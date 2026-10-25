@@ -402,7 +402,7 @@ final class World {
      * when depends on who they are and what the dead are doing: a curfew, sealing off the one district where it's
      * all happening, opening the gun stores, calling the Guard out early, or a convoy of ammunition to the police.
      */
-    private void leadersDecide(float dt) {
+    void leadersDecide(float dt) {
         if (!outbreak || alert < 1 || (decideCd -= dt) > 0) return;
         decideCd = 30 + rnd.nextFloat() * 30;
         int zs = zombieCount();
@@ -8075,7 +8075,7 @@ final class World {
      * sent to stand among them), the nearest free soldier with rounds and their health goes and takes it. One who has
      * been called away is not replaced - it's only manned again when they come back or someone dies.
      */
-    private void staffPosts() {
+    void staffPosts() {
         if (city.cfg != null && !city.cfg.nature()) return;
         for (int k = 0; k < rosterPosts.size(); k++) {
             float[] p = rosterPosts.get(k);

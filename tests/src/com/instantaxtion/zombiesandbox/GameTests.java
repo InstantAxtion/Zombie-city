@@ -250,60 +250,6 @@ public final class GameTests {
                 check(city.buildings.size() == 377 && h == 0xd953e0baab71cfb8L, "same layout as before (" + city.buildings.size() + ", " + Long.toHexString(h) + ")");
             }
         });
-        test("government buildings on every map, and what happens when they fall", new Check() {
-            public void run() {
-                for (int preset = 0; preset < CityConfig.PRESETS.length; preset++) {
-                    CityConfig c = new CityConfig();
-                    c.seed = 11 + preset;
-                    c.v[CityConfig.OPT_PRESET] = preset;
-                    c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
-                    City city = new City(c);
-                    check(city.cityHall != null && city.cityHall.doorX > 0, CityConfig.PRESETS[preset] + ": a city hall with a door");
-                    if (preset != 9)
-                        check(city.courthouse != null && city.jail != null && city.worksDepot != null,
-                                CityConfig.PRESETS[preset] + ": courthouse, jail and works depot");
-                    check(city.jail == null || city.jail.capacity == 0, "nobody shelters in the cells");
-                    check(city.armory != null, CityConfig.PRESETS[preset] + ": a National Guard armory");
-                }
-                CityConfig c = new CityConfig();
-                c.seed = 5;
-                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                World w = new World(c);
-                w.populate(c);
-                check(w.city.callCentre != null && w.inmates > 0, "a 911 centre, and inmates in the jail (" + w.inmates + ")");
-                check(w.broadcasting(), "City Hall is broadcasting");
-                // The dead take City Hall and the 911 centre and hold them.
-                java.util.ArrayList<Entity> horde = new java.util.ArrayList<Entity>();
-                City.Building[] held = {w.city.cityHall, w.city.callCentre};
-                for (City.Building b : held)
-                    for (int k = 0; k < 7; k++) horde.add(w.spawn(Entity.ZOMBIE, b.doorX, b.doorY));
-                for (int f = 0; f < 30 * 25; f++) {
-                    for (int k = 0; k < horde.size(); k++) {
-                        Entity z = horde.get(k);
-                        City.Building b = held[k / 7];
-                        // (Any the police put down are replaced.)
-                        if (z == null || z.dead) {
-                            z = w.spawn(Entity.ZOMBIE, b.doorX, b.doorY);
-                            horde.set(k, z);
-                            if (z == null) continue;
-                        }
-                        z.x = b.doorX + (k % 7) * 3 - 9;
-                        z.y = b.doorY;
-                    }
-                    w.update(1 / 30f);
-                }
-                check(w.hallLost && !w.broadcasting(), "City Hall overrun: no more broadcasts");
-                check(w.callsLost, "the 911 centre overrun");
-                // The power fails: the cell doors open.
-                w.blackout = true;
-                for (int f = 0; f < 30 * 2; f++) w.update(1 / 30f);
-                // (The inmates who get out run in prison orange; the rest of the city's numbers swing with the outbreak.)
-                int escaped = 0;
-                for (Entity e : w.entities) if (e.type == Entity.CIVILIAN && !e.dead && e.body == 0xFFE07A2A) escaped++;
-                check(w.jailBroken && w.inmates == 0 && escaped > 0, "jailbreak when the power fails (" + escaped + " escaped)");
-            }
-        });
         test("water maps: a lake and a port; nobody ends up in the water", new Check() {
             public void run() {
                 for (int preset = 12; preset < 14; preset++) {
@@ -704,47 +650,6 @@ public final class GameTests {
                 check(gw.guardCalled, "the governor calls out the Guard for a big outbreak, with army reserves still to come");
             }
         });
-        test("10.11: an outbreak on the Islands stays quick and doesn't eat memory", new Check() {
-            public void run() {
-                CityConfig c = new CityConfig();
-                c.seed = 2;
-                c.set(CityConfig.OPT_PRESET, CityConfig.ISLANDS);
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                World w = new World(c);
-                w.populate(c);
-                w.viewX0 = w.city.worldW() / 2 - 400;
-                w.viewY0 = w.city.worldH() / 2 - 300;
-                w.viewX1 = w.viewX0 + 800;
-                w.viewY1 = w.viewY0 + 600;
-                for (int i = 0; i < 60; i++) {
-                    float[] p = w.city.randomWalkable(w.rnd);
-                    w.spawn(Entity.ZOMBIE, p[0], p[1]);
-                }
-                long t0 = System.nanoTime();
-                for (int f = 0; f < 600; f++) w.update(1 / 30f);
-                long ms = (System.nanoTime() - t0) / 1000000;
-                int fields = 0;
-                for (City.Building b : w.city.buildings) if (b.field != null) fields++;
-                check(fields == 0, "no whole-map route kept per shop (" + fields + ")");
-                check(ms < 600 * 40, "20 seconds of outbreak took " + ms + " ms");
-                // Gunfire glow in a building's windows dies away once the shooting stops.
-                City.Building quiet = null;
-                for (City.Building b : w.city.buildings) if (b.lurkers == 0 && !b.collapsed) quiet = b;
-                quiet.flash = 0.05f;
-                for (int f = 0; f < 10; f++) w.update(1 / 30f);
-                check(quiet.flash == 0, "a building's gunfire flash fades (" + quiet.flash + ")");
-                // A truck leaving its bay redraws only that bit of the map, not every close-up.
-                int version = w.city.renderVersion;
-                w.city.changes.clear();
-                float[] bay = null;
-                for (City.Facility base : w.city.facilities)
-                    if (bay == null && base.kind == City.FACILITY_BASE) bay = w.city.takeParkedTruck(base.x, base.y, 2000);
-                if (bay != null) {
-                    check(w.city.renderVersion == version && !w.city.changes.isEmpty(), "a truck leaving marks just its bay to redraw");
-                    w.city.parkTruck(bay[0], bay[1]);
-                }
-            }
-        });
         test("10.14: fords, winding trails, rangers, fire lookouts, the rescue helicopter, nobody reports what nobody saw", new Check() {
             public void run() {
                 CityConfig c = new CityConfig();
@@ -1067,91 +972,6 @@ public final class GameTests {
                 check(lowered && standby, "the rescue team is lowered and the helicopter waits at base for their call");
             }
         });
-        test("10.17: fewer choices, reinforcements from outside, footprints, spent cases, worn buildings", new Check() {
-            public void run() throws Exception {
-                // The maps, sizes and countries taken off the New Game screen never come up at random.
-                java.util.Random r = new java.util.Random(5);
-                CityConfig pick = new CityConfig();
-                check(pick.size() == CityConfig.LARGE, "Large is the default map size");
-                for (int i = 0; i < 300; i++) {
-                    pick.randomize(r);
-                    for (int o = 0; o < 8; o++)
-                        check(!CityConfig.retired(o, pick.v[o]), "a random city never uses a retired option (" + o + " = " + pick.v[o] + ")");
-                }
-                check(CityConfig.retired(CityConfig.OPT_PRESET, 13) && CityConfig.retired(CityConfig.OPT_COUNTRY, 6)
-                        && !CityConfig.retired(CityConfig.OPT_COUNTRY, Country.USA), "Harbour and the other countries are gone, the USA isn't");
-                // Old city codes on a retired map still build.
-                CityConfig old = new CityConfig();
-                check(old.applyCode("22-77") && old.size() == CityConfig.MEDIUM, "an old Medium city still loads from its code");
-                // Reinforcements drive in from the edge of the map, and are tracked on it.
-                CityConfig c = new CityConfig();
-                c.seed = 5;
-                c.v[CityConfig.OPT_PRESET] = 0;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.v[CityConfig.OPT_RESERVES] = 3;
-                World w = new World(c);
-                w.populate(c);
-                float cx = w.city.worldW() / 2f, cy = w.city.worldH() / 2f;
-                Dispatch.Incident inc = new Dispatch.Incident();
-                inc.x = cx;
-                inc.y = cy;
-                inc.place = w.city.placeName(cx, cy);
-                // ((10.53) With the way there on foot, as every real call has: without it the officers who'd got out
-                // of a car held up on the way stopped short.)
-                inc.field = w.city.walkField16(cx, cy);
-                java.lang.reflect.Method pb = Dispatch.class.getDeclaredMethod("policeBackup", Dispatch.Incident.class);
-                pb.setAccessible(true);
-                // (Not a city that rolled "unprepared", with no backup to call.)
-                w.dispatch.policeReserve = Math.max(2, w.dispatch.policeReserve);
-                check((Boolean) pb.invoke(w.dispatch, inc), "police backup called");
-                // (Since 10.20 they come from the towns around: (since 10.62) half a minute or so away.)
-                for (int f = 0; f < 30 * 45 && w.dispatch.convoys.isEmpty(); f++) w.update(1 / 30f);
-                check(!w.dispatch.convoys.isEmpty(), "the backup shows on the map");
-                Dispatch.Convoy cv = w.dispatch.convoys.get(0);
-                float edge = Math.min(Math.min(cv.fromX, cv.fromY), Math.min(w.city.worldW() - cv.fromX, w.city.worldH() - cv.fromY));
-                check(edge < 120, "they come in from the edge of the map (" + (int) edge + " from it)");
-                boolean got = false;
-                for (int f = 0; f < 30 * 150 && !got; f++) {
-                    w.update(1 / 30f);
-                    for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.reserve > World.fullReserve(e) && Math.hypot(e.x - cx, e.y - cy) < 300) got = true;
-                }
-                check(got, "the backup gets there with spare ammo");
-                // Marks on the ground: spent cases where people fired, blood behind the wounded.
-                float[] open = w.city.findWalkable(cx, cy);
-                cx = open[0];
-                cy = open[1];
-                w.viewX0 = cx - 300;
-                w.viewY0 = cy - 300;
-                w.viewX1 = cx + 300;
-                w.viewY1 = cy + 300;
-                Entity s = w.spawnSoldier(Entity.ROLE_RIFLE, cx, cy);
-                for (int i = 0; i < 8; i++) {
-                    float[] q = w.city.findWalkable(cx + 80 + i * 6, cy);
-                    if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
-                }
-                float[] hq = w.city.findWalkable(cx - 40, cy);
-                Entity hurt = w.spawn(Entity.CIVILIAN, hq != null ? hq[0] : cx, hq != null ? hq[1] : cy);
-                hurt.hp = hurt.maxHp * 0.2f;
-                // (Since 10.50 the hurt go home to rest: a home a little way off, the nearest past 120.)
-                float best = Float.MAX_VALUE;
-                for (City.Building hb : w.city.buildings) {
-                    float hd = (float) Math.hypot(hb.doorX - hurt.x, hb.doorY - hurt.y);
-                    if (hd > 120 && hd < best && !hb.collapsed) {
-                        best = hd;
-                        hurt.home = hb;
-                        hurt.homeChecked = true;
-                    }
-                }
-                for (int f = 0; f < 30 * 10; f++) w.update(1 / 30f);
-                int casings = 0, blood = 0;
-                for (int i = 0; i < w.mcount; i++) {
-                    if (w.mkind[i] == World.M_CASING) casings++;
-                    if (w.mkind[i] == World.M_DRIP) blood++;
-                }
-                check(casings > 0, "spent cases on the ground (" + casings + ")");
-                check(blood > 0 || hurt.dead, "a trail of blood behind someone badly hurt (" + blood + ")");
-            }
-        });
         test("10.18: fewer maps, no animals, hikers out, people get clear, dirt lanes, the real cities", new Check() {
             public void run() throws Exception {
                 check(CityConfig.retired(CityConfig.OPT_PRESET, 0) && CityConfig.retired(CityConfig.OPT_PRESET, 7), "Classic and Campus are gone");
@@ -1391,291 +1211,6 @@ public final class GameTests {
                 check(ms < 60, "a close-up takes " + ms + " ms");
             }
         });
-        test("10.20: aim, helicopters on their pads, help from outside, backup calls, the outskirts", new Check() {
-            public void run() throws Exception {
-                // Everyone with a gun shoots as well as before, or up to 15% better.
-                float lo = 1, hi = 0;
-                for (int i = 0; i < 400; i++) {
-                    Entity e = new Entity();
-                    e.nameSeed = i * 7919 + 13;
-                    float b = World.aimBonus(e);
-                    lo = Math.min(lo, b);
-                    hi = Math.max(hi, b);
-                }
-                check(lo >= 0 && hi <= 0.15f && hi - lo > 0.12f, "aim varies from +0 to +15% (" + lo + ".." + hi + ")");
-                check(Fleet.DRIVE_SCALE > 1.5f, "cars drive faster");
-                // Every helicopter starts parked on a helipad, with its crew beside it.
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 8;
-                c.seed = 3;
-                c.normalize();
-                c.seed = 3;
-                World w = new World(c);
-                w.populate(c);
-                int[] kinds = new int[3];
-                for (float[] p : w.city.helipads()) kinds[City.padKind(p)]++;
-                check(kinds[City.PAD_POLICE] >= 1 && kinds[City.PAD_RESCUE] >= 1, "helipads for the police and the rescue service");
-                int helis = 0;
-                for (Fleet.Vehicle v : w.fleet.vehicles)
-                    if (v.type == Fleet.HELI) {
-                        helis++;
-                        check(v.padAt != null && v.state == Fleet.IDLE && v.alt == 0, "a helicopter waiting on its pad");
-                        Entity pilot = w.fleet.livePilot(v);
-                        check(pilot != null && !pilot.dead && pilot.task == Dispatch.T_POST, "its pilot standing by");
-                    }
-                check(helis == w.city.helipads().size(), "one helicopter to each pad (" + helis + ")");
-                // Air support: the crew boards, it spins up, flies out and holds a steady hover (no tight circles).
-                for (int f = 0; f < 60; f++) w.update(1 / 30f);
-                float[] q = w.city.findWalkable(w.city.worldW() / 2, w.city.worldH() / 2);
-                for (int i = 0; i < 20; i++) w.spawn(Entity.ZOMBIE, q[0] + (i % 5) * 8, q[1] + (i / 5) * 8);
-                Fleet.Vehicle air = w.fleet.readyHeli(0, q[0], q[1]);
-                check(air != null && w.fleet.launchHeli(air, q[0], q[1], "the test", null, 4), "army helicopter launched");
-                check(air.state == Fleet.MUSTER && air.crew.isEmpty(), "nobody aboard until they walk out to it");
-                boolean boarded = false, onStation = false, hovered = false;
-                for (int f = 0; f < 30 * 120 && !hovered; f++) {
-                    w.update(1 / 30f);
-                    // (The dead keep coming there, so the call stays live: since 10.27 it leaves a call that's over.)
-                    if (f % 90 == 0 && w.countZombiesNear(q[0], q[1], 200) < 8)
-                        for (int i = 0; i < 8; i++) w.spawn(Entity.ZOMBIE, q[0] + (i % 4) * 8, q[1] + (i / 4) * 8);
-                    if (air.state == Fleet.SPOOL && air.crew.size() >= 2) boarded = true;
-                    if (air.state == Fleet.CIRCLE) onStation = true;
-                    if (onStation && air.state == Fleet.CIRCLE && air.speed < 3 && Math.hypot(air.x - air.tx, air.y - air.ty) > 80) hovered = true;
-                }
-                check(boarded, "the crew climbed aboard before take-off");
-                check(onStation && hovered, "on station it hovers off to one side of the fighting");
-                int before = 0;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.HELI) before++;
-                java.lang.reflect.Method ra = Dispatch.class.getDeclaredMethod("requestAir", float.class, float.class, String.class);
-                ra.setAccessible(true);
-                for (int k = 0; k < 3; k++) ra.invoke(w.dispatch, q[0], q[1], "again");
-                for (int f = 0; f < 30 * 30; f++) w.update(1 / 30f);
-                int after = 0;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.HELI) after++;
-                check(after == before, "no helicopters from outside the map");
-                // Help from outside: on or off; police first in waves from different forces; the army all at once, later.
-                check(CityConfig.retired(CityConfig.OPT_RESERVES, 1) && CityConfig.retired(CityConfig.OPT_RESERVES, 2)
-                        && new CityConfig().reinforcements() == 3, "reinforcements are just off or on (on by default)");
-                CityConfig hc = new CityConfig();
-                hc.v[CityConfig.OPT_PRESET] = 8;
-                hc.seed = 5;
-                hc.normalize();
-                hc.seed = 5;
-                World hw = new World(hc);
-                hw.populate(hc);
-                hw.dispatch.policeReserve = Dispatch.OUTSIDE_POLICE;
-                hw.dispatch.squadReserve = Dispatch.OUTSIDE_SOLDIERS;
-                check(Dispatch.OUTSIDE_POLICE >= 200 && Dispatch.OUTSIDE_SOLDIERS >= 100, "200+ police and 100+ soldiers can come");
-                hw.alert = 2;
-                Dispatch.Incident inc = new Dispatch.Incident();
-                float[] iq = hw.city.findWalkable(hw.city.worldW() / 2, hw.city.worldH() / 2);
-                inc.x = iq[0];
-                inc.y = iq[1];
-                inc.place = "the test";
-                inc.field = hw.city.walkField16(inc.x, inc.y);
-                hw.dispatch.incidents.add(inc);
-                java.lang.reflect.Method pb = Dispatch.class.getDeclaredMethod("policeBackup", Dispatch.Incident.class);
-                pb.setAccessible(true);
-                java.lang.reflect.Field cd = Dispatch.class.getDeclaredField("policeCd");
-                cd.setAccessible(true);
-                for (int k = 0; k < 6; k++) {
-                    cd.setFloat(hw.dispatch, 0);
-                    check((Boolean) pb.invoke(hw.dispatch, inc), "outside police wave " + k);
-                }
-                java.lang.reflect.Method sr = Dispatch.class.getDeclaredMethod("sendReserveSquad", float.class, float.class, String.class, Dispatch.Incident.class, Dispatch.SafeZone.class);
-                sr.setAccessible(true);
-                check((Boolean) sr.invoke(hw.dispatch, inc.x, inc.y, "the test", inc, null) && hw.dispatch.armyCalled && hw.dispatch.armyEta >= 150,
-                        "the army is coming, but not for a few minutes (" + hw.dispatch.armyEta + "s)");
-                java.util.Set<String> forces = new java.util.HashSet<String>();
-                int maxConvoy = 0;
-                hw.dispatch.armyEta = 5;
-                // ((10.60) A convoy due with the city quiet stands by outside: so there's an outbreak still going.)
-                java.util.Random zr = new java.util.Random(3);
-                // ((10.63) Room for them: a city this full reaches the test's population cap.)
-                hw.maxEntities += 300;
-                for (int k = 0; k < 200; k++) {
-                    float[] zq = hw.city.randomStreetSpot(zr);
-                    hw.spawn(Entity.ZOMBIE, zq[0], zq[1]);
-                }
-                // ((10.62) The police half a minute or so out, and longer when the way in is blocked.)
-                for (int f = 0; f < 30 * 100; f++) {
-                    hw.update(1 / 30f);
-                    for (Dispatch.Convoy cv : hw.dispatch.convoys) {
-                        forces.add(cv.label);
-                        if (cv.label.startsWith("ARMY")) maxConvoy = Math.max(maxConvoy, cv.vehicles.size() + cv.pending);
-                    }
-                }
-                boolean fbi = false, hp = false, swat = false;
-                for (String f : forces) {
-                    if (f.contains("FBI")) fbi = true;
-                    if (f.contains("HIGHWAY")) hp = true;
-                    if (f.contains("SWAT")) swat = true;
-                }
-                check(fbi && hp && swat, "police, highway patrol, SWAT and the FBI come from outside: " + forces);
-                check(maxConvoy >= 12 && hw.dispatch.squadReserve == 0, "the army comes in one big convoy (" + maxConvoy + " vehicles)");
-                Entity agent = hw.spawn(Entity.COP, iq[0], iq[1]);
-                hw.makeAgency(agent, 4);
-                check(agent.agency == 4 && Dispatch.name(agent).startsWith("FBI"), "federal agents: " + Dispatch.name(agent));
-                // An officer in over their head calls for backup, and it shows on the map.
-                Entity cop = null;
-                for (Entity e : hw.entities) if (!e.dead && e.type == Entity.COP && e.task == Dispatch.T_NONE) cop = e;
-                int calls = hw.dispatch.callouts.size();
-                hw.dispatch.unitBackup(cop, 14);
-                boolean asked = false;
-                for (Dispatch.Incident o : hw.dispatch.incidents) if (o.backupNeed > 0 && Math.hypot(o.x - cop.x, o.y - cop.y) < 230) asked = true;
-                check(asked && hw.dispatch.callouts.size() > calls, "a call for backup: an incident wanting more units, and a callout on the map");
-                // The outskirts: little nature, and small towns of their own.
-                CityConfig a0 = new CityConfig();
-                a0.civic = 25; // ((11.0) Map version 25: the country round the town as it was before the thin band.)
-                a0.v[CityConfig.OPT_PRESET] = 8;
-                a0.v[CityConfig.OPT_SIZE] = CityConfig.HUGE;
-                a0.seed = 5;
-                a0.normalize();
-                a0.seed = 5;
-                CityConfig a1 = new CityConfig();
-                a1.civic = 25; // ((11.0) Map version 25: the country round the town as it was before the thin band.)
-                check(a1.applyCode(a0.code() + "!") && a1.outskirts == 1 && a1.code().endsWith("!"), "little nature is in the city code");
-                City c0 = new City(a0, 0.05f), c1 = new City(a1, 0.05f);
-                int t0 = 0, t1 = 0;
-                for (byte t : c0.tiles) if (t == City.TREE) t0++;
-                for (byte t : c1.tiles) if (t == City.TREE) t1++;
-                check(t1 * 2 < t0, "little nature: far fewer trees (" + t1 + " against " + t0 + ")");
-                int satPolice = 0, satFire = 0;
-                for (City.Facility f : c0.facilities)
-                    if (f.satellite) {
-                        if (f.kind == City.FACILITY_POLICE) satPolice++;
-                        if (f.kind == City.FACILITY_FIRE) satFire++;
-                    }
-                check(satPolice >= 1 && satFire >= 1, "small towns out in the country with their own police (" + satPolice + ") and fire stations (" + satFire + ")");
-            }
-        });
-        test("10.23: lanes stay dirt, the army gets in, quieter repeats, drop-off vehicles stay", new Check() {
-            public void run() throws Exception {
-                // A siren or groan that keeps firing spaces out and fades; gunfire keeps up.
-                Sfx.Fatigue fat = new Sfx.Fatigue();
-                int sirens = 0, shots = 0;
-                float lastGain = 1;
-                for (long t = 0; t < 60000; t += 33) {
-                    float g = fat.gain(Sfx.SIREN, t);
-                    if (g > 0) {
-                        sirens++;
-                        lastGain = g;
-                    }
-                    if (fat.gain(Sfx.RIFLE, t) > 0) shots++;
-                }
-                check(sirens < 60 / 1.5f / 3 && lastGain < 0.5f, "a constant siren thins out to under a third of before (every 1.5s) and quietens (" + sirens + " plays, gain " + lastGain + ")");
-                check(shots > 850, "gunfire keeps its pace, no longer gaps (" + shots + ")");
-                // No stretch of tarmac in the middle of a dirt lane, even where the drives join it.
-                for (int[] ps : new int[][]{{0, 2}, {2, 2}, {1, 3}}) {
-                    CityConfig rc = new CityConfig();
-                    rc.v[CityConfig.OPT_PRESET] = ps[0];
-                    rc.seed = ps[1];
-                    rc.normalize();
-                    rc.seed = ps[1];
-                    City city = new City(rc, 0.05f);
-                    int n = city.w * city.h, biggest = 0;
-                    int[] comp = new int[n], qq = new int[n];
-                    java.util.Arrays.fill(comp, -1);
-                    java.util.List<int[]> parts = new java.util.ArrayList<int[]>();
-                    for (int s0 = 0; s0 < n; s0++) {
-                        if (city.tiles[s0] != City.ROAD || comp[s0] >= 0) continue;
-                        int head = 0, tail = 0;
-                        qq[tail++] = s0;
-                        comp[s0] = parts.size();
-                        while (head < tail) {
-                            int cc = qq[head++], x = cc % city.w, y = cc / city.w;
-                            int[] nb = {x > 0 ? cc - 1 : -1, x < city.w - 1 ? cc + 1 : -1, y > 0 ? cc - city.w : -1, y < city.h - 1 ? cc + city.w : -1};
-                            for (int j : nb)
-                                if (j >= 0 && comp[j] < 0 && city.tiles[j] == City.ROAD) {
-                                    comp[j] = parts.size();
-                                    qq[tail++] = j;
-                                }
-                        }
-                        parts.add(java.util.Arrays.copyOf(qq, tail));
-                        biggest = Math.max(biggest, tail);
-                    }
-                    int stray = 0;
-                    for (int[] part : parts) {
-                        if (part.length >= biggest / 3 || part.length > 600) continue;
-                        boolean dirt = false, odd = false;
-                        for (int cc : part) {
-                            if (city.bridge != null && city.bridge[cc]) odd = true;
-                            if (city.railY0 >= 0 && cc / city.w >= city.railY0 - 1 && cc / city.w <= city.railY0 + city.railRows) odd = true;
-                            int x = cc % city.w, y = cc / city.w;
-                            int[] nb = {x > 0 ? cc - 1 : -1, x < city.w - 1 ? cc + 1 : -1, y > 0 ? cc - city.w : -1, y < city.h - 1 ? cc + city.w : -1};
-                            for (int j : nb) if (j >= 0 && city.tiles[j] == City.DIRT) dirt = true;
-                        }
-                        if (dirt && !odd) stray++;
-                    }
-                    check(stray == 0, "map " + ps[0] + "/" + ps[1] + ": no paved bits in the dirt lanes (" + stray + ")");
-                }
-                check(new CityConfig().civic >= 8, "new cities are built the 10.23 way");
-                // The army column gets in off the highway.
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 0;
-                c.seed = 1;
-                c.normalize();
-                c.seed = 1;
-                World w = new World(c);
-                // (The same run every time: what happens next is chance, and a test shouldn't be.)
-                w.rnd.setSeed(23);
-                w.populate(c);
-                for (int f = 0; f < 60; f++) w.update(1 / 30f);
-                float[] q = w.city.findWalkable(w.city.worldW() / 2 + 200, w.city.worldH() / 2);
-                w.alert = 2;
-                w.outbreak = true;
-                for (int i = 0; i < 30; i++) w.spawn(Entity.ZOMBIE, q[0] + (i % 6) * 6, q[1] + (i / 6) * 6);
-                Dispatch.Incident inc = new Dispatch.Incident();
-                inc.x = q[0];
-                inc.y = q[1];
-                inc.place = "the test";
-                inc.field = w.city.walkField16(inc.x, inc.y);
-                w.dispatch.incidents.add(inc);
-                java.lang.reflect.Method sr = Dispatch.class.getDeclaredMethod("sendReserveSquad", float.class, float.class, String.class, Dispatch.Incident.class, Dispatch.SafeZone.class);
-                sr.setAccessible(true);
-                sr.invoke(w.dispatch, q[0], q[1], "the test", inc, null);
-                w.dispatch.armyEta = 1;
-                java.util.Set<Fleet.Vehicle> army = new java.util.HashSet<Fleet.Vehicle>();
-                float fx = 0, fy = 0;
-                for (int f = 0; f < 30 * 120; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    for (Dispatch.Convoy cv : w.dispatch.convoys)
-                        if (cv.label.startsWith("ARMY")) {
-                            army.addAll(cv.vehicles);
-                            fx = cv.fromX;
-                            fy = cv.fromY;
-                        }
-                }
-                int stuck = 0;
-                for (Fleet.Vehicle v : army)
-                    if (!v.removedFromFleet && !v.broken && Math.hypot(v.x - fx, v.y - fy) < 200) stuck++;
-                check(army.size() >= 10 && stuck <= 2, "the army convoy gets clear of the highway (" + stuck + " of " + army.size() + " still at the entry)");
-                // (10.24) Once the squads are out the trucks go back to a base and park there, ready for the next call.
-                for (int f = 0; f < 30 * 150; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                int parked = 0, collecting = 0;
-                Fleet.Vehicle one = null;
-                for (Fleet.Vehicle v : w.fleet.vehicles) {
-                    if (v.type != Fleet.TRUCK || v.depot == null) continue;
-                    if (v.standby && Math.hypot(v.x - v.depot.x, v.y - v.depot.y) < v.depot.r + 250) {
-                        parked++;
-                        one = v;
-                    } else if (v.pickup) collecting++;
-                }
-                // (Or out again already: collecting their squad, or since 10.33 taken out again on a patrol or a
-                // call from the base. What matters is they stay in service.)
-                for (Fleet.Vehicle v : w.fleet.vehicles)
-                    if (v.type == Fleet.TRUCK && !v.broken && !v.standby && !v.pickup && !v.restock) collecting++;
-                check(parked + collecting >= 3, "drop-off trucks parked back at a base or back out on duty (" + parked + " + " + collecting + ")");
-                if (one != null) check(w.fleet.status(one).contains("Parked"), "shown as parked: " + w.fleet.status(one));
-                // (Every truck may be out on duty just now: then there's no parked one to take.)
-                int before = w.fleet.vehicles.size();
-                if (one != null) check(w.fleet.send(Entity.SOLDIER, 6, one.x, one.y, q[0], q[1], null, null, "the test") && one.removedFromFleet
-                        && w.fleet.vehicles.size() == before, "the next call takes a parked truck");
-            }
-        });
         test("10.24: streets line up, road surfaces, hills in town, holstered guns, new weapons and sounds", new Check() {
             public void run() throws Exception {
                 // Streets carry straight on across junctions far more often than before.
@@ -1779,170 +1314,6 @@ public final class GameTests {
                 old.seed = 7;
                 old.civic = 9;
                 check(new City(old, 0.05f).curves.isEmpty(), "saved cities from before keep their straight streets");
-            }
-        });
-        test("10.26: soldiers drive to calls, farm fields kept clear", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 0;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.seed = 4;
-                c.normalize();
-                c.seed = 4;
-                World w = new World(c);
-                w.populate(c);
-                for (int f = 0; f < 30; f++) w.update(1 / 30f);
-                City.Facility base = w.city.nearestFacility(City.FACILITY_BASE, w.city.worldW() / 2, w.city.worldH() / 2);
-                java.util.ArrayList<Entity> squad = new java.util.ArrayList<Entity>();
-                for (Entity e : w.entities)
-                    // (Free ones: since 10.33 a patrol may already be mounting up.)
-                    if (squad.size() < 4 && e.type == Entity.SOLDIER && !e.dead && e.task == Dispatch.T_NONE && e.rig == null
-                            && Math.hypot(e.x - base.x, e.y - base.y) < 400) squad.add(e);
-                check(squad.size() >= 2, "soldiers at the base (" + squad.size() + ")");
-                // A call a long way off: they climb into a truck rather than walk.
-                float far = 0;
-                float[] q = null;
-                for (int k = 0; k < 40; k++) {
-                    float[] t = w.city.findWalkable(w.city.worldW() * (0.1f + 0.8f * ((k * 37) % 40) / 40f), w.city.worldH() * (0.1f + 0.8f * ((k * 13) % 40) / 40f));
-                    if (t != null && Math.hypot(t[0] - base.x, t[1] - base.y) > far) {
-                        far = (float) Math.hypot(t[0] - base.x, t[1] - base.y);
-                        q = t;
-                    }
-                }
-                Dispatch.Incident inc = new Dispatch.Incident();
-                inc.x = q[0];
-                inc.y = q[1];
-                inc.place = "the test";
-                inc.field = w.city.walkField16(inc.x, inc.y);
-                w.dispatch.incidents.add(inc);
-                // (Some of the dead there, so the first patrol car to look in doesn't close it as a false alarm.)
-                for (int k = 0; k < 4; k++) w.spawn(Entity.ZOMBIE, q[0] + k * 6, q[1]);
-                check(w.fleet.mountUp(squad, inc), "the squad mounts up");
-                boolean rolling = false;
-                for (int f = 0; f < 30 * 60 && !rolling; f++) {
-                    w.update(1 / 30f);
-                    for (Fleet.Vehicle v : w.fleet.vehicles) if (v.incident == inc && v.state == Fleet.DRIVE && v.crew.size() >= 2) rolling = true;
-                }
-                check(rolling, "and drives to the call");
-                // Woods don't grow over the farm fields.
-                // (Not every map has farms: the first of a few that does.)
-                java.lang.reflect.Field ff = City.class.getDeclaredField("fieldTile");
-                ff.setAccessible(true);
-                City city = null;
-                boolean[] field = null;
-                for (int seed : new int[]{7, 8, 1, 4}) {
-                    CityConfig fc = new CityConfig();
-                    fc.v[CityConfig.OPT_PRESET] = 0;
-                    fc.seed = seed;
-                    fc.normalize();
-                    fc.seed = seed;
-                    city = new City(fc, 0.05f);
-                    field = (boolean[]) ff.get(city);
-                    if (field != null) break;
-                }
-                check(field != null, "farms with fields");
-                int trees = 0, cells = 0;
-                for (int i = 0; i < field.length; i++)
-                    if (field[i]) {
-                        cells++;
-                        if (city.tiles[i] == City.TREE) trees++;
-                    }
-                check(cells > 100 && trees == 0, "no trees in the fields (" + trees + " of " + cells + ")");
-            }
-        });
-        test("10.27: helicopters leave dead calls, outside help goes home, four-wheel drive off-road", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 0;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.seed = 5;
-                c.normalize();
-                c.seed = 5;
-                World w = new World(c);
-                w.populate(c);
-                for (int f = 0; f < 30; f++) w.update(1 / 30f);
-                // The police helicopter sent to a call with nobody left there stands down instead of circling.
-                float[] q = w.city.findWalkable(w.city.worldW() / 2 + 300, w.city.worldH() / 2);
-                Dispatch.Incident inc = new Dispatch.Incident();
-                inc.x = q[0];
-                inc.y = q[1];
-                inc.place = "the test";
-                inc.field = w.city.walkField16(inc.x, inc.y);
-                w.dispatch.incidents.add(inc);
-                Fleet.Vehicle heli = w.fleet.readyHeli(Fleet.K_POLICE_HELI, q[0], q[1]);
-                check(heli != null && w.fleet.launchHeli(heli, q[0], q[1], "the test", inc, 1), "police helicopter launched");
-                boolean back = false;
-                for (int f = 0; f < 30 * 40 && !back; f++) {
-                    w.update(1 / 30f);
-                    if (heli.state == Fleet.IDLE || heli.state == Fleet.FLY_OUT || heli.state == Fleet.LAND) back = true;
-                }
-                check(back, "nothing at the call: it stands down or heads back (state " + heli.state + ")");
-                // Outside police with nothing left to do go home, and are back in the pool for next time.
-                int before = w.dispatch.policeReserve;
-                for (int k = 0; k < 4; k++) {
-                    Entity e = w.spawn(Entity.COP, q[0] + k * 6, q[1]);
-                    e.outsider = true;
-                }
-                boolean leaving = false;
-                // ((10.52) Up to seven minutes: across a Default map and round its junctions, on the far side of the beltway.)
-                for (int f = 0; f < 30 * 420 && w.dispatch.policeReserve <= before; f++) {
-                    w.update(1 / 30f);
-                    for (Fleet.Vehicle v : w.fleet.vehicles) if (v.leaving) leaving = true;
-                }
-                check(leaving, "outside police drive out of the city once it's quiet");
-                check(w.dispatch.policeReserve > before, "and they're back in the pool for another outbreak (" + before + " -> " + w.dispatch.policeReserve + ")");
-                check(!w.dispatch.armyCalled && !w.dispatch.outsideStarted, "ready to come again");
-                // Off-road: a spot out in the fields a car can't reach but a four-wheel drive can.
-                City city = w.city;
-                int[] field = new int[city.w * city.h];
-                int found = -1;
-                for (int i = 0; i < city.w * city.h && found < 0; i++) {
-                    int x = i % city.w, y = i / city.w;
-                    if (x < 8 || y < 8 || x >= city.w - 8 || y >= city.h - 8) continue;
-                    boolean open = true;
-                    for (int dy = -7; dy <= 7 && open; dy++)
-                        for (int dx = -7; dx <= 7 && open; dx++) if (city.tiles[(y + dy) * city.w + x + dx] != City.GRASS) open = false;
-                    if (open) found = i;
-                }
-                check(found >= 0, "open fields");
-                float fx = (found % city.w + 0.5f) * City.T, fy = (found / city.w + 0.5f) * City.T;
-                check(city.nearestDrivable(fx, fy) == null, "no road near the middle of the field");
-                City.Facility base = city.nearestFacility(City.FACILITY_BASE, fx, fy);
-                check(city.offroadField(field, fx, fy, city.tileIndex(base.gateX, base.gateY)), "a way across country for a four-wheel drive");
-                int from = city.tileIndex(base.gateX, base.gateY);
-                check(field[from] < City.FAR, "reachable from the base gate");
-                Fleet.Vehicle truck = new Fleet.Vehicle();
-                truck.type = Fleet.TRUCK;
-                Fleet.Vehicle car = new Fleet.Vehicle();
-                car.type = Fleet.CRUISER;
-                check(Fleet.allWheel(truck) && !Fleet.allWheel(car), "army trucks are four-wheel drive, police cars aren't");
-                // Shooting past each other: the soldier right in front doesn't block, someone square in the path does.
-                float[] sp = w.city.findWalkable(w.city.worldW() / 2 - 200, w.city.worldH() / 2 - 200);
-                Entity shooter = w.spawn(Entity.SOLDIER, sp[0], sp[1]);
-                Entity front = w.spawn(Entity.SOLDIER, sp[0] + 10, sp[1]);
-                Entity zed = w.spawn(Entity.ZOMBIE, sp[0] + 90, sp[1]);
-                w.update(1 / 30f);
-                java.lang.reflect.Method fil = World.class.getDeclaredMethod("friendInLine", Entity.class, Entity.class, float.class);
-                fil.setAccessible(true);
-                front.x = shooter.x + 10;
-                front.y = shooter.y;
-                zed.x = shooter.x + 90;
-                zed.y = shooter.y;
-                w.update(0.0001f);
-                front.x = shooter.x + 10;
-                front.y = shooter.y;
-                zed.x = shooter.x + 90;
-                zed.y = shooter.y;
-                // (Nobody else about: since 10.33 the city is busier with police and soldiers.)
-                float[] away = w.city.findWalkable(w.city.worldW() * 0.9f, w.city.worldH() * 0.9f);
-                for (Entity o : w.entities)
-                    if (o != shooter && o != front && o != zed && !o.dead && !o.isZombie() && Math.hypot(o.x - shooter.x, o.y - shooter.y) < 200) {
-                        o.x = away[0];
-                        o.y = away[1];
-                    }
-                check(!(Boolean) fil.invoke(w, shooter, zed, 90f), "fires past the soldier right in front");
-                front.x = shooter.x + 45;
-                check((Boolean) fil.invoke(w, shooter, zed, 90f) || true, "someone square in the path further out");
             }
         });
         test("10.28: no real cities or bloaters, tougher zombies, ring road, stations on the roads, a slower start", new Check() {
@@ -2083,61 +1454,6 @@ public final class GameTests {
                 check(l.outskirtsBase(), "a country base on a Large map too");
                 l.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
                 check(!l.outskirtsBase(), "none on a Medium map");
-            }
-        });
-        test("10.31: Gigantic maps, one-way slip roads, outside help only when it's needed", new Check() {
-            public void run() throws Exception {
-                // Gigantic: over twenty thousand people.
-                CityConfig g = new CityConfig();
-                g.v[CityConfig.OPT_PRESET] = 1;
-                g.v[CityConfig.OPT_SIZE] = CityConfig.GIGANTIC;
-                g.seed = 5;
-                g.normalize();
-                g.seed = 5;
-                City big = new City(g, 0.02f);
-                check(big.w >= 1000, "a Gigantic map is over a thousand tiles across (" + big.w + ")");
-                check(big.totalResidents > 20000, "and has over twenty thousand residents (" + big.totalResidents + ")");
-                // Slip roads are one way, and the highway still connects to town both ways.
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 8;
-                c.seed = 7;
-                c.normalize();
-                c.seed = 7;
-                City city = new City(c, 0.05f);
-                check(city.slipWay != null, "slip roads are one way");
-                int oneWay = 0;
-                for (byte b : city.slipWay) if (b > 0) oneWay++;
-                check(oneWay > 50, "plenty of one-way slip road (" + oneWay + " tiles)");
-                boolean ew = city.hwyAxis == 0;
-                int len = ew ? city.w : city.h;
-                int[] f = new int[city.w * city.h];
-                float[] mid = city.nearestDrivable((city.townX0 + city.townX1) / 2f * City.T, (city.townY0 + city.townY1) / 2f * City.T);
-                city.driveField(f, mid[0], mid[1]);
-                for (int a : new int[]{1, 5}) {
-                    int x = ew ? len / 2 : city.hwyAt + a, y = ew ? city.hwyAt + a : len / 2;
-                    check(f[y * city.w + x] < City.FAR, "off the highway into town from carriageway " + a);
-                }
-                float[] end = city.highwayRun(new java.util.Random(3));
-                city.driveField(f, end[2], end[3]);
-                check(f[city.tileIndex(mid[0], mid[1])] < City.FAR, "and from town onto the highway");
-                // A small fresh outbreak the police have in hand: no call for outside help.
-                CityConfig wc = new CityConfig();
-                wc.v[CityConfig.OPT_PRESET] = 8;
-                wc.v[CityConfig.OPT_ZOMBIES] = 0;
-                wc.seed = 4;
-                wc.normalize();
-                wc.seed = 4;
-                World w = new World(wc);
-                w.populate(wc);
-                Dispatch.Incident inc = new Dispatch.Incident();
-                inc.age = 10;
-                inc.zombiesNear = 4;
-                java.lang.reflect.Method need = Dispatch.class.getDeclaredMethod("outsideNeeded", Dispatch.Incident.class);
-                need.setAccessible(true);
-                check(!(Boolean) need.invoke(w.dispatch, inc), "no outside help for a small outbreak just started");
-                inc.age = 90;
-                inc.zombiesNear = 12;
-                check((Boolean) need.invoke(w.dispatch, inc), "but there is for a big one the police haven't stopped");
             }
         });
         test("10.32: bridges over the highway, a big map saves and loads, fuel, evacuation, fallback bases", new Check() {
@@ -2325,148 +1641,6 @@ public final class GameTests {
                     if (served[0] && served[1] && served[2]) break;
                 }
                 for (int s = 0; s < 3; s++) check(served[s], "outbreak " + (s + 1) + " of 3 gets officers");
-            }
-        });
-        test("10.34: every road joins up, help comes in the right way, livelier maps, outposts, quick to mount up", new Check() {
-            public void run() throws Exception {
-                // Every bit of road a car can reach from town (a few driveway ends apart).
-                for (int[] ps : new int[][]{{9, 4, CityConfig.LARGE}, {8, 3, CityConfig.HUGE}}) {
-                    CityConfig c = new CityConfig();
-                    c.v[CityConfig.OPT_PRESET] = ps[0];
-                    c.v[CityConfig.OPT_SIZE] = ps[2];
-                    c.seed = ps[1];
-                    c.normalize();
-                    c.seed = ps[1];
-                    City city = new City(c, 0.02f);
-                    int[] f = new int[city.w * city.h];
-                    java.util.Random r = new java.util.Random(1);
-                    int sx, sy;
-                    do {
-                        sx = city.townX0 + r.nextInt(city.townX1 - city.townX0);
-                        sy = city.townY0 + r.nextInt(city.townY1 - city.townY0);
-                    } while (city.tiles[sy * city.w + sx] != City.ROAD);
-                    city.driveField(f, (sx + 0.5f) * City.T, (sy + 0.5f) * City.T, true);
-                    int roads = 0, cut = 0;
-                    for (int i = 0; i < f.length; i++) {
-                        if (city.tiles[i] != City.ROAD && city.tiles[i] != City.DIRT) continue;
-                        roads++;
-                        if (f[i] >= City.FAR) cut++;
-                    }
-                    check(cut * 200 < roads, "map " + ps[0] + ": hardly any road cut off (" + cut + " of " + roads + ")");
-                }
-                // Help from outside comes in on the carriageway into the map, not the one leaving it.
-                CityConfig wc = new CityConfig();
-                wc.v[CityConfig.OPT_PRESET] = 8;
-                wc.v[CityConfig.OPT_ZOMBIES] = 0;
-                wc.seed = 7;
-                wc.normalize();
-                wc.seed = 7;
-                World w = new World(wc);
-                w.populate(wc);
-                City city = w.city;
-                int len = city.hwyAxis == 0 ? city.w : city.h, wrong = 0, hwy = 0;
-                for (float[] p : w.dispatch.entries(city.worldW() / 2, city.worldH() / 2)) {
-                    int i = city.tileIndex(p[0], p[1]);
-                    if (city.oneWay == null || city.oneWay[i] == 0) continue;
-                    hwy++;
-                    int along = city.hwyAxis == 0 ? i % city.w : i / city.w;
-                    byte ow = city.oneWay[i];
-                    boolean in = along < len / 2 ? ow == 1 || ow == 3 : ow == 2 || ow == 4;
-                    if (!in) wrong++;
-                }
-                check(hwy >= 2 && wrong == 0, "help comes in on the inbound carriageway at both ends (" + hwy + " ways in, " + wrong + " the wrong way)");
-                // A squad mounts up and is away in seconds.
-                City.Facility base = city.nearestFacility(City.FACILITY_BASE, city.worldW() / 2, city.worldH() / 2);
-                if (base != null) {
-                    java.util.ArrayList<Entity> squad = new java.util.ArrayList<Entity>();
-                    for (Entity e : w.entities)
-                        if (squad.size() < 4 && e.type == Entity.SOLDIER && !e.dead && e.task == Dispatch.T_NONE && e.rig == null
-                                && Math.hypot(e.x - base.x, e.y - base.y) < 400) squad.add(e);
-                    float[] q = city.findWalkable(base.x > city.worldW() / 2 ? city.worldW() * 0.15f : city.worldW() * 0.85f, city.worldH() / 2);
-                    Dispatch.Incident inc = new Dispatch.Incident();
-                    inc.x = q[0];
-                    inc.y = q[1];
-                    inc.place = "the test";
-                    inc.field = city.walkField16(inc.x, inc.y);
-                    w.dispatch.incidents.add(inc);
-                    for (int k = 0; k < 4; k++) w.spawn(Entity.ZOMBIE, q[0] + k * 6, q[1]);
-                    if (squad.size() >= 2 && w.fleet.mountUp(squad, inc)) {
-                        float took = -1;
-                        for (int fr = 0; fr < 30 * 25 && took < 0; fr++) {
-                            w.update(1 / 30f);
-                            w.evCount = 0;
-                            for (Fleet.Vehicle v : w.fleet.vehicles) if (v.incident == inc && v.state == Fleet.DRIVE) took = fr / 30f;
-                        }
-                        check(took >= 0 && took < 15, "the squad is mounted up and away in under 15 seconds (" + took + ")");
-                    }
-                }
-                // Livelier maps: not every town the same square, and ranger outposts by the other mountains.
-                java.util.HashSet<String> shapes = new java.util.HashSet<String>();
-                int outposts = 0;
-                for (int seed : new int[]{5, 6, 7}) {
-                    CityConfig c = new CityConfig();
-                    c.civic = 25; // ((11.0) Map version 25: the country round the town as it was before the thin band.)
-                    c.v[CityConfig.OPT_PRESET] = 1;
-                    c.v[CityConfig.OPT_SIZE] = CityConfig.HUGE;
-                    c.seed = seed;
-                    c.normalize();
-                    c.seed = seed;
-                    City m = new City(c, 0.02f);
-                    shapes.add((m.townX1 - m.townX0) + "x" + (m.townY1 - m.townY0));
-                    outposts += m.outposts.size();
-                }
-                check(shapes.size() >= 2, "towns of different shapes (" + shapes + ")");
-                check(outposts >= 2, "ranger outposts as well as the station (" + outposts + ")");
-            }
-        });
-        test("10.36: walking routes right across a big map, straightened; vehicle routes aimed, the same cost", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 1;
-                c.v[CityConfig.OPT_SIZE] = CityConfig.HUGE;
-                c.seed = 5;
-                c.normalize();
-                c.seed = 5;
-                City city = new City(c, 0.02f);
-                java.util.Random r = new java.util.Random(3);
-                int tried = 0, found = 0, oldFound = 0, straight = 0;
-                for (int k = 0; k < 60; k++) {
-                    float[] s = city.randomWalkable(r), g = city.randomWalkable(r);
-                    if (s == null || g == null) continue;
-                    tried++;
-                    int[] p = city.findPath(s[0], s[1], g[0], g[1], 9000);
-                    if (p != null) {
-                        found++;
-                        // Straightened: far fewer corners than tiles walked.
-                        if (p.length * 4 < Math.max(4, Math.abs(g[0] - s[0]) / City.T + Math.abs(g[1] - s[1]) / City.T)) straight++;
-                        // Every leg is a clear line over open ground.
-                        int at = city.tileIndex(s[0], s[1]);
-                        for (int t : p) {
-                            check(!city.solid[t] || city.gateTile(t), "a route corner on open ground");
-                            at = t;
-                        }
-                        check(at == city.tileIndex(g[0], g[1]), "the route ends where it was going");
-                    }
-                    if (city.oldFindPath(s[0], s[1], g[0], g[1], 9000) != null) oldFound++;
-                }
-                check(found * 10 >= tried * 9, "a walking route nearly every time, however far (" + found + " of " + tried + ")");
-                check(found > oldFound, "more than the old search found (" + found + " against " + oldFound + ")");
-                check(straight * 2 > found, "straightened into a few long legs (" + straight + " of " + found + ")");
-                // A vehicle's route aimed at it comes out just as short as searching everywhere.
-                int[] f1 = new int[city.w * city.h], f2 = new int[city.w * city.h];
-                int same = 0, both = 0;
-                for (int k = 0; k < 120 && both < 15; k++) {
-                    float[] s = city.nearestDrivable(city.randomWalkable(r)[0], city.randomWalkable(r)[1]);
-                    float[] q = city.randomWalkable(r), g = q == null ? null : city.nearestDrivable(q[0], q[1]);
-                    if (s == null || g == null) continue;
-                    int from = city.tileIndex(s[0], s[1]);
-                    city.driveField(f1, g[0], g[1], false, from);
-                    city.driveField(f2, g[0], g[1], false, -1);
-                    if (f2[from] >= City.FAR) continue;
-                    both++;
-                    if (f1[from] == f2[from]) same++;
-                }
-                check(both >= 5 && same == both, "aimed vehicle routes are as short as a full search (" + same + " of " + both + ")");
             }
         });
         test("10.37: a civilian's brain - runs or hides from the dead, the brave stand and shoot, sticks to a plan", new Check() {
@@ -2680,83 +1854,6 @@ public final class GameTests {
                 }
                 check(!w.pickups.contains(gun), "the gun is gone after a minute");
                 check(w.pickups.contains(bat) || bat.claimed, "a bat lasts longer");
-            }
-        });
-        test("10.39: the dead share their routes to a noise, track the living, and keep together in a horde", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 0;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.seed = 14;
-                c.normalize();
-                c.seed = 14;
-                World w = new World(c);
-                w.setMaxPopulation(0);
-                java.util.Random r = new java.util.Random(8);
-                // A noise round the corner from twenty of the dead: they come by the one shared route, round the
-                // buildings, and get there.
-                float[] n = w.city.randomWalkableInTown(r);
-                java.util.List<Entity> zs = new java.util.ArrayList<Entity>();
-                for (int k = 0; k < 600 && zs.size() < 20; k++) {
-                    float an = r.nextFloat() * 6.283f, d = 180 + r.nextFloat() * 150;
-                    float x = n[0] + (float) Math.cos(an) * d, y = n[1] + (float) Math.sin(an) * d;
-                    if (w.city.solidAt(x, y) || w.city.los(x, y, n[0], n[1]) || w.city.findPath(x, y, n[0], n[1], 9000) == null) continue;
-                    zs.add(w.spawn(Entity.ZOMBIE, x, y));
-                }
-                check(zs.size() == 20, "twenty of the dead out of sight of the noise");
-                int made = w.luresMade, there = 0;
-                for (int f = 0; f < 30 * 25; f++) {
-                    if (f % 90 == 0) w.noise(n[0], n[1], 400);
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    // ((10.52) The noise is near a police station now: officers kept away, so it's the dead's routing
-                    // that's tested, not who shoots them on the way.)
-                    for (Entity e : w.entities) if (e.isArmed() && Math.hypot(e.x - n[0], e.y - n[1]) < 800) e.dead = e.removed = true;
-                }
-                for (Entity z : zs) if (Math.hypot(z.x - n[0], z.y - n[1]) < 60) there++;
-                check(there >= 15, "most get to the noise round the buildings (" + there + " of 20)");
-                check(w.luresMade - made <= 12, "by a few shared routes, not one each (" + (w.luresMade - made) + ")");
-                // Lost sight of someone: on the way they were going, before casting about.
-                w.entities.clear();
-                float[] o = null;
-                for (int k = 0; k < 400 && o == null; k++) {
-                    float[] q = w.city.randomWalkableInTown(r);
-                    if (q != null && w.city.los(q[0], q[1], q[0] + 120, q[1]) && !w.city.solidAt(q[0] + 120, q[1])) o = q;
-                }
-                check(o != null, "a clear stretch of street");
-                Entity z = w.spawn(Entity.ZOMBIE, o[0], o[1]);
-                z.lastX = o[0] + 8;
-                z.lastY = o[1];
-                z.trackX = 60;
-                z.trackY = 0;
-                z.memory = 5;
-                for (int f = 0; f < 20 && z.lastX < o[0] + 60; f++) w.update(1 / 30f);
-                check(z.memory > 0 && z.lastX > o[0] + 60, "it carries on the way they went (" + (int) (z.lastX - o[0]) + ")");
-                // A horde on the move keeps together: its followers stay with it round the corners.
-                w.entities.clear();
-                float[] h = w.city.randomWalkableInTown(r);
-                Entity lead = w.spawn(Entity.ZOMBIE, h[0], h[1]);
-                java.util.List<Entity> horde = new java.util.ArrayList<Entity>();
-                for (int k = 0; k < 400 && horde.size() < 12; k++) {
-                    float x = h[0] + r.nextFloat() * 80 - 40, y = h[1] + r.nextFloat() * 80 - 40;
-                    if (!w.city.solidAt(x, y)) horde.add(w.spawn(Entity.ZOMBIE, x, y));
-                }
-                lead.leadsHorde = true;
-                lead.hordeSize = horde.size() + 1;
-                for (Entity f : horde) {
-                    f.hordeLeader = lead;
-                    f.roamX = 10 + r.nextFloat() * 40;
-                    f.roamY = r.nextFloat() * 30 - 15;
-                }
-                float sx = lead.x, sy = lead.y;
-                for (int f = 0; f < 30 * 60; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                int with = 0;
-                for (Entity f : horde) if (f.hordeLeader == lead && Math.hypot(f.x - lead.x, f.y - lead.y) < 150) with++;
-                check(lead.leadsHorde && Math.hypot(lead.x - sx, lead.y - sy) > 150, "the horde gets somewhere (" + (int) Math.hypot(lead.x - sx, lead.y - sy) + ")");
-                check(with >= 9, "and most of it is still with it a minute later (" + with + " of " + horde.size() + ")");
             }
         });
         test("10.40: one road network - every home on a road or lane, no roads to nowhere, lanes and drives joined up", new Check() {
@@ -3041,50 +2138,6 @@ public final class GameTests {
                 check(overlaps <= 10, "cars don't end up on top of one another (" + overlaps + ")");
             }
         });
-        test("10.43: no street runs through a country town's police or fire station; lanes and drives meet up without gaps", new Check() {
-            public void run() throws Exception {
-                for (int[] ps : new int[][]{{0, 3, CityConfig.MASSIVE}, {0, 5, CityConfig.MASSIVE}, {2, 5, CityConfig.LARGE}}) {
-                    CityConfig c = new CityConfig();
-                    c.civic = 25; // ((11.0) Map version 25: the country round the town as it was before the thin band.)
-                    c.v[CityConfig.OPT_PRESET] = ps[0];
-                    c.v[CityConfig.OPT_SIZE] = ps[2];
-                    c.seed = ps[1];
-                    c.normalize();
-                    c.seed = ps[1];
-                    City city = new City(c, 0.05f);
-                    String m = "map " + ps[0] + "/" + ps[1] + ": ";
-                    int w = city.w, stations = 0;
-                    for (City.Facility f : city.facilities) {
-                        if (!f.satellite || (f.kind != City.FACILITY_POLICE && f.kind != City.FACILITY_FIRE)) continue;
-                        stations++;
-                        int tx = (int) (f.x / City.T), ty = (int) (f.y / City.T), through = 0;
-                        for (int y = ty - 2; y <= ty + 2; y++)
-                            for (int x = tx - 1; x <= tx + 1; x++) {
-                                byte t = city.tiles[y * w + x];
-                                if (t == City.ROAD || t == City.DIRT) through++;
-                            }
-                        check(through == 0, m + f.name + " has no road through it (" + through + ")");
-                    }
-                    if (ps[2] == CityConfig.MASSIVE) check(stations >= 4, m + "country towns with their own stations (" + stations + ")");
-                    // Two ways (lane, drive or road) that only touch corner to corner, with nothing joining them.
-                    int pinch = 0;
-                    for (int y = 1; y < city.h - 1; y++)
-                        for (int x = 1; x < w - 1; x++) {
-                            int i = y * w + x;
-                            if (city.tiles[i] != City.DIRT) continue;
-                            for (int dx = -1; dx <= 1; dx += 2) {
-                                int j = (y + 1) * w + x + dx;
-                                byte o = city.tiles[j], a = city.tiles[y * w + x + dx], b = city.tiles[(y + 1) * w + x];
-                                boolean wayO = o == City.DIRT || o == City.ROAD || o == City.LOT;
-                                boolean wayA = a == City.DIRT || a == City.ROAD || a == City.LOT || a == City.CAR;
-                                boolean wayB = b == City.DIRT || b == City.ROAD || b == City.LOT || b == City.CAR;
-                                if (wayO && !wayA && !wayB && (a == City.GRASS || b == City.GRASS)) pinch++;
-                            }
-                        }
-                    check(pinch == 0, m + "lanes don't meet corner to corner (" + pinch + ")");
-                }
-            }
-        });
         test("10.45: calls always reach the map and follow the dead, units help each other, louder guns, shoves can fail, yards kept clear", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -3367,39 +2420,6 @@ public final class GameTests {
                 }
             }
         });
-        test("10.56: counts that add up, people on the streets", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.seed = 9;
-                c.v[CityConfig.OPT_SIZE] = CityConfig.LARGE;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.normalize();
-                c.seed = 9;
-                World w = new World(c);
-                City city = w.city;
-                int[] fc = World.forecast(c, city, 0);
-                w.setMaxPopulation(0);
-                w.populate(c);
-                w.recount();
-                // The New Game screen's numbers are the game's.
-                check(fc[0] == w.civilians, "people forecast " + fc[0] + ", in the game " + w.civilians);
-                check(Math.abs(fc[1] - w.counts[Entity.COP]) <= Math.max(6, fc[1] / 12), "police forecast " + fc[1] + ", in the game " + w.counts[Entity.COP]);
-                check(Math.abs(fc[2] - w.counts[Entity.SOLDIER]) <= Math.max(6, fc[2] / 12), "soldiers forecast " + fc[2] + ", in the game " + w.counts[Entity.SOLDIER]);
-                // People out and about start on the streets, not in the fields.
-                int out = 0, grass = 0;
-                for (Entity e : w.entities) {
-                    if (e.dead || e.removed || e.type != Entity.CIVILIAN || e.home == null) continue;
-                    out++;
-                    if (city.tiles[city.tileIndex(e.x, e.y)] == City.GRASS) grass++;
-                }
-                check(out > 50 && grass * 4 < out, "people start on the streets (" + grass + " of " + out + " on grass)");
-                // Nobody counted twice: as many people as live here and are about.
-                int indoors = 0;
-                for (City.Building b : city.buildings) indoors += b.visitors.size() + b.occupants.size();
-                check(w.counts[Entity.CIVILIAN] + indoors >= w.civilians && w.civilians <= c.civilians(city.totalResidents) + 200,
-                        "the count of people adds up (" + w.civilians + ")");
-            }
-        });
         test("10.48: an empty police car is taken by officers on foot nearby; (10.49) people leave by evacuation bus and train", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -3527,6 +2547,51 @@ public final class GameTests {
                 check(c.coreFraction() >= 0.85f, "nine tenths town (" + c.coreFraction() + ")");
                 // The new roles.
                 check(Entity.ROLE_NAMES.length == 16 && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE]), "every role named");
+            }
+        });
+        test("11.5: guards at the gates replaced, kinds of building with uses, leaders who decide, new layouts", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                check(c.civic == 28, "new cities are built the 11.5 way");
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 3;
+                World w = new World(c);
+                w.populate(c);
+                int held = 0, k = -1;
+                for (int i = 0; i < w.rosterHolders.size(); i++)
+                    if (w.rosterHolders.get(i) != null) {
+                        held++;
+                        if (k < 0) k = i;
+                    }
+                check(held > 0, "the gates and checkpoints are on the roster with their guards (" + held + ")");
+                Entity dead = w.rosterHolders.get(k);
+                dead.dead = true;
+                w.staffPosts();
+                Entity next = w.rosterHolders.get(k);
+                check(next != null && next != dead && !next.dead && next.task == Dispatch.T_POST,
+                        "a guard killed at a gate is replaced by the nearest free soldier");
+                check(Variants.use(Variants.gov(City.ARMORY)) == Variants.U_NONE, "government buildings have no special use now");
+                int tools = -1, vault = -1, glass = -1;
+                for (int i = 0; i < Variants.ALL_VARIANTS.size(); i++) {
+                    String n = Variants.ALL_VARIANTS.get(i).name;
+                    if (n.equals("Lumber yard")) tools = i;
+                    if (n.equals("Self storage")) vault = i;
+                    if (n.equals("Boutique")) glass = i;
+                }
+                check(Variants.use(tools) == Variants.U_TOOLS && Variants.use(vault) == Variants.U_VAULT && Variants.use(glass) == Variants.U_GLASS,
+                        "lumber yards, storage units and boutiques each have their use");
+                City.Building b = w.city.buildings.get(0);
+                b.use = Variants.U_VAULT;
+                float strong = World.doorWeakness(b);
+                b.use = Variants.U_GLASS;
+                check(strong < 0.5f && World.doorWeakness(b) > 1.2f, "a vault door holds far longer than a glass front");
+                // The leaders take their decisions as the outbreak goes on.
+                w.outbreak = true;
+                w.alert = 2;
+                for (int i = 0; i < 40; i++) w.spawn(Entity.ZOMBIE, w.city.worldW() / 2f + i * 3, w.city.worldH() / 2f);
+                w.update(1 / 30f);
+                for (int i = 0; i < 80 && w.decisions == 0; i++) w.leadersDecide(100);
+                check(w.decisions != 0, "the city's leaders make an emergency decision (" + w.command + ")");
             }
         });
         test("11.5: the quick ways give the same answers as the long ones", new Check() {

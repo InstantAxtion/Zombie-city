@@ -29,7 +29,7 @@ away from the middle of the screen as you pan, and the game plays in both portra
   buses in the USA, utes and 4WDs in Australia, kei cars and minivans in Japan, hatchbacks and vans in
   France, Beetles and pink taxis in Mexico. Avenues have turn-lane arrows before each junction.
 - **Load Game**: three save slots plus the autosave (save from the pause menu).
-- **Records & Achievements**: best results across games and 15 achievements.
+- **Records**: best results across games.
 - **Settings**: music and sound volume, view (3D or bird's-eye), minimap, text and button size, battery saver, blood, health bars, screen shake, FPS counter
   max population (Auto, the default, makes room for everyone who lives in the city), name tags and graphics (Realistic: textured ground, soft shadows and shading; or Classic). Saved between sessions.
 - **Patch Notes**: what changed in each version.
@@ -160,7 +160,7 @@ on the phone, so the APK contains no audio files.
 - **Police keep their distance**: patrol cars and backup stop short of a crowd of the dead and the
   officers go in on foot; a car driving back empty holds back rather than go through a horde (and is
   left parked if the road stays blocked).
-- **Save/load**, a **Stats** screen (people vs zombies over time) and a **How to Play** tutorial.
+- **Save/load**, a **Stats** screen (people vs zombies over time).
 
 ## Who wins?
 
@@ -420,6 +420,16 @@ glance, nearby cars and units are found from spatial grids, and anything off scr
 every other step or so. Drawing is cut hard too: zoomed out about a quarter of the draw calls (crowd dots batched, cars and
 emergency vehicles simplified), zoomed in about a third, with small people drawn plainly and off-screen walls, minimap
 cars and tiny roof lettering skipped. Cars that miss a tight turn and orbit a block now pick somewhere else to go.
+
+Also in 11.5: a modern main menu, New Game screen, Settings and Pause, with a new logo and app icon; flick momentum in
+menus and (gently) on the map. Achievements, How to Play and the Suburbs map are gone, and the government buildings'
+benefits simply apply. Guards on gates, checkpoints and roadblocks fall back from the dead and retake their posts, and
+dead gate guards are replaced; in an emergency every free officer at a station turns out. Buildings have uses (food,
+medical care, tools for barricades, vault doors, glass fronts, a radio to call for help, guns on the shelves), people
+inside shoot from the windows and brace the door, and each outbreak's hidden leadership makes its own decisions (curfew,
+quarantine, open gun stores, the Guard early, ammunition runs). Roundabout routes no longer loop over the island, new
+cities have more winding neighbourhoods and varied setbacks, and district names are richer and lettered like a map.
+The test suite is smaller (40 tests plus one new one).
 
 **Steadier close-ups; fewer water maps; more guns; car patrols (11.4):** a frame that can't be drawn when zoomed right in is skipped
 (and the map's close-ups freed if memory runs short) instead of the game closing. Seaside, River City and Bay City
