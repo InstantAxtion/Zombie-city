@@ -475,7 +475,8 @@ final class World {
         aFill = new int[gw * gh];
         cellCount = new int[gw * gh];
         cellFill = new int[gw * gh];
-        if (city.courthouse != null) {
+        // ((11.5) No courthouse armoury: the government buildings are just buildings now.)
+        if (false) {
             City.Building b = city.courthouse;
             courtArmoury = new City.Facility(City.FACILITY_POLICE, b.doorX, b.doorY, 40, b.doorX, b.doorY, b.name);
         }
@@ -582,7 +583,7 @@ final class World {
         dispatch.swatTeams = city.nearestFacility(City.FACILITY_POLICE, 0, 0) == null ? 0 : city.w >= 300 ? 2 : 1;
         launchBoats();
         if (courtArmoury != null) courtArmoury.ammo = 1200;
-        inmates = city.jail != null ? 6 + rnd.nextInt(9) : 0;
+        inmates = 0;
         int people = Math.min(cfg.civilians(city.totalResidents), maxEntities * 4 / 5);
         residents(people);
         // A few strays.
@@ -4274,10 +4275,9 @@ final class World {
             alert = 1;
             timeline("It's on the news");
         }
-        // (City Hall puts out the emergency broadcast sooner; with City Hall lost it's left to the news.)
-        boolean hall = city.cityHall != null, hallUp = hall && !hallLost;
-        float t2 = hallUp ? 150 : hall ? 240 : 190;
-        int z2 = hallUp ? 20 : hall ? 35 : 26, c2 = hallUp ? 14 : hall ? 24 : 18;
+        // ((11.5) The emergency broadcast goes out in good time, City Hall or no City Hall.)
+        float t2 = 150;
+        int z2 = 20, c2 = 14;
         if (alert < 2 && seen && (outbreakTime > t2 || zombies >= z2 || dispatch.calls >= c2)) {
             alert = 2;
             timeline("Emergency broadcast: everyone indoors");
@@ -4288,8 +4288,7 @@ final class World {
             dispatch.say(Dispatch.WHO_INFO, null, "News: Reports of people attacking people near " + where
                     + ". Police urge residents to stay indoors.", city.worldW() / 2, city.worldH() / 2);
         } else {
-            banner("EMERGENCY BROADCAST", (city.cityHall != null && !hallLost ? "From " + city.cityHall.name + ": g" : "G")
-                    + "et indoors and lock your doors. Do not approach the infected.");
+            banner("EMERGENCY BROADCAST", "Get indoors and lock your doors. Do not approach the infected.");
             for (int i = 0, n = entities.size(); i < n; i++) {
                 Entity e = entities.get(i);
                 if (!e.dead && e.type == Entity.CIVILIAN) e.aware = true;
@@ -5609,57 +5608,14 @@ final class World {
 
     /** Broadcasts get out: the power's on and City Hall (if the city has one) is still running. */
     boolean broadcasting() {
-        return !blackout && !(city.cityHall != null && hallLost);
+        return !blackout;
     }
 
     /** Once a second: what the government buildings are doing, and whether they've fallen. */
     private void government() {
-        City.Building h = city.cityHall;
-        if (h != null) {
-            int was = hallLost ? 1 : 0;
-            hallThreat = threat(h, hallThreat);
-            hallLost = lost(h, hallThreat, hallLost);
-            if (hallLost && was == 0)
-                dispatch.say(Dispatch.WHO_INFO, null, h.name + " has been overrun. The Mayor's office has gone silent: no more emergency broadcasts or calls for volunteers.",
-                        h.doorX, h.doorY);
-            else if (!hallLost && was == 1)
-                dispatch.say(Dispatch.WHO_INFO, null, "The Mayor's staff are back in " + h.name + ". Broadcasts are going out again.", h.doorX, h.doorY);
-        }
-        City.Building c = city.callCentre;
-        if (c != null) {
-            boolean was = callsLost;
-            callsThreat = threat(c, callsThreat);
-            callsLost = lost(c, callsThreat, callsLost);
-            if (callsLost && !was)
-                dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: " + c.name + " has been overrun. 911 calls are going unanswered and the cameras are down.",
-                        c.doorX, c.doorY);
-            else if (!callsLost && was)
-                dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: " + c.name + " is back on the air. We're taking calls again.", c.doorX, c.doorY);
-        }
-        City.Building wd = city.worksDepot;
-        if (wd != null) {
-            boolean was = worksLost;
-            worksThreat = threat(wd, worksThreat);
-            worksLost = lost(wd, worksThreat, worksLost);
-            if (worksLost && !was)
-                dispatch.say(Dispatch.WHO_INFO, null, wd.name + " has been overrun. The road crews have scattered.", wd.doorX, wd.doorY);
-            else if (!worksLost && was)
-                dispatch.say(Dispatch.WHO_INFO, null, "Crews are back at " + wd.name + ".", wd.doorX, wd.doorY);
-            if (!worksLost && !wd.collapsed && outbreak && alert >= 1 && aftermath == AFTER_NONE) boardUp();
-        }
-        City.Building ar = city.armory;
-        if (ar != null) {
-            boolean was = armoryLost;
-            armoryThreat = threat(ar, armoryThreat);
-            armoryLost = lost(ar, armoryThreat, armoryLost);
-            String force = Country.guard()[1];
-            if (armoryLost && !was)
-                dispatch.say(Dispatch.WHO_MILITARY, null, ar.name + " has been overrun. If the " + force
-                        + " is called out now, they'll have to come from out of town.", ar.doorX, ar.doorY);
-            else if (!armoryLost && was)
-                dispatch.say(Dispatch.WHO_MILITARY, null, ar.name + " is clear again.", ar.doorX, ar.doorY);
-        }
-        jail();
+        // ((11.5) The government buildings' work goes on whatever happens to the buildings: road crews board up
+        // shelters through the outbreak; nobody tracks which office has fallen, and the jail has nobody to break out.)
+        if (outbreak && alert >= 1 && aftermath == AFTER_NONE) boardUp();
     }
 
     /** How long the dead have held a building (it falls at 15). */
@@ -5692,7 +5648,7 @@ final class World {
         best.barricade = Math.min(100, best.barricade + 35);
         boardedUp++;
         if (boardedUp == 1 || boardedUp % 10 == 0)
-            dispatch.say(Dispatch.WHO_INFO, null, "News: Crews from " + city.worksDepot.name + " are boarding up buildings with people sheltering inside ("
+            dispatch.say(Dispatch.WHO_INFO, null, "News: Road crews are boarding up buildings with people sheltering inside ("
                     + boardedUp + " so far).", best.doorX, best.doorY);
     }
 
@@ -6143,8 +6099,6 @@ final class World {
         peakCops = Math.max(peakCops, counts[Entity.COP]);
         peakSoldiers = Math.max(peakSoldiers, counts[Entity.SOLDIER]);
         if (peakZombies < 5) return;
-        // (Volunteer drives are run from City Hall.)
-        if (city.cityHall != null && hallLost) return;
         policeDrive = drive(Entity.COP, City.FACILITY_POLICE, peakCops, policeDrive);
         armyDrive = drive(Entity.SOLDIER, City.FACILITY_BASE, peakSoldiers, armyDrive);
     }
@@ -7126,7 +7080,7 @@ final class World {
         boolean local = hq != null && hq.baseType == City.BT_GUARD;
         // (The Mayor asks the governor; with City Hall gone, the governor takes a lot longer to hear. With the
         // town's own armory overrun, the Guard has to come from out of town, which takes longer still.)
-        boolean hall = city.cityHall != null;
+        boolean hall = true;
         City.Building arm = city.armory;
         boolean muster = arm != null && !armoryLost && !arm.collapsed;
         float wait = local ? 50 : hall && !hallLost ? 70 : hall ? 200 : 90;
@@ -8607,7 +8561,7 @@ final class World {
     private void recovery() {
         recoveryStep((int) afterTime);
         // (The public works crews make it go twice as fast.)
-        if (city.worksDepot != null && !worksLost && !city.worksDepot.collapsed) {
+        if (city.worksDepot != null && !city.worksDepot.collapsed) {
             if (afterTime > 20 && (afterSaid & 64) == 0) {
                 afterSaid |= 64;
                 dispatch.say(Dispatch.WHO_INFO, null, "News: " + city.worksDepot.name + " has every truck out clearing the streets.",

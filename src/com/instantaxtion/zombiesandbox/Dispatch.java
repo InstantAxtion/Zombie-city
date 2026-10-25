@@ -499,7 +499,7 @@ final class Dispatch {
         caller.phoneTimer = 3f;
         w.emit(Sfx.PHONE, caller.x, caller.y);
         // With the call centre overrun, most calls just ring out.
-        if (w.callsLost && rnd.nextFloat() < 0.6f) {
+        if (false) {
             if (w.time - unansweredSaid > 40) {
                 unansweredSaid = w.time;
                 say(WHO_911, null, "(The line rings and rings. Nobody at " + city.callCentre.name + " picks up.)", caller.x, caller.y);
@@ -690,8 +690,8 @@ final class Dispatch {
         if (sweepCd > 0 || w.alert < 1) return;
         // The call centre watches the traffic cameras: it spots trouble sooner and keeps more calls going.
         // With it overrun, nobody's watching.
-        boolean centre = city.callCentre != null;
-        if (centre && w.callsLost) return;
+        // ((11.5) As if every city had one.)
+        boolean centre = true;
         sweepCd = centre ? 2 : 3;
         // ((10.51) More at once in a bigger city.)
         int max = Math.min(maxCalls(), 8 + city.w / 25 + (centre ? 6 : 0));

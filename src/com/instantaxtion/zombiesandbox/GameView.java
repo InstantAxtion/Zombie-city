@@ -224,6 +224,9 @@ final class GameView extends View implements Menu.Host {
     private static final int MODE_NONE = 0, MODE_UI = 1, MODE_WORLD = 2, MODE_GESTURE = 3;
     private int mode;
     private float downX, downY, lastX, lastY, lastSpawnX, lastSpawnY;
+    // ((11.5) A flicked pan glides on a little: the map's speed in world units a second, and when the finger last moved.)
+    private float panVX, panVY;
+    private long panAt;
     private boolean dragged;
     private float pinchDist, pinchMidX, pinchMidY;
 
@@ -874,6 +877,19 @@ final class GameView extends View implements Menu.Host {
             if (follow != null && follow.dead) world.say("You didn't make it");
         }
         wasControlling = world.controlled != null;
+        if (panVX != 0 || panVY != 0) {
+            if (mode != MODE_NONE || follow != null || followV != null || menu.liveBackground()) panVX = panVY = 0;
+            else {
+                float ox = camX, oy = camY;
+                camX += panVX * dt;
+                camY += panVY * dt;
+                clampCamera();
+                float k = (float) Math.exp(-4.5f * dt);
+                panVX = camX == ox ? 0 : panVX * k;
+                panVY = camY == oy ? 0 : panVY * k;
+                if (Math.abs(panVX) + Math.abs(panVY) < 8) panVX = panVY = 0;
+            }
+        }
         if (menu.liveBackground()) driftCamera(dt);
         else if (follow != null) {
             if (follow.dead && follow != world.controlled) {
@@ -904,11 +920,7 @@ final class GameView extends View implements Menu.Host {
             recordTimer -= dt;
             if (recordTimer <= 0) {
                 recordTimer = 2;
-                String got = records.check(world);
-                if (got != null) {
-                    headline("ACHIEVEMENT UNLOCKED", got, 0xFFFFD86B);
-                    sound.play(Sfx.RADIO, 0.8f, 0);
-                }
+                records.check(world);
             }
         }
         // Headlines: one at a time, each for a few seconds.
@@ -1563,9 +1575,6 @@ final class GameView extends View implements Menu.Host {
             bc.drawText(world.city.name + "  -  Zombie City Sandbox  -  city " + world.city.cfg.code(), getWidth() - 10 * dp,
                     getHeight() - 10 * dp, text);
             shareHandler.share(b);
-            if (records.unlock(Records.PHOTO)) {
-                headline("ACHIEVEMENT UNLOCKED", Records.ACHIEVEMENTS[Records.PHOTO][0], 0xFFFFD86B);
-            }
         } catch (Throwable t) {
             world.say("Couldn't take a screenshot");
         }
@@ -7487,6 +7496,7 @@ final class GameView extends View implements Menu.Host {
                     downX = lastX = x;
                     downY = lastY = y;
                     dragged = false;
+                    panVX = panVY = 0;
                     worldDown(x, y);
                 }
                 return true;
@@ -7746,6 +7756,13 @@ final class GameView extends View implements Menu.Host {
                 camX -= (x - lastX) / scale;
                 camY -= (y - lastY) / scale;
                 clampCamera();
+                long now = System.nanoTime();
+                float sec = Math.max(0.004f, (now - panAt) / 1e9f);
+                if (sec < 0.1f) {
+                    panVX = panVX * 0.5f - (x - lastX) / scale / sec * 0.5f;
+                    panVY = panVY * 0.5f - (y - lastY) / scale / sec * 0.5f;
+                } else panVX = panVY = 0;
+                panAt = now;
             }
         } else if (tool == TOOL_ERASE) {
             world.erase(wx, wy, 22);
@@ -7793,6 +7810,14 @@ final class GameView extends View implements Menu.Host {
             }
             boxing = false;
             return;
+        }
+        if (tool == TOOL_PAN && dragged) {
+            // Let go mid-swipe and the map glides on, gently; held still first and it stays put.
+            if ((System.nanoTime() - panAt) / 1e9f > 0.08f) panVX = panVY = 0;
+            else {
+                panVX *= 0.55f;
+                panVY *= 0.55f;
+            }
         }
         if (tool != TOOL_PAN || dragged) return;
         float wx = worldX(x), wy = worldY(y);
@@ -7875,13 +7900,10 @@ final class GameView extends View implements Menu.Host {
             case City.PHARMACY: role = "Patches people up and sometimes stops a bite"; break;
             case City.FIRE_STATION: role = "The fire station (no crews any more): the paramedics are based here"; break;
             case City.HOUSE: case City.APARTMENT: role = "Home: the people who live here run back to it"; break;
-            case City.CITY_HALL: role = world.hallLost ? "FALLEN: no emergency broadcasts, no volunteers, no one to call the Guard"
-                    : "Runs the emergency: broadcasts, calls for volunteers, asks for the National Guard"; break;
-            case City.COURTHOUSE: role = "Its holding cells and evidence room: police restock here; can become a safe zone"; break;
-            case City.JAIL: role = world.jailBroken ? "EMPTY: the inmates broke out"
-                    : world.inmates + " inmates locked up. If it's overrun or the power fails, they break out"; break;
-            case City.CALL_CENTRE: role = world.callsLost ? "FALLEN: 911 calls go unanswered and nobody is watching the cameras"
-                    : "Answers 911 calls and watches the cameras: police are sent to trouble quicker"; break;
+            case City.CITY_HALL: role = "The Mayor's office"; break;
+            case City.COURTHOUSE: role = "The county courthouse; can become a safe zone"; break;
+            case City.JAIL: role = "The county jail"; break;
+            case City.CALL_CENTRE: role = "The 911 call centre"; break;
             case City.ARMORY: {
                 String[] g = Country.guard();
                 role = world.armoryLost ? "FALLEN: the " + g[1] + " can't muster here; they'll have to come from out of town"
@@ -7889,8 +7911,7 @@ final class GameView extends View implements Menu.Host {
                         : "The " + g[1] + ": reservists muster here and drive out when the " + g[2] + " calls them up";
                 break;
             }
-            case City.WORKS: role = world.worksLost ? "FALLEN: no crews out boarding up or clearing the streets"
-                    : "Crews board up shelters during the outbreak and clear the streets after it"; break;
+            case City.WORKS: role = "The city works depot"; break;
         }
         if (role != null) lines.add(role);
         text.setTextAlign(Paint.Align.LEFT);

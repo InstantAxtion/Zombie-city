@@ -56,7 +56,7 @@ final class Menu {
         void askCityCode(String current);
     }
 
-    static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, TUTORIAL = 7, RECORDS = 8,
+    static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
             SAVES = 9, LOG = 10, REPLAY = 11;
     /** The save slot screen: saving (from the pause menu) or loading (from the main menu). */
     private boolean savingMode;
@@ -67,16 +67,7 @@ final class Menu {
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
             A_REPLAY = 24, A_REPLAY_PLAY = 25, A_SLOT = 100, A_LOG_ROW = 200;
 
-    private static final String[][] TUTORIAL_PAGES = {
-            {"Welcome to Zombie City", "A sandbox: set up a city, start an outbreak and watch what happens. There are no missions. Play however you like."},
-            {"Spawning", "Pick a unit in the bottom bar and tap the city. Drag to paint a line of them, or use Brush (top) to spawn 5 or 10 at once. Buttons with a dot open a picker: People, Police, Military (soldiers, snipers, gunners, the National Guard) and Zombies. Tap a choice, then tap the city."},
-            {"Looking around", "Pinch to zoom and drag with two fingers. With Move selected you can drag with one finger, and tap anyone to follow them with the camera. Press Take control on their card to play them yourself: left thumb to move (push further to run), the red button to shoot, bite or shove. Zoom right in to see through roofs. The View button switches between 3D and bird's-eye."},
-            {"The city fights back", "Civilians call 911, the police respond by car, and the military is called in when it gets bad. The radio feed shows what they say. Tap a message to jump there."},
-            {"Safe zones and hiding", "Police and soldiers pick a spot well away from the dead and put up a sandbag line; the zone opens once it's built. Its border grows as people arrive and guards join, follows the streets, and pulls back where the dead push. Others barricade themselves in buildings until zombies break the door down. Where and when zones go up is up to them."},
-            {"Ammo and reserves", "Ammo runs out, and units go back to the station or base to resupply. Backup, army squads and helicopter support are limited."},
-            {"Pausing and saving", "Menu (top right) pauses the game, saves it and shows the stats. The game also saves itself when you leave the app."},
-    };
-    private int tutorialPage;
+    // ((11.5) No How to Play pages any more.)
 
     private static final class Button {
         final RectF r = new RectF();
@@ -134,6 +125,13 @@ final class Menu {
 
     private boolean dragging, pressed;
     private float downX, downY, lastY;
+    /** ((11.5) Scrolling carries on after the finger lifts, slowing to a stop: how fast, and when it last moved.) */
+    private float flingV;
+    private long lastMoveAt;
+
+    /** ((11.5) The menus' look: a dark night palette with one toxic-green accent.) */
+    static final int BG = 0xFF0C0F13, CARD = 0xFF161A20, CARD_HI = 0xFF1E242C, EDGE = 0x22FFFFFF, ACCENT = 0xFF7CE04A,
+            ACCENT_INK = 0xFF0B1A06, INK = 0xFFF1F4F7, MUTED = 0xFF8C96A2;
 
     Menu(Host host, Settings settings, float dp) {
         this.host = host;
@@ -158,7 +156,7 @@ final class Menu {
     }
 
     void open(int s) {
-        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == TUTORIAL || s == RECORDS || s == SAVES || s == LOG) {
+        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG) {
             if (screen == MAIN || screen == PAUSE || screen == NONE) returnTo = screen;
         } else {
             returnTo = MAIN;
@@ -170,7 +168,6 @@ final class Menu {
             config.newSeed(rnd);
             config.dropRetired();
         }
-        if (s == TUTORIAL) tutorialPage = 0;
     }
 
     /** A city code typed in by the player. */
@@ -206,6 +203,17 @@ final class Menu {
 
     void draw(Canvas c, int w, int h, float dt) {
         time += dt;
+        // ((11.5) Momentum: a flicked list keeps going, easing off.)
+        float flung = -1;
+        if (!dragging && Math.abs(flingV) > 4 * dp) {
+            scroll += flingV * Math.min(dt, 0.05f);
+            flingV *= (float) Math.exp(-3.2f * Math.min(dt, 0.05f));
+            if (scroll < 0) {
+                scroll = 0;
+                flingV = 0;
+            }
+            flung = scroll;
+        } else if (!dragging) flingV = 0;
         for (Button b : buttons) pool.add(b);
         buttons.clear();
         segPool.addAll(segs);
@@ -218,13 +226,14 @@ final class Menu {
             case SETTINGS: drawOptions(c, w, h, "Settings", settings, false); break;
             case NOTES: drawNotes(c, w, h); break;
             case STATS: drawStats(c, w, h); break;
-            case TUTORIAL: drawTutorial(c, w, h); break;
             case RECORDS: drawRecords(c, w, h); break;
             case SAVES: drawSaves(c, w, h); break;
             case LOG: drawLog(c, w, h); break;
             case REPLAY: drawReplay(c, w, h, dt); break;
         }
         for (Button b : buttons) drawButton(c, b);
+        // (Run into the end of the list: stop there.)
+        if (flung >= 0 && scroll != flung) flingV = 0;
     }
 
     private Button button(String label, int action, boolean primary, float l, float t, float r, float b) {
@@ -240,95 +249,211 @@ final class Menu {
 
     private void drawButton(Canvas c, Button b) {
         if (b.invisible) return;
-        fill.setColor(b.primary ? 0xFF3F8A3A : 0xE0262A30);
-        c.drawRoundRect(b.r, 12 * dp, 12 * dp, fill);
-        stroke.setStrokeWidth(1.5f * dp);
-        stroke.setColor(b.primary ? 0xFF9BE08A : 0x50FFFFFF);
-        c.drawRoundRect(b.r, 12 * dp, 12 * dp, stroke);
+        // ((11.5) Flat, rounded, modern: the main action in the accent colour, the rest dark cards with a fine edge.)
+        float r = Math.min(14 * dp, b.r.height() / 2);
+        if (b.primary) {
+            fill.setColor(0x40000000);
+            tmp.set(b.r.left, b.r.top + 3 * dp, b.r.right, b.r.bottom + 3 * dp);
+            c.drawRoundRect(tmp, r, r, fill);
+            fill.setColor(ACCENT);
+            c.drawRoundRect(b.r, r, r, fill);
+            fill.setColor(0x26FFFFFF);
+            tmp.set(b.r.left, b.r.top, b.r.right, b.r.centerY());
+            c.drawRoundRect(tmp, r, r, fill);
+        } else {
+            fill.setColor(CARD_HI);
+            c.drawRoundRect(b.r, r, r, fill);
+            stroke.setStrokeWidth(1 * dp);
+            stroke.setColor(EDGE);
+            c.drawRoundRect(b.r, r, r, stroke);
+        }
         text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(Math.min(18 * dp, b.r.height() * 0.38f));
+        text.setTextSize(Math.min(16.5f * dp, b.r.height() * 0.36f));
         float fit = text.measureText(b.label);
-        if (fit > b.r.width() - 16 * dp) text.setTextSize(text.getTextSize() * (b.r.width() - 16 * dp) / fit);
-        text.setColor(0xFFF4F4F4);
+        if (fit > b.r.width() - 18 * dp) text.setTextSize(text.getTextSize() * (b.r.width() - 18 * dp) / fit);
+        text.setColor(b.primary ? ACCENT_INK : INK);
         c.drawText(b.label, b.r.centerX(), b.r.centerY() + text.getTextSize() * 0.36f, text);
     }
 
+    /** ((11.5) The backdrop behind the menus: the city dimmed under a dusk-to-night fade.) */
+    private void backdrop(Canvas c, int w, int h, float strength) {
+        int bands = 14;
+        for (int k = 0; k < bands; k++) {
+            float f = k / (float) (bands - 1);
+            // (Darkest at the top, behind the logo; the city shows through a little more lower down.)
+            float g = 1 - Math.abs(f - 0.35f) * 0.5f;
+            int a = (int) Math.min(255, 255 * strength * (0.62f + 0.36f * g));
+            fill.setColor((a << 24) | 0x080B0F);
+            c.drawRect(0, (float) Math.floor(h * k / (float) bands), w, (float) Math.floor(h * (k + 1) / (float) bands), fill);
+        }
+        // A faint green glow low on the screen, like the city's lights through smoke.
+        fill.setColor(0x147CE04A);
+        c.drawCircle(w * 0.5f, h * 1.05f, Math.max(w, h) * 0.55f, fill);
+        fill.setColor(0x0E7CE04A);
+        c.drawCircle(w * 0.5f, h * 1.05f, Math.max(w, h) * 0.75f, fill);
+    }
+
+    /** ((11.5) A page's top bar: a round back button and the title beside it. Returns where the page starts.) */
+    private float header(Canvas c, int w, int h, String title) {
+        fill.setColor(BG);
+        c.drawRect(0, 0, w, h, fill);
+        float top = 14 * dp, hh = 44 * dp;
+        Button back = button("", A_BACK, false, 14 * dp, top, 14 * dp + hh, top + hh);
+        back.invisible = true;
+        fill.setColor(CARD_HI);
+        c.drawCircle(14 * dp + hh / 2, top + hh / 2, hh / 2, fill);
+        stroke.setColor(INK);
+        stroke.setStrokeWidth(2.4f * dp);
+        float cx = 14 * dp + hh / 2 - 2 * dp, cy = top + hh / 2;
+        c.drawLine(cx + 5 * dp, cy - 8 * dp, cx - 3 * dp, cy, stroke);
+        c.drawLine(cx - 3 * dp, cy, cx + 5 * dp, cy + 8 * dp, stroke);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(24 * dp);
+        float room = w - (14 * dp + hh + 16 * dp) - 14 * dp, fit = text.measureText(title);
+        if (fit > room) text.setTextSize(24 * dp * room / fit);
+        text.setColor(INK);
+        c.drawText(title, 14 * dp + hh + 16 * dp, top + hh / 2 + text.getTextSize() * 0.36f, text);
+        fill.setColor(0x14FFFFFF);
+        c.drawRect(0, top + hh + 12 * dp, w, top + hh + 12 * dp + 1 * dp, fill);
+        return top + hh + 20 * dp;
+    }
+
+    /** ((11.5) A small, spaced-out capitals heading for a section of a page; returns the y below it.) */
+    private float section(Canvas c, String title, float x, float y) {
+        plain.setTextAlign(Paint.Align.LEFT);
+        plain.setTextSize(11.5f * dp);
+        plain.setColor(ACCENT);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < title.length(); i++) {
+            if (i > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(title.charAt(i)));
+        }
+        c.drawText(sb.toString(), x + 2 * dp, y + 13 * dp, plain);
+        return y + 24 * dp;
+    }
+
+    /**
+     * ((11.5) The logo: a round badge - a city skyline inside a broken ring, a biohazard trefoil over it - and the
+     * name beside or under it in heavy capitals, the second word in the accent colour.)
+     */
     private void drawTitle(Canvas c, float cx, float cy, float maxW) {
-        String title = "ZOMBIE CITY";
+        float bob = (float) Math.sin(time * 1.1f) * 1.2f * dp;
+        float badge = Math.min(64 * dp, maxW * 0.16f);
+        float by = cy - badge * 1.45f + bob;
+        drawBadge(c, cx, by, badge);
         text.setTextAlign(Paint.Align.CENTER);
         text.setTextSize(100);
-        float size = Math.min(64 * dp, maxW / text.measureText(title) * 100);
+        String a = "ZOMBIE", b = "CITY";
+        float size = Math.min(58 * dp, maxW / text.measureText(a + " " + b) * 100);
         text.setTextSize(size);
-        float wobble = (float) Math.sin(time * 1.3f) * 1.5f * dp;
-        text.setColor(0xCC000000);
-        c.drawText(title, cx + 3 * dp, cy + 4 * dp + wobble, text);
-        text.setColor(0xFF8BD450);
-        c.drawText(title, cx, cy + wobble, text);
-        text.setTextSize(size * 0.36f);
-        text.setColor(0xFFEDEDED);
-        String sub = "S A N D B O X";
-        c.drawText(sub, cx, cy + size * 0.62f + wobble, text);
-        // Blood drips under the title.
-        fill.setColor(0xFFA01818);
-        float tw = Math.min(maxW, size * 6.5f);
-        for (int i = 0; i < 6; i++) {
-            float x = cx - tw / 2 + tw * (0.1f + i * 0.16f);
-            float len = (6 + (i * 37 % 11)) * dp * (1 + 0.25f * (float) Math.sin(time * 0.8f + i));
-            c.drawRect(x - 1.5f * dp, cy + 2 * dp, x + 1.5f * dp, cy + 2 * dp + len, fill);
-            c.drawCircle(x, cy + 2 * dp + len, 2.6f * dp, fill);
+        float wa = text.measureText(a + " "), wb = text.measureText(b), left = cx - (wa + wb) / 2, ty = cy + size * 0.42f + bob;
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0x99000000);
+        c.drawText(a + " " + b, left + 2 * dp, ty + 3 * dp, text);
+        text.setColor(INK);
+        c.drawText(a, left, ty, text);
+        text.setColor(ACCENT);
+        c.drawText(b, left + wa, ty, text);
+        // The underline, broken like a bite out of it, and the tag line.
+        fill.setColor(ACCENT);
+        float uy = ty + size * 0.2f, uw = wa + wb;
+        c.drawRect(left, uy, left + uw * 0.62f, uy + 3 * dp, fill);
+        c.drawRect(left + uw * 0.7f, uy, left + uw, uy + 3 * dp, fill);
+        plain.setTextAlign(Paint.Align.CENTER);
+        plain.setTextSize(Math.max(11 * dp, size * 0.24f));
+        plain.setColor(MUTED);
+        c.drawText("S A N D B O X   ·   S U R V I V E   T H E   O U T B R E A K", cx, uy + plain.getTextSize() * 1.9f, plain);
+    }
+
+    private void drawBadge(Canvas c, float cx, float cy, float r) {
+        fill.setColor(0x55000000);
+        c.drawCircle(cx + 2 * dp, cy + 4 * dp, r, fill);
+        fill.setColor(0xFF141A12);
+        c.drawCircle(cx, cy, r, fill);
+        // The skyline, cut off at the badge's edge.
+        c.save();
+        c.clipRect(cx - r * 0.72f, cy - r * 0.8f, cx + r * 0.72f, cy + r * 0.52f);
+        fill.setColor(0xFF2C3A26);
+        float[][] towers = {{-0.68f, 0.18f, 0.2f}, {-0.48f, -0.22f, 0.18f}, {-0.3f, 0.02f, 0.14f}, {-0.16f, -0.46f, 0.2f},
+                {0.04f, -0.12f, 0.16f}, {0.2f, -0.34f, 0.18f}, {0.38f, 0.0f, 0.14f}, {0.52f, -0.16f, 0.18f}};
+        for (float[] t : towers) c.drawRect(cx + t[0] * r, cy + t[1] * r, cx + (t[0] + t[2]) * r, cy + r * 0.52f, fill);
+        // Lit windows, one or two going on and off.
+        fill.setColor(0xFFB8E07A);
+        for (int k = 0; k < 9; k++) {
+            float wx = cx + (-0.6f + k * 0.14f) * r, wy = cy + (0.25f - (k * 37 % 5) * 0.12f) * r;
+            if (((int) (time * 1.5f) + k) % 7 == 0) continue;
+            c.drawRect(wx, wy, wx + r * 0.04f, wy + r * 0.05f, fill);
         }
+        c.restore();
+        // The ground line.
+        fill.setColor(ACCENT);
+        c.drawRect(cx - r * 0.72f, cy + r * 0.52f, cx + r * 0.72f, cy + r * 0.58f, fill);
+        // The trefoil: three blades round a hub, slowly turning.
+        float tr = r * 0.36f, ty = cy - r * 0.3f;
+        tmp.set(cx - tr, ty - tr, cx + tr, ty + tr);
+        float spin = time * 12;
+        fill.setColor(ACCENT);
+        for (int k = 0; k < 3; k++) c.drawArc(tmp, spin + k * 120, 60, true, fill);
+        fill.setColor(0xFF141A12);
+        c.drawCircle(cx, ty, tr * 0.38f, fill);
+        fill.setColor(ACCENT);
+        c.drawCircle(cx, ty, tr * 0.2f, fill);
+        // The ring, broken at the bottom right like something got through.
+        stroke.setStrokeWidth(r * 0.12f);
+        tmp.set(cx - r * 0.9f, cy - r * 0.9f, cx + r * 0.9f, cy + r * 0.9f);
+        c.drawArc(tmp, 70, 300, false, stroke);
+        stroke.setColor(0x887CE04A);
+        stroke.setStrokeWidth(r * 0.05f);
+        c.drawArc(tmp, 22, 30, false, stroke);
     }
 
     private void drawMain(Canvas c, int w, int h) {
-        fill.setColor(0x88000000);
-        c.drawRect(0, 0, w, h, fill);
+        // ((11.5) A modern main menu: the logo, one big button for what you most likely want, and the rest as tiles.)
+        backdrop(c, w, h, 0.82f);
         boolean landscape = w > h;
-        float bw = Math.min(300 * dp, w - 60 * dp), bh = 52 * dp, gap = 12 * dp;
         boolean game = host.canContinue();
         boolean slots = host.slotInfo(1) != null || host.slotInfo(2) != null || host.slotInfo(3) != null;
-        int n = (game ? 7 : 6) + (slots ? 1 : 0);
-        float bx, by;
+        float colW, x0, y;
         if (landscape) {
-            drawTitle(c, w * 0.29f, h * 0.45f, w * 0.44f);
-            bw = Math.min(280 * dp, w * 0.38f);
-            bh = Math.min(52 * dp, (h - 40 * dp - gap * (n - 1)) / n);
-            bx = w * 0.72f - bw / 2;
-            by = (h - (bh * n + gap * (n - 1))) / 2;
+            drawTitle(c, w * 0.3f, h * 0.5f, w * 0.48f);
+            colW = Math.min(340 * dp, w * 0.4f);
+            x0 = w * 0.74f - colW / 2;
+            y = h * 0.16f;
         } else {
-            drawTitle(c, w / 2f, h * 0.22f, w - 40 * dp);
-            bx = (w - bw) / 2;
-            by = h * 0.38f;
-            bh = Math.min(bh, (h * 0.6f - gap * (n - 1)) / n);
+            drawTitle(c, w / 2f, h * 0.24f, w - 48 * dp);
+            colW = Math.min(360 * dp, w - 48 * dp);
+            x0 = (w - colW) / 2;
+            y = h * 0.42f;
         }
+        float bigH = Math.min(62 * dp, h * 0.085f), tileH = Math.min(54 * dp, h * 0.075f), gap = 12 * dp;
         if (game) {
-            button("Continue", A_CONTINUE, true, bx, by, bx + bw, by + bh);
-            by += bh + gap;
+            button("Continue", A_CONTINUE, true, x0, y, x0 + colW, y + bigH);
+            y += bigH + gap;
+            button("New Game", A_NEW, false, x0, y, x0 + colW, y + tileH);
+        } else button("New Game", A_NEW, true, x0, y, x0 + colW, y + bigH);
+        y += (game ? tileH : bigH) + gap * 1.6f;
+        // The rest, two to a row.
+        java.util.ArrayList<Object[]> tiles = new java.util.ArrayList<Object[]>();
+        if (slots) tiles.add(new Object[]{"Load Game", A_LOAD});
+        tiles.add(new Object[]{"Settings", A_SETTINGS});
+        tiles.add(new Object[]{"Records", A_RECORDS});
+        tiles.add(new Object[]{settings.hasUnreadNotes() ? "What's New  •" : "What's New", A_NOTES});
+        tiles.add(new Object[]{"Quit", A_QUIT});
+        float tw = (colW - gap) / 2;
+        for (int k = 0; k < tiles.size(); k++) {
+            boolean lone = k == tiles.size() - 1 && tiles.size() % 2 == 1;
+            float l = lone ? x0 : x0 + (k % 2) * (tw + gap), r = lone ? x0 + colW : l + tw;
+            button((String) tiles.get(k)[0], (Integer) tiles.get(k)[1], false, l, y, r, y + tileH);
+            if (k % 2 == 1 || lone) y += tileH + gap;
         }
-        button("New Game", A_NEW, !game, bx, by, bx + bw, by + bh);
-        by += bh + gap;
-        if (slots) {
-            button("Load Game", A_LOAD, false, bx, by, bx + bw, by + bh);
-            by += bh + gap;
-        }
-        button("How to Play", A_HOW_TO, false, bx, by, bx + bw, by + bh);
-        by += bh + gap;
-        button("Settings", A_SETTINGS, false, bx, by, bx + bw, by + bh);
-        by += bh + gap;
-        button("Records & Achievements", A_RECORDS, false, bx, by, bx + bw, by + bh);
-        by += bh + gap;
-        button(settings.hasUnreadNotes() ? "Patch Notes  (new!)" : "Patch Notes", A_NOTES, false, bx, by, bx + bw, by + bh);
-        by += bh + gap;
-        button("Quit", A_QUIT, false, bx, by, bx + bw, by + bh);
-
         plain.setTextSize(12 * dp);
         plain.setTextAlign(Paint.Align.RIGHT);
-        plain.setColor(0xAAFFFFFF);
-        c.drawText("v" + PatchNotes.VERSION, w - 12 * dp, h - 12 * dp, plain);
+        plain.setColor(0x88FFFFFF);
+        c.drawText("v" + PatchNotes.VERSION, w - 14 * dp, h - 14 * dp, plain);
     }
 
     private void drawPause(Canvas c, int w, int h) {
-        fill.setColor(0x99000000);
-        c.drawRect(0, 0, w, h, fill);
+        backdrop(c, w, h, 0.6f);
         String[] labels = {"Resume", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", "New Game", "Settings",
                 "Main Menu"};
         int[] actions = {A_RESUME, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_NEW, A_SETTINGS, A_MAIN_MENU};
@@ -337,15 +462,18 @@ final class Menu {
         float colW = Math.min(300 * dp, (w - 60 * dp) / cols);
         float pw = colW * cols + gap * (cols - 1) + 40 * dp, ph = 76 * dp + bh * rowsN + gap * (rowsN - 1) + 20 * dp;
         tmp.set((w - pw) / 2, (h - ph) / 2, (w + pw) / 2, (h + ph) / 2);
-        fill.setColor(0xF0181A1E);
-        c.drawRoundRect(tmp, 16 * dp, 16 * dp, fill);
+        fill.setColor(0xF2161A20);
+        c.drawRoundRect(tmp, 22 * dp, 22 * dp, fill);
+        stroke.setColor(EDGE);
+        stroke.setStrokeWidth(1 * dp);
+        c.drawRoundRect(tmp, 22 * dp, 22 * dp, stroke);
         text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(26 * dp);
-        text.setColor(0xFF8BD450);
-        c.drawText("PAUSED", w / 2f, tmp.top + 38 * dp, text);
+        text.setTextSize(24 * dp);
+        text.setColor(INK);
+        c.drawText("Paused", w / 2f, tmp.top + 38 * dp, text);
         plain.setTextAlign(Paint.Align.CENTER);
         plain.setTextSize(12 * dp);
-        plain.setColor(0xFF9AA0A8);
+        plain.setColor(MUTED);
         World world = host.world();
         c.drawText(world.city.name + "  -  city code " + world.city.cfg.code(), w / 2f, tmp.top + 58 * dp, plain);
         float top = tmp.top + 72 * dp;
@@ -371,11 +499,11 @@ final class Menu {
             c.drawRoundRect(tmp, 12 * dp, 12 * dp, fill);
             text.setTextAlign(Paint.Align.LEFT);
             text.setTextSize(16 * dp);
-            text.setColor(0xFF8BD450);
+            text.setColor(ACCENT);
             c.drawText(slot == 0 ? "Autosave" : "Slot " + slot, x0 + 14 * dp, y + 26 * dp, text);
             plain.setTextAlign(Paint.Align.LEFT);
             plain.setTextSize(12.5f * dp);
-            plain.setColor(0xFFC8CCD2);
+            plain.setColor(0xFFB4BCC6);
             String[] lines = info == null ? new String[]{"Empty"} : info.split("\n");
             for (int k = 0; k < lines.length && k < 3; k++) c.drawText(lines[k], x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
             boolean can = savingMode || info != null;
@@ -422,7 +550,7 @@ final class Menu {
         c.restore();
         if (log.isEmpty()) {
             plain.setTextAlign(Paint.Align.CENTER);
-            plain.setColor(0xFF9AA0A8);
+            plain.setColor(MUTED);
             c.drawText("Nothing on the radio yet.", w / 2f, top + 40 * dp, plain);
         }
         contentHeight = y + scroll - top;
@@ -728,55 +856,6 @@ final class Menu {
     }
 
     /** The How to Play cards. */
-    private void drawTutorial(Canvas c, int w, int h) {
-        fill.setColor(0xC0000000);
-        c.drawRect(0, 0, w, h, fill);
-        float cw = Math.min(460 * dp, w - 40 * dp), ch = Math.min(340 * dp, h - 40 * dp);
-        tmp.set((w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2);
-        fill.setColor(0xF5181A1E);
-        c.drawRoundRect(tmp, 16 * dp, 16 * dp, fill);
-        stroke.setStrokeWidth(1.5f * dp);
-        stroke.setColor(0xFF3F8A3A);
-        c.drawRoundRect(tmp, 16 * dp, 16 * dp, stroke);
-        String[] page = TUTORIAL_PAGES[tutorialPage];
-        plain.setTextSize(12 * dp);
-        plain.setTextAlign(Paint.Align.LEFT);
-        plain.setColor(0xFF8A9099);
-        c.drawText((tutorialPage + 1) + " / " + TUTORIAL_PAGES.length, tmp.left + 20 * dp, tmp.top + 28 * dp, plain);
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(21 * dp);
-        text.setColor(0xFF8BD450);
-        c.drawText(page[0], tmp.left + 20 * dp, tmp.top + 58 * dp, text);
-        plain.setTextSize(15 * dp);
-        plain.setColor(0xFFE0E3E8);
-        float y = tmp.top + 90 * dp;
-        for (String line : wrap(page[1], cw - 40 * dp, plain)) {
-            c.drawText(line, tmp.left + 20 * dp, y, plain);
-            y += 22 * dp;
-        }
-        float bw = (cw - 60 * dp) / 2, bh = 46 * dp, by = tmp.bottom - bh - 18 * dp;
-        boolean last = tutorialPage == TUTORIAL_PAGES.length - 1;
-        button(tutorialPage == 0 ? "Skip" : "Back", tutorialPage == 0 ? A_TUT_DONE : A_TUT_PREV, false,
-                tmp.left + 20 * dp, by, tmp.left + 20 * dp + bw, by + bh);
-        button(last ? "Start playing" : "Next", last ? A_TUT_DONE : A_TUT_NEXT, true,
-                tmp.right - 20 * dp - bw, by, tmp.right - 20 * dp, by + bh);
-    }
-
-    private float header(Canvas c, int w, int h, String title) {
-        fill.setColor(0xF2121418);
-        c.drawRect(0, 0, w, h, fill);
-        float top = 12 * dp, hh = 42 * dp;
-        button("< Back", A_BACK, false, 12 * dp, top, 12 * dp + 96 * dp, top + hh);
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(22 * dp);
-        // Keep long titles clear of the Back button.
-        float room = w - 2 * (12 * dp + 96 * dp + 8 * dp), fit = text.measureText(title);
-        if (fit > room) text.setTextSize(22 * dp * room / fit);
-        text.setColor(0xFF8BD450);
-        c.drawText(title, w / 2f, top + hh / 2 + 8 * dp, text);
-        return top + hh + 12 * dp;
-    }
-
     private void drawOptions(Canvas c, int w, int h, String title, OptionSet opts, boolean setup) {
         float top = header(c, w, h, title);
         float footer = setup ? 72 * dp : 12 * dp;
@@ -801,22 +880,27 @@ final class Menu {
             r.prev.set(r.r.right - vw, y, r.r.right - vw + 44 * dp, y + rowH);
             rows.add(r);
 
-            fill.setColor(i == 0 && setup ? 0xE0233322 : 0xE0202328);
-            c.drawRoundRect(r.r, 10 * dp, 10 * dp, fill);
+            // ((11.5) A card per setting, its value in a pill with arrows either side.)
+            fill.setColor(CARD);
+            c.drawRoundRect(r.r, 14 * dp, 14 * dp, fill);
             plain.setTextSize(15 * dp);
             plain.setTextAlign(Paint.Align.LEFT);
-            plain.setColor(0xFFDADDE2);
-            c.drawText(opts.label(i), x + 14 * dp, y + rowH / 2 + 5 * dp, plain);
+            plain.setColor(INK);
+            c.drawText(opts.label(i), x + 16 * dp, y + rowH / 2 + 5 * dp, plain);
 
             tmp.set(r.r.right - vw, y + 7 * dp, r.r.right - 7 * dp, y + rowH - 7 * dp);
-            fill.setColor(0xFF15171B);
-            c.drawRoundRect(tmp, 8 * dp, 8 * dp, fill);
+            fill.setColor(CARD_HI);
+            c.drawRoundRect(tmp, tmp.height() / 2, tmp.height() / 2, fill);
+            stroke.setColor(ACCENT);
+            stroke.setStrokeWidth(2 * dp);
+            float ay = tmp.centerY();
+            c.drawLine(tmp.left + 19 * dp, ay - 5 * dp, tmp.left + 14 * dp, ay, stroke);
+            c.drawLine(tmp.left + 14 * dp, ay, tmp.left + 19 * dp, ay + 5 * dp, stroke);
+            c.drawLine(tmp.right - 19 * dp, ay - 5 * dp, tmp.right - 14 * dp, ay, stroke);
+            c.drawLine(tmp.right - 14 * dp, ay, tmp.right - 19 * dp, ay + 5 * dp, stroke);
             text.setTextSize(14 * dp);
             text.setTextAlign(Paint.Align.CENTER);
-            text.setColor(0xFF8BD450);
-            c.drawText("<", tmp.left + 16 * dp, tmp.centerY() + 5 * dp, text);
-            c.drawText(">", tmp.right - 16 * dp, tmp.centerY() + 5 * dp, text);
-            text.setColor(0xFFFFFFFF);
+            text.setColor(INK);
             c.drawText(opts.values(i)[opts.get(i)], tmp.centerX(), tmp.centerY() + 5 * dp, text);
         }
         c.restore();
@@ -825,9 +909,9 @@ final class Menu {
         if (setup) {
             float bgap = 8 * dp, bw = Math.min(180 * dp, (w - 32 * dp - bgap * 2) / 3), bh = 50 * dp, by = h - footer + 11 * dp;
             float x = (w - bw * 3 - bgap * 2) / 2;
-            button("Randomize", A_RANDOM, false, x, by, x + bw, by + bh);
+            button("Surprise me", A_RANDOM, false, x, by, x + bw, by + bh);
             button(config.keepCity ? config.code() : "City code", A_CODE, false, x + bw + bgap, by, x + bw * 2 + bgap, by + bh);
-            button("Start", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
+            button("Start  ›", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
             if (noteTime > 0 && note != null) {
                 noteTime -= 1 / 60f;
                 fill.setColor(0xF0121418);
@@ -840,7 +924,7 @@ final class Menu {
         }
     }
 
-    /** Best results across all games, and the achievements (locked ones greyed out). */
+    /** Best results across all games. */
     private void drawRecords(Canvas c, int w, int h) {
         float top = header(c, w, h, "Records");
         listArea.set(0, top, w, h - 12 * dp);
@@ -850,7 +934,7 @@ final class Menu {
         float y = top + 10 * dp - scroll;
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(17 * dp);
-        text.setColor(0xFF8BD450);
+        text.setColor(ACCENT);
         c.drawText("Records", x0, y + 18 * dp, text);
         y += 34 * dp;
         for (int i = 0; i < Records.RECORD_NAMES.length; i++) {
@@ -863,35 +947,6 @@ final class Menu {
             text.setColor(0xFFFFFFFF);
             c.drawText(records.recordText(i), x0 + maxW, y + 14 * dp, text);
             y += 26 * dp;
-        }
-        y += 14 * dp;
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(17 * dp);
-        text.setColor(0xFF8BD450);
-        c.drawText("Achievements  (" + records.unlockedCount() + "/" + Records.ACHIEVEMENTS.length + ")", x0, y + 18 * dp, text);
-        y += 34 * dp;
-        for (int i = 0; i < Records.ACHIEVEMENTS.length; i++) {
-            boolean got = records.unlocked(i);
-            plain.setTextSize(12.5f * dp);
-            ArrayList<String> desc = wrap(Records.ACHIEVEMENTS[i][1], maxW - 56 * dp, plain);
-            float ih = 36 * dp + desc.size() * 16 * dp;
-            tmp.set(x0, y, x0 + maxW, y + ih);
-            fill.setColor(got ? 0xE0233322 : 0xE0202328);
-            c.drawRoundRect(tmp, 10 * dp, 10 * dp, fill);
-            fill.setColor(got ? 0xFF8BD450 : 0xFF4A4E56);
-            c.drawCircle(x0 + 24 * dp, y + ih / 2, 11 * dp, fill);
-            if (got) {
-                stroke.setColor(0xFF0F2A0C);
-                stroke.setStrokeWidth(2.5f * dp);
-                c.drawLine(x0 + 18 * dp, y + ih / 2, x0 + 23 * dp, y + ih / 2 + 5 * dp, stroke);
-                c.drawLine(x0 + 23 * dp, y + ih / 2 + 5 * dp, x0 + 31 * dp, y + ih / 2 - 5 * dp, stroke);
-            }
-            text.setTextSize(15 * dp);
-            text.setColor(got ? 0xFFFFFFFF : 0xFF9AA0A8);
-            c.drawText(Records.ACHIEVEMENTS[i][0], x0 + 46 * dp, y + 22 * dp, text);
-            plain.setColor(got ? 0xFFC8CCD2 : 0xFF7A8088);
-            for (int k = 0; k < desc.size(); k++) c.drawText(desc.get(k), x0 + 46 * dp, y + 41 * dp + k * 16 * dp, plain);
-            y += ih + 8 * dp;
         }
         c.restore();
         contentHeight = y + scroll - top;
@@ -940,68 +995,72 @@ final class Menu {
 
     /** A row of equal buttons, one per value, with the chosen one lit up. */
     private float segRow(Canvas c, int option, String label, float x, float y, float width) {
-        plain.setTextAlign(Paint.Align.LEFT);
-        plain.setTextSize(13 * dp);
-        plain.setColor(0xFFB8BDC4);
-        // Long labels wrap rather than run off a narrow screen.
-        for (String line : wrap(label, width - 4 * dp, plain)) {
-            c.drawText(line, x + 2 * dp, y + 14 * dp, plain);
-            y += 17 * dp;
-        }
-        y += 5 * dp;
+        // ((11.5) A heading, then the choices as a segmented control: a dark track, the chosen one lit up.)
+        y = section(c, label, x, y);
         String[] values = config.values(option);
         // (Choices that are no longer offered are left out, unless a loaded city code is using one.)
         int shown = 0;
         int[] index = new int[values.length];
         for (int i = 0; i < values.length; i++)
             if (!CityConfig.retired(option, i) || config.get(option) == i) index[shown++] = i;
-        // A long list (the countries) goes over two rows rather than squeezing into one.
         int lines = shown > 12 ? 3 : shown > 6 ? 2 : 1;
         int perRow = (shown + lines - 1) / lines;
         int rows = (shown + perRow - 1) / perRow;
-        float gap = 4 * dp, bh = 36 * dp, bw = (width - gap * (perRow - 1)) / perRow;
+        float pad = 4 * dp, bh = 38 * dp, bw = (width - pad * 2) / perRow;
+        tmp.set(x, y, x + width, y + rows * bh + pad * 2);
+        fill.setColor(CARD);
+        c.drawRoundRect(tmp, 14 * dp, 14 * dp, fill);
         for (int k = 0; k < shown; k++) {
             int i = index[k];
-            float l = x + (k % perRow) * (bw + gap), t = y + (k / perRow) * (bh + gap);
+            float l = x + pad + (k % perRow) * bw, t = y + pad + (k / perRow) * bh;
             Seg sg = seg(option, i, l, t, l + bw, t + bh);
             boolean on = config.get(option) == i;
-            fill.setColor(on ? 0xFF3F8A3A : 0xFF23262C);
-            c.drawRoundRect(sg.r, 8 * dp, 8 * dp, fill);
             if (on) {
-                stroke.setColor(0xFF9BE08A);
-                stroke.setStrokeWidth(1.5f * dp);
-                c.drawRoundRect(sg.r, 8 * dp, 8 * dp, stroke);
+                fill.setColor(ACCENT);
+                c.drawRoundRect(sg.r, 11 * dp, 11 * dp, fill);
             }
             text.setTextAlign(Paint.Align.CENTER);
             text.setTextSize(Math.min(14 * dp, bw / Math.max(3, values[i].length()) * 1.5f));
-            text.setColor(on ? 0xFFFFFFFF : 0xFFC8CCD2);
+            text.setColor(on ? ACCENT_INK : 0xFFC4CBD3);
             c.drawText(values[i], sg.r.centerX(), sg.r.centerY() + text.getTextSize() * 0.36f, text);
         }
-        return y + rows * bh + (rows - 1) * gap + 14 * dp;
+        return y + rows * bh + pad * 2 + 10 * dp;
     }
 
     /** A grid of map cards (the maps given by index); returns the y below it. */
     private float mapCards(Canvas c, int[] shown, int cards, int preset, float lx, float y, float cw, float ch, float gap, int perRow) {
+        // ((11.5) Map cards: a tall tile each, a colour wash for the map, its name along the bottom.)
         for (int k = 0; k < cards; k++) {
             int i = shown[k];
             float l = lx + (k % perRow) * (cw + gap), t = y + (k / perRow) * (ch + gap);
             Seg sg = seg(CityConfig.OPT_PRESET, i, l, t, l + cw, t + ch);
             boolean on = preset == i;
-            fill.setColor(on ? 0xFF2F5E2B : 0xFF23262C);
-            c.drawRoundRect(sg.r, 9 * dp, 9 * dp, fill);
-            // A strip in the map's colour.
-            fill.setColor(MAP_COLORS[i % MAP_COLORS.length]);
-            tmp.set(l, t, l + 5 * dp, t + ch);
-            c.drawRoundRect(tmp, 3 * dp, 3 * dp, fill);
+            fill.setColor(CARD);
+            c.drawRoundRect(sg.r, 14 * dp, 14 * dp, fill);
+            int col = MAP_COLORS[i % MAP_COLORS.length];
+            fill.setColor((col & 0x00FFFFFF) | (on ? 0x55000000 : 0x26000000));
+            tmp.set(l, t, l + cw, t + ch * 0.62f);
+            c.drawRoundRect(tmp, 14 * dp, 14 * dp, fill);
+            // A little emblem: water maps get waves, the city a skyline.
+            fill.setColor((col & 0x00FFFFFF) | 0xCC000000);
+            float ex = l + cw / 2, ey = t + ch * 0.34f, u = Math.min(cw, ch) * 0.12f;
+            if (i == CityConfig.ISLANDS || i == CityConfig.ARCHIPELAGO) {
+                c.drawCircle(ex - u * 1.2f, ey, u * 0.9f, fill);
+                c.drawCircle(ex + u * 1.1f, ey + u * 0.4f, u * 0.65f, fill);
+            } else {
+                c.drawRect(ex - u * 1.6f, ey - u * 0.4f, ex - u * 0.8f, ey + u, fill);
+                c.drawRect(ex - u * 0.6f, ey - u * 1.4f, ex + u * 0.3f, ey + u, fill);
+                c.drawRect(ex + u * 0.5f, ey - u * 0.8f, ex + u * 1.5f, ey + u, fill);
+            }
             if (on) {
-                stroke.setColor(0xFF9BE08A);
-                stroke.setStrokeWidth(1.5f * dp);
-                c.drawRoundRect(sg.r, 9 * dp, 9 * dp, stroke);
+                stroke.setColor(ACCENT);
+                stroke.setStrokeWidth(2 * dp);
+                c.drawRoundRect(sg.r, 14 * dp, 14 * dp, stroke);
             }
             text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(Math.min(13.5f * dp, cw / 7.5f));
-            text.setColor(on ? 0xFFFFFFFF : 0xFFC8CCD2);
-            c.drawText(CityConfig.PRESETS[i], l + cw / 2 + 2 * dp, t + ch / 2 + text.getTextSize() * 0.36f, text);
+            text.setTextSize(Math.min(14 * dp, cw / 7f));
+            text.setColor(on ? INK : 0xFFB8C0C8);
+            c.drawText(CityConfig.PRESETS[i], l + cw / 2, t + ch - 12 * dp, text);
         }
         return y + ((cards + perRow - 1) / perRow) * (ch + gap) + 12 * dp;
     }
@@ -1014,9 +1073,9 @@ final class Menu {
         // The city preview: left in landscape, on top in portrait.
         float pv = landscape ? Math.min(h - top - footer - 72 * dp, w * 0.34f) : Math.min(w - side * 2, (h - top) * 0.3f);
         float px = landscape ? side : (w - pv) / 2, py = top + 4 * dp;
-        tmp.set(px - 3 * dp, py - 3 * dp, px + pv + 3 * dp, py + pv + 3 * dp);
-        fill.setColor(0xFF2A2E34);
-        c.drawRoundRect(tmp, 10 * dp, 10 * dp, fill);
+        tmp.set(px - 4 * dp, py - 4 * dp, px + pv + 4 * dp, py + pv + 4 * dp);
+        fill.setColor(CARD);
+        c.drawRoundRect(tmp, 18 * dp, 18 * dp, fill);
         Bitmap bmp = preview;
         boolean current = config.code().equals(previewKey);
         if (bmp != null) {
@@ -1025,23 +1084,42 @@ final class Menu {
             bmpPaint.setAlpha(current ? 255 : 110);
             c.drawBitmap(bmp, bmpSrc, tmp, bmpPaint);
         }
+        // ((11.5) Rounded corners on the picture, and a fine edge.)
+        stroke.setColor(CARD);
+        stroke.setStrokeWidth(8 * dp);
+        tmp.set(px - 4 * dp, py - 4 * dp, px + pv + 4 * dp, py + pv + 4 * dp);
+        c.drawRoundRect(tmp, 18 * dp, 18 * dp, stroke);
+        stroke.setColor(EDGE);
+        stroke.setStrokeWidth(1 * dp);
+        c.drawRoundRect(tmp, 18 * dp, 18 * dp, stroke);
         if (!current) {
+            // (A spinning arc while the city is built.)
+            stroke.setColor(ACCENT);
+            stroke.setStrokeWidth(3 * dp);
+            tmp.set(px + pv / 2 - 16 * dp, py + pv / 2 - 30 * dp, px + pv / 2 + 16 * dp, py + pv / 2 + 2 * dp);
+            c.drawArc(tmp, time * 360, 260, false, stroke);
             text.setTextAlign(Paint.Align.CENTER);
             text.setTextSize(14 * dp);
-            text.setColor(0xFFE6E6E6);
-            c.drawText("Building city...", px + pv / 2, py + pv / 2, text);
+            text.setColor(INK);
+            c.drawText("Building city...", px + pv / 2, py + pv / 2 + 26 * dp, text);
         }
         int preset = config.v[CityConfig.OPT_PRESET];
         float infoY = py + pv + 20 * dp;
         float infoW = landscape ? pv : w - side * 2, infoX = landscape ? px : side;
         text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(16 * dp);
-        text.setColor(0xFF8BD450);
+        text.setTextSize(19 * dp);
+        text.setColor(INK);
         c.drawText(CityConfig.PRESETS[preset], infoX, infoY, text);
-        plain.setTextAlign(Paint.Align.RIGHT);
+        // (The city code as a little chip.)
         plain.setTextSize(12 * dp);
-        plain.setColor(0xFF9AA0A8);
-        c.drawText("City " + config.code(), infoX + infoW, infoY, plain);
+        String chip = "CITY " + config.code();
+        float cwid = plain.measureText(chip) + 18 * dp;
+        tmp.set(infoX + infoW - cwid, infoY - 15 * dp, infoX + infoW, infoY + 6 * dp);
+        fill.setColor(CARD_HI);
+        c.drawRoundRect(tmp, 10 * dp, 10 * dp, fill);
+        plain.setTextAlign(Paint.Align.CENTER);
+        plain.setColor(MUTED);
+        c.drawText(chip, tmp.centerX(), infoY - 0.5f * dp, plain);
         float ly = infoY + 10 * dp;
         if (landscape) {
             button("New map", A_REROLL, false, px, ly, px + pv, ly + 34 * dp);
@@ -1061,13 +1139,9 @@ final class Menu {
         float y = listTop + 4 * dp - scroll;
         if (landscape) y = drawInfo(c, preset, lx, y + 14 * dp, lw) + 4 * dp;
         // Map cards.
-        plain.setTextAlign(Paint.Align.LEFT);
-        plain.setTextSize(13 * dp);
-        plain.setColor(0xFFB8BDC4);
-        c.drawText("Map", lx + 2 * dp, y + 14 * dp, plain);
-        y += 22 * dp;
+        y = section(c, "Map", lx, y);
         int perRow = lw > 520 * dp ? 5 : lw > 330 * dp ? 4 : 3;
-        float gap = 6 * dp, cw = (lw - gap * (perRow - 1)) / perRow, ch = 40 * dp;
+        float gap = 10 * dp, cw = (lw - gap * (perRow - 1)) / perRow, ch = Math.min(96 * dp, cw * 0.9f);
         // (Maps no longer offered are left out, unless a loaded city code is using one. The real cities have
         // their own section below.)
         int cards = 0;
@@ -1122,14 +1196,14 @@ final class Menu {
         // ((10.56) The numbers are the game's own count as it starts, not just the residents and the town's
         // officers: it used to show a good deal fewer police and soldiers than there then were.)
         plain.setTextSize(12.5f * dp);
-        plain.setColor(0xFF9AA0A8);
+        plain.setColor(MUTED);
         if (known) {
             c.drawText(fc[0] + " people in the city.", lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;
         }
         // Police and the army are set by the size of the city.
         plain.setTextSize(12.5f * dp);
-        plain.setColor(0xFF9AA0A8);
+        plain.setColor(MUTED);
         String force = known ? "Police and army are set by the city: " + fc[1] + " police"
                 + (fc[2] > 0 ? " and " + fc[2] + " soldiers." : ", and no army on this map.")
                 : "Police and army are set by the size of the city.";
@@ -1138,18 +1212,18 @@ final class Menu {
             y += 16 * dp;
         }
         y += 10 * dp;
-        y = segRow(c, CityConfig.OPT_RESERVES, "Reinforcements: who comes to help once the fighting starts", lx, y, lw);
+        y = segRow(c, CityConfig.OPT_RESERVES, "Reinforcements", lx, y, lw);
         plain.setTextSize(12.5f * dp);
-        plain.setColor(0xFF9AA0A8);
+        plain.setColor(MUTED);
         y -= 6 * dp;
         for (String line : wrap(CityConfig.RESERVE_INFO[config.v[CityConfig.OPT_RESERVES]], lw - 4 * dp, plain)) {
             c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;
         }
         y += 12 * dp;
-        y = segRow(c, CityConfig.OPT_EXODUS, "Fleeing citizens: whether the people leave the city", lx, y, lw);
+        y = segRow(c, CityConfig.OPT_EXODUS, "Fleeing citizens", lx, y, lw);
         plain.setTextSize(12.5f * dp);
-        plain.setColor(0xFF9AA0A8);
+        plain.setColor(MUTED);
         y -= 6 * dp;
         String[] exodusInfo = {"Off: the people stay in town and sit it out (or don't).",
                 "On foot: once the news breaks, most people walk out of the city for the country. They come home once the outbreak is over.",
@@ -1165,11 +1239,16 @@ final class Menu {
         clampScroll();
         drawScrollHint(c, w, landscape ? lx - 8 * dp : 0);
 
-        float bgap = 8 * dp, bw = Math.min(180 * dp, (w - 32 * dp - bgap * 2) / 3), bh = 50 * dp, by = h - footer + 11 * dp;
+        // ((11.5) The buttons on a bar of their own along the bottom.)
+        fill.setColor(0xF20C0F13);
+        c.drawRect(0, h - footer, w, h, fill);
+        fill.setColor(0x14FFFFFF);
+        c.drawRect(0, h - footer, w, h - footer + 1 * dp, fill);
+        float bgap = 10 * dp, bw = Math.min(180 * dp, (w - 32 * dp - bgap * 2) / 3), bh = 50 * dp, by = h - footer + 11 * dp;
         float x = (w - bw * 3 - bgap * 2) / 2;
-        button("Randomize", A_RANDOM, false, x, by, x + bw, by + bh);
+        button("Surprise me", A_RANDOM, false, x, by, x + bw, by + bh);
         button("City code", A_CODE, false, x + bw + bgap, by, x + bw * 2 + bgap, by + bh);
-        button("Start", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
+        button("Start  ›", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
         if (noteTime > 0 && note != null) {
             noteTime -= 1 / 60f;
             fill.setColor(0xF0121418);
@@ -1185,7 +1264,7 @@ final class Menu {
     private float drawInfo(Canvas c, int preset, float x, float y, float width) {
         plain.setTextAlign(Paint.Align.LEFT);
         plain.setTextSize(12.5f * dp);
-        plain.setColor(0xFFC8CCD2);
+        plain.setColor(0xFFB4BCC6);
         for (String line : wrap(CityConfig.PRESET_INFO[preset], width, plain)) {
             c.drawText(line, x, y, plain);
             y += 16 * dp;
@@ -1207,14 +1286,14 @@ final class Menu {
         for (String[] entry : PatchNotes.NOTES) {
             text.setTextAlign(Paint.Align.LEFT);
             text.setTextSize(17 * dp);
-            text.setColor(0xFF8BD450);
+            text.setColor(ACCENT);
             c.drawText(entry[0], x0, y + 18 * dp, text);
             y += 32 * dp;
             plain.setTextSize(14.5f * dp);
             plain.setTextAlign(Paint.Align.LEFT);
             for (int i = 1; i < entry.length; i++) {
                 ArrayList<String> lines = wrap(entry[i], maxW - 18 * dp, plain);
-                fill.setColor(0xFF8BD450);
+                fill.setColor(ACCENT);
                 c.drawCircle(x0 + 5 * dp, y + 10 * dp, 2.5f * dp, fill);
                 plain.setColor(0xFFDADDE2);
                 for (String line : lines) {
@@ -1239,13 +1318,17 @@ final class Menu {
     private void drawScrollHint(Canvas c, int w, float left) {
         float max = contentHeight - listArea.height() + 12 * dp;
         if (scroll >= max - 2 * dp) return;
-        float cx = (left + w) / 2f, y = listArea.bottom - 8 * dp;
-        fill.setColor(0xF2121418);
-        c.drawRect(left, y - 26 * dp, w, listArea.bottom, fill);
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(13 * dp);
-        text.setColor(0xFF8BD450);
-        c.drawText("scroll for more", cx, y - 7.5f * dp, text);
+        // ((11.5) A fade over the last of the list and a small bobbing chevron, not a bar of text.)
+        float cx = (left + w) / 2f, b = listArea.bottom;
+        for (int k = 0; k < 8; k++) {
+            fill.setColor(((int) (28 * (k + 1)) << 24) | 0x0C0F13);
+            c.drawRect(left, b - (8 - k) * 5 * dp, w, b - (7 - k) * 5 * dp, fill);
+        }
+        float bob = (float) Math.sin(time * 4) * 2 * dp;
+        stroke.setColor(ACCENT);
+        stroke.setStrokeWidth(2.4f * dp);
+        c.drawLine(cx - 8 * dp, b - 18 * dp + bob, cx, b - 10 * dp + bob, stroke);
+        c.drawLine(cx, b - 10 * dp + bob, cx + 8 * dp, b - 18 * dp + bob, stroke);
     }
 
     private static ArrayList<String> wrap(String s, float maxW, Paint p) {
@@ -1280,6 +1363,10 @@ final class Menu {
                 downY = y;
                 lastY = y;
                 dragging = false;
+                // (A touch stops a list that's still moving, and doesn't count as a tap if it did.)
+                if (Math.abs(flingV) > 60 * dp) pressed = false;
+                flingV = 0;
+                lastMoveAt = System.nanoTime();
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (screen == REPLAY && replayBar.contains(downX, downY)) {
@@ -1292,12 +1379,20 @@ final class Menu {
                 if (dragging) {
                     scroll -= y - lastY;
                     clampScroll();
+                    long now = System.nanoTime();
+                    float dt = Math.max(0.004f, (now - lastMoveAt) / 1e9f);
+                    float v = -(y - lastY) / dt;
+                    flingV = flingV * 0.6f + v * 0.4f;
+                    lastMoveAt = now;
                 }
                 lastY = y;
                 break;
             case MotionEvent.ACTION_UP:
                 // Ignore the lift of a finger that went down before the menu opened.
                 if (pressed && !dragging) tap(x, y);
+                // (Lifted after holding still: no fling.)
+                if (!dragging || System.nanoTime() - lastMoveAt > 90000000L) flingV = 0;
+                flingV = Math.max(-5000 * dp, Math.min(5000 * dp, flingV));
                 dragging = false;
                 pressed = false;
                 break;
@@ -1409,7 +1504,6 @@ final class Menu {
                 // The seed is the one in the preview.
                 config.keepCity = false;
                 host.startGame(config);
-                if (!settings.tutorialDone()) open(TUTORIAL);
                 break;
             case A_SAVE:
                 host.world().say(host.saveGame() ? "Game saved" : "Could not save the game");
@@ -1448,19 +1542,6 @@ final class Menu {
             case A_SHOT:
                 host.continueGame();
                 host.screenshot();
-                break;
-            case A_HOW_TO:
-                open(TUTORIAL);
-                break;
-            case A_TUT_NEXT:
-                tutorialPage = Math.min(TUTORIAL_PAGES.length - 1, tutorialPage + 1);
-                break;
-            case A_TUT_PREV:
-                tutorialPage = Math.max(0, tutorialPage - 1);
-                break;
-            case A_TUT_DONE:
-                settings.markTutorialDone();
-                screen = returnTo;
                 break;
         }
     }

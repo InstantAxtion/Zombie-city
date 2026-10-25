@@ -255,7 +255,8 @@ final class CityConfig implements OptionSet {
      * theirs; saves and city codes on them no longer load.
      */
     static boolean removed(int preset) {
-        return preset == 10 || preset == 11 || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((11.5) Suburbs (2) too.)
+        return preset == 2 || preset == 10 || preset == 11 || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }

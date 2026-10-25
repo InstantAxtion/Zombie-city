@@ -1751,7 +1751,7 @@ public final class GameTests {
         test("10.25: curved streets in the suburbs", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.seed = 7;
                 c.normalize();
                 c.seed = 7;
@@ -1773,7 +1773,7 @@ public final class GameTests {
                     check(field[i] < City.FAR, "the curve joins the streets");
                 }
                 CityConfig old = new CityConfig();
-                old.v[CityConfig.OPT_PRESET] = 2;
+                old.v[CityConfig.OPT_PRESET] = 8;
                 old.seed = 7;
                 old.normalize();
                 old.seed = 7;
@@ -1950,7 +1950,7 @@ public final class GameTests {
                 for (int p = RealCities.FIRST; p < RealCities.FIRST + RealCities.NAMES.length; p++)
                     check(CityConfig.retired(CityConfig.OPT_PRESET, p), "real city map " + p + " is gone");
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 4;
                 c.normalize();
@@ -1992,7 +1992,7 @@ public final class GameTests {
         test("10.29: highway interchanges with slip roads, no lights on the highway, steady traffic on it", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 7;
                 c.normalize();
@@ -2077,7 +2077,7 @@ public final class GameTests {
                 // ((10.52) A Large map has a smaller one now; a Medium one none.)
                 CityConfig l = new CityConfig();
                 l.civic = 25; // ((11.0) Map version 25: the country round the town as it was before the thin band.)
-                l.v[CityConfig.OPT_PRESET] = 2;
+                l.v[CityConfig.OPT_PRESET] = 8;
                 l.v[CityConfig.OPT_SIZE] = CityConfig.LARGE;
                 l.normalize();
                 check(l.outskirtsBase(), "a country base on a Large map too");
@@ -2099,7 +2099,7 @@ public final class GameTests {
                 check(big.totalResidents > 20000, "and has over twenty thousand residents (" + big.totalResidents + ")");
                 // Slip roads are one way, and the highway still connects to town both ways.
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.seed = 7;
                 c.normalize();
                 c.seed = 7;
@@ -2122,7 +2122,7 @@ public final class GameTests {
                 check(f[city.tileIndex(mid[0], mid[1])] < City.FAR, "and from town onto the highway");
                 // A small fresh outbreak the police have in hand: no call for outside help.
                 CityConfig wc = new CityConfig();
-                wc.v[CityConfig.OPT_PRESET] = 2;
+                wc.v[CityConfig.OPT_PRESET] = 8;
                 wc.v[CityConfig.OPT_ZOMBIES] = 0;
                 wc.seed = 4;
                 wc.normalize();
@@ -2144,7 +2144,7 @@ public final class GameTests {
             public void run() throws Exception {
                 // Bridges at the interchanges: the road goes over, the highway runs on under it untouched.
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.seed = 7;
                 c.normalize();
                 c.seed = 7;
@@ -2356,7 +2356,7 @@ public final class GameTests {
                 }
                 // Help from outside comes in on the carriageway into the map, not the one leaving it.
                 CityConfig wc = new CityConfig();
-                wc.v[CityConfig.OPT_PRESET] = 2;
+                wc.v[CityConfig.OPT_PRESET] = 8;
                 wc.v[CityConfig.OPT_ZOMBIES] = 0;
                 wc.seed = 7;
                 wc.normalize();
@@ -2985,7 +2985,7 @@ public final class GameTests {
         test("10.42: cars drive the line of their lane - round corners, through junctions and back out - and traffic doesn't knot up", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.v[CityConfig.OPT_SIZE] = 3;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 5;
@@ -3521,7 +3521,7 @@ public final class GameTests {
                 }
                 // A thin band of country round every other map.
                 CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 2;
+                c.v[CityConfig.OPT_PRESET] = 8;
                 c.v[CityConfig.OPT_SIZE] = CityConfig.LARGE;
                 c.normalize();
                 check(c.coreFraction() >= 0.85f, "nine tenths town (" + c.coreFraction() + ")");
@@ -3585,7 +3585,7 @@ public final class GameTests {
                 for (int[] size : new int[][]{{2400, 1080}, {1080, 2400}, {2560, 1600}}) {
                     v.layout(size[0], size[1]);
                     Menu m = (Menu) field(v, "menu");
-                    for (int s : new int[]{Menu.MAIN, Menu.SETUP, Menu.SETTINGS, Menu.NOTES, Menu.RECORDS, Menu.TUTORIAL}) {
+                    for (int s : new int[]{Menu.MAIN, Menu.SETUP, Menu.SETTINGS, Menu.NOTES, Menu.RECORDS}) {
                         m.open(s);
                         draw(v, size);
                     }
