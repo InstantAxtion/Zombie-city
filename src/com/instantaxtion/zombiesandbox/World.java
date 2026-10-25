@@ -10493,6 +10493,21 @@ final class World {
             if (e.stamina < 0) e.stamina = 0;
         }
         if (e.want > 1 && (e.mx != 0 || e.my != 0)) lookAhead(e);
+        // ((11.6) A long step - the phone catching up after a slow frame, or the faster speeds - is walked as several
+        // ordinary ones for anyone being worked out every frame (everyone on screen): in one long step the easing
+        // into a new direction was all at once, so a single odd moment's wish to go the other way turned them right
+        // round and back, and people and units on screen jittered and twitched whenever the frame rate dipped.)
+        if (dt > SUB_STEP * 1.25f && e.lodStep == 1) {
+            int n = Math.min(4, (int) Math.ceil(dt / SUB_STEP));
+            for (int i = 0; i < n; i++) moveStep(e, dt / n);
+            return;
+        }
+        moveStep(e, dt);
+    }
+
+    private static final float SUB_STEP = 1 / 30f;
+
+    private void moveStep(Entity e, float dt) {
         float k = Math.min(1, dt * 10);
         e.vx += (e.mx * e.want - e.vx) * k;
         e.vy += (e.my * e.want - e.vy) * k;

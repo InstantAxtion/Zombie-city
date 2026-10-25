@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "11.5";
-    static final int VERSION_CODE = 107;
+    static final String VERSION = "11.6";
+    static final int VERSION_CODE = 108;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "11.6  -  Steady movement when the frame rate dips",
+                    "People, police, soldiers and the dead no longer twitch, spin round or jitter back and forth when the phone falls behind and the game catches up with a longer step (or at 2x to 8x speed): anyone on screen now walks that longer moment as several ordinary ones. In tests, units flip-flopping back and forth went from dozens per minute of play to one or two.",
+            },
             {
                     "11.5  -  Much faster; a new look; smarter police and army; buildings that matter",
                     "The city runs far quicker: a Large or Massive city in a panic, ten thousand people about, takes about a third less time to work out each moment, and its worst moments - the ones that made the game stutter - about half as long.",
