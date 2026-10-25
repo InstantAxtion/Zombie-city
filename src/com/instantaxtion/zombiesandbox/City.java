@@ -48,6 +48,8 @@ final class City {
         final List<float[]> posts = new ArrayList<float[]>();
         /** Bases: the alarm is sounding (the dead are at the wire), and time until the next patrol goes out. */
         boolean alarm;
+        /** ((11.5) Police stations: everyone free has been sent out in this emergency (said once).) */
+        boolean turnedOut;
         float patrolCd = 30, quietFor;
         /** A small town's own police or fire station out in the country (10.20). */
         boolean satellite;
@@ -136,6 +138,8 @@ final class City {
          * windows shot out in a fight inside (0 to 1), and the door broken in by the dead.
          */
         float scorch, shotUp;
+        /** ((11.5) Variants.U_ use, worked out when first wanted; -1 not yet.) */
+        int use = -1;
         boolean doorBroken;
         /** How long survivors inside have gone without food, and whether that's been reported. */
         float hunger;
@@ -657,6 +661,10 @@ final class City {
             // Food in the cupboards and on the shelves.
             b.food = k == MARKET ? 400 : k == MALL ? 300 : k == WAREHOUSE ? 150 : k == SHOP ? (b.shopType == 2 ? 120 : 40)
                     : k == APARTMENT ? 60 : k == HOUSE ? 25 : k == SCHOOL ? 80 : k == BARN ? 120 : 12;
+            // ((11.5) Groceries and the like have a lot more; pawn shops and sporting goods some rounds.)
+            int use = Variants.use(b.variant);
+            if (use == Variants.U_FOOD) b.food += 160;
+            else if (use == Variants.U_ROUNDS) b.stock = 60;
             // (The visitor centre, a camp store or a cabin out in the country.)
             Integer mark = lotLandmark.get(l);
             if (mark != null) b.landmark = mark;

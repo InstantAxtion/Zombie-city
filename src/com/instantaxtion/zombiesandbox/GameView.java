@@ -3425,19 +3425,7 @@ final class GameView extends View implements Menu.Host {
      * pushed back to the far end, facing them, with guns flashing.
      */
     private void drawFightInside(Canvas c, final City.Building b, final java.util.ArrayList<float[]> spots, float a) {
-        Integer[] order = byDoor.get(b);
-        if (order == null || order.length != spots.size()) {
-            if (byDoor.size() > 100) byDoor.clear();
-            order = new Integer[spots.size()];
-            for (int i = 0; i < order.length; i++) order[i] = i;
-            java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
-                public int compare(Integer p, Integer q) {
-                    float[] u = spots.get(p), v = spots.get(q);
-                    return Float.compare(Math.abs(u[0] - b.doorX) + Math.abs(u[1] - b.doorY), Math.abs(v[0] - b.doorX) + Math.abs(v[1] - b.doorY));
-                }
-            });
-            byDoor.put(b, order);
-        }
+        Integer[] order = doorOrder(b, spots);
         if (puppets == null) {
             puppets = new Entity[10];
             for (int i = 0; i < puppets.length; i++) puppets[i] = world.puppetZombie(i);
@@ -3625,9 +3613,53 @@ final class GameView extends View implements Menu.Host {
      * doorways if it's in another room). Everyone in a building moves on the same beat to different spots,
      * so nobody ends up on top of anyone else.
      */
+    /** The spots inside a building, nearest the door first. */
+    private Integer[] doorOrder(final City.Building b, final java.util.ArrayList<float[]> spots) {
+        Integer[] order = byDoor.get(b);
+        if (order == null || order.length != spots.size()) {
+            if (byDoor.size() > 100) byDoor.clear();
+            order = new Integer[spots.size()];
+            for (int i = 0; i < order.length; i++) order[i] = i;
+            java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
+                public int compare(Integer p, Integer q) {
+                    float[] u = spots.get(p), v = spots.get(q);
+                    return Float.compare(Math.abs(u[0] - b.doorX) + Math.abs(u[1] - b.doorY), Math.abs(v[0] - b.doorX) + Math.abs(v[1] - b.doorY));
+                }
+            });
+            byDoor.put(b, order);
+        }
+        return order;
+    }
+
     private void placeInside(Entity o, int i, City.Building b, java.util.ArrayList<float[]> spots, Interiors.Plan plan) {
         int n = spots.size();
-        float cycle = 14 + (b.seed & 7);
+        // ((11.5) The dead at the door: two of them put their backs to it (the strongest, or whoever has a gun),
+        // everyone else gets as far from it as the place allows and keeps still - no wandering from room to room.)
+        if (i < b.occupants.size() && b.barricade < 99 && b.calmTimer < 2 && n > 2) {
+            Integer[] order = doorOrder(b, spots);
+            float cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+            float ix = cx - b.doorX, iy = cy - b.doorY, il = (float) Math.sqrt(ix * ix + iy * iy) + 0.001f;
+            ix /= il;
+            iy /= il;
+            if (i < 2) {
+                float side = i == 0 ? 3.5f : -3.5f;
+                o.x = b.doorX + ix * 6 - iy * side;
+                o.y = b.doorY + iy * 6 + ix * side;
+                o.angle = (float) Math.atan2(-iy, -ix);
+                // (Shoving back as the door shakes.)
+                float shove = (float) Math.sin(world.time * 9 + i * 2) * (b.barricade < 50 ? 1.2f : 0.6f);
+                o.x -= ix * shove;
+                o.y -= iy * shove;
+                return;
+            }
+            float[] sp = spots.get(order[Math.max(0, n - 1 - (i - 2) % Math.max(1, n - 2))]);
+            o.x = sp[0];
+            o.y = sp[1];
+            o.angle = (float) Math.atan2(b.doorY - sp[1], b.doorX - sp[0]);
+            return;
+        }
+        // ((11.5) With the city under attack, those sheltering here move about a lot less.)
+        float cycle = (14 + (b.seed & 7)) * (world.alert >= 1 && i < b.occupants.size() ? 2.5f : 1);
         float t = world.time + (b.seed & 255) * 0.13f;
         int k = (int) (t / cycle);
         float f = t / cycle - k;
@@ -7881,7 +7913,7 @@ final class GameView extends View implements Menu.Host {
         else lines.add(b.capacity > 0 ? "Empty (room for " + b.capacity + " to hide)" : "Nobody can shelter here");
         if (!b.collapsed) {
             String supplies = "Food: " + b.food + (b.food == 0 && !b.occupants.isEmpty() ? " (they're starving)" : "");
-            if (b.kind == City.MARKET || (b.kind == City.SHOP && b.shopType == 1))
+            if (b.kind == City.MARKET || (b.kind == City.SHOP && b.shopType == 1) || World.useOf(b) == Variants.U_ROUNDS)
                 supplies += "   Ammo: " + b.stock + (b.shopType == 1 ? " rounds (arms anyone who comes in)" : " rounds");
             if (b.kind == City.PHARMACY) supplies += "   Medicine: " + b.stock;
             lines.add(supplies);
@@ -7912,6 +7944,18 @@ final class GameView extends View implements Menu.Host {
                 break;
             }
             case City.WORKS: role = "The city works depot"; break;
+        }
+        if (role == null) {
+            // ((11.5) What the kinds of building are good for.)
+            switch (World.useOf(b)) {
+                case Variants.U_FOOD: role = "Well stocked with food: somewhere to hold out"; break;
+                case Variants.U_MEDICAL: role = "Medical supplies: the hurt sheltering here are patched up"; break;
+                case Variants.U_TOOLS: role = "Tools and timber: barricades go up fast and hold better"; break;
+                case Variants.U_VAULT: role = "A heavy door: the dead take more than twice as long to get in"; break;
+                case Variants.U_GLASS: role = "All glass at the front: the dead are through it quickly"; break;
+                case Variants.U_RADIO: role = "A radio: survivors here can call for help and be heard"; break;
+                case Variants.U_ROUNDS: role = "Some guns and rounds on the shelves"; break;
+            }
         }
         if (role != null) lines.add(role);
         text.setTextAlign(Paint.Align.LEFT);

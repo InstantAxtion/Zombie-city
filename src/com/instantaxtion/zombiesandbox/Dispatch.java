@@ -577,6 +577,7 @@ final class Dispatch {
         census();
         sweep(step);
         updateIncidents(step);
+        turnOut(step);
         outsideFlow();
         sendOutsidersHome(step);
         mobilise(step);
@@ -1015,7 +1016,9 @@ final class Dispatch {
         }
         int force = freeCops;
         for (int i = 0; i < incidents.size(); i++) force += incidents.get(i).cops;
-        int reserve = live >= 2 ? force / 7 : 0;
+        // ((11.5) In an emergency - the city knows, several calls at once, or officers going down - nobody is kept
+        // back: the reserve goes out too.)
+        int reserve = live >= 2 && !emergency() ? force / 7 : 0;
         int spare = Math.max(0, freeCops - reserve);
         byNeed.clear();
         byNeed.addAll(incidents);
@@ -1149,6 +1152,88 @@ final class Dispatch {
             if (!inc.militaryRequested && known && (inc.zombiesNear >= 8 || (inc.officersDown > 0 && inc.zombiesNear >= 3)
                     || (open >= 4 && inc.zombiesNear >= 4))) {
                 requestMilitary(inc.x, inc.y, inc.place, inc, null);
+            }
+        }
+    }
+
+    /**
+     * (11.5) Whether this is an emergency: everyone knows what's happening, three or more live calls, or an officer
+     * down at one of them.
+     */
+    boolean emergency() {
+        if (w.alert >= 2) return true;
+        int live = 0;
+        for (int i = 0; i < incidents.size(); i++) {
+            Incident inc = incidents.get(i);
+            if (inc.resolved || inc.zombiesNear == 0) continue;
+            if (inc.officersDown > 0) return true;
+            live++;
+        }
+        return live >= 3;
+    }
+
+    private float turnOutCd = 6;
+
+    /**
+     * (11.5) In an emergency the officers at the stations don't wait to be called one at a time: whoever is at a
+     * station and free goes out in pairs, in the station's cars, to the worst call within reach that's short of
+     * people - the station says so once - and when it's over they're back to normal.
+     */
+    private void turnOut(float step) {
+        if ((turnOutCd -= step) > 0) return;
+        turnOutCd = 6;
+        boolean emergency = emergency();
+        for (City.Facility f : city.facilities) {
+            if (f.kind != City.FACILITY_POLICE) continue;
+            if (!emergency) {
+                f.turnedOut = false;
+                continue;
+            }
+            ArrayList<Entity> there = new ArrayList<Entity>();
+            for (int i = 0, n = w.entities.size(); i < n; i++) {
+                Entity e = w.entities.get(i);
+                if (e.dead || e.type != Entity.COP || e.task != T_NONE || e.rig != null || e.ride != null) continue;
+                if (e.ammo + e.reserve <= 0 || e.hp < e.maxHp * 0.35f || e.role == Entity.ROLE_PILOT) continue;
+                if (World.hypot(e.x - f.x, e.y - f.y) < 220) there.add(e);
+            }
+            if (there.isEmpty()) continue;
+            // The worst call within reach that hasn't what it needs (the nearer, the better).
+            Incident best = null;
+            float bs = 0;
+            for (int i = 0; i < incidents.size(); i++) {
+                Incident inc = incidents.get(i);
+                if (inc.resolved || inc.zombiesNear == 0 || inc.cordonPost >= 0) continue;
+                int have = inc.cops + inc.soldiers + w.fleet.inbound(inc);
+                int short_ = needAt(inc) + 2 - have;
+                if (short_ <= 0) continue;
+                float d = (float) World.hypot(inc.x - f.x, inc.y - f.y);
+                if (d > 1800) continue;
+                float score = (severity(inc) + short_ * 2) / (1 + d / 600);
+                if (score > bs) {
+                    bs = score;
+                    best = inc;
+                }
+            }
+            if (best == null) continue;
+            int want = Math.min(there.size(), needAt(best) + 2 - (best.cops + best.soldiers + w.fleet.inbound(best)));
+            while (there.size() > want) there.remove(there.size() - 1);
+            int sent = 0;
+            for (int i = 0; i + 1 < there.size(); i += 2) {
+                ArrayList<Entity> pair = new ArrayList<Entity>();
+                pair.add(there.get(i));
+                pair.add(there.get(i + 1));
+                if (w.fleet.stationCar(pair, f, best)) {
+                    sent += 2;
+                    there.remove(i + 1);
+                    there.remove(i);
+                    i -= 2;
+                }
+            }
+            if (!there.isEmpty()) sent += assignOnFoot(best, Entity.COP, there);
+            if (sent > 0 && !f.turnedOut) {
+                f.turnedOut = true;
+                say(WHO_POLICE, null, "Dispatch: " + (f.name != null ? f.name.trim() : "The station") + ", everyone who's free, out to "
+                        + best.place + ". We need every officer on the street.", f.x, f.y);
             }
         }
     }
@@ -1368,6 +1453,8 @@ final class Dispatch {
             for (int i = 0, count = w.entities.size(); i < count; i++) {
                 Entity e = w.entities.get(i);
                 if (e.dead || e.type != type || e.task != T_NONE || picked.contains(e)) continue;
+                // ((11.5) Not someone with no rounds left, or badly hurt: they'd only be another one down.)
+                if (e.ammo + e.reserve <= 0 || e.hp < e.maxHp * 0.35f || e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR) continue;
                 float dx = e.x - x, dy = e.y - y, d = dx * dx + dy * dy;
                 if (d < bd) {
                     bd = d;

@@ -732,6 +732,7 @@ final class World {
             }
         }
         applyReadiness();
+        buildRoster();
         spawnBirds();
         spawnWildlife();
         fleet.trafficTarget = Fleet.trafficFor(city);
@@ -1468,6 +1469,7 @@ final class World {
         for (Entity e : entities) if (e.role == Entity.ROLE_K9 && e.type == Entity.COP) e.role = 0;
         for (Entity e : entities) if (e.role == Entity.ROLE_CORPSMAN && e.type == Entity.SOLDIER) e.role = Entity.ROLE_GRENADIER;
         findWilds();
+        buildRoster();
         launchBoats();
         spawnBirds();
         spawnWildlife();
@@ -1600,6 +1602,10 @@ final class World {
             city.computeFields(entities);
         }
         dispatch.update(dt);
+        if ((rosterCd -= dt) <= 0) {
+            rosterCd = 5;
+            staffPosts();
+        }
         if (controlled != null) {
             Fleet.Vehicle car = controlledCar;
             if (car != null && (!fleet.vehicles.contains(car) || car.player != controlled || !controlled.removed)) {
@@ -2503,7 +2509,7 @@ final class World {
                 float wx = Math.max(target.x0, Math.min(target.x1, z.x)) - z.x, wy = Math.max(target.y0, Math.min(target.y1, z.y)) - z.y;
                 steer(z, 0, 0, 0);
                 z.angle = turn(z.angle, (float) Math.atan2(wy, wx), dt * 4);
-                target.barricade -= (z.type == Entity.BRUTE ? 2.4f : 0.8f) * dt;
+                target.barricade -= (z.type == Entity.BRUTE ? 2.4f : 0.8f) * dt * doorWeakness(target);
                 target.calmTimer = 0;
                 if (rnd.nextFloat() < dt * 0.6f) emit(Sfx.THUD, z.x, z.y);
                 z.stuckTime = 0;
@@ -2517,6 +2523,8 @@ final class World {
                 float dps = (z.type == Entity.BRUTE ? 10 : z.type == Entity.CRAWLER ? 2 : 4.5f) * (d < 14 ? 1 : 0.5f);
                 // (A group's fortified door holds a lot longer.)
                 if (target.holdout != null) dps *= 1 - target.holdout.fort * 0.006f;
+                // ((11.5) A bank's or a storage unit's door holds out far longer than a glass shop front.)
+                dps *= doorWeakness(target);
                 target.barricade -= dps * dt;
                 target.calmTimer = 0;
                 if (target.barricade < 70 && isShop(target)) smash(target);
@@ -6382,7 +6390,7 @@ final class World {
             float bd = 2600 * 2600;
             for (int i = 0, n = city.buildings.size(); i < n; i++) {
                 City.Building b = city.buildings.get(i);
-                if (!(b.kind == City.MARKET || (b.kind == City.SHOP && b.shopType == 1)) || b.collapsed || b.stock <= 0
+                if (!(b.kind == City.MARKET || (b.kind == City.SHOP && b.shopType == 1) || useOf(b) == Variants.U_ROUNDS) || b.collapsed || b.stock <= 0
                         || b.infestKnown) continue;
                 float d = (b.doorX - e.x) * (b.doorX - e.x) + (b.doorY - e.y) * (b.doorY - e.y);
                 if (d < bd) {
@@ -6432,7 +6440,7 @@ final class World {
                 else if (g < 0.72f) setGun(e, Entity.W_REVOLVER, take);
                 armedAtStores++;
             }
-            if (b.stock <= 0 && b.kind == City.SHOP && !b.looted) {
+            if (b.stock <= 0 && b.kind == City.SHOP && b.shopType == 1 && !b.looted) {
                 b.looted = true;
                 dispatch.say(Dispatch.WHO_INFO, null, b.name + " has been cleaned out: every gun is gone.", b.doorX, b.doorY);
             }
@@ -7452,10 +7460,21 @@ final class World {
             if (stock < 0.5f) keep *= 1 + (0.5f - stock) * 3;
             Dispatch.SafeZone guarding = e.task == Dispatch.T_GUARD ? e.zone : null;
             boolean swarmed = countZombiesNear(e.x, e.y, 40) >= 3;
-            if (stationary) standAt(e, e.postX, e.postY, 0.5f);
-            else if ((d < keep || (e.reload > 0 && d < 70) || swarmed) && (guarding == null || inside(e, guarding, 1f)))
+            boolean pressed = d < keep || (e.reload > 0 && d < 70) || swarmed;
+            if (stationary) {
+                // ((11.5) Nobody is rooted to a gate or a checkpoint: with the dead coming at them they step back
+                // (a fair way, not across town), shooting, and take the post again once it's clear.)
+                float pd = (float) World.hypot(e.x - e.postX, e.y - e.postY);
+                if ((d < keep * 0.8f || swarmed || (e.reload > 0 && d < 45)) && pd < 120)
+                    flee(e, -ddx / d, -ddy / d, e.runSpeed * (swarmed ? 0.95f : 0.8f));
+                else if (d > keep * 1.4f && !swarmed) standAt(e, e.postX, e.postY, 0.5f);
+                else steer(e, 0, 0, 0);
+            } else if (pressed && (guarding == null || inside(e, guarding, 1f)))
                 // Too close, reloading or outnumbered: fall back while shooting.
                 flee(e, -ddx / d, -ddy / d, e.runSpeed * (swarmed ? 0.95f : 0.8f));
+            else if (pressed && guarding != null)
+                // ((11.5) On the gate outside the walls and the dead are on them: back inside, not stood there.)
+                walkToSpot(e, guarding.x, guarding.y, e.runSpeed * 0.9f);
             else if (guarding != null) holdPost(e, guarding, 0.5f);
             else if (e.task == Dispatch.T_NONE && e.member % 3 == 2 && d > keep + 25) {
                 // Flankers work round to the side for a clear angle, instead of all firing down one line.
@@ -7901,6 +7920,91 @@ final class World {
             if (city.solidTile(City.fl(x / City.T), City.fl(y / City.T))) return false;
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------ (11.5) posts kept manned
+
+    /** Gate and checkpoint posts {x, y} that are kept manned, and who has each now (null for nobody). */
+    final ArrayList<float[]> rosterPosts = new ArrayList<float[]>();
+    final ArrayList<Entity> rosterHolders = new ArrayList<Entity>();
+    private float rosterCd = 5;
+
+    /**
+     * (11.5) The base gates, the armory and the country checkpoints, and whoever is on each now (worked out again from
+     * where everyone stands after a load).
+     */
+    void buildRoster() {
+        rosterPosts.clear();
+        rosterHolders.clear();
+        for (City.Facility f : city.facilities)
+            if (f.kind == City.FACILITY_BASE) for (float[] p : f.posts) rosterPosts.add(new float[]{p[0], p[1]});
+        for (float[] p : city.checkpointPosts) rosterPosts.add(new float[]{p[0], p[1]});
+        if (city.armory != null && city.armoryGate != null) {
+            float[] g = city.armoryGate;
+            rosterPosts.add(new float[]{g[0] - 14, g[1]});
+            rosterPosts.add(new float[]{g[0] + 14, g[1]});
+            rosterPosts.add(new float[]{city.armory.doorX - 12, city.armory.doorY + 6});
+            rosterPosts.add(new float[]{city.armory.doorX + 12, city.armory.doorY + 6});
+        }
+        for (float[] p : rosterPosts) {
+            Entity best = null;
+            float bd = 14;
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (e.dead || e.type != Entity.SOLDIER || e.task != Dispatch.T_POST) continue;
+                float d = (float) World.hypot(e.postX - p[0], e.postY - p[1]);
+                if (d < bd) {
+                    bd = d;
+                    best = e;
+                }
+            }
+            if (best != null) {
+                // (The holder's post is the roster's spot from now on, so they can be matched up again.)
+                p[0] = best.postX;
+                p[1] = best.postY;
+            }
+            rosterHolders.add(best);
+        }
+    }
+
+    /**
+     * (11.5) A guard killed on a gate or a checkpoint is replaced: once the dead have gone from the post (nobody is
+     * sent to stand among them), the nearest free soldier with rounds and their health goes and takes it. One who has
+     * been called away is not replaced - it's only manned again when they come back or someone dies.
+     */
+    private void staffPosts() {
+        if (city.cfg != null && !city.cfg.nature()) return;
+        for (int k = 0; k < rosterPosts.size(); k++) {
+            float[] p = rosterPosts.get(k);
+            Entity h = rosterHolders.get(k);
+            if (h != null && !h.dead && !h.removed) continue;
+            boolean died = h != null;
+            if (countZombiesNear(p[0], p[1], 110) > 0) continue;
+            City.Facility base = city.nearestFacility(City.FACILITY_BASE, p[0], p[1]);
+            if (base != null && base.fallen && World.hypot(base.x - p[0], base.y - p[1]) < base.r * 1.6f) continue;
+            Entity best = null;
+            float bd = 700;
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (e.dead || e.type != Entity.SOLDIER || e.task != Dispatch.T_NONE || e.rig != null || e.ride != null) continue;
+                if (e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR) continue;
+                if (e.ammo + e.reserve <= 0 || e.hp < e.maxHp * 0.5f) continue;
+                float d = (float) World.hypot(e.x - p[0], e.y - p[1]) - (e.role == Entity.ROLE_GUARD ? 150 : 0);
+                if (d < bd) {
+                    bd = d;
+                    best = e;
+                }
+            }
+            if (best == null) continue;
+            best.task = Dispatch.T_POST;
+            best.postX = p[0];
+            best.postY = p[1];
+            rosterHolders.set(k, best);
+            if (died)
+                dispatch.say(Dispatch.WHO_MILITARY, null, "Military: " + Dispatch.name(best) + ", take the post at "
+                        + (base != null && base.name != null && World.hypot(base.x - p[0], base.y - p[1]) < base.r * 2 ? base.name.trim()
+                        : String.valueOf(city.placeName(p[0], p[1]))) + ". We lost the last one there.", p[0], p[1]);
+        }
     }
 
     /**
@@ -9495,10 +9599,27 @@ final class World {
                 continue;
             }
             b.fighting = false;
-            // Everyone inside helps shore up the door: more people, a stronger barricade.
+            // Everyone inside helps shore up the door: more people, a stronger barricade. ((11.5) With the tools and
+            // timber of a hardware store or lumber yard to hand, a lot quicker.)
+            int use = useOf(b);
+            float tools = use == Variants.U_TOOLS ? 2.5f : 1;
             if (!zombieWithin(b.doorX, b.doorY, 60))
-                b.barricade = Math.min(100, b.barricade + dt * (2 + b.occupants.size() * 0.5f));
-            else if (b.occupants.size() >= 4) b.barricade = Math.min(100, b.barricade + dt * b.occupants.size() * 0.25f);
+                b.barricade = Math.min(100, b.barricade + dt * (2 + b.occupants.size() * 0.5f) * tools);
+            else if (b.occupants.size() >= 4 || (tools > 1 && b.occupants.size() >= 2))
+                b.barricade = Math.min(100, b.barricade + dt * b.occupants.size() * 0.25f * tools);
+            windowShots(b, dt);
+            // ((11.5) Somewhere with medical supplies: the hurt sheltering there are patched up.)
+            if (use == Variants.U_MEDICAL)
+                for (int k = 0; k < b.occupants.size(); k++) {
+                    Entity o = b.occupants.get(k);
+                    if (o.hp < o.maxHp) o.hp = Math.min(o.maxHp, o.hp + dt * 3);
+                }
+            // ((11.5) Survivors at the radio station keep calling for help: once in a while it goes out, and it's heard.)
+            if (use == Variants.U_RADIO && alert >= 1) {
+                if (((int) (time / 90)) != ((int) ((time - dt) / 90)))
+                    dispatch.say(Dispatch.WHO_INFO, null, "Radio: " + b.occupants.size() + (b.occupants.size() == 1 ? " survivor is" : " survivors are")
+                            + " broadcasting from the radio station on " + city.placeName(b.doorX, b.doorY) + ". They need help.", b.doorX, b.doorY);
+            }
             // Come out once the street has been quiet for a little while (not a minute and a half of nothing).
             b.calmTimer += dt;
             if (zombieWithin(b.doorX, b.doorY, 200)) b.calmTimer = 0;
@@ -9669,6 +9790,59 @@ final class World {
         b.infestKnown = true;
         dispatch.say(Dispatch.WHO_INFO, null, n + (n == 1 ? " zombie burst" : " zombies burst") + " out of "
                 + (b.name != null ? b.name : "a building") + " on " + city.placeName(b.doorX, b.doorY) + "!", b.doorX, b.doorY);
+    }
+
+    /**
+     * (11.5) Anyone inside with a gun shoots from the windows at the dead outside - slowly, a round at a time, and
+     * every shot is heard up and down the street (which brings more of them).
+     */
+    private void windowShots(City.Building b, float dt) {
+        if (!zombieWithin(b.doorX, b.doorY, 70)) return;
+        float cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+        float reach = Math.max(b.x1 - b.x0, b.y1 - b.y0) / 2 + 60;
+        for (int k = 0; k < b.occupants.size(); k++) {
+            Entity o = b.occupants.get(k);
+            if (!o.canShoot()) continue;
+            if ((o.cooldown -= dt) > 0) continue;
+            if (o.ammo <= 0) {
+                if (o.reserve <= 0) continue;
+                int r = Math.min(o.magSize, o.reserve);
+                o.reserve -= r;
+                o.ammo = r;
+                o.cooldown = 2.5f;
+                continue;
+            }
+            Entity z = nearestZombie(cx, cy, reach);
+            if (z == null || z.hidden) return;
+            o.cooldown = 1.1f + rnd.nextFloat() * 0.8f;
+            o.ammo--;
+            shotsFired++;
+            b.flash = 0.15f;
+            emit(Sfx.PISTOL, b.doorX, b.doorY);
+            noise(b.doorX, b.doorY, 140);
+            if (rnd.nextFloat() < 0.5f) {
+                z.hp -= rnd.nextFloat() < 0.2f ? z.hp : 20 * GUN_DAMAGE * (z.armored ? 0.5f : 1);
+                z.hurt = 1;
+                if (z.hp <= 0) killMade(o);
+                bloodBurst(z.x, z.y, 3, 0, 0);
+            }
+            tracer(Math.max(b.x0, Math.min(b.x1, z.x)), Math.max(b.y0, Math.min(b.y1, z.y)), z.x, z.y);
+        }
+    }
+
+    /**
+     * (11.5) How quickly the dead get through a building's door: a vault-like door holds out more than twice as long,
+     * a glass front goes half again as quick.
+     */
+    static float doorWeakness(City.Building b) {
+        int use = useOf(b);
+        return use == Variants.U_VAULT ? 0.45f : use == Variants.U_GLASS ? 1.5f : use == Variants.U_TOOLS ? 0.8f : 1;
+    }
+
+    /** (11.5) What a building is good for when the dead come (Variants.U_). */
+    static int useOf(City.Building b) {
+        if (b.use < 0) b.use = b.kind == City.PHARMACY || b.kind == City.HOSPITAL ? Variants.U_MEDICAL : Variants.use(b.variant);
+        return b.use;
     }
 
     static boolean isShop(City.Building b) {
@@ -13071,6 +13245,8 @@ final class World {
                         City.Building b = city.buildings.get(i);
                         if (b.occupants.isEmpty() || b.lurkers > 0 || b.collapsed || b.holdout != null) continue;
                         float d = (b.doorX - hx) * (b.doorX - hx) + (b.doorY - hy) * (b.doorY - hy);
+                        // ((11.5) Survivors on the radio are heard from three times as far.)
+                        if (useOf(b) == Variants.U_RADIO) d /= 9;
                         if (d < bb) {
                             bb = d;
                             e.building = b;

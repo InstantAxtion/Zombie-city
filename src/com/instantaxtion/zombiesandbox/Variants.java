@@ -302,6 +302,51 @@ final class Variants {
         wh("Plant nursery", PARK | SUB, R_GLASS, 0xFF4F5A66, 0xFF3FB8B0, "NURSERY", I_SHELVES);
         o("Mini golf club", PARK, R_FLAT, 0xFF59646B, 0xFF2E4F3A, "MINI GOLF", I_GYM, 1, 1);
         government();
+        // ((11.5) More kinds of building, each with a use when the dead come (see use()). After the government
+        // buildings, so the ids already in saved games don't move.)
+        s("Grocery store", TOWN, R_FLAT, 0xFFB8BCC0, 0xFF2E8A3A, "GROCERY", I_SHELVES);
+        s("Pawn shop", DOWN | MID | OLD, R_FLAT, 0xFF6A6E74, 0xFFD8B040, "PAWN", I_SHELVES);
+        s("Sporting goods", MID | SUB, R_FLAT, 0xFF7C848A, 0xFF2E5FB0, "SPORTS", I_SHOWROOM);
+        o("Urgent care", MID | SUB | DOWN, R_FLAT, 0xFFE4E8EC, 0xFFE03A3A, "URGENT CARE", I_WARD, 1, 2);
+        o("Radio station", MID | DOWN | IND, R_ANTENNA, 0xFF59646B, 0xFFE03A3A, "RADIO", I_OFFICE, 2, 3);
+        wh("Lumber yard", IND | SUB, R_SAWTOOTH, 0xFF8A7F70, 0xFFC8963A, "LUMBER", I_RACKS);
+        wh("Self storage", IND | SUB, R_STRIPES, 0xFF8A9096, 0xFFE0702E, "STORAGE", I_RACKS);
+        wh("Cold store", IND, R_FLAT, 0xFFD8DCE0, 0xFF3A8AE0, "COLD STORE", I_RACKS);
+    }
+
+    // ((11.5) What a kind of building is good for when the dead come.)
+    static final int U_NONE = 0, U_FOOD = 1, U_MEDICAL = 2, U_TOOLS = 3, U_VAULT = 4, U_GLASS = 5, U_RADIO = 6, U_ROUNDS = 7;
+
+    /**
+     * (11.5) A building's use: food on the shelves (groceries, bakeries, butchers, cold stores), somewhere to patch up
+     * the hurt (urgent care, clinics, dentists), tools and timber for a much stronger barricade (hardware stores,
+     * lumber yards), a door built to keep people out (banks, jewellers, pawn shops, self storage), a glass front the
+     * dead are through in no time (boutiques, cafés, showrooms, glass towers), a radio (survivors there call for help
+     * and are heard), or a few rounds on the shelves (pawn shops, sporting goods).
+     */
+    static int use(int variant) {
+        V v = get(variant);
+        if (v == null) return U_NONE;
+        switch (v.name) {
+            case "Grocery store": case "Bakery": case "Butcher": case "Cold store": case "Convenience store": case "Pizzeria":
+            case "Restaurant":
+                return U_FOOD;
+            case "Urgent care": case "Clinic": case "Dentist":
+                return U_MEDICAL;
+            case "Hardware store": case "Lumber yard":
+                return U_TOOLS;
+            case "Bank": case "Bank headquarters": case "Jeweller": case "Self storage": case "Courthouse":
+                return U_VAULT;
+            case "Boutique": case "Café": case "Shoe shop": case "Electronics store": case "Glass skyscraper": case "Florist":
+            case "Ice cream parlour": case "Bike shop":
+                return U_GLASS;
+            case "Radio station":
+                return U_RADIO;
+            case "Pawn shop": case "Sporting goods":
+                return U_ROUNDS;
+            default:
+                return U_NONE;
+        }
     }
 
     /** The government buildings (only ever chosen by {@link #gov}). */
