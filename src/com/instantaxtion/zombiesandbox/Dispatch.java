@@ -383,7 +383,7 @@ final class Dispatch {
     void callout(float x, float y, String label, int color) {
         for (int i = 0; i < callouts.size(); i++) {
             Callout c = callouts.get(i);
-            if (c.age < 3 && Math.hypot(c.x - x, c.y - y) < 60 && c.label.equals(label)) return;
+            if (c.age < 3 && World.hypot(c.x - x, c.y - y) < 60 && c.label.equals(label)) return;
         }
         Callout c = new Callout();
         c.x = x;
@@ -794,7 +794,7 @@ final class Dispatch {
         String squadName = SQUADS[Math.max(0, lead.squad) % SQUADS.length];
         // A long way from the base: by truck.
         City.Facility base = city.nearestFacility(City.FACILITY_BASE, px, py);
-        boolean atBase = base != null && Math.hypot(base.x - px, base.y - py) < Math.max(200, base.r * 2.5f);
+        boolean atBase = base != null && World.hypot(base.x - px, base.y - py) < Math.max(200, base.r * 2.5f);
         if (atBase && bd > 600 * 600 && w.fleet.troopTruck(pick, base, target)) {
             say(WHO_MILITARY, null, "Command: " + squadName + " squad, mount up. Support the police at " + target.place + ".",
                     target.x, target.y);
@@ -844,7 +844,7 @@ final class Dispatch {
                     break;
                 case T_GUARD:
                     e.slot = e.zone.guards++;
-                    if (Math.hypot(e.x - e.zone.x, e.y - e.zone.y) < e.zone.baseR * 1.3f) e.zone.onSite++;
+                    if (World.hypot(e.x - e.zone.x, e.y - e.zone.y) < e.zone.baseR * 1.3f) e.zone.onSite++;
                     break;
                 case T_SHELTER:
                     e.zone.sheltered++;
@@ -944,7 +944,7 @@ final class Dispatch {
         airPlace = place;
         airIncident = null;
         for (int i = 0; i < incidents.size(); i++)
-            if (Math.hypot(incidents.get(i).x - x, incidents.get(i).y - y) < 200) airIncident = incidents.get(i);
+            if (World.hypot(incidents.get(i).x - x, incidents.get(i).y - y) < 200) airIncident = incidents.get(i);
         airDelay = 12 + w.rnd.nextFloat() * 10;
         say(WHO_MILITARY, null, "Military: Air support approved for " + place + ". Crew to the helicopter.", x, y);
     }
@@ -1315,7 +1315,7 @@ final class Dispatch {
             riders.clear();
             for (int i = 0; i < units.size(); i++) {
                 Entity e = units.get(i);
-                if (e.incident == best && e.type == Entity.SOLDIER && e.rig == null && Math.hypot(e.x - best.x, e.y - best.y) > 600) riders.add(e);
+                if (e.incident == best && e.type == Entity.SOLDIER && e.rig == null && World.hypot(e.x - best.x, e.y - best.y) > 600) riders.add(e);
             }
             if (!riders.isEmpty()) w.fleet.mountUp(riders, best);
             if (sent > mostN) {
@@ -1388,14 +1388,14 @@ final class Dispatch {
             int driven = 0;
             for (int i = 0; i < units.size(); i++) {
                 Entity e = units.get(i);
-                if (Math.hypot(e.x - inc.x, e.y - inc.y) < 500) continue;
+                if (World.hypot(e.x - inc.x, e.y - inc.y) < 500) continue;
                 City.Facility f = city.nearestFacility(City.FACILITY_POLICE, e.x, e.y);
-                if (f == null || Math.hypot(e.x - f.x, e.y - f.y) > 220) continue;
+                if (f == null || World.hypot(e.x - f.x, e.y - f.y) > 220) continue;
                 ArrayList<Entity> pair = new ArrayList<Entity>();
                 pair.add(e);
                 for (int j = i + 1; j < units.size() && pair.size() < 2; j++) {
                     Entity o = units.get(j);
-                    if (Math.hypot(o.x - f.x, o.y - f.y) <= 220) pair.add(o);
+                    if (World.hypot(o.x - f.x, o.y - f.y) <= 220) pair.add(o);
                 }
                 if (!w.fleet.stationCar(pair, f, inc)) continue;
                 for (Entity o : pair) units.remove(o);
@@ -1420,12 +1420,12 @@ final class Dispatch {
         int driven = 0, seats = type == Entity.COP ? 4 : 8;
         for (int i = 0; i < units.size(); i++) {
             Entity e = units.get(i);
-            if (Math.hypot(e.x - inc.x, e.y - inc.y) < 600) continue;
+            if (World.hypot(e.x - inc.x, e.y - inc.y) < 600) continue;
             ArrayList<Entity> group = new ArrayList<Entity>();
             group.add(e);
             for (int j = i + 1; j < units.size() && group.size() < seats; j++) {
                 Entity o = units.get(j);
-                if (Math.hypot(o.x - e.x, o.y - e.y) < 160 && Math.hypot(o.x - inc.x, o.y - inc.y) >= 600) group.add(o);
+                if (World.hypot(o.x - e.x, o.y - e.y) < 160 && World.hypot(o.x - inc.x, o.y - inc.y) >= 600) group.add(o);
             }
             if (!w.fleet.driveTo(group, inc)) continue;
             units.removeAll(group);
@@ -1515,7 +1515,7 @@ final class Dispatch {
                 + " hostiles.", x, y);
         ArrayList<Entity> squad = nearestFree(Entity.SOLDIER, x, y, 4, Float.MAX_VALUE);
         if (!squad.isEmpty() && zone == null && (w.fleet.mountUp(squad, inc)
-                || (Math.hypot(squad.get(0).x - x, squad.get(0).y - y) > 600 && w.fleet.driveTo(squad, inc)))) {
+                || (World.hypot(squad.get(0).x - x, squad.get(0).y - y) > 600 && w.fleet.driveTo(squad, inc)))) {
             Entity lead = squad.get(0);
             say(WHO_MILITARY, lead, "Copy that, Police. " + SQUADS[Math.max(0, lead.squad) % SQUADS.length]
                     + " squad mounting up, on our way to " + place + ".", lead.x, lead.y);
@@ -1714,7 +1714,7 @@ final class Dispatch {
         for (int i = 0, n = w.entities.size(); i < n && group.size() < (first.type == Entity.COP ? 2 : 8); i++) {
             Entity e = w.entities.get(i);
             if (e.outsider && !e.dead && e.type == first.type && e.task == T_NONE && e.rig == null && !e.aiming
-                    && Math.hypot(e.x - first.x, e.y - first.y) < 250) group.add(e);
+                    && World.hypot(e.x - first.x, e.y - first.y) < 250) group.add(e);
         }
         java.util.List<float[]> out = entries(first.x, first.y, true);
         float[] exit = null;
@@ -1815,7 +1815,7 @@ final class Dispatch {
             Incident inc = incidents.get(i);
             if (inc == not || inc.resolved || inc.cordonPost >= 0 || inc.zombiesNear < 2) continue;
             int have = inc.cops + inc.soldiers + w.fleet.inbound(inc) + w.fleet.inboundSoldiers(inc);
-            float score = inc.zombiesNear + inc.officersDown * 4 - have * 1.5f - (float) Math.hypot(inc.x - x, inc.y - y) / 600f;
+            float score = inc.zombiesNear + inc.officersDown * 4 - have * 1.5f - (float) World.hypot(inc.x - x, inc.y - y) / 600f;
             if (best == null || score > bs) {
                 bs = score;
                 best = inc;
@@ -1926,7 +1926,7 @@ final class Dispatch {
         Incident inc = null;
         for (int i = 0; i < incidents.size(); i++) {
             Incident o = incidents.get(i);
-            if (!o.resolved && o.cordonPost < 0 && Math.hypot(o.x - e.x, o.y - e.y) < 220) inc = o;
+            if (!o.resolved && o.cordonPost < 0 && World.hypot(o.x - e.x, o.y - e.y) < 220) inc = o;
         }
         if (inc == null) {
             // ((10.45) A unit's call for backup always gets on the board: a quiet call makes way for it.)
@@ -2023,7 +2023,7 @@ final class Dispatch {
             }
 
             private float cost(float[] p) {
-                return (float) Math.hypot(p[0] - fx, p[1] - fy) + (all.indexOf(p) >= hw ? 100000 : 0);
+                return (float) World.hypot(p[0] - fx, p[1] - fy) + (all.indexOf(p) >= hw ? 100000 : 0);
             }
         });
         return out;
@@ -2076,7 +2076,7 @@ final class Dispatch {
             if (c.pending > 0) moving = true;
             for (int k = 0; k < c.onFoot.size() && !moving; k++) {
                 Entity e = c.onFoot.get(k);
-                if (e.dead || Math.hypot(e.x - c.toX, e.y - c.toY) < 80) continue;
+                if (e.dead || World.hypot(e.x - c.toX, e.y - c.toY) < 80) continue;
                 c.x = e.x;
                 c.y = e.y;
                 moving = true;
@@ -2535,7 +2535,7 @@ final class Dispatch {
             for (int y = ty0 + 1; y < ty1; y++)
                 for (int x = tx0 + 1; x < tx1; x++) if (!city.solid[y * city.w + x]) open++;
             if (open < (military ? 70 : 50)) continue;
-            float score = Math.min(open, 500) * 0.03f + zd * 2 - (float) Math.hypot(cx - px, cy - py) / City.T * 0.5f;
+            float score = Math.min(open, 500) * 0.03f + zd * 2 - (float) World.hypot(cx - px, cy - py) / City.T * 0.5f;
             for (City.Facility f : city.facilities)
                 if (f.x > tx0 * City.T && f.x < (tx1 + 1) * City.T && f.y > ty0 * City.T && f.y < (ty1 + 1) * City.T
                         && f.kind == (military ? City.FACILITY_BASE : City.FACILITY_POLICE)) score += 25;
@@ -2691,7 +2691,7 @@ final class Dispatch {
                 if (!walkable(y * W + x) || !walkable(y * W + x + 1)) continue;
                 float tx = (x + 1) * City.T, ty = (y + 0.5f) * City.T;
                 boolean lane = false;
-                for (int g = 0; g < ng; g++) if (Math.hypot(z.gateIn[g][0] - tx, z.gateIn[g][1] - ty) < 3 * City.T) lane = true;
+                for (int g = 0; g < ng; g++) if (World.hypot(z.gateIn[g][0] - tx, z.gateIn[g][1] - ty) < 3 * City.T) lane = true;
                 if (!lane) spots.add(new float[]{tx, ty});
             }
         if (spots.size() < 3) return false;

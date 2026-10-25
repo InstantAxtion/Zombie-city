@@ -245,6 +245,8 @@ final class Fleet {
         }
         /** A parked car's alarm going off (seconds left) after zombies bumped into it. */
         float alarm;
+        /** ((11.5) Off screen, whether this step is the one it sits out.) */
+        boolean lodSkip;
         /** Police roadblocks: the safe zone this car is closing a road for, which way that road runs, cones out,
          *  and the officer posted beside it. */
         Dispatch.SafeZone block;
@@ -485,7 +487,7 @@ final class Fleet {
         float[] pf = pumpFuel();
         if (v.pumpAt >= 0 && v.pumpAt < pf.length) {
             float[] p = city.pumps.get(v.pumpAt);
-            if (Math.hypot(p[0] - v.x, p[1] - v.y) < 30) {
+            if (World.hypot(p[0] - v.x, p[1] - v.y) < 30) {
                 v.speed = Math.max(0, v.speed - dt * 160);
                 v.refuelT += dt;
                 if (v.refuelT > 3.5f) {
@@ -521,7 +523,7 @@ final class Fleet {
             for (int i = 0; i < pf.length; i++) {
                 if (pf[i] < 0.3f || city.pumps.get(i)[2] <= 0) continue;
                 float[] p = city.pumps.get(i);
-                float d = (float) Math.hypot(p[0] - v.x, p[1] - v.y);
+                float d = (float) World.hypot(p[0] - v.x, p[1] - v.y);
                 if (d < bd) {
                     bd = d;
                     best = i;
@@ -854,6 +856,11 @@ final class Fleet {
     }
 
     /** True if (x, y) is on the player's screen (or near it). */
+    /** ((11.5) Well away from the screen: further out than a car goes in a second or two.) */
+    private boolean farOff(Vehicle v) {
+        return v.x < w.viewX0 - 300 || v.x > w.viewX1 + 300 || v.y < w.viewY0 - 300 || v.y > w.viewY1 + 300;
+    }
+
     boolean inView(float x, float y) {
         return x > w.viewX0 - 60 && x < w.viewX1 + 60 && y > w.viewY0 - 60 && y < w.viewY1 + 60;
     }
@@ -883,15 +890,15 @@ final class Fleet {
                         else other = run;
                     }
                     if (mine == null || other == null) continue;
-                    float[] run = Math.hypot(mine[2] - v.x, mine[3] - v.y) < 300 ? other : mine;
+                    float[] run = World.hypot(mine[2] - v.x, mine[3] - v.y) < 300 ? other : mine;
                     d = new float[]{run[2], run[3]};
                 }
                 // (Sheriffs keep to their own patch of country rather than crossing town; rangers to the lanes
                 // round their park.)
-                if (d != null && v.agency == 2 && tries < 10 && Math.hypot(d[0] - v.x, d[1] - v.y) > 1400) continue;
+                if (d != null && v.agency == 2 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > 1400) continue;
                 if (d != null && v.agency == 3 && city.rangerLot != null && tries < 10
-                        && Math.hypot(d[0] - city.rangerLot[0], d[1] - city.rangerLot[1]) > 1100) continue;
-                if (d != null && Math.hypot(d[0] - v.x, d[1] - v.y) > 300) {
+                        && World.hypot(d[0] - city.rangerLot[0], d[1] - city.rangerLot[1]) > 1100) continue;
+                if (d != null && World.hypot(d[0] - v.x, d[1] - v.y) > 300) {
                     if (route(v, d[0], d[1])) return true;
                     if (++routes >= 3) break;
                 }
@@ -911,15 +918,15 @@ final class Fleet {
             for (int tries = 0; tries < 10; tries++) {
                 float a = w.rnd.nextFloat() * 6.2832f, r = 300 + w.rnd.nextFloat() * 1000;
                 float[] d = city.nearestDrivable(v.station.x + (float) Math.cos(a) * r, v.station.y + (float) Math.sin(a) * r);
-                if (d == null || Math.hypot(d[0] - v.x, d[1] - v.y) < 250) continue;
+                if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < 250) continue;
                 if (route(v, d[0], d[1])) return true;
                 if (++routes >= 4) break;
             }
         for (int tries = 0; tries < 12; tries++) {
             float[] d = randomRoad();
-            if (d == null || Math.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
+            if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
             // ((10.34) On the biggest maps everyday trips stay local: a drive right across one is a long search.)
-            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && Math.hypot(d[0] - v.x, d[1] - v.y) > 3200) continue;
+            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > 3200) continue;
             // Somewhere on ahead, as a rule: a car doesn't spin round in the road for its next trip.
             float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
             if (tries < 8 && (d[0] - v.x) * hx + (d[1] - v.y) * hy < 0) continue;
@@ -991,7 +998,7 @@ final class Fleet {
         // (10.45) Everyday traffic has no business inside an army base: it was driving in among the trucks at the gate.
         if (v.type == CAR && v.player == null) {
             for (City.Facility f : city.facilities)
-                if (f.kind == City.FACILITY_BASE && Math.hypot(x - f.x, y - f.y) < f.r + City.T * 2) return false;
+                if (f.kind == City.FACILITY_BASE && World.hypot(x - f.x, y - f.y) < f.r + City.T * 2) return false;
         }
         int[] field = scratchField();
         // (Everyday traffic and patrol cars keep to the roads; emergencies cut across whatever's paved.)
@@ -1210,7 +1217,7 @@ final class Fleet {
         for (int k = 0; k < 6; k++) {
             float[] q = city.randomStreetSpot(w.rnd);
             float[] p = q != null ? city.nearestDrivable(q[0], q[1]) : null;
-            if (p != null && Math.hypot(p[0] - v.x, p[1] - v.y) > 400 && route(v, p[0], p[1])) return true;
+            if (p != null && World.hypot(p[0] - v.x, p[1] - v.y) > 400 && route(v, p[0], p[1])) return true;
         }
         return false;
     }
@@ -1225,7 +1232,7 @@ final class Fleet {
         v.stuckTimer += dt;
         boolean moving = driveStep(v, dt, 100, carAhead(v) ? 0.5f : 1f);
         if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        if (!moving || Math.hypot(v.tx - v.x, v.ty - v.y) < 40 || v.stuckTimer > 6) {
+        if (!moving || World.hypot(v.tx - v.x, v.ty - v.y) < 40 || v.stuckTimer > 6) {
             v.speed = 0;
             v.stuckTimer = 0;
             if (!reconDestination(v)) v.stuckTimer = 3;
@@ -1238,7 +1245,7 @@ final class Fleet {
                 boolean covered = false;
                 for (int i = 0; i < w.dispatch.incidents.size() && !covered; i++) {
                     Dispatch.Incident inc = w.dispatch.incidents.get(i);
-                    if (!inc.resolved && Math.hypot(inc.x - v.x, inc.y - v.y) < 260) covered = true;
+                    if (!inc.resolved && World.hypot(inc.x - v.x, inc.y - v.y) < 260) covered = true;
                 }
                 if (!covered) {
                     Entity z = w.nearestZombie(v.x, v.y, 190);
@@ -1469,7 +1476,7 @@ final class Fleet {
     private boolean updateJet(Vehicle v, float dt) {
         v.x += (float) Math.cos(v.angle) * v.speed * dt;
         v.y += (float) Math.sin(v.angle) * v.speed * dt;
-        float d = (float) Math.hypot(v.tx - v.x, v.ty - v.y);
+        float d = (float) World.hypot(v.tx - v.x, v.ty - v.y);
         v.gunCd -= dt;
         boolean over = d < 120;
         if (over && v.gunCd <= 0) {
@@ -1481,7 +1488,7 @@ final class Fleet {
         if (w.rnd.nextFloat() < dt * 40)
             w.particle(v.x - (float) Math.cos(v.angle) * 14, v.y - (float) Math.sin(v.angle) * 14, 0, 0, 2.5f, 2.5f, 0xFFE8E8E8,
                     World.P_SMOKE);
-        return Math.hypot(v.x - v.tx, v.y - v.ty) > 1000 && v.timer > 0;
+        return World.hypot(v.x - v.tx, v.y - v.ty) > 1000 && v.timer > 0;
     }
 
     /** A tank rolls out of the base towards heavy fighting. */
@@ -1533,7 +1540,7 @@ final class Fleet {
     Vehicle placePolice(float x, float y) {
         for (int tries = 0; tries < 6; tries++) {
             float[] d = randomRoad();
-            if (d == null || Math.hypot(d[0] - x, d[1] - y) < 250) continue;
+            if (d == null || World.hypot(d[0] - x, d[1] - y) < 250) continue;
             int before = vehicles.size();
             if (send(Entity.COP, 2, x, y, d[0], d[1], null, null, city.placeName(d[0], d[1])) && vehicles.size() > before) {
                 Vehicle v = vehicles.get(vehicles.size() - 1);
@@ -1570,7 +1577,7 @@ final class Fleet {
                     float x = tx * City.T + City.T / 2f, y = ty * City.T + City.T / 2f;
                     boolean taken = false;
                     for (int k = 0; k < vehicles.size() && !taken; k++)
-                        if (Math.hypot(vehicles.get(k).x - x, vehicles.get(k).y - y) < 24) taken = true;
+                        if (World.hypot(vehicles.get(k).x - x, vehicles.get(k).y - y) < 24) taken = true;
                     if (!taken) best = new float[]{x, y, dir};
                 }
             if (best == null) continue;
@@ -1675,7 +1682,7 @@ final class Fleet {
                 for (int i = 0, n = w.entities.size(); i < n; i++) {
                     Entity e = w.entities.get(i);
                     if (e.dead || (pilot ? e.role != Entity.ROLE_PILOT : e.role != Entity.ROLE_SAR) || e.type != (army ? Entity.SOLDIER : Entity.COP)) continue;
-                    float d = (float) Math.hypot(e.x - p[0], e.y - p[1]);
+                    float d = (float) World.hypot(e.x - p[0], e.y - p[1]);
                     if (d >= fd || inFlight(e)) continue;
                     fd = d;
                     found = e;
@@ -2132,37 +2139,47 @@ final class Fleet {
             boolean army = (o.type == TRUCK || o.type == TANK) && o.state == DRIVE && emergency(o);
             if (o.player == null && !airborne(o) && (o.lightsOn() || army) && Math.abs(o.speed) > 18) sirens.add(o);
         }
+        boolean lodOn = w.viewX1 >= 0 && w.viewX1 - w.viewX0 < 2000 && vehicles.size() > 120;
         for (int i = vehicles.size() - 1; i >= 0; i--) {
             Vehicle v = vehicles.get(i);
+            // ((11.5) Well off screen (out past the edge, not just round it), everyday traffic and units on their
+            // rounds drive every other step, two steps' worth: nobody sees it, and the city has hundreds of cars.
+            // Back near the screen they're worked out every step again, well before they come into view.)
+            float vdt = dt;
+            if (lodOn && v.player == null && !airborne(v) && v.type != TRAIN && v.type != BOAT && farOff(v)) {
+                v.lodSkip = !v.lodSkip;
+                if (v.lodSkip) continue;
+                vdt = dt * 2;
+            } else v.lodSkip = false;
             if (v.alarm > 0) {
                 // Whoop, whoop: every zombie for streets around comes to see.
-                v.alarm -= dt;
+                v.alarm -= vdt;
                 if (v.broken || v.burnt) v.alarm = 0;
-                else if (((int) (v.alarm * 2)) != ((int) ((v.alarm + dt) * 2))) {
+                else if (((int) (v.alarm * 2)) != ((int) ((v.alarm + vdt) * 2))) {
                     w.emit(Sfx.HORN, v.x, v.y);
                     if (((int) v.alarm) % 4 == 0) w.noise(v.x, v.y, 180);
                 }
             }
-            v.anim += dt;
+            v.anim += vdt;
             // (Time spent crawling: nudging back and forth in a jam still counts.)
-            if (Math.abs(v.speed) < 8) v.stillT += dt;
+            if (Math.abs(v.speed) < 8) v.stillT += vdt;
             else if (Math.abs(v.speed) > 15) v.stillT = 0;
-            v.soundCd -= dt;
-            v.destCd -= dt;
-            v.rerouteCd -= dt;
-            v.holdSaidCd -= dt;
-            v.crashCd -= dt;
+            v.soundCd -= vdt;
+            v.destCd -= vdt;
+            v.rerouteCd -= vdt;
+            v.holdSaidCd -= vdt;
+            v.crashCd -= vdt;
             boolean done;
-            if (v.player != null) done = updatePlayerVehicle(v, dt);
-            else if (v.type == HELI) done = updateHeli(v, dt);
-            else if (v.type == JET) done = updateJet(v, dt);
-            else if (v.type == TRAIN) done = updateTrain(v, dt);
-            else if (v.type == BOAT) done = updateBoat(v, dt);
-            else if (v.broken || v.parked) done = updateWreck(v, dt);
-            else if (v.type == TANK) done = updateTank(v, dt);
-            else if (v.type == CAR) done = v.evacStop >= 0 ? updateEvacBus(v, dt) : updateTraffic(v, dt);
-            else if (v.patrol) done = updatePatrol(v, dt);
-            else done = updateCar(v, dt);
+            if (v.player != null) done = updatePlayerVehicle(v, vdt);
+            else if (v.type == HELI) done = updateHeli(v, vdt);
+            else if (v.type == JET) done = updateJet(v, vdt);
+            else if (v.type == TRAIN) done = updateTrain(v, vdt);
+            else if (v.type == BOAT) done = updateBoat(v, vdt);
+            else if (v.broken || v.parked) done = updateWreck(v, vdt);
+            else if (v.type == TANK) done = updateTank(v, vdt);
+            else if (v.type == CAR) done = v.evacStop >= 0 ? updateEvacBus(v, vdt) : updateTraffic(v, vdt);
+            else if (v.patrol) done = updatePatrol(v, vdt);
+            else done = updateCar(v, vdt);
             if (done) {
                 // (10.48) Whoever was still aboard a car fleeing the city went with it.
                 if (v.exodus && !v.riders.isEmpty()) w.droveOut(v.riders);
@@ -2172,9 +2189,9 @@ final class Fleet {
             }
             // At a scene: in to the kerb, out of the traffic's way.
             if (((v.type == CRUISER && v.state == SCENE) || (v.type == AMBULANCE && v.state == LOAD)) && Math.abs(v.speed) < 1 && !v.broken)
-                kerbAtScene(v, dt);
+                kerbAtScene(v, vdt);
             else if (Math.abs(v.speed) > 10) v.kerbed = false;
-            if (!airborne(v) && v.type != TRAIN && v.hp < v.maxHp * 0.5f) smoke(v, dt);
+            if (!airborne(v) && v.type != TRAIN && v.hp < v.maxHp * 0.5f) smoke(v, vdt);
         }
         routeBudget = Integer.MAX_VALUE;
         buildGrid();
@@ -2304,6 +2321,29 @@ final class Fleet {
     private int cellOf(float x, float y) {
         int cx = Math.max(0, Math.min(gridW - 1, (int) (x / GC))), cy = Math.max(0, Math.min(gridH - 1, (int) (y / GC)));
         return cy * gridW + cx;
+    }
+
+    /**
+     * ((11.5) The vehicles on the ground in the grid squares within r of (x, y), as of the last time the grid was
+     * built, into found[0..n): for the world's questions about cars nearby without going through all of them.
+     * The caller checks how near each really is. Not to be asked again while going through the last answer.)
+     */
+    Vehicle[] found = new Vehicle[32];
+
+    int gather(float x, float y, float r) {
+        if (gridW == 0) return 0;
+        int n = 0;
+        int c0x = Math.max(0, (int) ((x - r) / GC)), c1x = Math.min(gridW - 1, (int) ((x + r) / GC));
+        int c0y = Math.max(0, (int) ((y - r) / GC)), c1y = Math.min(gridH - 1, (int) ((y + r) / GC));
+        for (int cy = c0y; cy <= c1y; cy++)
+            for (int cx = c0x; cx <= c1x; cx++)
+                for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
+                    Vehicle v = gridV[i];
+                    if (v.removedFromFleet) continue;
+                    if (n == found.length) found = java.util.Arrays.copyOf(found, n * 2);
+                    found[n++] = v;
+                }
+        return n;
     }
 
     // ------------------------------------------------------------------ damage
@@ -2728,7 +2768,7 @@ final class Fleet {
                         outX = kx;
                         outY = ky;
                     }
-                    boolean useIn = Math.hypot(inX - cx, inY - cy) <= Math.hypot(outX - cx, outY - cy);
+                    boolean useIn = World.hypot(inX - cx, inY - cy) <= World.hypot(outX - cx, outY - cy);
                     px = useIn ? inX : outX;
                     py = useIn ? inY : outY;
                 } else if (out && !Float.isNaN(li) && ax == ex && ay == ey) {
@@ -2795,7 +2835,7 @@ final class Fleet {
 
     /** Every tile under the line from one point to another is on the vehicle's route. */
     private boolean onRoute(Vehicle v, float x0, float y0, float x1, float y1) {
-        float d = (float) Math.hypot(x1 - x0, y1 - y0);
+        float d = (float) World.hypot(x1 - x0, y1 - y0);
         int n = Math.max(1, (int) (d / 4));
         for (int s = 0; s <= n; s++) {
             float f = s / (float) n;
@@ -2813,7 +2853,7 @@ final class Fleet {
             float ax = v.cor[i * 2 - 2], ay = v.cor[i * 2 - 1], sx = v.cor[i * 2] - ax, sy = v.cor[i * 2 + 1] - ay;
             float l2 = sx * sx + sy * sy;
             float f = l2 < 0.001f ? 0 : Math.max(0, Math.min(1, ((v.x - ax) * sx + (v.y - ay) * sy) / l2));
-            float d = (float) Math.hypot(ax + sx * f - v.x, ay + sy * f - v.y);
+            float d = (float) World.hypot(ax + sx * f - v.x, ay + sy * f - v.y);
             if (d < best) {
                 best = d;
                 seg0 = i;
@@ -2821,17 +2861,26 @@ final class Fleet {
             }
         }
         if (best > 40) return null;
-        float left = dist + f0 * (float) Math.hypot(v.cor[seg0 * 2] - v.cor[seg0 * 2 - 2], v.cor[seg0 * 2 + 1] - v.cor[seg0 * 2 - 1]);
+        float left = dist + f0 * (float) World.hypot(v.cor[seg0 * 2] - v.cor[seg0 * 2 - 2], v.cor[seg0 * 2 + 1] - v.cor[seg0 * 2 - 1]);
         for (int i = seg0; i < v.corN; i++) {
             float ax = v.cor[i * 2 - 2], ay = v.cor[i * 2 - 1], bx = v.cor[i * 2], by = v.cor[i * 2 + 1];
-            float seg = (float) Math.hypot(bx - ax, by - ay);
+            float seg = (float) World.hypot(bx - ax, by - ay);
             if (seg >= left && seg > 0.001f) {
                 float f = left / seg;
-                return new float[]{ax + (bx - ax) * f, ay + (by - ay) * f};
+                return point(ax + (bx - ax) * f, ay + (by - ay) * f);
             }
             left -= seg;
         }
-        return v.corN >= 2 ? new float[]{v.cor[v.corN * 2 - 2], v.cor[v.corN * 2 - 1]} : null;
+        return v.corN >= 2 ? point(v.cor[v.corN * 2 - 2], v.cor[v.corN * 2 - 1]) : null;
+    }
+
+    /** ((11.5) The one point pursuitPoint hands back, reused: it's asked of every car every step.) */
+    private final float[] pursuit = new float[2];
+
+    private float[] point(float x, float y) {
+        pursuit[0] = x;
+        pursuit[1] = y;
+        return pursuit;
     }
 
     /** The way the line runs where alongCorridor last found something on it. */
@@ -2852,7 +2901,7 @@ final class Fleet {
             float seg = (float) Math.sqrt(l2);
             if (f >= 0 && f <= 1) {
                 float px = ax + sx * f, py = ay + sy * f;
-                if (Math.hypot(o.x - px, o.y - py) < width) {
+                if (World.hypot(o.x - px, o.y - py) < width) {
                     hitDx = sx / seg;
                     hitDy = sy / seg;
                     return run + f * seg;
@@ -2930,12 +2979,17 @@ final class Fleet {
             if (inJ) through = true;
             else if (through) {
                 float ex = (t % W + 0.5f) * City.T, ey = (t / W + 0.5f) * City.T;
-                for (int i = 0, n = vehicles.size(); i < n; i++) {
-                    Vehicle o = vehicles.get(i);
-                    if (o == v || o.parked || offRoad(o) || Math.abs(o.speed) > 4) continue;
-                    if (Math.abs(o.x - ex) < City.T * 0.9f && Math.abs(o.y - ey) < City.T * 0.9f
-                            && city.junctionIdAt(o.x, o.y) < 0) return true;
-                }
+                // ((11.5) Only those in the grid squares round the spot, not every vehicle on the map.)
+                int c0x = Math.max(0, (int) ((ex - City.T) / GC)), c1x = Math.min(gridW - 1, (int) ((ex + City.T) / GC));
+                int c0y = Math.max(0, (int) ((ey - City.T) / GC)), c1y = Math.min(gridH - 1, (int) ((ey + City.T) / GC));
+                for (int cy = c0y; cy <= c1y; cy++)
+                    for (int cx = c0x; cx <= c1x; cx++)
+                        for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
+                            Vehicle o = gridV[i];
+                            if (o == v || o.removedFromFleet || o.parked || offRoad(o) || Math.abs(o.speed) > 4) continue;
+                            if (Math.abs(o.x - ex) < City.T * 0.9f && Math.abs(o.y - ey) < City.T * 0.9f
+                                    && city.junctionIdAt(o.x, o.y) < 0) return true;
+                        }
                 return false;
             }
             int n = downhill(v.field, t);
@@ -2948,21 +3002,32 @@ final class Fleet {
     /** Nobody else driving in the junction. */
     /** Nothing moving across the junction in front of a vehicle coming in along (dx, dy). */
     private boolean crossClear(int id, Vehicle self, int dx, int dy) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o == self || offRoad(o) || o.parked || Math.abs(o.speed) < 5) continue;
-            if (city.junctionIdAt(o.x, o.y) != id) continue;
-            if (Math.abs((float) Math.cos(o.angle) * dx + (float) Math.sin(o.angle) * dy) < 0.6f) return false;
-        }
+        int[] j = city.junctions.get(id);
+        int c0x = Math.max(0, (j[0] - 1) * City.T / GC), c1x = Math.min(gridW - 1, (j[2] + 2) * City.T / GC);
+        int c0y = Math.max(0, (j[1] - 1) * City.T / GC), c1y = Math.min(gridH - 1, (j[3] + 2) * City.T / GC);
+        for (int cy = c0y; cy <= c1y; cy++)
+            for (int cx = c0x; cx <= c1x; cx++)
+                for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
+                    Vehicle o = gridV[i];
+                    if (o == self || o.removedFromFleet || offRoad(o) || o.parked || Math.abs(o.speed) < 5) continue;
+                    if (city.junctionIdAt(o.x, o.y) != id) continue;
+                    if (Math.abs((float) Math.cos(o.angle) * dx + (float) Math.sin(o.angle) * dy) < 0.6f) return false;
+                }
         return true;
     }
 
     private boolean junctionClear(int id, Vehicle self) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o == self || offRoad(o) || o.parked) continue;
-            if (city.junctionIdAt(o.x, o.y) == id) return false;
-        }
+        // ((11.5) Only the grid squares over the junction's box.)
+        int[] j = city.junctions.get(id);
+        int c0x = Math.max(0, (j[0] - 1) * City.T / GC), c1x = Math.min(gridW - 1, (j[2] + 2) * City.T / GC);
+        int c0y = Math.max(0, (j[1] - 1) * City.T / GC), c1y = Math.min(gridH - 1, (j[3] + 2) * City.T / GC);
+        for (int cy = c0y; cy <= c1y; cy++)
+            for (int cx = c0x; cx <= c1x; cx++)
+                for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
+                    Vehicle o = gridV[i];
+                    if (o == self || o.removedFromFleet || offRoad(o) || o.parked) continue;
+                    if (city.junctionIdAt(o.x, o.y) == id) return false;
+                }
         return true;
     }
 
@@ -3101,7 +3166,7 @@ final class Fleet {
             // The zone has closed: the officer gets back in, the cones come in and the car drives off.
             v.block = null;
             v.cones = false;
-            if (v.guard != null && !v.guard.dead && Math.hypot(v.guard.x - v.x, v.guard.y - v.y) < 80) {
+            if (v.guard != null && !v.guard.dead && World.hypot(v.guard.x - v.x, v.guard.y - v.y) < 80) {
                 v.guard.dead = true;
                 v.guard.removed = true;
             }
@@ -3323,7 +3388,7 @@ final class Fleet {
         if (arrived) {
             if (v.state == DRIVE && v.block != null) {
                 // A roadblock car: only set up if the zone still needs it and it got close to its spot.
-                if (v.block.removed || Math.hypot(v.x - v.tx, v.y - v.ty) > 90) {
+                if (v.block.removed || World.hypot(v.x - v.tx, v.y - v.ty) > 90) {
                     v.block = null;
                 } else {
                     setUpRoadblock(v);
@@ -3334,7 +3399,7 @@ final class Fleet {
                 // The ammo gets through (if the truck reached the zone).
                 Dispatch.SafeZone z = v.zone;
                 z.supplyComing = false;
-                if (!z.removed && Math.hypot(v.x - z.x, v.y - z.y) < z.r + 90) {
+                if (!z.removed && World.hypot(v.x - z.x, v.y - z.y) < z.r + 90) {
                     z.ammo += v.supply;
                     z.food = Math.min(z.foodMax, z.food + z.foodMax * 0.7f);
                     w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Supply truck at " + z.place + ". " + v.supply
@@ -3354,7 +3419,7 @@ final class Fleet {
             }
             if (v.state == RETURN && v.leaving) {
                 // Off the map: they're home, and back in the pool if they're needed again.
-                if (Math.hypot(v.x - v.homeX, v.y - v.homeY) > 120) {
+                if (World.hypot(v.x - v.homeX, v.y - v.homeY) > 120) {
                     // ((10.53) Not there yet: the way planned ran out short of the edge (or it was put off it).
                     // Plan it again from here rather than put them out in the fields to be fetched all over again.)
                     if (v.rerouteCd <= 0 && route(v, v.homeX, v.homeY)) {
@@ -3376,7 +3441,7 @@ final class Fleet {
                 return false;
             }
             if (v.state == DRIVE && v.restock) {
-                if (Math.hypot(v.x - v.tx, v.y - v.ty) < 120) w.restocked(v);
+                if (World.hypot(v.x - v.tx, v.y - v.ty) < 120) w.restocked(v);
                 v.state = RETURN;
                 v.speed = 0;
                 return !route(v, v.homeX, v.homeY);
@@ -3516,10 +3581,10 @@ final class Fleet {
                     if (t != City.LOT && t != City.BASE && t != City.SIDEWALK && t != City.PLAZA) continue;
                     float px = (x + 0.5f) * City.T, py = (y + 0.5f) * City.T;
                     if (city.solidAt(px, py)) continue;
-                    if (d != null && d.gateX > 0 && Math.hypot(px - d.gateX, py - d.gateY) < City.T * 3.2f) continue;
+                    if (d != null && d.gateX > 0 && World.hypot(px - d.gateX, py - d.gateY) < City.T * 3.2f) continue;
                     if (d != null && r > 2 && !city.los(v.x, v.y, px, py)) continue;
                     // (And not out on the pavement beyond the fence.)
-                    if (d != null && Math.hypot(px - d.x, py - d.y) > d.r + City.T * 2) continue;
+                    if (d != null && World.hypot(px - d.x, py - d.y) > d.r + City.T * 2) continue;
                     boolean taken = false;
                     for (int i = 0; i < vehicles.size() && !taken; i++) {
                         Vehicle o = vehicles.get(i);
@@ -3548,7 +3613,7 @@ final class Fleet {
                 continue;
             }
             if (e.task != Dispatch.T_NONE || e.aiming || e.rig != null) continue;
-            if (Math.hypot(e.x - v.x, e.y - v.y) < 600 || w.countZombiesNear(e.x, e.y, 160) > 0) continue;
+            if (World.hypot(e.x - v.x, e.y - v.y) < 600 || w.countZombiesNear(e.x, e.y, 160) > 0) continue;
             sx += e.x;
             sy += e.y;
             n++;
@@ -3583,7 +3648,7 @@ final class Fleet {
         int walking = 0;
         for (Entity e : v.squad) {
             if (e.dead || e.removed || e.isZombie()) continue;
-            if (Math.hypot(e.x - v.x, e.y - v.y) > 500 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_BOARD)) continue;
+            if (World.hypot(e.x - v.x, e.y - v.y) > 500 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_BOARD)) continue;
             walking++;
             if (e.task != Dispatch.T_BOARD) {
                 e.rig = v;
@@ -3770,7 +3835,7 @@ final class Fleet {
         // (10.32) Crossing a bridge, the route steps from one end of it to the other.
         boolean crossing = v.pathT >= 0 && city.bridgeTo(v.pathT) >= 0 && city.overpassAt(v.x, v.y) >= 0;
         if (v.pathField != v.field || v.pathT < 0 || v.field.get(v.pathT) >= City.FAR
-                || (!crossing && Math.hypot((v.pathT % W + 0.5f) * City.T - v.x, (v.pathT / W + 0.5f) * City.T - v.y) > 44)) {
+                || (!crossing && World.hypot((v.pathT % W + 0.5f) * City.T - v.x, (v.pathT / W + 0.5f) * City.T - v.y) > 44)) {
             v.pathField = v.field;
             v.pathT = -1;
             int ti = city.tileIndex(v.x, v.y), tx0 = ti % W, ty0 = ti / W, bestV = City.FAR;
@@ -3909,7 +3974,7 @@ final class Fleet {
             max = Math.min(max, 16);
         }
         float gx = bx * City.T + City.T / 2f - ddy * off, gy = by * City.T + City.T / 2f + ddx * off;
-        if (Math.hypot(gx - v.x, gy - v.y) < 11 || ((v.x - (bx + 0.5f) * City.T) * ddx + (v.y - (by + 0.5f) * City.T) * ddy) > -2) {
+        if (World.hypot(gx - v.x, gy - v.y) < 11 || ((v.x - (bx + 0.5f) * City.T) * ddx + (v.y - (by + 0.5f) * City.T) * ddy) > -2) {
             v.pathT = by * W + bx;
             // Only a step along the road counts as the way it's going, not a turn inside a junction.
             if (city.junctionIdAt(v.x, v.y) < 0) {
@@ -3982,7 +4047,7 @@ final class Fleet {
         // reaching the line's point for the next tile or two counts as reaching those tiles.
         if (v.corN > corPi + 1 && !crossing) {
             for (int j = Math.min(v.corN - 1, corPi + 3); j > corPi; j--)
-                if (Math.hypot(v.cor[j * 2] - v.x, v.cor[j * 2 + 1] - v.y) < City.T * 0.55f) {
+                if (World.hypot(v.cor[j * 2] - v.x, v.cor[j * 2 + 1] - v.y) < City.T * 0.55f) {
                     v.pathT = corTiles[j];
                     int c2 = v.field.get(v.pathT);
                     if (c2 < v.lastDist - 1) {
@@ -3998,7 +4063,7 @@ final class Fleet {
             float[] p = pursuitPoint(v, 13 + Math.abs(v.speed) * 0.3f);
             if (p != null) {
                 // (The line is planned afresh every moment, and can shift a little as it goes: ease the aim over.)
-                if (v.aiming && Math.hypot(p[0] - v.aimX, p[1] - v.aimY) < City.T * 2) {
+                if (v.aiming && World.hypot(p[0] - v.aimX, p[1] - v.aimY) < City.T * 2) {
                     float k = Math.min(1, dt * 6);
                     v.aimX += (p[0] - v.aimX) * k;
                     v.aimY += (p[1] - v.aimY) * k;
@@ -4118,6 +4183,10 @@ final class Fleet {
                     v.fleeing = false;
                     v.fleeCd = 20;
                     if (!newDestination(v)) v.stuckTimer = Math.max(v.stuckTimer, 5);
+                } else if (!v.through && v.riders.isEmpty() && v.evacStop < 0) {
+                    // ((11.5) And anyone else just driving about: somewhere else.)
+                    v.destCd = 0;
+                    newDestination(v);
                 }
             }
             if (!going) {
@@ -4343,7 +4412,7 @@ final class Fleet {
         Entity z = w.nearestZombie(v.x, v.y, 105);
         if (z == null || z.hidden || !city.los(v.x, v.y, z.x, z.y)) return null;
         Dispatch.Incident inc = v.incident;
-        if (inc != null && Math.hypot(z.x - inc.x, z.y - inc.y) < 240) return null;
+        if (inc != null && World.hypot(z.x - inc.x, z.y - inc.y) < 240) return null;
         Entity who = v.crew.get(0);
         // (Out of rounds: nothing to fight with, so they drive on.)
         boolean armed = false;
@@ -4562,7 +4631,7 @@ final class Fleet {
             for (int k = 0, n = w.entities.size(); k < n; k++) {
                 Entity e = w.entities.get(k);
                 if (!(beat ? freeUnit(e, type) : strandedUnit(e, type))) continue;
-                float d = (float) Math.hypot(e.x - v.x, e.y - v.y);
+                float d = (float) World.hypot(e.x - v.x, e.y - v.y);
                 if (d < bd) {
                     bd = d;
                     first = e;
@@ -4575,7 +4644,7 @@ final class Fleet {
             group.add(first);
             for (int k = 0, n = w.entities.size(); k < n && group.size() < seats; k++) {
                 Entity e = w.entities.get(k);
-                if (e != first && (beat ? freeUnit(e, type) : strandedUnit(e, type)) && Math.hypot(e.x - v.x, e.y - v.y) < 600) group.add(e);
+                if (e != first && (beat ? freeUnit(e, type) : strandedUnit(e, type)) && World.hypot(e.x - v.x, e.y - v.y) < 600) group.add(e);
             }
             v.reclaimCd = 30;
             v.wasPatrol = v.patrol;
@@ -4610,13 +4679,13 @@ final class Fleet {
                 // ((11.0) Sooner, and from nearer the station, than before: units were left standing about for long.)
                 if (!strandedUnit(e, type) || e.strandedFor < 9 || w.countZombiesNear(e.x, e.y, 250) > 0) continue;
                 City.Facility f = city.nearestFacility(type == Entity.COP ? City.FACILITY_POLICE : City.FACILITY_BASE, e.x, e.y);
-                if (f == null || Math.hypot(f.x - e.x, f.y - e.y) < 600) continue;
+                if (f == null || World.hypot(f.x - e.x, f.y - e.y) < 600) continue;
                 // One parked at the station or base.
                 Vehicle v = null;
                 for (int i = 0; i < vehicles.size() && v == null; i++) {
                     Vehicle o = vehicles.get(i);
                     if (o.standby && o.type == (type == Entity.COP ? CRUISER : TRUCK) && !o.broken && o.kind != K_BIKE
-                            && Math.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
+                            && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
                 }
                 if (v == null) {
                     // (None there: one comes out from the station or base anyway.)
@@ -4635,7 +4704,7 @@ final class Fleet {
                 ArrayList<Entity> group = new ArrayList<Entity>();
                 for (int j = 0; j < n && group.size() < (v.type == CRUISER ? SEATS : 10); j++) {
                     Entity o = w.entities.get(j);
-                    if (strandedUnit(o, type) && Math.hypot(o.x - e.x, o.y - e.y) < 400) group.add(o);
+                    if (strandedUnit(o, type) && World.hypot(o.x - e.x, o.y - e.y) < 400) group.add(o);
                 }
                 float[] spot = city.nearestDrivable(e.x, e.y);
                 if (spot == null) continue;
@@ -4729,7 +4798,7 @@ final class Fleet {
             v.stuckTimer += dt;
             boolean going = driveStep(v, dt, 75, carAhead(v) ? 0.4f : 1f);
             if (going) hit(v, w.runOver(v.x, v.y, 9, v.speed, v.angle));
-            if (!going || Math.hypot(st.bx - v.x, st.by - v.y) < 28) {
+            if (!going || World.hypot(st.bx - v.x, st.by - v.y) < 28) {
                 v.busPhase = 1;
                 v.timer = 0;
                 v.checkCd = 0;
@@ -4917,7 +4986,7 @@ final class Fleet {
         if (c != null) {
             v.stopT += dt;
             boolean over = c.removedFromFleet || c.broken || c.parked || v.stopT > 26 || w.alert > 0
-                    || Math.hypot(c.x - v.x, c.y - v.y) > 220 || v.state != PATROL;
+                    || World.hypot(c.x - v.x, c.y - v.y) > 220 || v.state != PATROL;
             if (over) {
                 c.pulled = false;
                 v.stopping = null;
@@ -4925,7 +4994,7 @@ final class Fleet {
                 return false;
             }
             // Up behind it, then stop.
-            if (Math.hypot(c.x - v.x, c.y - v.y) < 34 && Math.abs(c.speed) < 3) {
+            if (World.hypot(c.x - v.x, c.y - v.y) < 34 && Math.abs(c.speed) < 3) {
                 v.speed = Math.max(0, v.speed - dt * 120);
                 return true;
             }
@@ -4980,7 +5049,7 @@ final class Fleet {
                 // ((11.4) The foot patrols keep walking their beat.)
                 if (World.footPatrol(e) && w.alert < 1) continue;
                 if (patrolCount >= patrolTarget && (e.role != Entity.ROLE_RIFLE || e.agency != 0)) continue;
-                if (Math.hypot(e.x - f.x, e.y - f.y) < 220) two.add(e);
+                if (World.hypot(e.x - f.x, e.y - f.y) < 220) two.add(e);
             }
             if (two.size() < want) continue;
             float[] p = bay(city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y), f);
@@ -5116,7 +5185,7 @@ final class Fleet {
         int kind = 0;
         if (city.cfg.nature()) {
             // An APC into a big fight (or from an armoured base), a Humvee for a fast run a long way out.
-            float far = (float) Math.hypot(inc.x - p[0], inc.y - p[1]);
+            float far = (float) World.hypot(inc.x - p[0], inc.y - p[1]);
             kind = inc.zombiesNear >= 10 || (base.baseType == City.BT_ARMOUR && inc.zombiesNear >= 5) ? K_APC
                     : far > 900 && squad.size() <= 4 ? K_HUMVEE : 0;
             if (forceKind >= 0) kind = forceKind;
@@ -5139,7 +5208,7 @@ final class Fleet {
         }
         sx /= squad.size();
         sy /= squad.size();
-        if (Math.hypot(inc.x - sx, inc.y - sy) < 350) return false;
+        if (World.hypot(inc.x - sx, inc.y - sy) < 350) return false;
         float[] p = takeStandby(TRUCK, sx, sy, 600);
         if (p == null) p = city.takeParkedTruck(sx, sy, 600);
         if (p == null) return false;
@@ -5187,8 +5256,8 @@ final class Fleet {
                 byte t = city.tiles[y * city.w + x];
                 if (t != City.LOT && t != City.BASE) continue;
                 float px = (x + 0.5f) * City.T, py = (y + 0.5f) * City.T;
-                float g = (float) Math.hypot(px - f.gateX, py - f.gateY);
-                if (g < keep || g >= best || Math.hypot(px - f.x, py - f.y) > f.r + City.T) continue;
+                float g = (float) World.hypot(px - f.gateX, py - f.gateY);
+                if (g < keep || g >= best || World.hypot(px - f.x, py - f.y) > f.r + City.T) continue;
                 if (city.solidAt(px, py) || occupied(px, py)) continue;
                 best = g;
                 out = new float[]{px, py};
@@ -5200,7 +5269,7 @@ final class Fleet {
     private City.Facility yardOf(float x, float y) {
         for (City.Facility f : city.facilities)
             if ((f.kind == City.FACILITY_BASE || f.kind == City.FACILITY_POLICE)
-                    && (Math.hypot(x - f.x, y - f.y) < f.r + City.T * 4 || (f.gateX > 0 && Math.hypot(x - f.gateX, y - f.gateY) < City.T * 5))) return f;
+                    && (World.hypot(x - f.x, y - f.y) < f.r + City.T * 4 || (f.gateX > 0 && World.hypot(x - f.gateX, y - f.gateY) < City.T * 5))) return f;
         return null;
     }
 
@@ -5273,7 +5342,7 @@ final class Fleet {
         int n = 0;
         for (int i = 0, m = vehicles.size(); i < m; i++) {
             Vehicle v = vehicles.get(i);
-            if (v.loop && !v.broken && Math.hypot(v.homeX - base.x, v.homeY - base.y) < Math.max(300, base.r * 3)) n++;
+            if (v.loop && !v.broken && World.hypot(v.homeX - base.x, v.homeY - base.y) < Math.max(300, base.r * 3)) n++;
         }
         return n;
     }
@@ -5311,7 +5380,7 @@ final class Fleet {
             if (o.type != vtype || o.broken || o.burnt || o.player != null || o.removedFromFleet || !o.crew.isEmpty() || o.block != null
                     || o.zone != null || o.loop || o.leaving || o.kind == K_BIKE || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
             if (!o.standby && !o.parked && o.state != ABANDONED) continue;
-            float d = (float) Math.hypot(o.x - sx, o.y - sy);
+            float d = (float) World.hypot(o.x - sx, o.y - sy);
             if (d < bd && w.countZombiesNear(o.x, o.y, 80) == 0) {
                 bd = d;
                 v = o;
@@ -5320,10 +5389,10 @@ final class Fleet {
         boolean fetch = v == null;
         if (fetch) {
             City.Facility f = city.nearestFacility(type == Entity.COP ? City.FACILITY_POLICE : City.FACILITY_BASE, sx, sy);
-            if (f == null || Math.hypot(f.x - sx, f.y - sy) > Math.hypot(inc.x - sx, inc.y - sy) * 0.8f) return false;
+            if (f == null || World.hypot(f.x - sx, f.y - sy) > World.hypot(inc.x - sx, inc.y - sy) * 0.8f) return false;
             for (int i = 0; i < vehicles.size() && v == null; i++) {
                 Vehicle o = vehicles.get(i);
-                if (o.standby && o.type == vtype && !o.broken && o.kind != K_BIKE && o.pickupFor == null && Math.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
+                if (o.standby && o.type == vtype && !o.broken && o.kind != K_BIKE && o.pickupFor == null && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
             }
             boolean made = false;
             if (v == null) {
@@ -5437,15 +5506,15 @@ final class Fleet {
                     Entity e = w.entities.get(i);
                     if (e.dead || e.rig != v) continue;
                     if (e.task == Dispatch.T_CORDON || e.task == Dispatch.T_POST || e.task == Dispatch.T_GUARD
-                            || Math.hypot(e.x - v.x, e.y - v.y) > 500) e.rig = null;
+                            || World.hypot(e.x - v.x, e.y - v.y) > 500) e.rig = null;
                 }
                 // ((10.60) One of its officers out of rounds, with the station a long walk off: everyone back in
                 // the car, and it drives them there to restock instead of them walking it with the dead behind.)
                 for (int i = 0, n = w.entities.size(); i < n; i++) {
                     Entity e = w.entities.get(i);
-                    if (e.dead || e.rig != v || e.task != Dispatch.T_RESUPPLY || Math.hypot(e.x - v.x, e.y - v.y) > 320) continue;
+                    if (e.dead || e.rig != v || e.task != Dispatch.T_RESUPPLY || World.hypot(e.x - v.x, e.y - v.y) > 320) continue;
                     City.Facility f = w.restockFor(e);
-                    if (f == null || Math.hypot(f.x - v.x, f.y - v.y) < 450) continue;
+                    if (f == null || World.hypot(f.x - v.x, f.y - v.y) < 450) continue;
                     v.onward = null;
                     v.state = RECALL;
                     v.timer = 0;
@@ -5458,7 +5527,7 @@ final class Fleet {
                     for (int i = 0, n = w.entities.size(); i < n; i++) {
                         Entity e = w.entities.get(i);
                         if (e.dead || e.rig != v || e.task != Dispatch.T_RESPOND || e.incident == null || e.incident == v.incident || e.incident.resolved) continue;
-                        if (Math.hypot(e.incident.x - v.x, e.incident.y - v.y) < 450) continue;
+                        if (World.hypot(e.incident.x - v.x, e.incident.y - v.y) < 450) continue;
                         v.onward = e.incident;
                         v.state = RECALL;
                         v.timer = 0;
@@ -5547,7 +5616,7 @@ final class Fleet {
             }
             boolean moving = here == null && driveStep(v, dt, v.kind == K_BIKE ? 130 : 115, carAhead(v) ? 0.5f : 1f);
             if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-            if (!moving || Math.hypot(inc.x - v.x, inc.y - v.y) < 50 || v.stuckTimer > 6) {
+            if (!moving || World.hypot(inc.x - v.x, inc.y - v.y) < 50 || v.stuckTimer > 6) {
                 v.speed = 0;
                 v.state = SCENE;
                 v.quiet = 0;
@@ -5581,6 +5650,12 @@ final class Fleet {
         if (v.held || queue) v.stuckTimer = Math.min(v.stuckTimer, 1);
         if (!driveStep(v, dt, Math.min(limit, person ? 15 : city.onHighway(v.x, v.y) ? 105 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 95 : 60), queue ? 0.15f : 1f) || v.stuckTimer > 10) {
             v.stuckTimer = 0;
+            newDestination(v);
+        } else if (v.orbited) {
+            // ((11.5) Gone round in a circle - a turn too tight for it off a wide road - on its rounds: somewhere else
+            // instead, rather than round the block again and again.)
+            v.orbited = false;
+            v.destCd = 0;
             newDestination(v);
         }
         return false;
@@ -5618,7 +5693,7 @@ final class Fleet {
         v.stuckTimer += dt;
         boolean moving = driveStep(v, dt, 100, carAhead(v) ? 0.5f : 1f);
         if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        float d = (float) Math.hypot(f.x - v.x, f.y - v.y);
+        float d = (float) World.hypot(f.x - v.x, f.y - v.y);
         if (moving && d > Math.max(60, f.r) && v.stuckTimer < 8) return false;
         v.speed = 0;
         v.ammoRun = null;
@@ -5711,7 +5786,7 @@ final class Fleet {
             v.alt = Math.min(1, v.alt + dt * 0.15f);
             gx = v.tx;
             gy = v.ty;
-            float d = (float) Math.hypot(gx - v.x, gy - v.y);
+            float d = (float) World.hypot(gx - v.x, gy - v.y);
             speed = 15 + 95 * v.alt * v.alt;
             if (v.alt < 0.35f) {
                 // (Straight up first: no skimming across the rooftops.)
@@ -5756,7 +5831,7 @@ final class Fleet {
             gx = v.homeX;
             gy = v.homeY;
             speed = 45;
-            float d = (float) Math.hypot(gx - v.x, gy - v.y);
+            float d = (float) World.hypot(gx - v.x, gy - v.y);
             // ((10.60) Watching the landing zone all the way down: the dead closing on it (the rotors draw them), and
             // it climbs away and picks another, rather than putting the squad down on top of them.)
             v.lzCheck -= dt;
@@ -5769,7 +5844,7 @@ final class Fleet {
                     v.homeY = lz[1];
                     gx = v.homeX;
                     gy = v.homeY;
-                    d = (float) Math.hypot(gx - v.x, gy - v.y);
+                    d = (float) World.hypot(gx - v.x, gy - v.y);
                     v.alt = Math.max(v.alt, 0.5f);
                     if (v.lzTries == 1)
                         w.dispatch.say(Dispatch.WHO_MILITARY, null, "Air " + v.number + ": LZ's hot, waving off. Finding another.", v.x, v.y);
@@ -5804,7 +5879,7 @@ final class Fleet {
                     }
                 }
             }
-            int step = !hot && Math.hypot(gx - v.x, gy - v.y) < 8 && v.speed < 10 ? w.rescueStep(v, dt) : 0;
+            int step = !hot && World.hypot(gx - v.x, gy - v.y) < 8 && v.speed < 10 ? w.rescueStep(v, dt) : 0;
             if (step == 1) {
                 // The team's down: back to base to wait for their call.
                 v.state = FLY_OUT;
@@ -5855,7 +5930,7 @@ final class Fleet {
             gx = v.tx + (float) Math.cos(v.circle) * r;
             gy = v.ty + (float) Math.sin(v.circle) * r;
             speed = v.escort != null ? 75 : 45;
-            float d = (float) Math.hypot(gx - v.x, gy - v.y);
+            float d = (float) World.hypot(gx - v.x, gy - v.y);
             // Side-on to the target (the door gunner's side), sliding sideways from one hover to the next
             // rather than swinging the nose round each time.
             if (v.escort == null && d < 200) face = (float) Math.atan2(v.ty - v.y, v.tx - v.x) + (float) Math.PI / 2;
@@ -5892,7 +5967,7 @@ final class Fleet {
             gx = v.homeX;
             gy = v.homeY;
             speed = 110;
-            float d = (float) Math.hypot(gx - v.x, gy - v.y);
+            float d = (float) World.hypot(gx - v.x, gy - v.y);
             // ((10.60) The dead round the pad, or the hospital doors: it holds overhead until they're dealt with,
             // rather than setting down and letting everyone out among them.)
             if (d < 6 && v.speed < 12 && w.countZombiesNear(gx, gy, 70) > 0) {
@@ -5979,7 +6054,7 @@ final class Fleet {
     private float[] landingZone(float x, float y, float fx, float fy) {
         float[] best = null, quiet = null;
         float bs = Float.MAX_VALUE, qs = Float.MAX_VALUE;
-        float ax = fx - x, ay = fy - y, al = (float) Math.hypot(ax, ay) + 0.01f;
+        float ax = fx - x, ay = fy - y, al = (float) World.hypot(ax, ay) + 0.01f;
         for (float r = 140; r <= 420; r += 40)
             for (int k = 0; k < 16; k++) {
                 float a = k * (float) Math.PI / 8 + r * 0.01f;
@@ -6070,10 +6145,10 @@ final class Fleet {
         if (z != null) {
             float off = Math.abs(aim - v.turret);
             if (v.cannonCd <= 0 && off < 0.15f && w.countZombiesNear(z.x, z.y, 40) >= 3 && !w.peopleNear(z.x, z.y, 55)
-                    && Math.hypot(z.x - v.x, z.y - v.y) > 60) {
+                    && World.hypot(z.x - v.x, z.y - v.y) > 60) {
                 v.cannonCd = 3.5f;
                 w.tankShell(v.x + (float) Math.cos(v.turret) * 14, v.y + (float) Math.sin(v.turret) * 14, z.x, z.y);
-            } else if (v.gunCd <= 0 && Math.hypot(z.x - v.x, z.y - v.y) < 160) {
+            } else if (v.gunCd <= 0 && World.hypot(z.x - v.x, z.y - v.y) < 160) {
                 v.gunCd = 0.15f;
                 w.airShot(v.x, v.y, z);
             }

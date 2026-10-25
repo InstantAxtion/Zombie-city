@@ -414,6 +414,13 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Much faster (11.5):** a Large or Massive city in a full panic (about ten thousand people) takes about a third less
+time per simulation step, with its worst spikes roughly halved; car routes come from a per-map table, open ground is known at a
+glance, nearby cars and units are found from spatial grids, and anything off screen and away from the action is updated
+every other step or so. Drawing is cut hard too: zoomed out about a quarter of the draw calls (crowd dots batched, cars and
+emergency vehicles simplified), zoomed in about a third, with small people drawn plainly and off-screen walls, minimap
+cars and tiny roof lettering skipped. Cars that miss a tight turn and orbit a block now pick somewhere else to go.
+
 **Steadier close-ups; fewer water maps; more guns; car patrols (11.4):** a frame that can't be drawn when zoomed right in is skipped
 (and the map's close-ups freed if memory runs short) instead of the game closing. Seaside, River City and Bay City
 are gone; Islands and the Archipelago are the maps on the water. New guns too: submachine guns, carbines and

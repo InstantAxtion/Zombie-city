@@ -6,6 +6,11 @@ import java.util.Random;
 
 /** The simulation: people, zombies, gunfire, explosions and all the visual effects they leave behind. */
 final class World {
+    /** ((11.5) The length of (x, y): Math.hypot is careful about overflow we never get near, and many times slower.) */
+    static double hypot(double x, double y) {
+        return Math.sqrt(x * x + y * y);
+    }
+
     private static final float TAU = (float) (Math.PI * 2);
 
     private static final int[] SHIRTS = {
@@ -108,7 +113,7 @@ final class World {
     // Spatial hash (counting sort into cells).
     private static final int CELL = 32;
     private final int gw, gh;
-    private final int[] cellStart, cellCount, cellFill, zCount, zFill;
+    private final int[] cellStart, cellCount, cellFill, zCount, zFill, aCount, aFill;
     private Entity[] sorted = new Entity[512];
     private int lodFrame;
     /** Counts up each time the grid is rebuilt; a leader marked with the current one has someone following. */
@@ -466,6 +471,8 @@ final class World {
         cellStart = new int[gw * gh + 1];
         zCount = new int[gw * gh];
         zFill = new int[gw * gh];
+        aCount = new int[gw * gh];
+        aFill = new int[gw * gh];
         cellCount = new int[gw * gh];
         cellFill = new int[gw * gh];
         if (city.courthouse != null) {
@@ -782,7 +789,7 @@ final class World {
             if (n < 2) continue;
             int k = rnd.nextInt(n);
             float[] p = city.findWalkable(h[k * 2], h[k * 2 + 1]);
-            if (p == null || Math.hypot(p[0] - h[k * 2], p[1] - h[k * 2 + 1]) > 20) continue;
+            if (p == null || World.hypot(p[0] - h[k * 2], p[1] - h[k * 2 + 1]) > 20) continue;
             e.job = Entity.J_HIKER;
             e.hike = h;
             e.hikeIdx = k;
@@ -1544,6 +1551,28 @@ final class World {
 
     // ------------------------------------------------------------------ update
 
+    /**
+     * ((11.5) How far the dead (or, for the dead, the living) are from someone, for deciding how often they need
+     * thinking about: looked up afresh every few steps, not every step - the fields themselves are only worked
+     * out a few times a second.)
+     */
+    private int lodZDist(Entity e) {
+        if (lodFrame - e.lodZAt >= 6 || e.lodZAt == 0) {
+            e.lodZ = city.fieldAt(city.zombieDist, e.x, e.y);
+            // (Spread out a little, so not everyone made at once looks again on the same step.)
+            e.lodZAt = lodFrame - (e.nameSeed & 3);
+        }
+        return e.lodZ;
+    }
+
+    private int lodHDist(Entity e) {
+        if (lodFrame - e.lodHAt >= 6 || e.lodHAt == 0) {
+            e.lodH = city.fieldAt(city.humanDist, e.x, e.y);
+            e.lodHAt = lodFrame - (e.nameSeed & 3);
+        }
+        return e.lodH;
+    }
+
     /** (10.34) How many frames' worth at a time the calm off screen, and the busy off screen, move and think. */
     private int lodCalm = 3, lodBusy = 2;
 
@@ -1556,13 +1585,17 @@ final class World {
         shake = Math.max(0, shake - dt * 3);
         if (messageTime > 0) messageTime -= dt;
         if (warBannerTime > 0) warBannerTime -= dt;
-        buildHash();
+        // ((11.5) In a crowd of thousands, the grid of who's where every other step: nobody moves more than a step or
+        // two in between, and everything that asks it allows for that.)
+        if (entities.size() < 3000 || (lodFrame & 1) == 0 || hashSize < 0) buildHash();
         fieldTimer -= dt;
         occTimer -= dt;
         if (fieldTimer <= 0) {
             fieldTimer = quality == Q_FULL ? 0.25f : quality == Q_REDUCED ? 0.4f : 0.6f;
             // ((10.34) Half as often in a crowded city: it's a whole-map search, and nobody moves far in between.)
             if (entities.size() > 12000) fieldTimer *= 2;
+            // ((11.5) And half as often again from six thousand.)
+            else if (entities.size() > 6000) fieldTimer *= 1.5f;
             city.computeFields(entities);
         }
         dispatch.update(dt);
@@ -1586,7 +1619,8 @@ final class World {
             e.lodStep = 1;
             if (e.dead) continue;
             if (i == 0) {
-                boolean crowd = entities.size() > 12000;
+                // ((11.5) From six thousand people up, not twelve: a Large city in a panic is about ten thousand.)
+                boolean crowd = entities.size() > 6000;
                 lodCalm = crowd ? 4 : 3;
                 lodBusy = crowd ? 3 : 2;
             }
@@ -1595,7 +1629,7 @@ final class World {
             // ((10.31) Families and friends out together too, while whoever they're with is calm as well.)
             if (e.type == Entity.CIVILIAN && e.task == Dispatch.T_NONE && e.fleeTimer <= 0 && e != controlled
                     && (e.leader == null || (e.leader.type == Entity.CIVILIAN && e.leader.task == Dispatch.T_NONE && e.leader.fleeTimer <= 0 && e.leader != controlled))
-                    && city.fieldAt(city.zombieDist, e.x, e.y) > 30) {
+                    && lodZDist(e) > 30) {
                 boolean seen = onScreen(e);
                 // (10.31) Off screen they also only move, and get out of each other's way, every third frame, three
                 // frames' worth at a time: with tens of thousands in a Gigantic city, that's most of the work.
@@ -1606,7 +1640,7 @@ final class World {
                 if ((i + lodFrame) % every != 0) continue;
                 think(e, dt * every);
             } else if (e.isZombie() && e.charge <= 0 && e.noiseTimer <= 0 && e != controlled && !onScreen(e)
-                    && city.fieldAt(city.humanDist, e.x, e.y) > 40) {
+                    && lodHDist(e) > 40) {
                 // The same for the dead shuffling about off screen with nobody near (since 10.31 on any phone,
                 // and they move every other frame too).
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
@@ -1615,19 +1649,28 @@ final class World {
                 think(e, dt * every);
             } else if ((e.type == Entity.COP || e.type == Entity.SOLDIER) && e != controlled && !e.aiming && e.rig == null
                     && (e.task == Dispatch.T_NONE || e.task == Dispatch.T_POST || e.task == Dispatch.T_GUARD)
-                    && !onScreen(e) && city.fieldAt(city.zombieDist, e.x, e.y) > 40) {
+                    && !onScreen(e) && lodZDist(e) > 40) {
                 // ((10.57) Police and soldiers with nothing near them, on patrol, at a post or guarding a zone, off
                 // screen: every other frame too, like everyone else with nothing going on.)
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
                 if ((i + lodFrame) % lodBusy != 0) continue;
                 think(e, dt * lodBusy);
-            } else if (e.type == Entity.CIVILIAN && e != controlled && !onScreen(e) && city.fieldAt(city.zombieDist, e.x, e.y) > 30) {
+            } else if (e.type == Entity.CIVILIAN && e != controlled && !onScreen(e) && lodZDist(e) > 30) {
                 // (10.31) And people off screen who know what's going on but have none of the dead near them:
                 // every other frame (a Gigantic city in a panic is tens of thousands of them).
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
                 int every = quality == Q_FULL ? lodBusy : quality == Q_REDUCED ? 3 : 4;
                 if ((i + lodFrame) % every != 0) continue;
                 think(e, dt * every);
+            } else if (e != controlled && e.rig == null && !e.aiming && e.ride == null && !onScreen(e)
+                    && (e.type == Entity.CIVILIAN ? lodZDist(e) > 8
+                        : e.isZombie() && e.charge <= 0 && lodHDist(e) > 8)) {
+                // ((11.5) Off screen and near the trouble but not in the thick of it - running from the dead a few
+                // streets off, or one of the dead heading for the living: every other frame, two frames' worth.
+                // Only those right up against it, or on screen, are worked out every frame.)
+                e.lodStep = (i + lodFrame) % 2 == 0 ? 2 : 0;
+                if ((i + lodFrame) % 2 != 0) continue;
+                think(e, dt * 2);
             } else think(e, dt);
         }
         for (int i = 0, n = entities.size(); i < n; i++) {
@@ -1684,7 +1727,8 @@ final class World {
             for (int i = 0; i < newRecruits.size(); i++) entities.add(newRecruits.get(i));
             newRecruits.clear();
         }
-        recount();
+        // ((11.5) The head counts every other step in a crowd of thousands: they're only read off for the panels.)
+        if (entities.size() < 3000 || (lodFrame & 1) == 0) recount();
         statTimer += dt;
         if (statTimer >= statStep) {
             statTimer = 0;
@@ -1818,33 +1862,45 @@ final class World {
         messageTime = 4f;
     }
 
+    /** ((11.5) Each one's cell, from the first pass over everyone to the second.) */
+    private int[] hashCell = new int[64];
+    private int hashSize = -1;
+
     private void buildHash() {
         int n = entities.size();
         if (sorted.length < n) sorted = new Entity[n * 2];
         Arrays.fill(cellCount, 0);
         Arrays.fill(zCount, 0);
+        Arrays.fill(aCount, 0);
         hashFrame++;
+        hashSize = n;
+        if (hashCell.length < n) hashCell = new int[n * 2];
         for (int i = 0; i < n; i++) {
             Entity e = entities.get(i);
             if (e.leader != null && !e.dead) e.leader.followerFrame = hashFrame;
             int c = cellOf(e);
+            hashCell[i] = c;
             cellCount[c]++;
             if (e.isZombie()) zCount[c]++;
+            else if (e.isArmed()) aCount[c]++;
         }
         // Each cell lists its zombies first, then everyone else, so a search for one or the other only looks at
         // what it wants (a crowd of thousands doesn't slow down looking for the one zombie among them).
+        // ((11.5) And among everyone else, the police and soldiers first: a search for them skips the crowd too.)
         int acc = 0;
         for (int c = 0; c < cellCount.length; c++) {
             cellStart[c] = acc;
             zFill[c] = acc;
-            cellFill[c] = acc + zCount[c];
+            aFill[c] = acc + zCount[c];
+            cellFill[c] = acc + zCount[c] + aCount[c];
             acc += cellCount[c];
         }
         cellStart[cellCount.length] = acc;
         for (int i = 0; i < n; i++) {
             Entity e = entities.get(i);
-            int c = cellOf(e);
+            int c = hashCell[i];
             if (e.isZombie()) sorted[zFill[c]++] = e;
+            else if (e.isArmed()) sorted[aFill[c]++] = e;
             else sorted[cellFill[c]++] = e;
         }
     }
@@ -2001,7 +2057,7 @@ final class World {
         }
         if (e.stuckTime > 1.2f) {
             e.stuckTime = 0;
-            float heading = (float) Math.atan2(e.my, e.mx);
+            float heading = fastAtan2(e.my, e.mx);
             e.unstickAngle = heading + (rnd.nextBoolean() ? 1 : -1) * (1.6f + rnd.nextFloat() * 1f);
             e.unstick = 0.6f + rnd.nextFloat() * 0.6f;
             e.blocked = false;
@@ -2438,7 +2494,7 @@ final class World {
                 float px = bx + (float) Math.cos(a) * rx, py = by + (float) Math.sin(a) * ry;
                 if (!city.solidAt(px, py)) {
                     zombieWalkTo(z, px, py, z.speed);
-                    if (Math.hypot(px - z.x, py - z.y) < 8) atWall = true;
+                    if (World.hypot(px - z.x, py - z.y) < 8) atWall = true;
                     else return;
                 }
             }
@@ -2809,7 +2865,7 @@ final class World {
         }
         float gx = sx - z.x, gy = sy - z.y;
         float d = (float) Math.sqrt(gx * gx + gy * gy) + 0.001f;
-        float ld = (float) Math.hypot(lead.x - z.x, lead.y - z.y);
+        float ld = (float) World.hypot(lead.x - z.x, lead.y - z.y);
         if (ld > 420) {
             z.hordeLeader = null;
             return;
@@ -2821,7 +2877,7 @@ final class World {
                 for (int k = 0; k < lead.trailN; k++) {
                     int i = ((lead.trailHead - 1 - k) % TRAIL + TRAIL) % TRAIL;
                     float px = tr[i * 2], py = tr[i * 2 + 1];
-                    float pd = (float) Math.hypot(px - z.x, py - z.y);
+                    float pd = (float) World.hypot(px - z.x, py - z.y);
                     if (pd < 220 && pd > 6 && city.los(z.x, z.y, px, py)) {
                         steer(z, (px - z.x) / pd, (py - z.y) / pd, z.speed * 1.3f);
                         z.blocked = false;
@@ -2842,7 +2898,7 @@ final class World {
     private void markTrail(Entity z) {
         if (z.trail == null) z.trail = new float[TRAIL * 2];
         int last = ((z.trailHead - 1) % TRAIL + TRAIL) % TRAIL;
-        if (z.trailN > 0 && Math.hypot(z.trail[last * 2] - z.x, z.trail[last * 2 + 1] - z.y) < 22) return;
+        if (z.trailN > 0 && World.hypot(z.trail[last * 2] - z.x, z.trail[last * 2 + 1] - z.y) < 22) return;
         z.trail[z.trailHead * 2] = z.x;
         z.trail[z.trailHead * 2 + 1] = z.y;
         z.trailHead = (z.trailHead + 1) % TRAIL;
@@ -2890,7 +2946,7 @@ final class World {
                 float v = fightHeat[j * n + i];
                 if (v <= best) continue;
                 float cx = (i + 0.5f) * HEAT_CELL, cy = (j + 0.5f) * HEAT_CELL;
-                if (Math.hypot(cx - x, cy - y) > reach) continue;
+                if (World.hypot(cx - x, cy - y) > reach) continue;
                 best = v;
                 at = new float[]{cx, cy};
             }
@@ -2901,7 +2957,7 @@ final class World {
         // (10.32) A horde hears a big fight a long way off, and goes to it.
         if (z.leadsHorde && rnd.nextFloat() < 0.6f) {
             float[] f = loudestFight(z.x, z.y, 3200);
-            if (f != null && Math.hypot(f[0] - z.x, f[1] - z.y) > 300) {
+            if (f != null && World.hypot(f[0] - z.x, f[1] - z.y) > 300) {
                 float[] p = city.findWalkable(f[0] + rnd.nextFloat() * 120 - 60, f[1] + rnd.nextFloat() * 120 - 60);
                 if (p != null) {
                     z.roamX = p[0];
@@ -2996,7 +3052,7 @@ final class World {
         for (int k = 0; k < 24; k++) {
             Entity o = entities.get(rnd.nextInt(n));
             if (o.dead || o.isZombie() || o.type == Entity.DOG) continue;
-            float d = (float) Math.hypot(o.x - x, o.y - y);
+            float d = (float) World.hypot(o.x - x, o.y - y);
             if (d > 1500) continue;
             float score = 1 / (60 + d);
             if (score > bs) {
@@ -3180,7 +3236,7 @@ final class World {
         } else if (e.canShoot() && e.ammo + e.reserve > 0) {
             Entity t = aimTarget(e, 210);
             if (t != null) {
-                float d = (float) Math.hypot(t.x - e.x, t.y - e.y);
+                float d = (float) World.hypot(t.x - e.x, t.y - e.y);
                 aimAndFire(e, t, d, 210, dt);
             }
         } else {
@@ -3883,7 +3939,7 @@ final class World {
             City.Building b = e.task == Dispatch.T_HIDE ? e.building : null;
             if (b == null || b.occupants.size() >= b.capacity || b.barricade <= 0 || b.collapsed) b = hidingPlace(e);
             if (b != null && countZombiesNear(b.doorX, b.doorY, 35) == 0) {
-                float dd = (float) Math.hypot(b.doorX - e.x, b.doorY - e.y);
+                float dd = (float) World.hypot(b.doorX - e.x, b.doorY - e.y);
                 // (Not if the way to it runs past the dead.)
                 float tx = threat != null ? threat.x - e.x : 0, ty = threat != null ? threat.y - e.y : 0;
                 float toward = threat == null ? 0 : ((b.doorX - e.x) * tx + (b.doorY - e.y) * ty) / ((dd + 0.001f) * (threatDist + 0.001f));
@@ -4177,7 +4233,7 @@ final class World {
         int g = z.gateNear(e.x, e.y);
         float[] out = z.gateOut[g], in = z.gateIn[g];
         float ox = out[0] - e.x, oy = out[1] - e.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
-        boolean atGate = od < 22 || (z.gateOpen[g] && Math.hypot(in[0] - e.x, in[1] - e.y) < od);
+        boolean atGate = od < 22 || (z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < od);
         if (!atGate) {
             if (!z.open || !followField(e, dispatch.zoneField, speed)) walkToSpot(e, out[0], out[1], speed);
             return true;
@@ -4274,12 +4330,12 @@ final class World {
         // Nowhere to hide yet: hurry to the police station, and keep moving.
         City.Facility police = city.nearestFacility(City.FACILITY_POLICE, e.x, e.y);
         if (police != null) {
-            float pd = (float) Math.hypot(police.x - e.x, police.y - e.y);
+            float pd = (float) World.hypot(police.x - e.x, police.y - e.y);
             // (10.28) Each to a spot of their own round the station, not all in a crowd at its door.
             float a = (e.nameSeed & 255) / 256f * TAU, rr = police.r * (1.3f + ((e.nameSeed >> 8) & 7) * 0.25f);
             float sx = police.x + (float) Math.cos(a) * rr, sy = police.y + (float) Math.sin(a) * rr;
             if (pd > rr + 60 && followField(e, city.field(police), e.speed * 1.6f)) return true;
-            if (!city.solidAt(sx, sy) && Math.hypot(sx - e.x, sy - e.y) > 6) {
+            if (!city.solidAt(sx, sy) && World.hypot(sx - e.x, sy - e.y) > 6) {
                 walkToSpot(e, sx, sy, e.speed * 1.2f);
                 return true;
             }
@@ -4593,7 +4649,7 @@ final class World {
         float bestScore = Float.MAX_VALUE;
         for (int k = 0; k < 8 && !workplaces.isEmpty(); k++) {
             City.Building b = workplaces.get(rnd.nextInt(workplaces.size()));
-            float dd = (float) Math.hypot(b.doorX - e.x, b.doorY - e.y);
+            float dd = (float) World.hypot(b.doorX - e.x, b.doorY - e.y);
             if (dd > 1400) continue;
             float score = dd + rnd.nextFloat() * 300;
             if (score < bestScore) {
@@ -4611,7 +4667,7 @@ final class World {
         for (int k = 0; k < 10 && errandSpots != null && !errandSpots.isEmpty(); k++) {
             City.Building b = errandSpots.get(rnd.nextInt(errandSpots.size()));
             if (b.kind != City.SHOP && b.kind != City.PHARMACY && b.kind != City.KIOSK && b.kind != City.MARKET) continue;
-            float d = (float) Math.hypot(b.doorX - e.x, b.doorY - e.y) + rnd.nextFloat() * 200;
+            float d = (float) World.hypot(b.doorX - e.x, b.doorY - e.y) + rnd.nextFloat() * 200;
             if (d < bd) {
                 bd = d;
                 best = b;
@@ -4661,7 +4717,7 @@ final class World {
         for (int k = 0; k < 8; k++) {
             float[] a = city.openAreas.get(rnd.nextInt(city.openAreas.size()));
             if (plaza && a[2] == 2) continue;
-            float d = (float) Math.hypot(a[0] - e.x, a[1] - e.y) + rnd.nextFloat() * 250;
+            float d = (float) World.hypot(a[0] - e.x, a[1] - e.y) + rnd.nextFloat() * 250;
             if (d < bd && d < 1100) {
                 bd = d;
                 best = a;
@@ -4716,7 +4772,7 @@ final class World {
     boolean atStall(Entity e) {
         if (e.job != Entity.J_VENDOR || e.spot == null) return false;
         float[] p = areaPoint(e.spot);
-        return Math.hypot(p[0] - e.x, p[1] - e.y) < 18;
+        return World.hypot(p[0] - e.x, p[1] - e.y) < 18;
     }
 
     /** Walks to an open area by its own route. Returns true once there. */
@@ -4764,13 +4820,13 @@ final class World {
                     e.jobTimer += dt;
                     // Amble about the park, drifting back towards the middle rather than bouncing off an edge.
                     float[] mid = areaPoint(e.spot);
-                    if (Math.hypot(mid[0] - e.x, mid[1] - e.y) > 45 && e.jobStep != 1) {
+                    if (World.hypot(mid[0] - e.x, mid[1] - e.y) > 45 && e.jobStep != 1) {
                         // Head back in on a slant, so the next stretch takes them somewhere new in the park.
                         e.wanderAngle = (float) Math.atan2(mid[1] - e.y, mid[0] - e.x) + (rnd.nextFloat() - 0.5f) * 2.2f;
                         e.wanderTimer = 3 + rnd.nextFloat() * 3;
                         e.paused = false;
                         e.jobStep = 1;
-                    } else if (Math.hypot(mid[0] - e.x, mid[1] - e.y) < 30) e.jobStep = 0;
+                    } else if (World.hypot(mid[0] - e.x, mid[1] - e.y) < 30) e.jobStep = 0;
                     // Stop a while (on a bench, watching the dog), then wander on.
                     if (((int) ((e.jobTimer + (e.nameSeed & 7)) / 7)) % 2 == 0) steer(e, 0, 0, 0);
                     else wander(e, e.speed * 0.4f);
@@ -4836,7 +4892,7 @@ final class World {
                     e.jobStep = 0;
                     for (int i = 0, n = city.buildings.size(); i < n && e.round.size() < 7; i++) {
                         City.Building b = city.buildings.get((i * 37 + (e.nameSeed & 0x7FFF)) % n);
-                        if (b.residents > 0 && !b.collapsed && Math.hypot(b.doorX - e.x, b.doorY - e.y) < 320) e.round.add(b);
+                        if (b.residents > 0 && !b.collapsed && World.hypot(b.doorX - e.x, b.doorY - e.y) < 320) e.round.add(b);
                     }
                     if (e.round.isEmpty()) {
                         e.round = null;
@@ -5090,7 +5146,7 @@ final class World {
         for (int k = 0; k < 6; k++) {
             City.Building b = errandSpots.get(rnd.nextInt(errandSpots.size()));
             if (b.collapsed || b == e.lastErrand) continue;
-            float d = (float) Math.hypot(b.doorX - e.x, b.doorY - e.y);
+            float d = (float) World.hypot(b.doorX - e.x, b.doorY - e.y);
             if (d > 700) continue;
             // Busy places put people off: nobody wants to queue.
             int busy = b.heading + b.visitors.size();
@@ -5297,7 +5353,7 @@ final class World {
 
     /** Puts a barricade on the tile at (x, y). Returns it, or null if the tile can't take one. */
     float[] placeBarricade(float x, float y) {
-        int tx = (int) Math.floor(x / City.T), ty = (int) Math.floor(y / City.T);
+        int tx = City.fl(x / City.T), ty = City.fl(y / City.T);
         if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) return null;
         int i = ty * city.w + tx;
         byte t = city.tiles[i];
@@ -6042,7 +6098,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o.dead || !o.isArmed()) continue;
                     float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
@@ -6124,7 +6180,7 @@ final class World {
             Entity e = entities.get(i);
             if (e.dead || e.type != Entity.CIVILIAN || e.asked || e.infected || e.fleeTimer > 0) continue;
             if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_SEEK) continue;
-            if (Math.hypot(e.x - office.x, e.y - office.y) > 900 || city.fieldAt(city.field(office), e.x, e.y) >= City.FAR) continue;
+            if (World.hypot(e.x - office.x, e.y - office.y) > 900 || city.fieldAt(city.field(office), e.x, e.y) >= City.FAR) continue;
             asks--;
             e.asked = true;
             if (rnd.nextFloat() < willingness(e)) {
@@ -6173,7 +6229,7 @@ final class World {
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
             if (e.dead || !e.pilotReserve || e.type != Entity.CIVILIAN || e.infected || e.pilotFor != null) continue;
-            float d = (float) Math.hypot(e.x - v.padAt[0], e.y - v.padAt[1]);
+            float d = (float) World.hypot(e.x - v.padAt[0], e.y - v.padAt[1]);
             if (d < bd) {
                 bd = d;
                 best = e;
@@ -6199,7 +6255,7 @@ final class World {
             return false;
         }
         float px = v.padAt[0] + 30, py = v.padAt[1];
-        if (Math.hypot(px - e.x, py - e.y) > 18) {
+        if (World.hypot(px - e.x, py - e.y) > 18) {
             walkToSpot(e, px, py, e.runSpeed * 0.8f);
             return true;
         }
@@ -6293,7 +6349,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o.dead || !o.isArmed() || (o.ammo <= 0 && o.reserve <= 0)) continue;
                     float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
@@ -6364,7 +6420,7 @@ final class World {
     }
 
     private boolean marketRun(Entity e, Entity threat) {
-        boolean far = threat == null || Math.hypot(threat.x - e.x, threat.y - e.y) > 70;
+        boolean far = threat == null || World.hypot(threat.x - e.x, threat.y - e.y) > 70;
         if (e.task == Dispatch.T_NONE && far && e.ammo + e.reserve <= 2 && e.taskTimer <= 0) {
             e.taskTimer = 3;
             City.Building best = null;
@@ -6449,7 +6505,7 @@ final class World {
             float ddx = threat.x - e.x, ddy = threat.y - e.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
             if (rnd.nextFloat() < dt * 2.5f) emit(Sfx.BARK, e.x, e.y);
-            boolean guarding = hasOwner && Math.hypot(owner.x - threat.x, owner.y - threat.y) < 50;
+            boolean guarding = hasOwner && World.hypot(owner.x - threat.x, owner.y - threat.y) < 50;
             // Police dogs go in hard.
             boolean k9 = e.role == Entity.ROLE_K9 && hasOwner;
             if (e.hp > e.maxHp * (k9 ? 0.25f : 0.4f) && (guarding || d < 20 || (k9 && d < 70))) {
@@ -7167,7 +7223,7 @@ final class World {
                 && e.ride == null && e.agency != 3 && e.role != Entity.ROLE_PILOT && (e.driveCd -= dt) <= 0) {
             e.driveCd = 8;
             Dispatch.Incident inc = e.incident;
-            if (Math.hypot(inc.x - e.x, inc.y - e.y) > 700 && nearest(e, 100, true, false) == null) {
+            if (World.hypot(inc.x - e.x, inc.y - e.y) > 700 && nearest(e, 100, true, false) == null) {
                 java.util.ArrayList<Entity> group = new java.util.ArrayList<Entity>();
                 group.add(e);
                 int n = gatherLiving(e.x, e.y, 150), seats = e.type == Entity.COP ? 4 : 8;
@@ -7215,7 +7271,7 @@ final class World {
         if (dry && e.task != Dispatch.T_RESUPPLY && e.task != Dispatch.T_BORROW && e.task != Dispatch.T_BOARD && !e.scout) {
             City.Facility f = restockPoint(e);
             // ((10.60) A partner close by with plenty: a magazine off them first, rather than a long walk back.)
-            Entity mate = f == null || Math.hypot(f.x - e.x, f.y - e.y) > 300 ? lenderFor(e, 240) : null;
+            Entity mate = f == null || World.hypot(f.x - e.x, f.y - e.y) > 300 ? lenderFor(e, 240) : null;
             if (mate != null) {
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_BORROW;
@@ -7254,7 +7310,7 @@ final class World {
         if (!dry && stock < 0.22f && e.lowCd <= 0 && (e.task == Dispatch.T_NONE || e.task == Dispatch.T_RESPOND)) {
             e.lowCd = 25;
             City.Facility f = restockPoint(e);
-            if (f != null && Math.hypot(f.x - e.x, f.y - e.y) < 1600 && nearest(e, 70, true, false) == null) {
+            if (f != null && World.hypot(f.x - e.x, f.y - e.y) < 1600 && nearest(e, 70, true, false) == null) {
                 dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. Heading back to " + f.name + " to restock.", e.x, e.y);
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_RESUPPLY;
@@ -7263,7 +7319,7 @@ final class World {
         if (e.task == Dispatch.T_BORROW) {
             Entity l = e.protector;
             // ((10.60) And not chasing a partner who's drawn away: back to the station after all.)
-            if (l == null || l.dead || l.ammo + l.reserve < fullReserve(l) * 0.5f || Math.hypot(l.x - e.x, l.y - e.y) > 600 || e.taskTimer <= 0) {
+            if (l == null || l.dead || l.ammo + l.reserve < fullReserve(l) * 0.5f || World.hypot(l.x - e.x, l.y - e.y) > 600 || e.taskTimer <= 0) {
                 e.task = Dispatch.T_NONE;
                 e.protector = null;
                 if (l != null && !l.dead && restockPoint(e) != null) {
@@ -7407,8 +7463,8 @@ final class World {
             if (myZone == null || !myZone.critical) {
                 e.task = Dispatch.T_NONE;
             } else {
-                float pd = (float) Math.hypot(e.postX - e.x, e.postY - e.y);
-                if (pd > 30 && (t == null || Math.hypot(t.x - e.x, t.y - e.y) > 90)) {
+                float pd = (float) World.hypot(e.postX - e.x, e.postY - e.y);
+                if (pd > 30 && (t == null || World.hypot(t.x - e.x, t.y - e.y) > 90)) {
                     walkToSpot(e, e.postX, e.postY, e.runSpeed * 0.9f);
                     return;
                 }
@@ -7423,14 +7479,14 @@ final class World {
         // (10.46) Posted somewhere (a checkpoint on the road into an infection zone): get there first, and back to
         // it after a fight.
         if (e.task == Dispatch.T_POST && e.postX > 0) {
-            float pd = (float) Math.hypot(e.postX - e.x, e.postY - e.y);
-            if (pd > 24 && (t == null || Math.hypot(t.x - e.x, t.y - e.y) > 90)) {
+            float pd = (float) World.hypot(e.postX - e.x, e.postY - e.y);
+            if (pd > 24 && (t == null || World.hypot(t.x - e.x, t.y - e.y) > 90)) {
                 walkToSpot(e, e.postX, e.postY, pd > 200 ? e.runSpeed * 0.9f : e.speed * 1.3f);
                 return;
             }
         }
         boolean stationary = e.task == Dispatch.T_POST || e.task == Dispatch.T_HOLD
-                || (e.task == Dispatch.T_CORDON && Math.hypot(e.postX - e.x, e.postY - e.y) < 40);
+                || (e.task == Dispatch.T_CORDON && World.hypot(e.postX - e.x, e.postY - e.y) < 40);
         if (t != null && e.task != Dispatch.T_MOVE) {
             float ddx = t.x - e.x, ddy = t.y - e.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
@@ -7535,7 +7591,7 @@ final class World {
                     e.onScene = true;
                     dispatch.onScene(e, inc);
                 }
-                if (!city.solidAt(px, py) && Math.hypot(px - e.x, py - e.y) > 6) {
+                if (!city.solidAt(px, py) && World.hypot(px - e.x, py - e.y) > 6) {
                     walkToSpot(e, px, py, e.speed * 1.4f);
                     return;
                 }
@@ -7767,7 +7823,7 @@ final class World {
             if (e.dutyHx != 0 || e.dutyHy != 0) e.angle = turn(e.angle, (float) Math.atan2(e.dutyHy, e.dutyHx), dt * 2);
             return true;
         }
-        if (e.dutyFor <= 0 || there || Math.hypot(e.dutyX - st.x, e.dutyY - st.y) > reach + 60) {
+        if (e.dutyFor <= 0 || there || World.hypot(e.dutyX - st.x, e.dutyY - st.y) > reach + 60) {
             // ((11.2) Walked along the streets: on down the block, turning at a corner now and then and back round
             // towards the precinct at the end of the beat - not from one random spot to another. Partners keep
             // together: the next spot comes from their pair, the step and the spot they're both at.)
@@ -7776,7 +7832,7 @@ final class World {
             boolean fresh = e.dutyFor < -30 || (e.dutyHx == 0 && e.dutyHy == 0);
             // (A fresh beat sets off from the precinct's door - or from wherever they are, if that's nowhere near it.)
             float gx = st.gateX > 0 ? st.gateX : st.x, gy = st.gateY > 0 ? st.gateY : st.y;
-            if (fresh && Math.hypot(e.x - gx, e.y - gy) > 200) {
+            if (fresh && World.hypot(e.x - gx, e.y - gy) > 200) {
                 gx = e.x;
                 gy = e.y;
             }
@@ -7796,7 +7852,7 @@ final class World {
                 dirs[0] = dirs[k];
                 dirs[k] = t0;
             }
-            if (Math.hypot(bx - st.x, by - st.y) > reach * 0.75f) {
+            if (World.hypot(bx - st.x, by - st.y) > reach * 0.75f) {
                 final float sx = st.x - bx, sy = st.y - by;
                 java.util.Arrays.sort(dirs, 0, 3, new java.util.Comparator<float[]>() {
                     public int compare(float[] a, float[] b) {
@@ -7810,7 +7866,7 @@ final class World {
                 float[] q = city.findWalkable(bx + dirs[k][0] * step, by + dirs[k][1] * step);
                 int t = q == null ? -1 : city.tileIndex(q[0], q[1]);
                 if (t < 0 || (city.tiles[t] != City.SIDEWALK && city.tiles[t] != City.PLAZA) || city.outOfTown(q[0], q[1])
-                        || Math.hypot(q[0] - st.x, q[1] - st.y) > reach + 40 || !openBetween(bx, by, q[0], q[1])) continue;
+                        || World.hypot(q[0] - st.x, q[1] - st.y) > reach + 40 || !openBetween(bx, by, q[0], q[1])) continue;
                 p = q;
                 hx = dirs[k][0];
                 hy = dirs[k][1];
@@ -7884,11 +7940,11 @@ final class World {
 
     /** (11.2) Nothing solid on the straight line between two points (checked every half tile). */
     private boolean openBetween(float x0, float y0, float x1, float y1) {
-        float d = (float) Math.hypot(x1 - x0, y1 - y0);
+        float d = (float) World.hypot(x1 - x0, y1 - y0);
         int n = Math.max(1, (int) (d / (City.T * 0.5f)));
         for (int i = 1; i < n; i++) {
             float x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n;
-            if (city.solidTile((int) Math.floor(x / City.T), (int) Math.floor(y / City.T))) return false;
+            if (city.solidTile(City.fl(x / City.T), City.fl(y / City.T))) return false;
         }
         return true;
     }
@@ -7910,7 +7966,7 @@ final class World {
         }
         if (e.type != Entity.SOLDIER) return null;
         City.Facility base = city.nearestFacility(City.FACILITY_BASE, e.x, e.y);
-        if (base == null || base.fallen || Math.hypot(base.x - e.x, base.y - e.y) > base.r * 2.4f) return null;
+        if (base == null || base.fallen || World.hypot(base.x - e.x, base.y - e.y) > base.r * 2.4f) return null;
         if (alert >= 1) return "Formed up on the parade ground";
         switch (soldierDutyOf(e, base)) {
             case 0: return "On sentry at " + (base.name != null ? base.name.trim() : "the base");
@@ -7997,7 +8053,7 @@ final class World {
         if (e.type == Entity.COP) return e.dutyFor > 0;
         if (e.type != Entity.SOLDIER) return false;
         City.Facility base = city.nearestFacility(City.FACILITY_BASE, e.x, e.y);
-        return base != null && !base.fallen && Math.hypot(base.x - e.x, base.y - e.y) < base.r * 2.4f;
+        return base != null && !base.fallen && World.hypot(base.x - e.x, base.y - e.y) < base.r * 2.4f;
     }
 
     /**
@@ -8201,7 +8257,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o.dead || !o.isArmed()) continue;
                     if ((o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) <= r * r) n++;
@@ -8222,7 +8278,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o == e || o.dead || !o.isArmed() || o.aiming || o.fear > 0 || o.task != Dispatch.T_NONE) continue;
                     if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > r * r) continue;
@@ -8480,7 +8536,7 @@ final class World {
         e.fear = 5;
         Entity t = pickTarget(e, e.weapon == Entity.W_HUNTING ? 260 : 150);
         if (t != null) {
-            float d = (float) Math.hypot(t.x - e.x, t.y - e.y);
+            float d = (float) World.hypot(t.x - e.x, t.y - e.y);
             if (d < 14) {
                 float ax = e.x - t.x, ay = e.y - t.y;
                 flee(e, ax / (d + 0.01f), ay / (d + 0.01f), e.runSpeed);
@@ -8986,7 +9042,7 @@ final class World {
         // Police can also restock from the courthouse's armoury, if it's nearer and has some left.
         City.Facility c = courtArmoury;
         if (e.type != Entity.SOLDIER && c != null && c.ammo > 0 && !city.courthouse.collapsed
-                && (f == null || Math.hypot(c.x - e.x, c.y - e.y) < Math.hypot(f.x - e.x, f.y - e.y))) f = c;
+                && (f == null || World.hypot(c.x - e.x, c.y - e.y) < World.hypot(f.x - e.x, f.y - e.y))) f = c;
         return f;
     }
 
@@ -9379,14 +9435,16 @@ final class World {
         e.removed = true;
         b.occupants.add(e);
         b.calmTimer = 0;
-        // The family follows them in.
-        for (int i = 0, n = entities.size(); i < n; i++) {
+        // The family follows them in. ((11.5) Only looked for if they have any: going through everyone in the city for
+        // each person who went indoors on their own was a good part of a panic's cost.)
+        boolean family = e.leader != null || e.followerFrame == hashFrame;
+        for (int i = 0, n = family ? entities.size() : 0; i < n; i++) {
             Entity o = entities.get(i);
             if (o.dead || o.isZombie() || o.isArmed()) continue;
             if (o.leader == e || (e.leader != null && (o == e.leader || o.leader == e.leader))) {
                 if (o.type == Entity.DOG) {
                     // Dogs just come along.
-                    if (Math.hypot(o.x - b.doorX, o.y - b.doorY) < 40 && b.occupants.size() < b.capacity + 2) {
+                    if (World.hypot(o.x - b.doorX, o.y - b.doorY) < 40 && b.occupants.size() < b.capacity + 2) {
                         o.dead = true;
                         o.removed = true;
                         b.occupants.add(o);
@@ -9784,7 +9842,7 @@ final class World {
                 return;
             }
             float[] p = z.innerOf(z.wall[k], city.w);
-            if (z.contains(e.x, e.y, 1) || Math.hypot(p[0] - e.x, p[1] - e.y) < 200) walkToSpot(e, p[0], p[1], run);
+            if (z.contains(e.x, e.y, 1) || World.hypot(p[0] - e.x, p[1] - e.y) < 200) walkToSpot(e, p[0], p[1], run);
             else if (z.field == null || !followField(e, z.field, run)) walkToSpot(e, p[0], p[1], run);
             return;
         }
@@ -9792,7 +9850,7 @@ final class World {
             // In through the nearest gate.
             int g = z.gateNear(e.x, e.y);
             float[] out = z.gateOut[g], in = z.gateIn[g];
-            if (Math.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && Math.hypot(in[0] - e.x, in[1] - e.y) < 30)) {
+            if (World.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < 30)) {
                 walkToSpot(e, out[0], out[1], run);
                 return;
             }
@@ -9850,7 +9908,7 @@ final class World {
             int g = z.gateNear(e.x, e.y);
             if (g < 0) return;
             float[] out = z.gateOut[g], in = z.gateIn[g];
-            if (Math.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && Math.hypot(in[0] - e.x, in[1] - e.y) < 30))
+            if (World.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < 30))
                 walkToSpot(e, out[0], out[1], e.speed * 1.3f);
             else if (z.gateOpen[g]) walkToSpot(e, in[0], in[1], e.speed);
             else standAt(e, out[0], out[1], 0.4f);
@@ -10302,6 +10360,8 @@ final class World {
     }
 
     /** Moves with wall sliding. Returns false if the move was (at least partly) blocked. */
+    private static final float[] SIDESTEPS = {0.8f, -0.8f, 1.4f, -1.4f};
+
     private boolean tryMove(Entity e, float sx, float sy) {
         boolean ok = true;
         float bx0 = e.x, by0 = e.y;
@@ -10316,8 +10376,7 @@ final class World {
         if (!ok && (sx != 0 || sy != 0) && e.x == bx0 && e.y == by0) {
             // Walked straight into something round (a tree trunk): step off at an angle, whichever side is free,
             // keeping to the side we last went round on so we don't dither.
-            float[] turns = {0.8f, -0.8f, 1.4f, -1.4f};
-            for (float t : turns) {
+            for (float t : SIDESTEPS) {
                 float a = t * e.slideSide;
                 float c = (float) Math.cos(a), s = (float) Math.sin(a);
                 float rx = sx * c - sy * s, ry = sx * s + sy * c;
@@ -10636,8 +10695,9 @@ final class World {
 
     /** A car left by the road that still runs, with no zombies around it. */
     private Fleet.Vehicle abandonedCarNear(float x, float y, float radius) {
-        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = fleet.vehicles.get(i);
+        // ((11.5) Only the cars in the grid squares round about.)
+        for (int i = 0, n = fleet.gather(x, y, radius); i < n; i++) {
+            Fleet.Vehicle v = fleet.found[i];
             if (v.type != Fleet.CAR || !v.parked || v.broken || v.burnt) continue;
             if ((v.x - x) * (v.x - x) + (v.y - y) * (v.y - y) > radius * radius) continue;
             if (countZombiesNear(v.x, v.y, 30) > 0) continue;
@@ -10648,8 +10708,8 @@ final class World {
 
     /** A car (not the helicopter) at a point, or null. */
     Fleet.Vehicle vehicleAt(float x, float y) {
-        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = fleet.vehicles.get(i);
+        for (int i = 0, n = fleet.gather(x, y, 8); i < n; i++) {
+            Fleet.Vehicle v = fleet.found[i];
             if (Fleet.offRoad(v)) continue;
             float dx = v.x - x, dy = v.y - y;
             if (dx * dx + dy * dy < 7 * 7) return v;
@@ -10795,7 +10855,7 @@ final class World {
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = fleet.vehicles.get(i);
             if (Fleet.offRoad(v)) continue;
-            float d = (float) Math.hypot(v.x - x, v.y - y);
+            float d = (float) World.hypot(v.x - x, v.y - y);
             if (d < radius) fleet.damage(v, damage * (1.1f - d / radius), d < radius * 0.5f);
         }
         // Buildings: scorched walls, and enough of a hit brings one down.
@@ -10888,7 +10948,7 @@ final class World {
 
     private void blastBuilding(City.Building b, float x, float y, float radius, float damage) {
         float nx = Math.max(b.x0, Math.min(x, b.x1)), ny = Math.max(b.y0, Math.min(y, b.y1));
-        float d = (float) Math.hypot(nx - x, ny - y);
+        float d = (float) World.hypot(nx - x, ny - y);
         if (d > radius) return;
         float f = 1 - d / radius;
         int side = wallSide(b, x, y);
@@ -11232,7 +11292,7 @@ final class World {
         float bd = Float.MAX_VALUE;
         for (int i = 0; i < city.hikes.size(); i++) {
             float[] h = city.hikes.get(i);
-            float d = (float) Math.hypot(h[0] - e.x, h[1] - e.y) + rnd.nextFloat() * 400;
+            float d = (float) World.hypot(h[0] - e.x, h[1] - e.y) + rnd.nextFloat() * 400;
             if (d < bd) {
                 bd = d;
                 best = i;
@@ -11341,7 +11401,7 @@ final class World {
         for (int i = 0; i < city.natureSpots.size(); i++) {
             float[] q = city.natureSpots.get(i);
             if (q[2] != City.NL_LAKE) continue;
-            float d = (float) Math.hypot(q[0] - e.x, q[1] - e.y);
+            float d = (float) World.hypot(q[0] - e.x, q[1] - e.y);
             if (d > bd) continue;
             // Round the shore from the lake's middle, until it's dry land beside open water.
             float a = (e.nameSeed & 0xFFFF) / 65536f * TAU;
@@ -11369,7 +11429,7 @@ final class World {
         boolean picnic = (e.nameSeed & 3) == 0;
         for (float[] d : city.decor) {
             if ((int) d[0] != (picnic ? City.D_PICNIC : City.D_CAMPFIRE)) continue;
-            float cx = (d[1] + d[3]) / 2, cy = (d[2] + d[4]) / 2, dist = (float) Math.hypot(cx - hx, cy - hy);
+            float cx = (d[1] + d[3]) / 2, cy = (d[2] + d[4]) / 2, dist = (float) World.hypot(cx - hx, cy - hy);
             if (dist > bd) continue;
             bd = dist;
             float a = (e.nameSeed & 0xFFF) / 4096f * TAU;
@@ -11404,7 +11464,7 @@ final class World {
             // Holding the station: a fan out in front of the door, facing out (not lined up against the wall).
             float a = ((e.callsign * 0.618034f) % 1f - 0.5f) * 2.4f;
             float[] p = stationSpot(a, 30 + (e.callsign % 3) * 8);
-            if (Math.hypot(p[0] - e.x, p[1] - e.y) > 300) walkToSpot(e, p[0], p[1], e.speed);
+            if (World.hypot(p[0] - e.x, p[1] - e.y) > 300) walkToSpot(e, p[0], p[1], e.speed);
             else {
                 standAt(e, p[0], p[1], 0.8f);
                 if (e.want < 1) e.angle = turn(e.angle, p[2], dt * 3);
@@ -11420,7 +11480,7 @@ final class World {
                 e.hike = null;
                 int phase = (int) (time / 30) % 3;
                 float[] p = phase == 0 ? stationSpot(0, 16) : phase == 1 ? stationSpot(0.9f, 34) : stationSpot(-0.7f, 46);
-                if (Math.hypot(p[0] - e.x, p[1] - e.y) > 300) walkToSpot(e, p[0], p[1], e.speed);
+                if (World.hypot(p[0] - e.x, p[1] - e.y) > 300) walkToSpot(e, p[0], p[1], e.speed);
                 else {
                     standAt(e, p[0], p[1], 0.6f);
                     if (e.want < 1) e.angle = turn(e.angle, p[2], dt * 2);
@@ -11510,7 +11570,7 @@ final class World {
         if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_EVACUATE) return false;
         int here = dangerDistAt(e.x, e.y);
         if (e.task == Dispatch.T_EVACUATE) {
-            float d = (float) Math.hypot(e.postX - e.x, e.postY - e.y);
+            float d = (float) World.hypot(e.postX - e.x, e.postY - e.y);
             int there = dangerDistAt(e.postX, e.postY);
             if (there <= 1) {
                 // The dead got there first: somewhere else.
@@ -11548,7 +11608,7 @@ final class World {
             for (int x = Math.max(0, ex - 8); x <= Math.min(dgw - 1, ex + 8); x++) {
                 int c = y * dgw + x;
                 if (dangerDist[c] < 3) continue;
-                float score = Math.min(dangerDist[c], 6) * 3 - (float) Math.hypot(x - ex, y - ey);
+                float score = Math.min(dangerDist[c], 6) * 3 - (float) World.hypot(x - ex, y - ey);
                 if (score > bs) {
                     bs = score;
                     best = c;
@@ -11731,7 +11791,7 @@ final class World {
             float bd = Float.MAX_VALUE;
             for (int k = 0; k < evacStops.size(); k++) {
                 EvacStop st = evacStops.get(k);
-                float d = (float) Math.hypot(st.x - e.x, st.y - e.y);
+                float d = (float) World.hypot(st.x - e.x, st.y - e.y);
                 if (!st.closed && d < bd) {
                     bd = d;
                     bestStop = k;
@@ -11739,7 +11799,7 @@ final class World {
             }
             float sx = 0, sy = 0;
             if (city.stationX >= 0) {
-                float d = (float) Math.hypot(city.stationX - e.x, city.stationY - e.y);
+                float d = (float) World.hypot(city.stationX - e.x, city.stationY - e.y);
                 if (d < bd && countZombiesNear(city.stationX, city.stationY, 150) == 0) {
                     bd = d;
                     bestStop = STOP_TRAIN;
@@ -11782,7 +11842,7 @@ final class World {
         float[] best = null;
         float bd = Float.MAX_VALUE;
         for (float[] x : exits) {
-            float d = (float) Math.hypot(x[0] - e.x, x[1] - e.y);
+            float d = (float) World.hypot(x[0] - e.x, x[1] - e.y);
             if (d < bd) {
                 bd = d;
                 best = x;
@@ -11802,7 +11862,7 @@ final class World {
     private boolean leaveStep(Entity e) {
         if (e.task == Dispatch.T_HOMECOMING) {
             City.Building h = e.home;
-            if (h == null || h.collapsed || Math.hypot(h.doorX - e.x, h.doorY - e.y) < 24 || unreachable(e, h.doorX, h.doorY)) {
+            if (h == null || h.collapsed || World.hypot(h.doorX - e.x, h.doorY - e.y) < 24 || unreachable(e, h.doorX, h.doorY)) {
                 e.task = Dispatch.T_NONE;
                 e.taskTimer = 2;
                 return false;
@@ -11820,12 +11880,12 @@ final class World {
                 if (e.task != Dispatch.T_LEAVE) e.exodusCd = 20;
                 return e.task == Dispatch.T_LEAVE;
             }
-            if (Math.hypot(e.postX - e.x, e.postY - e.y) > 14) walkToSpot(e, e.postX, e.postY, e.fear > 0 ? e.runSpeed * 0.85f : e.speed * 1.4f);
+            if (World.hypot(e.postX - e.x, e.postY - e.y) > 14) walkToSpot(e, e.postX, e.postY, e.fear > 0 ? e.runSpeed * 0.85f : e.speed * 1.4f);
             else standAt(e, e.postX, e.postY, 0.3f);
             return true;
         }
         float m = City.T * 2.5f;
-        if (Math.hypot(e.postX - e.x, e.postY - e.y) < 40 || e.x < m || e.y < m || e.x > city.worldW() - m || e.y > city.worldH() - m) {
+        if (World.hypot(e.postX - e.x, e.postY - e.y) < 40 || e.x < m || e.y < m || e.x > city.worldW() - m || e.y > city.worldH() - m) {
             goAway(e);
             return true;
         }
@@ -11848,7 +11908,7 @@ final class World {
 
     /** The walk planner found no way to there on foot. */
     private static boolean unreachable(Entity e, float x, float y) {
-        return e.path != null && e.path.length == 0 && e.pathDest == null && e.planX == x && e.planY == y && Math.hypot(x - e.x, y - e.y) > 60;
+        return e.path != null && e.path.length == 0 && e.pathDest == null && e.planX == x && e.planY == y && World.hypot(x - e.x, y - e.y) > 60;
     }
 
     /** (10.49) A bus or train of people fleeing the city has left the map: they're gone with it. */
@@ -11869,10 +11929,10 @@ final class World {
         else if (stop >= 0 && stop < evacStops.size()) evacStops.get(stop).waiting = Math.max(0, evacStops.get(stop).waiting - room);
         for (int i = 0, m = entities.size(); i < m && n < room; i++) {
             Entity e = entities.get(i);
-            if (e.dead || e.task != Dispatch.T_LEAVE || e.exitStop != stop || Math.hypot(e.x - x, e.y - y) > radius) continue;
+            if (e.dead || e.task != Dispatch.T_LEAVE || e.exitStop != stop || World.hypot(e.x - x, e.y - y) > radius) continue;
             for (int k = 0; k < m && n < room; k++) {
                 Entity o = entities.get(k);
-                if (o == e || o.dead || o.leader != e || o == controlled || Math.hypot(o.x - e.x, o.y - e.y) > 80) continue;
+                if (o == e || o.dead || o.leader != e || o == controlled || World.hypot(o.x - e.x, o.y - e.y) > 80) continue;
                 aboard(v, o);
                 n++;
             }
@@ -11897,7 +11957,7 @@ final class World {
         int n = 0;
         for (int i = 0, m = entities.size(); i < m; i++) {
             Entity e = entities.get(i);
-            if (!e.dead && e.task == Dispatch.T_LEAVE && e.exitStop == stop && (!there || Math.hypot(e.x - x, e.y - y) < reach)) n++;
+            if (!e.dead && e.task == Dispatch.T_LEAVE && e.exitStop == stop && (!there || World.hypot(e.x - x, e.y - y) < reach)) n++;
         }
         return n;
     }
@@ -11925,7 +11985,7 @@ final class World {
     private void goAway(Entity e) {
         for (int i = 0, m = entities.size(); i < m; i++) {
             Entity o = entities.get(i);
-            if (o != e && o.leader == e && !o.dead && o != controlled && Math.hypot(o.x - e.x, o.y - e.y) < 140) gone(o);
+            if (o != e && o.leader == e && !o.dead && o != controlled && World.hypot(o.x - e.x, o.y - e.y) < 140) gone(o);
         }
         gone(e);
     }
@@ -11984,7 +12044,7 @@ final class World {
             float[] p = city.edgeRoad(r);
             if (p == null) break;
             boolean near = false;
-            for (float[] q : list) if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 400) near = true;
+            for (float[] q : list) if (World.hypot(q[0] - p[0], q[1] - p[1]) < 400) near = true;
             if (!near) list.add(p);
         }
         // (10.52) Over the beltway: the lanes that ran off the map's edges stop at it, so on foot it's out across
@@ -12062,7 +12122,7 @@ final class World {
             float bd = Float.MAX_VALUE;
             for (int i = 0; i < infection.size(); i++) {
                 InfectionZone z = infection.get(i);
-                float d = (float) Math.hypot(z.x - clusterX[c], z.y - clusterY[c]);
+                float d = (float) World.hypot(z.x - clusterX[c], z.y - clusterY[c]);
                 if (d < z.r + 220 && d < bd) {
                     bd = d;
                     best = z;
@@ -12089,7 +12149,7 @@ final class World {
         for (int i = 0; i < infection.size(); i++)
             for (int j = infection.size() - 1; j > i; j--) {
                 InfectionZone a = infection.get(i), b = infection.get(j);
-                float d = (float) Math.hypot(a.x - b.x, a.y - b.y);
+                float d = (float) World.hypot(a.x - b.x, a.y - b.y);
                 if (d > Math.max(Math.max(a.r, b.r) * 0.8f, (a.r + b.r) * 0.6f)) continue;
                 InfectionZone keep = a.r >= b.r ? a : b, gone = keep == a ? b : a;
                 float far = d + gone.r;
@@ -12114,13 +12174,13 @@ final class World {
                 int k = 0;
                 for (int j = 0, m = entities.size(); j < m; j++) {
                     Entity o = entities.get(j);
-                    if (o.dead || !o.isZombie() || Math.hypot(o.x - z.x, o.y - z.y) > z.r + 500) continue;
+                    if (o.dead || !o.isZombie() || World.hypot(o.x - z.x, o.y - z.y) > z.r + 500) continue;
                     sx += o.x;
                     sy += o.y;
                     k++;
                 }
                 boolean taken = false;
-                if (k > 0) for (InfectionZone o : infection) if (o != z && Math.hypot(o.x - sx / k, o.y - sy / k) < o.r + 60) taken = true;
+                if (k > 0) for (InfectionZone o : infection) if (o != z && World.hypot(o.x - sx / k, o.y - sy / k) < o.r + 60) taken = true;
                 if (k > 0 && !taken) {
                     placeZone(z, sx / k, sy / k, Math.max(160, z.r * 0.7f));
                     z.zombies = countZombiesNear(z.x, z.y, z.r + 40);
@@ -12136,7 +12196,7 @@ final class World {
             for (int k = 0, n = gatherLiving(z.x, z.y, z.r); k < n; k++) if (gathered[k].type == Entity.CIVILIAN) people++;
             z.people = people;
             boolean shelter = false;
-            for (Dispatch.SafeZone sz : dispatch.zones) if (!sz.removed && Math.hypot(sz.x - z.x, sz.y - z.y) < z.r + sz.r + 150) shelter = true;
+            for (Dispatch.SafeZone sz : dispatch.zones) if (!sz.removed && World.hypot(sz.x - z.x, sz.y - z.y) < z.r + sz.r + 150) shelter = true;
             z.priority = z.zombies + 0.3f * people + (shelter ? 15 : 0);
         }
         if (infection.isEmpty()) {
@@ -12202,12 +12262,12 @@ final class World {
             for (int i = 0, m = entities.size(); i < m && budget > 0; i++) {
                 Entity e = entities.get(i);
                 if (e.dead || controlled == e || !cordonCandidate(e)) continue;
-                if (Math.hypot(e.x - z.x, e.y - z.y) > z.r + 1400) continue;
+                if (World.hypot(e.x - z.x, e.y - z.y) > z.r + 1400) continue;
                 int best = -1;
                 float bd = Float.MAX_VALUE;
                 for (int p = 0; p < CORDON_POSTS; p++) {
                     if (z.post[p * 2] < 0 || z.manned[p] >= 2) continue;
-                    float d = (float) Math.hypot(z.post[p * 2] - e.x, z.post[p * 2 + 1] - e.y) + z.manned[p] * 300;
+                    float d = (float) World.hypot(z.post[p * 2] - e.x, z.post[p * 2 + 1] - e.y) + z.manned[p] * 300;
                     if (d < bd) {
                         bd = d;
                         best = p;
@@ -12299,7 +12359,7 @@ final class World {
             for (int i = 0, m = entities.size(); i < m; i++) {
                 Entity z = entities.get(i);
                 if (z.dead || !z.isZombie() || taken[i]) continue;
-                float d = (float) Math.hypot(z.x - cx, z.y - cy);
+                float d = (float) World.hypot(z.x - cx, z.y - cy);
                 if (d > 460) continue;
                 taken[i] = true;
                 if (j < k) dist[j++] = d;
@@ -12320,12 +12380,12 @@ final class World {
     /** Puts a zone's ring round (cx, cy): its perimeter posts, and checkpoints on the roads that cross it. */
     private void placeZone(InfectionZone z, float cx, float cy, float r) {
         // ((11.0) Moved or grown: any wall round where it was comes down, and goes up again once it's settled.)
-        if (Math.hypot(cx - z.x, cy - z.y) > 120 || Math.abs(r - z.r) > 100) {
+        if (World.hypot(cx - z.x, cy - z.y) > 120 || Math.abs(r - z.r) > 100) {
             if (z.ring != null) tearDownWall(z);
             z.stableFor = 0;
         }
         // (It keeps its name unless it's moved right away from where it was.)
-        if (z.place == null || Math.hypot(cx - z.x, cy - z.y) > z.r) {
+        if (z.place == null || World.hypot(cx - z.x, cy - z.y) > z.r) {
             z.place = city.placeName(cx, cy);
             // (Two on the same street: told apart by which end of it.)
             for (InfectionZone o : infection)
@@ -12365,7 +12425,7 @@ final class World {
         java.util.Arrays.fill(z.guardCall, null);
         for (int c = 0; c < oldCp.size(); c++) {
             float[] cp = oldCp.get(c);
-            if (Math.abs(Math.hypot(cp[0] - cx, cp[1] - cy) - (r + 70)) > 110 || oldSpots.size() < c * 2 + 2) continue;
+            if (Math.abs(World.hypot(cp[0] - cx, cp[1] - cy) - (r + 70)) > 110 || oldSpots.size() < c * 2 + 2) continue;
             int n = z.checkpoints.size();
             z.checkpoints.add(cp);
             city.checkpoints.add(cp);
@@ -12399,8 +12459,8 @@ final class World {
             boolean radial = (dir == 1 && Math.abs(uy) > 0.7f) || (dir == 2 && Math.abs(ux) > 0.7f);
             if (!radial) continue;
             boolean near = false;
-            for (float[] o : z.checkpoints) if (Math.hypot(o[0] - px, o[1] - py) < 220) near = true;
-            for (float[] o : city.checkpoints) if (Math.hypot(o[0] - px, o[1] - py) < 120) near = true;
+            for (float[] o : z.checkpoints) if (World.hypot(o[0] - px, o[1] - py) < 220) near = true;
+            for (float[] o : city.checkpoints) if (World.hypot(o[0] - px, o[1] - py) < 120) near = true;
             if (near) continue;
             float ang = dir == 1 ? (uy > 0 ? 1.5708f : -1.5708f) : (ux > 0 ? 0 : 3.1416f);
             float[] cp = {(tx + 0.5f) * City.T, (ty + 0.5f) * City.T, ang};
@@ -12456,7 +12516,7 @@ final class World {
             Entity g = z.guards[s];
             // (Still on it, or on the way: walking, aboard the truck, or just dropped off.)
             if (g != null && (riding(g) || !g.dead && (g.task == Dispatch.T_BOARD || g.task == Dispatch.T_RESPOND
-                    || (g.task == Dispatch.T_POST && Math.hypot(g.postX - z.guardSpots.get(s)[0], g.postY - z.guardSpots.get(s)[1]) < 4)))) continue;
+                    || (g.task == Dispatch.T_POST && World.hypot(g.postX - z.guardSpots.get(s)[0], g.postY - z.guardSpots.get(s)[1]) < 4)))) continue;
             z.guards[s] = null;
             float[] spot = z.guardSpots.get(s);
             Entity best = null;
@@ -12464,7 +12524,7 @@ final class World {
             for (int i = 0, m = entities.size(); i < m; i++) {
                 Entity e = entities.get(i);
                 if (e.dead || e.type != Entity.SOLDIER || !cordonCandidate(e) || controlled == e) continue;
-                float d = (float) Math.hypot(e.x - spot[0], e.y - spot[1]);
+                float d = (float) World.hypot(e.x - spot[0], e.y - spot[1]);
                 if (d < bd) {
                     bd = d;
                     best = e;
@@ -12506,7 +12566,7 @@ final class World {
     /** A checkpoint's squad on its way: by truck from the base, or whatever they can get in town, or on foot. */
     private void sendSquad(ArrayList<Entity> squad, Dispatch.Incident ride) {
         City.Facility base = city.nearestFacility(City.FACILITY_BASE, squad.get(0).x, squad.get(0).y);
-        boolean atBase = base != null && Math.hypot(base.x - squad.get(0).x, base.y - squad.get(0).y) < base.r + 300;
+        boolean atBase = base != null && World.hypot(base.x - squad.get(0).x, base.y - squad.get(0).y) < base.r + 300;
         boolean byRoad = atBase && fleet.troopTruck(squad, base, ride) || fleet.mountUp(squad, ride);
         if (!byRoad) for (Entity e : squad) {
             // (No truck to be had: they walk.)
@@ -12697,8 +12757,8 @@ final class World {
         float best = 0, bx = 0, by = 0;
         for (int i = 0; i < infection.size(); i++) {
             InfectionZone z = infection.get(i);
-            float s = z.zombies + 5 - (float) Math.hypot(z.x - d.x, z.y - d.y) / 400;
-            for (Drone o : drones) if (o != d && o.state == DRONE_OUT && Math.hypot(o.tx - z.x, o.ty - z.y) < z.r + 100) s -= 8;
+            float s = z.zombies + 5 - (float) World.hypot(z.x - d.x, z.y - d.y) / 400;
+            for (Drone o : drones) if (o != d && o.state == DRONE_OUT && World.hypot(o.tx - z.x, o.ty - z.y) < z.r + 100) s -= 8;
             if (s > best) {
                 best = s;
                 bx = z.x + rnd.nextFloat() * z.r - z.r / 2;
@@ -12708,8 +12768,8 @@ final class World {
         for (int i = 0; i < dispatch.incidents.size(); i++) {
             Dispatch.Incident inc = dispatch.incidents.get(i);
             if (inc.resolved || inc.cordonPost >= 0) continue;
-            float s = inc.zombiesNear + 3 - (inc.cops + inc.soldiers) - (float) Math.hypot(inc.x - d.x, inc.y - d.y) / 400;
-            for (Drone o : drones) if (o != d && o.state == DRONE_OUT && Math.hypot(o.tx - inc.x, o.ty - inc.y) < 200) s -= 8;
+            float s = inc.zombiesNear + 3 - (inc.cops + inc.soldiers) - (float) World.hypot(inc.x - d.x, inc.y - d.y) / 400;
+            for (Drone o : drones) if (o != d && o.state == DRONE_OUT && World.hypot(o.tx - inc.x, o.ty - inc.y) < 200) s -= 8;
             if (s > best) {
                 best = s;
                 bx = inc.x;
@@ -12741,7 +12801,7 @@ final class World {
         boolean covered = false;
         for (int i = 0; i < dispatch.incidents.size() && !covered; i++) {
             Dispatch.Incident inc = dispatch.incidents.get(i);
-            if (!inc.resolved && Math.hypot(inc.x - d.x, inc.y - d.y) < 250) covered = true;
+            if (!inc.resolved && World.hypot(inc.x - d.x, inc.y - d.y) < 250) covered = true;
         }
         if (covered && found == null) return;
         float sx = found != null ? found.doorX : d.x, sy = found != null ? found.doorY : d.y;
@@ -12789,7 +12849,7 @@ final class World {
         for (InfectionZone z : infection)
             for (int p = 0; p < CORDON_POSTS; p++)
                 if (z.post[p * 2] >= 0 && Math.abs(z.post[p * 2] - x) < 200 && Math.abs(z.post[p * 2 + 1] - y) < 200
-                        && Math.hypot(z.post[p * 2] - x, z.post[p * 2 + 1] - y) < 200) return z;
+                        && World.hypot(z.post[p * 2] - x, z.post[p * 2 + 1] - y) < 200) return z;
         return null;
     }
 
@@ -12798,7 +12858,7 @@ final class World {
         float bd = 200;
         for (int p = 0; p < CORDON_POSTS; p++) {
             if (z.post[p * 2] < 0) continue;
-            float d = (float) Math.hypot(z.post[p * 2] - x, z.post[p * 2 + 1] - y);
+            float d = (float) World.hypot(z.post[p * 2] - x, z.post[p * 2 + 1] - y);
             if (d < bd) {
                 bd = d;
                 best = p;
@@ -12834,7 +12894,7 @@ final class World {
             boolean covered = false;
             for (int k = 0; k < fleet.vehicles.size() && !covered; k++) {
                 Fleet.Vehicle v = fleet.vehicles.get(k);
-                if (v.kind == Fleet.K_RESCUE_HELI && Math.hypot(v.tx - e.x, v.ty - e.y) < 300) covered = true;
+                if (v.kind == Fleet.K_RESCUE_HELI && World.hypot(v.tx - e.x, v.ty - e.y) < 300) covered = true;
             }
             if (covered) continue;
             best = e;
@@ -12882,7 +12942,7 @@ final class World {
         v.timer += dt;
         if (!v.pickup) {
             if (v.team == null) {
-                if (Math.hypot(v.x - v.tx, v.y - v.ty) > 16) return 0;
+                if (World.hypot(v.x - v.tx, v.y - v.ty) > 16) return 0;
                 v.team = new ArrayList<Entity>();
                 // (Since 10.20 the team is the one that boarded at the pad: out of the door and down the line.)
                 ArrayList<Entity> aboard = new ArrayList<Entity>();
@@ -12919,7 +12979,7 @@ final class World {
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
             if (e.dead || e.type != Entity.CIVILIAN) continue;
-            boolean waiting = (e.task == Dispatch.T_RESCUE || (e.leader != null && e.leader.role == Entity.ROLE_SAR)) && Math.hypot(e.x - v.tx, e.y - v.ty) < 40;
+            boolean waiting = (e.task == Dispatch.T_RESCUE || (e.leader != null && e.leader.role == Entity.ROLE_SAR)) && World.hypot(e.x - v.tx, e.y - v.ty) < 40;
             if (!waiting) continue;
             e.dead = true;
             e.removed = true;
@@ -12932,7 +12992,7 @@ final class World {
         for (int i = 0; i < v.team.size(); i++) {
             Entity s = v.team.get(i);
             if (s.dead) continue;
-            if (Math.hypot(s.x - v.tx, s.y - v.ty) < 20 || v.timer > 50) {
+            if (World.hypot(s.x - v.tx, s.y - v.ty) < 20 || v.timer > 50) {
                 if (v.padAt != null) fleet.board(v, s);
                 else {
                     s.dead = true;
@@ -12946,7 +13006,7 @@ final class World {
     private void hoistFromTower(Fleet.Vehicle v) {
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
-            if (e.dead || e.type != Entity.CIVILIAN || !e.aloft || Math.hypot(e.x - v.x, e.y - v.y) > 60) continue;
+            if (e.dead || e.type != Entity.CIVILIAN || !e.aloft || World.hypot(e.x - v.x, e.y - v.y) > 60) continue;
             e.aloft = false;
             if (e.jobStep >= 0 && towerKeeper != null && e.jobStep < towerKeeper.length && towerKeeper[e.jobStep] == e) towerKeeper[e.jobStep] = null;
             e.dead = true;
@@ -12985,7 +13045,7 @@ final class World {
             for (int i = 0, n = entities.size(); i < n && !more; i++) {
                 Entity e = entities.get(i);
                 if (e.dead || e.type != Entity.CIVILIAN || e.task == Dispatch.T_RESCUE || e.aloft) continue;
-                if (Math.hypot(e.x - v.tx, e.y - v.ty) < 220 && (e.leader == null || e.leader.role == Entity.ROLE_SAR)) more = true;
+                if (World.hypot(e.x - v.tx, e.y - v.ty) < 220 && (e.leader == null || e.leader.role == Entity.ROLE_SAR)) more = true;
             }
             if (!more) why = "everyone's at the landing spot";
         }
@@ -13096,7 +13156,7 @@ final class World {
                     py = w[1];
                 }
             }
-            if (Math.hypot(px - e.x, py - e.y) > 12) walkToSpot(e, px, py, e.speed * 1.2f);
+            if (World.hypot(px - e.x, py - e.y) > 12) walkToSpot(e, px, py, e.speed * 1.2f);
             else standAt(e, px, py, 1);
             return true;
         }
@@ -13268,7 +13328,7 @@ final class World {
             if (f.ammo <= 0) continue;
             boolean own = f.kind == (soldier ? City.FACILITY_BASE : City.FACILITY_POLICE);
             if (!own && f.kind != (soldier ? City.FACILITY_POLICE : City.FACILITY_BASE)) continue;
-            float d = (float) Math.hypot(f.x - e.x, f.y - e.y) + (own ? 0 : 500);
+            float d = (float) World.hypot(f.x - e.x, f.y - e.y) + (own ? 0 : 500);
             if (d < bd) {
                 bd = d;
                 best = f;
@@ -13276,7 +13336,7 @@ final class World {
         }
         City.Facility c = courtArmoury;
         if (!soldier && c != null && c.ammo > 0 && city.courthouse != null && !city.courthouse.collapsed
-                && Math.hypot(c.x - e.x, c.y - e.y) < bd) best = c;
+                && World.hypot(c.x - e.x, c.y - e.y) < bd) best = c;
         return best;
     }
 

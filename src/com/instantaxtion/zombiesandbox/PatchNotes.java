@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "11.4";
-    static final int VERSION_CODE = 106;
+    static final String VERSION = "11.5";
+    static final int VERSION_CODE = 107;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "11.5  -  Much faster",
+                    "The city runs far quicker: a Large or Massive city in a panic, ten thousand people about, takes about a third less time to work out each moment, and its worst moments - the ones that made the game stutter - about half as long.",
+                    "Far less to draw: zoomed out, about a quarter of the drawing it took before - a crowd's dots go down together, cars are their shape and colour, police and army their shape and lights - and zoomed in, a third. People a dozen pixels across are drawn plainly; the safe zone's wall, the minimap's cars and the roofs' lettering only where they can be seen.",
+                    "Under the bonnet: routes for cars worked out from a table made once for the map; the open street known at a glance; cars, people and soldiers found from the grid of who's where, not by going through everyone; off screen and away from the action, cars and people worked out every other moment or so.",
+                    "A patrol car or a car out driving that misses a tight turn off a wide road and goes round the block heads somewhere else, instead of circling again and again.",
+            },
             {
                     "11.4  -  Steadier close-ups; fewer water maps; more guns; car patrols",
                     "Zooming right in no longer takes the game down: if a frame can't be drawn (or memory runs short close up), that frame is skipped, the map's close-ups are let go of and drawn again, and a short note says what went wrong instead of the game closing.",

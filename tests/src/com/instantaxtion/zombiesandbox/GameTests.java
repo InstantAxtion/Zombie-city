@@ -3529,6 +3529,56 @@ public final class GameTests {
                 check(Entity.ROLE_NAMES.length == 16 && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE]), "every role named");
             }
         });
+        test("11.5: the quick ways give the same answers as the long ones", new Check() {
+            public void run() {
+                int routes = 0, spots = 0;
+                for (int preset : new int[]{0, 8, 14}) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_PRESET] = preset;
+                    c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                    c.seed = 21 + preset;
+                    c.normalize();
+                    World w = new World(c);
+                    w.populate(c);
+                    City city = w.city;
+                    java.util.Random r = new java.util.Random(5);
+                    int[] f1 = new int[city.w * city.h], f2 = new int[city.w * city.h];
+                    // An army truck leaves its bay and another parks: the routes know.
+                    City.Facility base = city.mainBase();
+                    if (base != null) city.takeParkedTruck(base.x, base.y, 600);
+                    for (int k = 0; k < 25; k++) {
+                        float tx = r.nextFloat() * city.worldW(), ty = r.nextFloat() * city.worldH();
+                        int from = r.nextBoolean() ? -1 : r.nextInt(city.w * city.h);
+                        boolean strict = r.nextBoolean();
+                        City.slowSteps = false;
+                        boolean a = city.driveField(f1, tx, ty, strict, from);
+                        City.slowSteps = true;
+                        boolean b = city.driveField(f2, tx, ty, strict, from);
+                        City.slowSteps = false;
+                        check(a == b && java.util.Arrays.equals(f1, f2), "the same route from the table as the long way (" + preset + ", " + k + ")");
+                        routes++;
+                    }
+                    // A barricade goes up: nobody walks through it.
+                    float[] spot = null;
+                    for (int k = 0; k < 200 && spot == null; k++) {
+                        float x = r.nextFloat() * city.worldW(), y = r.nextFloat() * city.worldH();
+                        if (!city.circleBlocked(x, y, 4)) spot = w.placeBarricade(x, y);
+                    }
+                    if (spot != null) check(city.circleBlocked(spot[0], spot[1], 4), "a new barricade blocks the way");
+                    for (int k = 0; k < 4000; k++) {
+                        float x = r.nextFloat() * city.worldW(), y = r.nextFloat() * city.worldH(), rad = 2 + r.nextFloat() * 10;
+                        City.slowSteps = false;
+                        boolean a = city.circleBlocked(x, y, rad);
+                        City.slowSteps = true;
+                        boolean b = city.circleBlocked(x, y, rad);
+                        City.slowSteps = false;
+                        check(a == b, "the open-ground shortcut agrees with the long way");
+                        spots++;
+                    }
+                }
+                check(routes > 50 && spots > 10000, "checked enough");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

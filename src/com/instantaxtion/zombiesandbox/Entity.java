@@ -262,6 +262,8 @@ final class Entity {
     City.Building lastErrand;
     /** Set to the world's grid frame when someone is following this one. */
     int followerFrame;
+    /** ((11.5) The distances last looked up for the world's level of detail, and when.) */
+    int lodZ, lodZAt, lodH, lodHAt;
     /** (10.31) How many frames' worth this one moves this frame: 1, or for the calm off screen 3 every third frame (0 between). */
     transient int lodStep = 1;
     /** (10.34) Until a fleeing civilian looks round for a cop or soldier again. */

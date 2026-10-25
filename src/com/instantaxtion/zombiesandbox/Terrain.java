@@ -59,7 +59,7 @@ final class Terrain {
     }
 
     private float noise(float x, float y, int oct) {
-        int x0 = (int) Math.floor(x), y0 = (int) Math.floor(y);
+        int x0 = City.fl(x), y0 = City.fl(y);
         float fx = x - x0, fy = y - y0;
         fx = fx * fx * (3 - 2 * fx);
         fy = fy * fy * (3 - 2 * fy);
@@ -172,7 +172,7 @@ final class Terrain {
             float hd = Float.MAX_VALUE;
             for (int i = 0; i < w * h; i++) {
                 if (t[i] != City.ROAD || (c.bridge != null && c.bridge[i])) continue;
-                float d = (float) Math.hypot(i % w - cx, i / w - cy);
+                float d = (float) World.hypot(i % w - cx, i / w - cy);
                 if (d < hd) {
                     hd = d;
                     head = i;
@@ -188,7 +188,7 @@ final class Terrain {
                 if (area[j] == a + 1 && (t[j] == City.GRASS || t[j] == City.TREE || t[j] == City.PLAZA)) start = j;
             }
             if (start < 0) start = head;
-            float limit = (float) Math.hypot(top % w - start % w, top / w - start / w) + 40;
+            float limit = (float) World.hypot(top % w - start % w, top / w - start / w) + 40;
             int[] from = trailSearch(new int[]{start}, (start % w + top % w) / 2f, (start / w + top / w) / 2f, limit, cost);
             layTrail(top, from, cost, 0);
             // A second, on round to the far side (if it's a big wood).
@@ -197,7 +197,7 @@ final class Terrain {
                 float fd = 0;
                 for (int i = 0; i < w * h; i++) {
                     if (area[i] != a + 1 || t[i] != City.GRASS) continue;
-                    float d = (float) Math.hypot(i % w - top % w, i / w - top / w);
+                    float d = (float) World.hypot(i % w - top % w, i / w - top / w);
                     if (d > fd && d < 120) {
                         fd = d;
                         far = i;
@@ -293,7 +293,7 @@ final class Terrain {
                 if (wild[i] < 10) continue;
                 float x = i % w, y = i / w;
                 boolean clear = true;
-                for (float[] p : peaks) if (Math.hypot(p[0] - x, p[1] - y) < p[2] * (lively ? 4.5f : 2.2f)) clear = false;
+                for (float[] p : peaks) if (World.hypot(p[0] - x, p[1] - y) < p[2] * (lively ? 4.5f : 2.2f)) clear = false;
                 if (!clear) continue;
                 float sc = wild[i] + rnd.nextFloat() * (lively ? 26 : 3);
                 if (sc > score) {
@@ -389,7 +389,7 @@ final class Terrain {
         for (int y = Math.max(1, (int) cy - reach); y < Math.min(h - 1, (int) cy + reach); y++)
             for (int x = Math.max(1, (int) cx - reach); x < Math.min(w - 1, (int) cx + reach); x++) {
                 int i = y * w + x;
-                float d = (float) Math.hypot(x - cx, y - cy) / r + (noise(x / 4f, y / 4f, 40) - 0.5f) * 0.55f;
+                float d = (float) World.hypot(x - cx, y - cy) / r + (noise(x / 4f, y / 4f, 40) - 0.5f) * 0.55f;
                 if (d >= 1) continue;
                 // (A stream running into a pond is deep water from there on.)
                 if (t[i] == City.WATER && c.isFord(i)) {
@@ -419,7 +419,7 @@ final class Terrain {
                 if (wild[i] < 9 || mount[i] > 0.15f) continue;
                 float x = i % w, y = i / w;
                 boolean clear = true;
-                for (float[] l : lakes) if (Math.hypot(l[0] - x, l[1] - y) < 40) clear = false;
+                for (float[] l : lakes) if (World.hypot(l[0] - x, l[1] - y) < 40) clear = false;
                 if (!clear) continue;
                 if (e[i] < low) {
                     low = e[i];
@@ -652,7 +652,7 @@ final class Terrain {
             for (int x = Math.max(1, (int) parkX - reach); x < Math.min(w - 1, (int) parkX + reach); x++) {
                 int i = y * w + x;
                 if (t[i] != City.GRASS || wild[i] < 2) continue;
-                float d = (float) Math.hypot(x - parkX, y - parkY) / parkR;
+                float d = (float) World.hypot(x - parkX, y - parkY) / parkR;
                 if (d > 1) continue;
                 // Woods with meadows in them (as thick as the country's woods are).
                 if (fbm(x / 11f, y / 11f, 60) > 0.47f + (1 - Math.min(1.4f, land.forest)) * 0.12f
@@ -689,7 +689,7 @@ final class Terrain {
             if (t[i] != City.DIRT) continue;
             int x = i % w, y = i / w;
             if (x >= c.townX0 - 4 && x < c.townX1 + 4 && y >= c.townY0 - 4 && y < c.townY1 + 4) continue;
-            float d = (float) Math.hypot(x - tx, y - ty);
+            float d = (float) World.hypot(x - tx, y - ty);
             if (d > within || d > bd) continue;
             boolean vertical = (y > 0 && t[i - w] == City.DIRT) && (y < h - 1 && t[i + w] == City.DIRT);
             boolean horizontal = (x > 0 && t[i - 1] == City.DIRT) && (x < w - 1 && t[i + 1] == City.DIRT);
@@ -897,7 +897,7 @@ final class Terrain {
     /** Trails from the trailhead up to a lookout, to the falls, the lake shore and the campsite. */
     private void trails() {
         if (trailhead < 0) return;
-        float limit = Math.max(parkR * 1.7f, (float) Math.hypot(trailhead % w - parkX, trailhead / w - parkY) + parkR * 0.5f);
+        float limit = Math.max(parkR * 1.7f, (float) World.hypot(trailhead % w - parkX, trailhead / w - parkY) + parkR * 0.5f);
         int[] cost = new int[w * h];
         int[] from = new int[w * h];
         Arrays.fill(cost, Integer.MAX_VALUE);
@@ -919,7 +919,7 @@ final class Terrain {
             for (int[] d : nb) {
                 int nx = x + d[0], ny = y + d[1];
                 if (nx < 1 || ny < 1 || nx >= w - 1 || ny >= h - 1) continue;
-                if (Math.hypot(nx - parkX, ny - parkY) > limit) continue;
+                if (World.hypot(nx - parkX, ny - parkY) > limit) continue;
                 int j = ny * w + nx;
                 byte k = t[j];
                 int step;
@@ -959,7 +959,7 @@ final class Terrain {
             if (best >= 0) goals.add(new int[]{best % w, best / w});
         }
         for (float[] l : lakes) {
-            if (Math.hypot(l[0] - parkX, l[1] - parkY) > limit) continue;
+            if (World.hypot(l[0] - parkX, l[1] - parkY) > limit) continue;
             int best = nearestReached(cost, (int) l[0], (int) l[1], (int) l[2] + 4);
             if (best >= 0) goals.add(new int[]{best % w, best / w});
         }
@@ -992,7 +992,7 @@ final class Terrain {
             for (int x = Math.max(0, cx - r); x <= Math.min(w - 1, cx + r); x++) {
                 int i = y * w + x;
                 if (cost[i] == Integer.MAX_VALUE || t[i] == City.WATER) continue;
-                float d = (float) Math.hypot(x - cx, y - cy);
+                float d = (float) World.hypot(x - cx, y - cy);
                 if (d < bd) {
                     bd = d;
                     best = i;
@@ -1026,7 +1026,7 @@ final class Terrain {
         int most = size() >= CityConfig.HUGE ? 3 : size() >= CityConfig.LARGE ? 2 : 1;
         for (float[] p : peaks) {
             if (c.outposts.size() >= most) return;
-            if (parkR > 0 && Math.hypot(p[0] - parkX, p[1] - parkY) < parkR + p[2] + 30) continue;
+            if (parkR > 0 && World.hypot(p[0] - parkX, p[1] - parkY) < parkR + p[2] + 30) continue;
             int[] s0 = siteBeside(p[0], p[1], 8, 9, p[2] * 2.6f + 30);
             if (s0 == null) continue;
             c.clearDecorIn(s0[0], s0[1], s0[2], s0[3]);
@@ -1055,7 +1055,7 @@ final class Terrain {
                 if (x < 4 || y < 4 || x >= w - 4 || y >= h - 4 || wild[i] < 8) continue;
                 if (t[i] != City.GRASS && t[i] != City.TREE) continue;
                 boolean far = true;
-                for (float[] f : c.fireTowers) if (Math.hypot(f[0] / City.T - x, f[1] / City.T - y) < 70) far = false;
+                for (float[] f : c.fireTowers) if (World.hypot(f[0] / City.T - x, f[1] / City.T - y) < 70) far = false;
                 if (!far) continue;
                 // High up, among the trees (that's what it's watching).
                 int trees = 0;
@@ -1133,7 +1133,7 @@ final class Terrain {
             for (int[] d : nb) {
                 int nx = x + d[0], ny = y + d[1];
                 if (nx < 1 || ny < 1 || nx >= w - 1 || ny >= h - 1) continue;
-                if (Math.hypot(nx - cx, ny - cy) > limit) continue;
+                if (World.hypot(nx - cx, ny - cy) > limit) continue;
                 int j = ny * w + nx;
                 int step = trailStep(j);
                 if (step < 0) continue;
@@ -1249,7 +1249,7 @@ final class Terrain {
     private void wildTrails() {
         int[] cost = new int[w * h];
         if (parkR > 0 && trailhead >= 0) {
-            float limit = Math.max(parkR * 1.7f, (float) Math.hypot(trailhead % w - parkX, trailhead / w - parkY) + parkR * 0.5f);
+            float limit = Math.max(parkR * 1.7f, (float) World.hypot(trailhead % w - parkX, trailhead / w - parkY) + parkR * 0.5f);
             int[] from = trailSearch(new int[]{trailhead}, parkX, parkY, limit, cost);
             c.trailheadX = (trailhead % w + 0.5f) * City.T;
             c.trailheadY = (trailhead / w + 0.5f) * City.T;
@@ -1274,13 +1274,13 @@ final class Terrain {
                 if (best >= 0) layTrail(best, from, cost, City.HIKE_FALLS);
             }
             for (float[] l : lakes) {
-                if (Math.hypot(l[0] - parkX, l[1] - parkY) > limit) continue;
+                if (World.hypot(l[0] - parkX, l[1] - parkY) > limit) continue;
                 int best = nearestReached(cost, (int) l[0], (int) l[1], (int) l[2] + 4);
                 if (best >= 0) layTrail(best, from, cost, City.HIKE_LAKE);
             }
             for (int[] g : trailTargets) layTrail(g[1] * w + g[0], from, cost, City.HIKE_CAMP);
             for (float[] tw : c.fireTowers) {
-                if (Math.hypot(tw[0] / City.T - parkX, tw[1] / City.T - parkY) > limit) continue;
+                if (World.hypot(tw[0] / City.T - parkX, tw[1] / City.T - parkY) > limit) continue;
                 int best = nearestReached(cost, (int) (tw[0] / City.T), (int) (tw[1] / City.T), 3);
                 if (best >= 0) layTrail(best, from, cost, City.HIKE_TOWER);
             }
@@ -1294,20 +1294,20 @@ final class Terrain {
         // Each campsite outside the park: a walk down to the nearest water or into the woods.
         for (float[] camp : c.settlements) {
             int cx = (int) (camp[0] / City.T), cy = (int) (camp[1] / City.T);
-            if (parkR > 0 && Math.hypot(cx - parkX, cy - parkY) < parkR * 1.2f) continue;
+            if (parkR > 0 && World.hypot(cx - parkX, cy - parkY) < parkR * 1.2f) continue;
             if (!c.isCampAt(camp[0], camp[1])) continue;
             int st = nearestOpen(cx, cy, 4);
             if (st < 0) continue;
             int[] from = trailSearch(new int[]{st}, cx, cy, 55, cost);
             int goal = -1;
             for (float[] l : lakes)
-                if (Math.hypot(l[0] - cx, l[1] - cy) < 50) goal = nearestReached(cost, (int) l[0], (int) l[1], (int) l[2] + 4);
+                if (World.hypot(l[0] - cx, l[1] - cy) < 50) goal = nearestReached(cost, (int) l[0], (int) l[1], (int) l[2] + 4);
             if (goal < 0) {
                 // Out into the thickest woods near by.
                 int bestTrees = 0;
                 for (int s = 0; s < 300; s++) {
                     int x = cx + rnd.nextInt(80) - 40, y = cy + rnd.nextInt(80) - 40;
-                    if (x < 3 || y < 3 || x >= w - 3 || y >= h - 3 || Math.hypot(x - cx, y - cy) < 20) continue;
+                    if (x < 3 || y < 3 || x >= w - 3 || y >= h - 3 || World.hypot(x - cx, y - cy) < 20) continue;
                     int i = y * w + x;
                     if (cost[i] == Integer.MAX_VALUE || trailStep(i) > 30) continue;
                     int trees = 0;
@@ -1323,7 +1323,7 @@ final class Terrain {
         // The towers outside the park: a path out from the nearest lane or trail.
         for (float[] tw : c.fireTowers) {
             int tx = (int) (tw[0] / City.T), ty = (int) (tw[1] / City.T);
-            if (parkR > 0 && Math.hypot(tx - parkX, ty - parkY) < parkR * 1.7f && onTrail != null && nearOnTrail(tx, ty, 4)) continue;
+            if (parkR > 0 && World.hypot(tx - parkX, ty - parkY) < parkR * 1.7f && onTrail != null && nearOnTrail(tx, ty, 4)) continue;
             List<Integer> ends = new ArrayList<Integer>();
             for (int y = Math.max(1, ty - 60); y < Math.min(h - 1, ty + 60); y++)
                 for (int x = Math.max(1, tx - 60); x < Math.min(w - 1, tx + 60); x++) {

@@ -164,6 +164,20 @@ final class GameView extends View implements Menu.Host {
     private final RectF badgeRect = new RectF();
     private final Path routePath = new Path();
 
+    /** ((11.5) Everyone on screen this frame, and when the calls' badges were last counted.) */
+    private final java.util.ArrayList<Entity> onScreen = new java.util.ArrayList<Entity>();
+    /** ((11.5) Zoomed out, each side's dots this frame (x, y pairs), drawn together; and the round pen for them.) */
+    private final float[][] dotBuf = new float[8][];
+    private final int[] dotN = new int[8];
+    private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    {
+        dotPaint.setStyle(Paint.Style.STROKE);
+        dotPaint.setStrokeCap(Paint.Cap.ROUND);
+    }
+    /** ((11.5) The part of the map on screen this frame (world units, with a little to spare).) */
+    private float viewL, viewT, viewR, viewB;
+    private float inboundAt = -9;
+
     private void tally(Dispatch.Incident inc, boolean army, int n) {
         int[] k = inbound.get(inc);
         if (k == null) inbound.put(inc, k = new int[2]);
@@ -1167,21 +1181,14 @@ final class GameView extends View implements Menu.Host {
                 stroke.setStrokeWidth(1.2f * dp);
                 c.drawCircle(mx(co.x), my(co.y), (2 + (co.age * 6) % 6) * dp, stroke);
             }
-            float dot = Math.max(1.2f, dp * 0.9f);
-            for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-                Fleet.Vehicle v = world.fleet.vehicles.get(i);
-                if (v.type == Fleet.CAR && v.parked) continue;
-                if (v.type == Fleet.HELI || v.type == Fleet.JET) continue;
-                fill.setColor(v.type == Fleet.TANK ? 0xFFFFE27A : v.type == Fleet.CRUISER || Fleet.policeTruck(v) ? 0xFF6FA8FF : v.type == Fleet.TRUCK ? 0xFFB8E07A : 0xB0E0E0E0);
-                c.drawCircle(mx(v.x), my(v.y), dot * (v.type == Fleet.CAR ? 1f : 1.4f), fill);
-            }
+            // ((11.5) The cars and trucks are in the picture with the people now, drawn a few times a second.)
             // (10.50) Helicopters in the air: a rotor mark in the colour of who flies it, and a line to where it's going.
             for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
                 Fleet.Vehicle v = world.fleet.vehicles.get(i);
                 if (v.type != Fleet.HELI || !Fleet.airborne(v)) continue;
                 int col = v.rescue ? 0xFFFF8A3A : v.kind == Fleet.K_POLICE_HELI ? 0xFF6FA8FF : 0xFFFFE27A;
                 float hx = mx(v.x), hy = my(v.y);
-                if (Math.hypot(v.tx - v.x, v.ty - v.y) > 60) {
+                if (World.hypot(v.tx - v.x, v.ty - v.y) > 60) {
                     stroke.setColor(alpha(col, 0.7f));
                     stroke.setStrokeWidth(1.2f * dp);
                     c.drawLine(hx, hy, mx(v.tx), my(v.ty), stroke);
@@ -1468,6 +1475,9 @@ final class GameView extends View implements Menu.Host {
         return miniRect.top + (y - miniY0) / miniH * miniRect.height();
     }
 
+    private int[] miniSeen;
+    private int miniStamp;
+
     private void drawMiniDots() {
         if (miniDots == null) {
             miniDots = android.graphics.Bitmap.createBitmap(MINI, MINI, android.graphics.Bitmap.Config.ARGB_8888);
@@ -1494,19 +1504,45 @@ final class GameView extends View implements Menu.Host {
             float hx = (k % hg) * cw, hy = (k / hg) * cw;
             mc.drawRect(hx, hy, hx + cw, hy + cw, fill);
         }
+        // ((11.5) One dot per kind on each pixel of the minimap: a horde of thousands is a few hundred dots.)
+        if (miniSeen == null) miniSeen = new int[MINI * MINI];
+        miniStamp += 8;
+        if (miniStamp > Integer.MAX_VALUE - 16) {
+            miniStamp = 8;
+            java.util.Arrays.fill(miniSeen, 0);
+        }
         for (int i = 0, n = world.entities.size(); i < n; i++) {
             Entity e = world.entities.get(i);
-            int col;
+            int col, kind;
             // (Just the police, the army and the dead: the crowd of everyone else hid them.)
             float d = 1.4f;
             if (e.dead) continue;
-            if (e.isZombie()) col = 0xFF7CE04A;
-            else if (e.type == Entity.COP || e.type == Entity.SOLDIER) {
+            if (e.isZombie()) {
+                col = 0xFF7CE04A;
+                kind = 1;
+            } else if (e.type == Entity.COP || e.type == Entity.SOLDIER) {
                 col = e.type == Entity.SOLDIER ? 0xFFB8E07A : 0xFF6FA8FF;
+                kind = e.type == Entity.SOLDIER ? 3 : 2;
                 d = 1.8f;
             } else continue;
-            fill.setColor(col);
             float x = e.x * sx, y = e.y * sy;
+            int px = Math.max(0, Math.min(MINI - 1, (int) x)), py = Math.max(0, Math.min(MINI - 1, (int) y)), k = py * MINI + px;
+            if (miniSeen[k] == miniStamp + kind) continue;
+            miniSeen[k] = miniStamp + kind;
+            fill.setColor(col);
+            mc.drawRect(x - d, y - d, x + d, y + d, fill);
+        }
+        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = world.fleet.vehicles.get(i);
+            if (v.type == Fleet.CAR && v.parked) continue;
+            if (v.type == Fleet.HELI || v.type == Fleet.JET) continue;
+            int kind = v.type == Fleet.TANK ? 4 : v.type == Fleet.CRUISER || Fleet.policeTruck(v) ? 5 : v.type == Fleet.TRUCK ? 6 : 7;
+            int col = kind == 4 ? 0xFFFFE27A : kind == 5 ? 0xFF6FA8FF : kind == 6 ? 0xFFB8E07A : 0xB0E0E0E0;
+            float x = v.x * sx, y = v.y * sy, d = kind == 7 ? 1.1f : 1.6f;
+            int px = Math.max(0, Math.min(MINI - 1, (int) x)), py = Math.max(0, Math.min(MINI - 1, (int) y)), k = py * MINI + px;
+            if (miniSeen[k] == miniStamp + kind) continue;
+            miniSeen[k] = miniStamp + kind;
+            fill.setColor(col);
             mc.drawRect(x - d, y - d, x + d, y + d, fill);
         }
     }
@@ -1681,7 +1717,8 @@ final class GameView extends View implements Menu.Host {
         for (int i = 0; i < list.size(); i++) {
             City.Label l = list.get(i);
             float size = l.size * s;
-            if (size * scale < 3.5f) continue;
+            // ((11.5) Not under five pixels tall: unreadable, and text is among the dearest things to draw.)
+            if (size * scale < 5f) continue;
             labelPaint.setTextSize(size);
             float lx = cx + (l.x - cx) * s, ly = cy + (l.y - cy) * s;
             if (l.sign) {
@@ -1844,6 +1881,18 @@ final class GameView extends View implements Menu.Host {
         float vx0 = camX - 20, vy0 = camY - 20;
         float vx1 = camX + getWidth() / scale + 20, vy1 = camY + getHeight() / scale + 20;
         boolean detailed = scale > 1.1f;
+        // ((11.5) Who's on screen, found in one pass: the loops below that draw people only look at them, not at
+        // every one of the thousands in a big outbreak, again and again.)
+        viewL = vx0;
+        viewT = vy0;
+        viewR = vx1;
+        viewB = vy1;
+        onScreen.clear();
+        for (int i = 0, n = world.entities.size(); i < n; i++) {
+            Entity e = world.entities.get(i);
+            if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
+            onScreen.add(e);
+        }
         if (scale > 0.8f && (world.city.waterKind != CityConfig.W_NONE || world.city.elev != null)) drawWaterLife(c, vx0, vy0, vx1, vy1);
 
         for (int i = 0; i < world.dcount; i++) {
@@ -2037,8 +2086,8 @@ final class GameView extends View implements Menu.Host {
             if (dotSeen == null || dotSeen.length < pw * ph) dotSeen = new int[pw * ph];
             dotFrame++;
         }
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
+        for (int i = 0, n = onScreen.size(); i < n; i++) {
+            Entity e = onScreen.get(i);
             if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
             if (detailed && e.job == Entity.J_FISHER && e.jobStep == 1 && e.type == Entity.CIVILIAN && !e.aware) {
                 // A line out over the water, the float bobbing.
@@ -2067,15 +2116,30 @@ final class GameView extends View implements Menu.Host {
                     if ((seen >>> 8) == (dotFrame & 0xFFFFFF) && (seen & (1 << side)) != 0) continue;
                     dotSeen[cell] = (seen >>> 8) == (dotFrame & 0xFFFFFF) ? seen | (1 << side) : mark;
                 }
-                float r = Math.max(e.radius * 1.35f, 2.6f * dp / scale);
-                // (Civilians are the crowd, not the story: smaller, see-through, with a faint edge.)
+                // ((11.5) Gathered up and drawn below, each side's dots in one go, not two circles for each person.)
                 boolean civ = side == 0 && e.type == Entity.CIVILIAN;
-                if (civ) r *= 0.7f;
-                fill.setColor(civ ? 0x60101010 : 0xD0101010);
-                c.drawCircle(e.x, e.y, r + (civ ? 0.6f : 1.1f) * dp / scale, fill);
-                int col = ROW_COLORS[side];
-                fill.setColor(civ ? (col & 0x00FFFFFF) | 0x99000000 : col);
-                c.drawCircle(e.x, e.y, r, fill);
+                int k = side * 2 + (civ ? 1 : 0);
+                float[] b = dotBuf[k];
+                if (b == null || dotN[k] + 2 > b.length) dotBuf[k] = b = java.util.Arrays.copyOf(b == null ? new float[256] : b, Math.max(256, dotN[k] * 2));
+                b[dotN[k]++] = e.x;
+                b[dotN[k]++] = e.y;
+            }
+        }
+        if (!detailed) {
+            // (Civilians are the crowd, not the story: smaller, see-through, with a faint edge.)
+            float base = Math.max(4 * 1.35f, 2.6f * dp / scale);
+            for (int k = 0; k < dotBuf.length; k++) {
+                if (dotN[k] == 0) continue;
+                boolean civ = (k & 1) == 1;
+                float r = civ ? base * 0.7f : base;
+                dotPaint.setColor(civ ? 0x60101010 : 0xD0101010);
+                dotPaint.setStrokeWidth(2 * (r + (civ ? 0.6f : 1.1f) * dp / scale));
+                c.drawPoints(dotBuf[k], 0, dotN[k], dotPaint);
+                int col = ROW_COLORS[k / 2];
+                dotPaint.setColor(civ ? (col & 0x00FFFFFF) | 0x99000000 : col);
+                dotPaint.setStrokeWidth(2 * r);
+                c.drawPoints(dotBuf[k], 0, dotN[k], dotPaint);
+                dotN[k] = 0;
             }
         }
         if (boxing) {
@@ -2156,8 +2220,8 @@ final class GameView extends View implements Menu.Host {
         drawOverpasses(c, vx0, vx1, vy0, vy1);
 
         if (detailed) {
-            for (int i = 0, n = world.entities.size(); i < n; i++) {
-                Entity e = world.entities.get(i);
+            for (int i = 0, n = onScreen.size(); i < n; i++) {
+                Entity e = onScreen.get(i);
                 if (e.phoneTimer <= 0 && e.talkTimer <= 0) continue;
                 if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
                 drawSpeechIcon(c, e);
@@ -2286,18 +2350,22 @@ final class GameView extends View implements Menu.Host {
         // and for whoever you're following, the way they'll actually go, faintly, along the streets.)
         {
             float lx0 = camX - 60, ly0 = camY - 60, lx1 = camX + getWidth() / scale + 60, ly1 = camY + getHeight() / scale + 60;
-            inbound.clear();
-            for (int i = 0, n = world.entities.size(); i < n; i++) {
-                Entity e = world.entities.get(i);
-                if (e.dead || e.task != Dispatch.T_RESPOND || e.incident == null || e.onScene || e.incident.resolved) continue;
-                tally(e.incident, e.type == Entity.SOLDIER, 1);
-            }
-            for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-                Fleet.Vehicle v = world.fleet.vehicles.get(i);
-                Dispatch.Incident inc = v.incident;
-                if (inc == null || inc.resolved || v.broken || (v.state != Fleet.DRIVE && v.state != Fleet.MUSTER)) continue;
-                int aboard = v.crew.size() + v.passengers;
-                if (aboard > 0) tally(inc, Fleet.army(v) || v.passengerType == Entity.SOLDIER, aboard);
+            // ((11.5) Counted twice a second, not every frame: it means going through everyone.)
+            if (world.time - inboundAt > 0.5f || world.time < inboundAt) {
+                inboundAt = world.time;
+                inbound.clear();
+                for (int i = 0, n = world.entities.size(); i < n; i++) {
+                    Entity e = world.entities.get(i);
+                    if (e.dead || e.task != Dispatch.T_RESPOND || e.incident == null || e.onScene || e.incident.resolved) continue;
+                    tally(e.incident, e.type == Entity.SOLDIER, 1);
+                }
+                for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
+                    Fleet.Vehicle v = world.fleet.vehicles.get(i);
+                    Dispatch.Incident inc = v.incident;
+                    if (inc == null || inc.resolved || v.broken || (v.state != Fleet.DRIVE && v.state != Fleet.MUSTER)) continue;
+                    int aboard = v.crew.size() + v.passengers;
+                    if (aboard > 0) tally(inc, Fleet.army(v) || v.passengerType == Entity.SOLDIER, aboard);
+                }
             }
             float u = 1f / Math.max(0.35f, scale);
             text.setTextSize(10.5f * dp * u);
@@ -2306,7 +2374,7 @@ final class GameView extends View implements Menu.Host {
                 Dispatch.Incident inc = en.getKey();
                 int[] k = en.getValue();
                 // (A lone officer on the way needs no badge: only calls with a response worth showing.)
-                if (k[0] + k[1] < 2 || inc.x < lx0 || inc.x > lx1 || inc.y < ly0 || inc.y > ly1) continue;
+                if (k[0] + k[1] < 2 || inc.resolved || inc.x < lx0 || inc.x > lx1 || inc.y < ly0 || inc.y > ly1) continue;
                 int col = k[1] > k[0] ? 0xFFA8E070 : 0xFF70B0FF;
                 stroke.setStrokeWidth(1.4f * u);
                 stroke.setColor(alpha(col, 0.45f + 0.25f * (float) Math.sin(world.time * 4)));
@@ -2912,6 +2980,8 @@ final class GameView extends View implements Menu.Host {
             }
             fill.setColor(alpha(0xF00C0F12, a));
             c.drawRect(px - hw, py - hh, px + hw, py + hh, fill);
+            // ((11.5) The glass only close enough to see it.)
+            if (scale < 1.2f) continue;
             // Jagged glass left in the frame.
             stroke.setColor(alpha(0xD0CFE8F2, a));
             stroke.setStrokeWidth(0.45f);
@@ -3793,7 +3863,9 @@ final class GameView extends View implements Menu.Host {
         c.translate(v.x, v.y);
         c.rotate((float) Math.toDegrees(v.angle));
         // Zoomed well out a vehicle is a couple of pixels: just its shape in its colour.
-        boolean speck = scale < 0.3f;
+        // ((11.5) Everyday cars from further in than before - a dozen pixels long, the wheels, windows and lamps were
+        // dozens of drawing calls no one could make out - police, army and ambulances once they're a bit smaller.)
+        boolean speck = scale < (v.type == Fleet.CAR ? 0.8f : 0.5f);
         if (!v.burnt && !speck) {
             // Tyres poking out at the corners.
             fill.setColor(0xFF111214);
@@ -3828,6 +3900,13 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(-hl + 2, -hw + 1.2f, hl - 2, hw - 1.2f, fill);
             fill.setColor(0xFF151312);
             c.drawRect(-2, -hw + 1.5f, 3, hw - 1.5f, fill);
+            c.restore();
+            return;
+        }
+        // ((11.5) Police, army and ambulances zoomed out: the body and, on a call, the lights; the cab, lamps, markings
+        // and wear are too small to see, and were a couple of dozen drawing calls a vehicle.)
+        if (!civ && scale < 0.9f) {
+            if (!v.broken && (v.type == Fleet.CRUISER || amb)) lightBar(c, amb ? hl * 0.44f : hl * 0.06f, hw, v.lightsOn(), v.anim);
             c.restore();
             return;
         }
@@ -4734,17 +4813,26 @@ final class GameView extends View implements Menu.Host {
      * sleep in, the medical tent with its red cross and the food tent with crates stacked by it.
      */
     private void drawZone(Canvas c, Dispatch.SafeZone z) {
+        // ((11.5) Not at all when it's off screen, and only the bits of wall that are on it.)
+        if (z.right() < viewL || z.left() > viewR || z.bottom() < viewT || z.top() > viewB) return;
         int tint = z.military ? 0xFF6FBF3F : 0xFF4F8FE0;
         float T = City.T;
         int W = world.city.w;
         fill.setColor(alpha(tint, z.open ? (z.fallingBack ? 0.08f : 0.13f) : 0.06f));
         c.drawRect(z.left() + T, z.top() + T, z.right() - T, z.bottom() - T, fill);
+        // ((11.5) Zoomed out, each section of wall is a grey block: the barriers, fence and posts are too small to see.)
+        boolean plain = scale < 1.6f;
         // The wall.
         for (int k = 0; k < z.wall.length; k++) {
             int t = z.wall[k], tx = t % W, ty = t / W;
             float x0 = tx * T, y0 = ty * T;
+            if (x0 + T < viewL || x0 > viewR || y0 + T < viewT || y0 > viewB) continue;
             boolean horizontal = ty == z.ty0 || ty == z.ty1;
-            if (z.up[k]) {
+            if (z.up[k] && plain) {
+                fill.setColor(0xFF8E8A80);
+                if (horizontal) c.drawRect(x0, y0 + 2.5f, x0 + T, y0 + T - 2.5f, fill);
+                else c.drawRect(x0 + 2.5f, y0, x0 + T - 2.5f, y0 + T, fill);
+            } else if (z.up[k]) {
                 // Concrete barriers in a line, a fence along the top with a post at each.
                 fill.setColor(0x66000000);
                 c.drawRect(x0 + 2, y0 + 3, x0 + T + 2, y0 + T + 3, fill);
@@ -5143,7 +5231,7 @@ final class GameView extends View implements Menu.Host {
             boolean zoned = false;
             for (int k = 0; k < world.dispatch.zones.size(); k++) {
                 Dispatch.SafeZone z = world.dispatch.zones.get(k);
-                if (Math.hypot(z.x - f.x, z.y - f.y) < 150) zoned = true;
+                if (World.hypot(z.x - f.x, z.y - f.y) < 150) zoned = true;
             }
             // (With a safe zone there, its name goes just above the zone's own label.)
             float sx = screenX(f.x), sy = screenY(f.y) + (zoned ? -6 : 26) * dp;
@@ -5178,8 +5266,8 @@ final class GameView extends View implements Menu.Host {
         if (settings.nameTags() && scale / dp > 3f) {
             text.setTextSize(9.5f * dp);
             int placed = 0;
-            for (int i = 0, n = world.entities.size(); i < n; i++) {
-                Entity e = world.entities.get(i);
+            for (int i = 0, n = onScreen.size(); i < n; i++) {
+                Entity e = onScreen.get(i);
                 float sx = screenX(e.x), sy = screenY(e.y) - (e.radius * scale + 12 * dp);
                 if (sx < 0 || sx > getWidth() || sy < 0 || sy > barTop) continue;
                 String label = e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG ? Names.dog(e.nameSeed)
@@ -5583,8 +5671,13 @@ final class GameView extends View implements Menu.Host {
             return;
         }
         float r = e.radius;
+        // ((11.5) Small on screen - a dozen pixels across - just the body, the head and any gun drawn (see below), and
+        // no separate shadow: the dark outline does that job at this size.)
+        boolean small = scale < 1.8f && !healthBar && e != world.controlled && e.type != Entity.CRAWLER;
         // One light source for everything: shadows fall down and to the right.
-        if (realistic && scale > 3f) {
+        if (small) {
+            // (None.)
+        } else if (realistic && scale > 3f) {
             // A soft shadow: a pale outer edge round a darker core.
             fill.setColor(0x1C000000);
             c.drawCircle(e.x + r * 0.4f, e.y + r * 0.55f, r * 1.2f, fill);
@@ -5623,258 +5716,284 @@ final class GameView extends View implements Menu.Host {
             }
         }
 
-        if (e.type != Entity.CRAWLER && scale > 2.5f) {
-            // Legs stepping out in front and behind as they walk.
-            float step = (float) Math.sin(e.phase) * r * 0.55f;
-            fill.setColor(e.isZombie() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
-            oval.set(step - r * 0.3f, -r * 0.55f, step + r * 0.3f, -r * 0.12f);
-            c.drawOval(oval, fill);
-            oval.set(-step - r * 0.3f, r * 0.12f, -step + r * 0.3f, r * 0.55f);
-            c.drawOval(oval, fill);
-        }
-
-        if (e.type == Entity.CRAWLER) {
-            // Dragging itself along on its arms: long low body, no legs.
-            float sw = (float) Math.sin(e.phase * 1.5f) * r * 0.4f;
-            stroke.setColor(e.skin);
-            stroke.setStrokeWidth(r * 0.42f);
-            c.drawLine(r * 0.3f, -r * 0.6f, r * 1.7f + sw, -r * 0.9f, stroke);
-            c.drawLine(r * 0.3f, r * 0.6f, r * 1.7f - sw, r * 0.9f, stroke);
-            fill.setColor(0x906E0A0A);
-            c.drawCircle(-r * 1.3f, 0, r * 0.5f, fill);
-        } else if (e.isZombie()) {
-            float sw = (float) Math.sin(e.phase) * r * 0.2f;
-            stroke.setColor(e.skin);
-            if (e.type == Entity.RUNNER && spd > 30) {
-                // Sprinting: arms flung back.
-                stroke.setStrokeWidth(r * 0.36f);
-                c.drawLine(-r * 0.1f, -r * 0.72f, -r * 1.25f - sw, -r * 1.0f, stroke);
-                c.drawLine(-r * 0.1f, r * 0.72f, -r * 1.25f + sw, r * 1.0f, stroke);
-            } else if (e.type == Entity.BRUTE) {
-                // Huge arms ending in fists.
-                stroke.setStrokeWidth(r * 0.62f);
-                c.drawLine(r * 0.1f, -r * 0.85f, r * 1.4f + sw, -r * 0.8f, stroke);
-                c.drawLine(r * 0.1f, r * 0.85f, r * 1.4f - sw, r * 0.8f, stroke);
-                fill.setColor(City.darken(e.skin, 0.8f));
-                c.drawCircle(r * 1.45f + sw, -r * 0.8f, r * 0.36f, fill);
-                c.drawCircle(r * 1.45f - sw, r * 0.8f, r * 0.36f, fill);
-            } else {
-                stroke.setStrokeWidth(r * 0.42f);
-                c.drawLine(r * 0.1f, -r * 0.72f, r * 1.55f + sw, -r * 0.55f, stroke);
-                c.drawLine(r * 0.1f, r * 0.72f, r * 1.55f - sw, r * 0.55f, stroke);
+        // ((11.5) The arms, legs, hats, badges and holsters were a dozen drawing calls each for a crowd of hundreds.)
+        if (small) {
+            oval.set(-r * 0.62f, -r, r * 0.62f, r);
+            if (scale > 1.2f) {
+                fill.setColor(0x8C000000);
+                float o = Math.min(r * 0.18f, 0.9f / scale + 0.25f);
+                oval.inset(-o, -o);
+                c.drawOval(oval, fill);
+                oval.inset(o, o);
             }
-        } else if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
-            boolean soldier = e.type == Entity.SOLDIER;
-            stroke.setColor(e.skin);
-            stroke.setStrokeWidth(r * 0.36f);
-            c.drawLine(0, -r * 0.8f, r * 1.05f, r * 0.15f, stroke);
-            c.drawLine(0, r * 0.8f, r * 1.3f, r * 0.35f, stroke);
-            stroke.setColor(0xFF161616);
-            int role = soldier ? e.role : 0;
-            boolean marksman = e.role == Entity.ROLE_MARKSMAN;
-            stroke.setStrokeWidth(role == Entity.ROLE_GUNNER ? r * 0.6f : role == Entity.ROLE_COMMANDER ? r * 0.3f
-                    : soldier || marksman ? r * 0.42f : r * 0.32f);
-            float muzzle = role == Entity.ROLE_SNIPER || marksman ? r * 3.3f : role == Entity.ROLE_GUNNER ? r * 2.6f
-                    : role == Entity.ROLE_COMMANDER ? r * 1.8f : soldier ? r * 2.5f : r * 2f;
-            // ((11.4) Each gun its own length: a stubby submachine gun, a long marksman rifle, a wooden-stocked shotgun.)
-            int gun = e.weapon;
-            if (gun == Entity.W_SMG) muzzle = r * 1.9f;
-            else if (gun == Entity.W_CARBINE) muzzle = r * 2.4f;
-            else if (gun == Entity.W_DMR || gun == Entity.W_HUNTING) muzzle = r * 3.0f;
-            else if (gun == Entity.W_SHOTGUN) muzzle = r * 2.5f;
-            if (gun == Entity.W_SHOTGUN || gun == Entity.W_HUNTING) stroke.setColor(0xFF5A3A20);
-            c.drawLine(r * 0.6f, r * 0.3f, muzzle, r * 0.3f, stroke);
-            stroke.setColor(0xFF161616);
-            if (gun == Entity.W_SMG) {
-                // The magazine sticking down.
-                fill.setColor(0xFF161616);
-                c.drawRect(r * 1.1f, r * 0.4f, r * 1.3f, r * 0.85f, fill);
-            } else if (gun == Entity.W_DMR || gun == Entity.W_HUNTING) {
-                fill.setColor(0xFF0E0E0E);
-                c.drawRect(r * 1.1f, r * 0.05f, r * 1.8f, r * 0.2f, fill);
-            }
-            if (role == Entity.ROLE_GRENADIER) {
-                // The launcher slung under the barrel.
-                fill.setColor(0xFF34362A);
-                c.drawRect(r * 0.9f, r * 0.45f, r * 1.9f, r * 0.85f, fill);
-            } else if (role == Entity.ROLE_CORPSMAN) {
-                // A white armband with a red cross, and the medic's bag on the back.
-                fill.setColor(0xFFF2F2F2);
-                c.drawCircle(0, -r * 0.82f, r * 0.3f, fill);
-                fill.setColor(0xFFD83A3A);
-                c.drawRect(-r * 0.2f, -r * 0.86f, r * 0.2f, -r * 0.78f, fill);
-                c.drawRect(-r * 0.04f, -r * 1.02f, r * 0.04f, -r * 0.62f, fill);
-                fill.setColor(0xFF6A6E52);
-                c.drawRect(-r * 1.0f, -r * 0.45f, -r * 0.55f, r * 0.45f, fill);
-            }
-            if (role == Entity.ROLE_SNIPER || marksman) {
-                // Scope.
-                fill.setColor(0xFF0E0E0E);
-                c.drawRect(r * 1.1f, r * 0.05f, r * 1.9f, r * 0.2f, fill);
-            } else if (role == Entity.ROLE_GUNNER) {
-                // Ammo box and belt.
-                fill.setColor(0xFF4A4A30);
-                c.drawRect(r * 0.9f, r * 0.55f, r * 1.5f, r * 1.1f, fill);
-                fill.setColor(0xFFC8A040);
-                c.drawRect(r * 1.0f, r * 0.45f, r * 1.9f, r * 0.55f, fill);
-            }
-        } else {
-            float sw = (float) Math.sin(e.phase) * r * 0.55f;
-            fill.setColor(e.skin);
-            c.drawCircle(sw, -r * 0.95f, r * 0.28f, fill);
-            c.drawCircle(-sw, r * 0.95f, r * 0.28f, fill);
-        }
-
-        if (anim && !e.isZombie() && now - e.swingAt < 0.3f) {
-            // A swing: the arm (and bat, axe or rifle butt) sweeps across in front.
-            float t = (now - e.swingAt) / 0.3f;
-            double a = Math.toRadians(-70 + 120 * t);
-            float hx = (float) Math.cos(a) * r * 1.6f, hy = (float) Math.sin(a) * r * 1.6f;
-            stroke.setColor(e.skin);
-            stroke.setStrokeWidth(r * 0.34f);
-            c.drawLine(0, r * 0.5f, hx * 0.6f, hy * 0.6f + r * 0.2f, stroke);
-            stroke.setColor(e.melee == Entity.M_AXE ? 0xFF8A2A1E : e.melee == Entity.M_BAT ? 0xFF9A7448
-                    : e.melee == Entity.M_MACHETE ? 0xFFC8CCD0 : e.melee == Entity.M_CROWBAR ? 0xFF7A1E1A : 0xFF2A2A2A);
-            stroke.setStrokeWidth(r * 0.28f);
-            c.drawLine(hx * 0.55f, hy * 0.55f + r * 0.2f, hx * 1.2f, hy * 1.2f + r * 0.2f, stroke);
-            stroke.setColor(0x55FFFFFF);
-            stroke.setStrokeWidth(r * 0.12f);
-            oval.set(-r * 1.9f, -r * 1.9f, r * 1.9f, r * 1.9f);
-            stroke.setStyle(Paint.Style.STROKE);
-            c.drawArc(oval, -70, 120 * t, false, stroke);
-        }
-
-        if (e.type == Entity.CRAWLER) oval.set(-r * 1.2f, -r * 0.7f, r * 0.62f, r * 0.7f);
-        else oval.set(-r * 0.62f, -r, r * 0.62f, r);
-        if (scale > 1.2f) {
-            // ((11.0) A dark outline, so everyone stands out from the ground at any zoom.)
-            fill.setColor(0x8C000000);
-            float o = Math.min(r * 0.18f, 0.9f / scale + 0.25f);
-            oval.inset(-o, -o);
+            fill.setColor(e.body);
             c.drawOval(oval, fill);
-            oval.inset(o, o);
-        }
-        fill.setColor(e.body);
-        c.drawOval(oval, fill);
-        if (scale > 2.2f) {
-            // ((11.0) And the light catching the shoulders, from the north-west like everything else.)
-            fill.setColor(0x2EFFFFFF);
-            oval.set(-r * 0.5f, -r * 0.85f, r * 0.25f, r * 0.1f);
-            c.drawOval(oval, fill);
-        }
-        if (e.armored) {
-            // (10.32) The dead in body armour: the vest over the torso, dark and torn.
-            fill.setColor(0xFF2A3038);
-            c.drawRect(-r * 0.5f, -r * 0.78f, r * 0.42f, r * 0.78f, fill);
-            fill.setColor(0xFF3E4652);
-            c.drawRect(-r * 0.36f, -r * 0.6f, r * 0.28f, r * 0.6f, fill);
-        }
-        if (e.isArmed() && !world.weaponsOut(e) && !e.isZombie()) {
-            // (10.24) No emergency: the rifle slung across the back, the pistol in its holster.
-            fill.setColor(0xFF161616);
-            if (e.type == Entity.SOLDIER) {
+            if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
                 stroke.setColor(0xFF161616);
-                stroke.setStrokeWidth(r * 0.3f);
-                c.drawLine(-r * 0.7f, -r * 0.9f, -r * 0.3f, r * 1.0f, stroke);
-            } else c.drawRect(-r * 0.15f, r * 0.6f, r * 0.35f, r * 0.85f, fill);
-        }
-        if (e.hasGun && !e.aiming) {
-            // A gun tucked in a belt.
-            fill.setColor(0xFF1A1A1A);
-            c.drawRect(-r * 0.2f, r * 0.55f, r * 0.45f, r * 0.8f, fill);
-        }
-        if (e.type == Entity.SOLDIER) {
-            fill.setColor(0xFF3E4829);
-            oval.set(-r * 0.8f, -r * 0.5f, -r * 0.25f, r * 0.5f);
-            c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
-        } else if (e.type == Entity.COP) {
-            fill.setColor(0xFFE8C547);
-            c.drawCircle(r * 0.3f, -r * 0.55f, r * 0.14f, fill);
-            if (e.role == Entity.ROLE_SWAT) {
-                // Body armour plates and a helmet.
-                fill.setColor(0xFF3A3F48);
-                oval.set(-r * 0.55f, -r * 0.7f, r * 0.45f, r * 0.7f);
-                c.drawRoundRect(oval, r * 0.2f, r * 0.2f, fill);
-                fill.setColor(0xFF15181C);
-                c.drawCircle(0, 0, r * 0.42f, fill);
-                fill.setColor(0xFFE8E8E8);
-                c.drawRect(-r * 0.5f, -r * 0.08f, -r * 0.2f, r * 0.08f, fill);
+                stroke.setStrokeWidth(r * 0.38f);
+                c.drawLine(r * 0.5f, r * 0.3f, e.type == Entity.SOLDIER ? r * 2.5f : r * 2f, r * 0.3f, stroke);
+            } else if (e.isZombie()) {
+                // (Arms out in front.)
+                stroke.setColor(e.skin);
+                stroke.setStrokeWidth(r * 1.3f);
+                c.drawLine(r * 0.2f, 0, r * 1.4f, 0, stroke);
             }
-            if (e.role == Entity.ROLE_RIOT) {
-                // Riot shield in front.
-                fill.setColor(0xB0202A3A);
-                oval.set(r * 0.9f, -r * 1.25f, r * 1.35f, r * 1.25f);
-                c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
-                fill.setColor(0xCCE8E8E8);
-                c.drawRect(r * 1.05f, -r * 0.5f, r * 1.2f, r * 0.5f, fill);
-            }
-        } else if (e.type == Entity.BLOATER) {
-            // Swollen, covered in boils.
-            fill.setColor(0xFF9CAA5A);
-            c.drawCircle(-r * 0.1f, 0, r * 0.95f, fill);
-            fill.setColor(0xFFB8C86A);
-            c.drawCircle(-r * 0.4f, -r * 0.4f, r * 0.22f, fill);
-            c.drawCircle(r * 0.1f, r * 0.45f, r * 0.18f, fill);
-            c.drawCircle(-r * 0.5f, r * 0.3f, r * 0.15f, fill);
-        } else if (e.type == Entity.BRUTE) {
-            // A hunched hump of shoulders, wider than the rest of it.
-            fill.setColor(0xFF3A2E3C);
-            oval.set(-r * 0.55f, -r * 1.2f, r * 0.4f, r * 1.2f);
-            c.drawOval(oval, fill);
-            fill.setColor(0xFF4C3E4E);
-            oval.set(-r * 0.4f, -r * 0.8f, r * 0.2f, r * 0.8f);
-            c.drawOval(oval, fill);
-        }
-
-        fill.setColor(e.head);
-        c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
-        if (scale > 2.5f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
-                || e.type == Entity.RUNNER)) drawHair(c, e, r);
-        if (e.type == Entity.COP) {
-            if (e.agency == 4) {
-                // Federal agents: bareheaded, a dark cap of hair.
-                fill.setColor(0xFF2A2420);
-                c.drawCircle(r * 0.08f, 0, r * 0.4f, fill);
-            } else if (e.agency > 0) {
-                // Troopers, deputies and park rangers: a wide-brimmed hat.
-                fill.setColor(e.agency == 2 ? 0xFF5A4630 : e.agency == 3 ? 0xFF6E5A36 : 0xFF8A7650);
-                c.drawCircle(r * 0.08f, 0, r * 0.62f, fill);
-                fill.setColor(e.agency == 2 ? 0xFF6E5A3E : e.agency == 3 ? 0xFF8C7448 : 0xFFA08C62);
-                c.drawCircle(r * 0.08f, 0, r * 0.36f, fill);
-            } else if (e.role == Entity.ROLE_SAR) {
-                // Rescue: a white helmet.
-                fill.setColor(0xFFF2F2F2);
-                c.drawCircle(r * 0.08f, 0, r * 0.5f, fill);
-                fill.setColor(0xFFD8302A);
-                c.drawRect(-r * 0.05f, -r * 0.12f, r * 0.21f, r * 0.12f, fill);
-            } else {
-                fill.setColor(0xFF0B1022);
-                oval.set(r * 0.35f, -r * 0.45f, r * 0.85f, r * 0.45f);
+            fill.setColor(e.head);
+            c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
+        } else {
+            if (e.type != Entity.CRAWLER && scale > 2.5f) {
+                // Legs stepping out in front and behind as they walk.
+                float step = (float) Math.sin(e.phase) * r * 0.55f;
+                fill.setColor(e.isZombie() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
+                oval.set(step - r * 0.3f, -r * 0.55f, step + r * 0.3f, -r * 0.12f);
+                c.drawOval(oval, fill);
+                oval.set(-step - r * 0.3f, r * 0.12f, -step + r * 0.3f, r * 0.55f);
                 c.drawOval(oval, fill);
             }
-        } else if (e.type == Entity.SOLDIER) {
-            if (e.role == Entity.ROLE_COMMANDER) {
-                // Beret with a gold badge.
-                fill.setColor(0xFF6E1414);
-                c.drawCircle(-r * 0.12f, -r * 0.12f, r * 0.38f, fill);
-                fill.setColor(0xFFF2C94C);
-                c.drawCircle(r * 0.18f, -r * 0.2f, r * 0.14f, fill);
-            } else if (e.role == Entity.ROLE_SNIPER) {
-                // Ghillie hood.
-                fill.setColor(0xFF4E5A2E);
-                c.drawCircle(-r * 0.1f, r * 0.15f, r * 0.22f, fill);
-                c.drawCircle(-r * 0.2f, -r * 0.25f, r * 0.2f, fill);
+
+            if (e.type == Entity.CRAWLER) {
+                // Dragging itself along on its arms: long low body, no legs.
+                float sw = (float) Math.sin(e.phase * 1.5f) * r * 0.4f;
+                stroke.setColor(e.skin);
+                stroke.setStrokeWidth(r * 0.42f);
+                c.drawLine(r * 0.3f, -r * 0.6f, r * 1.7f + sw, -r * 0.9f, stroke);
+                c.drawLine(r * 0.3f, r * 0.6f, r * 1.7f - sw, r * 0.9f, stroke);
+                fill.setColor(0x906E0A0A);
+                c.drawCircle(-r * 1.3f, 0, r * 0.5f, fill);
+            } else if (e.isZombie()) {
+                float sw = (float) Math.sin(e.phase) * r * 0.2f;
+                stroke.setColor(e.skin);
+                if (e.type == Entity.RUNNER && spd > 30) {
+                    // Sprinting: arms flung back.
+                    stroke.setStrokeWidth(r * 0.36f);
+                    c.drawLine(-r * 0.1f, -r * 0.72f, -r * 1.25f - sw, -r * 1.0f, stroke);
+                    c.drawLine(-r * 0.1f, r * 0.72f, -r * 1.25f + sw, r * 1.0f, stroke);
+                } else if (e.type == Entity.BRUTE) {
+                    // Huge arms ending in fists.
+                    stroke.setStrokeWidth(r * 0.62f);
+                    c.drawLine(r * 0.1f, -r * 0.85f, r * 1.4f + sw, -r * 0.8f, stroke);
+                    c.drawLine(r * 0.1f, r * 0.85f, r * 1.4f - sw, r * 0.8f, stroke);
+                    fill.setColor(City.darken(e.skin, 0.8f));
+                    c.drawCircle(r * 1.45f + sw, -r * 0.8f, r * 0.36f, fill);
+                    c.drawCircle(r * 1.45f - sw, r * 0.8f, r * 0.36f, fill);
+                } else {
+                    stroke.setStrokeWidth(r * 0.42f);
+                    c.drawLine(r * 0.1f, -r * 0.72f, r * 1.55f + sw, -r * 0.55f, stroke);
+                    c.drawLine(r * 0.1f, r * 0.72f, r * 1.55f - sw, r * 0.55f, stroke);
+                }
+            } else if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
+                boolean soldier = e.type == Entity.SOLDIER;
+                stroke.setColor(e.skin);
+                stroke.setStrokeWidth(r * 0.36f);
+                c.drawLine(0, -r * 0.8f, r * 1.05f, r * 0.15f, stroke);
+                c.drawLine(0, r * 0.8f, r * 1.3f, r * 0.35f, stroke);
+                stroke.setColor(0xFF161616);
+                int role = soldier ? e.role : 0;
+                boolean marksman = e.role == Entity.ROLE_MARKSMAN;
+                stroke.setStrokeWidth(role == Entity.ROLE_GUNNER ? r * 0.6f : role == Entity.ROLE_COMMANDER ? r * 0.3f
+                        : soldier || marksman ? r * 0.42f : r * 0.32f);
+                float muzzle = role == Entity.ROLE_SNIPER || marksman ? r * 3.3f : role == Entity.ROLE_GUNNER ? r * 2.6f
+                        : role == Entity.ROLE_COMMANDER ? r * 1.8f : soldier ? r * 2.5f : r * 2f;
+                // ((11.4) Each gun its own length: a stubby submachine gun, a long marksman rifle, a wooden-stocked shotgun.)
+                int gun = e.weapon;
+                if (gun == Entity.W_SMG) muzzle = r * 1.9f;
+                else if (gun == Entity.W_CARBINE) muzzle = r * 2.4f;
+                else if (gun == Entity.W_DMR || gun == Entity.W_HUNTING) muzzle = r * 3.0f;
+                else if (gun == Entity.W_SHOTGUN) muzzle = r * 2.5f;
+                if (gun == Entity.W_SHOTGUN || gun == Entity.W_HUNTING) stroke.setColor(0xFF5A3A20);
+                c.drawLine(r * 0.6f, r * 0.3f, muzzle, r * 0.3f, stroke);
+                stroke.setColor(0xFF161616);
+                if (gun == Entity.W_SMG) {
+                    // The magazine sticking down.
+                    fill.setColor(0xFF161616);
+                    c.drawRect(r * 1.1f, r * 0.4f, r * 1.3f, r * 0.85f, fill);
+                } else if (gun == Entity.W_DMR || gun == Entity.W_HUNTING) {
+                    fill.setColor(0xFF0E0E0E);
+                    c.drawRect(r * 1.1f, r * 0.05f, r * 1.8f, r * 0.2f, fill);
+                }
+                if (role == Entity.ROLE_GRENADIER) {
+                    // The launcher slung under the barrel.
+                    fill.setColor(0xFF34362A);
+                    c.drawRect(r * 0.9f, r * 0.45f, r * 1.9f, r * 0.85f, fill);
+                } else if (role == Entity.ROLE_CORPSMAN) {
+                    // A white armband with a red cross, and the medic's bag on the back.
+                    fill.setColor(0xFFF2F2F2);
+                    c.drawCircle(0, -r * 0.82f, r * 0.3f, fill);
+                    fill.setColor(0xFFD83A3A);
+                    c.drawRect(-r * 0.2f, -r * 0.86f, r * 0.2f, -r * 0.78f, fill);
+                    c.drawRect(-r * 0.04f, -r * 1.02f, r * 0.04f, -r * 0.62f, fill);
+                    fill.setColor(0xFF6A6E52);
+                    c.drawRect(-r * 1.0f, -r * 0.45f, -r * 0.55f, r * 0.45f, fill);
+                }
+                if (role == Entity.ROLE_SNIPER || marksman) {
+                    // Scope.
+                    fill.setColor(0xFF0E0E0E);
+                    c.drawRect(r * 1.1f, r * 0.05f, r * 1.9f, r * 0.2f, fill);
+                } else if (role == Entity.ROLE_GUNNER) {
+                    // Ammo box and belt.
+                    fill.setColor(0xFF4A4A30);
+                    c.drawRect(r * 0.9f, r * 0.55f, r * 1.5f, r * 1.1f, fill);
+                    fill.setColor(0xFFC8A040);
+                    c.drawRect(r * 1.0f, r * 0.45f, r * 1.9f, r * 0.55f, fill);
+                }
             } else {
-                fill.setColor(0xFF4C5833);
-                c.drawCircle(r * 0.0f, -r * 0.1f, r * 0.2f, fill);
+                float sw = (float) Math.sin(e.phase) * r * 0.55f;
+                fill.setColor(e.skin);
+                c.drawCircle(sw, -r * 0.95f, r * 0.28f, fill);
+                c.drawCircle(-sw, r * 0.95f, r * 0.28f, fill);
             }
-        } else if (e.isZombie()) {
-            fill.setColor(0xFF5A1414);
-            c.drawCircle(-r * 0.1f, r * 0.18f, r * 0.2f, fill);
-            if (e.type == Entity.RUNNER) {
-                fill.setColor(0xFFFF3B2F);
-                c.drawCircle(r * 0.45f, -r * 0.18f, r * 0.08f, fill);
-                c.drawCircle(r * 0.45f, r * 0.18f, r * 0.08f, fill);
+
+            if (anim && !e.isZombie() && now - e.swingAt < 0.3f) {
+                // A swing: the arm (and bat, axe or rifle butt) sweeps across in front.
+                float t = (now - e.swingAt) / 0.3f;
+                double a = Math.toRadians(-70 + 120 * t);
+                float hx = (float) Math.cos(a) * r * 1.6f, hy = (float) Math.sin(a) * r * 1.6f;
+                stroke.setColor(e.skin);
+                stroke.setStrokeWidth(r * 0.34f);
+                c.drawLine(0, r * 0.5f, hx * 0.6f, hy * 0.6f + r * 0.2f, stroke);
+                stroke.setColor(e.melee == Entity.M_AXE ? 0xFF8A2A1E : e.melee == Entity.M_BAT ? 0xFF9A7448
+                        : e.melee == Entity.M_MACHETE ? 0xFFC8CCD0 : e.melee == Entity.M_CROWBAR ? 0xFF7A1E1A : 0xFF2A2A2A);
+                stroke.setStrokeWidth(r * 0.28f);
+                c.drawLine(hx * 0.55f, hy * 0.55f + r * 0.2f, hx * 1.2f, hy * 1.2f + r * 0.2f, stroke);
+                stroke.setColor(0x55FFFFFF);
+                stroke.setStrokeWidth(r * 0.12f);
+                oval.set(-r * 1.9f, -r * 1.9f, r * 1.9f, r * 1.9f);
+                stroke.setStyle(Paint.Style.STROKE);
+                c.drawArc(oval, -70, 120 * t, false, stroke);
+            }
+
+            if (e.type == Entity.CRAWLER) oval.set(-r * 1.2f, -r * 0.7f, r * 0.62f, r * 0.7f);
+            else oval.set(-r * 0.62f, -r, r * 0.62f, r);
+            if (scale > 1.2f) {
+                // ((11.0) A dark outline, so everyone stands out from the ground at any zoom.)
+                fill.setColor(0x8C000000);
+                float o = Math.min(r * 0.18f, 0.9f / scale + 0.25f);
+                oval.inset(-o, -o);
+                c.drawOval(oval, fill);
+                oval.inset(o, o);
+            }
+            fill.setColor(e.body);
+            c.drawOval(oval, fill);
+            if (scale > 2.2f) {
+                // ((11.0) And the light catching the shoulders, from the north-west like everything else.)
+                fill.setColor(0x2EFFFFFF);
+                oval.set(-r * 0.5f, -r * 0.85f, r * 0.25f, r * 0.1f);
+                c.drawOval(oval, fill);
+            }
+            if (e.armored) {
+                // (10.32) The dead in body armour: the vest over the torso, dark and torn.
+                fill.setColor(0xFF2A3038);
+                c.drawRect(-r * 0.5f, -r * 0.78f, r * 0.42f, r * 0.78f, fill);
+                fill.setColor(0xFF3E4652);
+                c.drawRect(-r * 0.36f, -r * 0.6f, r * 0.28f, r * 0.6f, fill);
+            }
+            if (e.isArmed() && !world.weaponsOut(e) && !e.isZombie()) {
+                // (10.24) No emergency: the rifle slung across the back, the pistol in its holster.
+                fill.setColor(0xFF161616);
+                if (e.type == Entity.SOLDIER) {
+                    stroke.setColor(0xFF161616);
+                    stroke.setStrokeWidth(r * 0.3f);
+                    c.drawLine(-r * 0.7f, -r * 0.9f, -r * 0.3f, r * 1.0f, stroke);
+                } else c.drawRect(-r * 0.15f, r * 0.6f, r * 0.35f, r * 0.85f, fill);
+            }
+            if (e.hasGun && !e.aiming) {
+                // A gun tucked in a belt.
+                fill.setColor(0xFF1A1A1A);
+                c.drawRect(-r * 0.2f, r * 0.55f, r * 0.45f, r * 0.8f, fill);
+            }
+            if (e.type == Entity.SOLDIER) {
+                fill.setColor(0xFF3E4829);
+                oval.set(-r * 0.8f, -r * 0.5f, -r * 0.25f, r * 0.5f);
+                c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
+            } else if (e.type == Entity.COP) {
+                fill.setColor(0xFFE8C547);
+                c.drawCircle(r * 0.3f, -r * 0.55f, r * 0.14f, fill);
+                if (e.role == Entity.ROLE_SWAT) {
+                    // Body armour plates and a helmet.
+                    fill.setColor(0xFF3A3F48);
+                    oval.set(-r * 0.55f, -r * 0.7f, r * 0.45f, r * 0.7f);
+                    c.drawRoundRect(oval, r * 0.2f, r * 0.2f, fill);
+                    fill.setColor(0xFF15181C);
+                    c.drawCircle(0, 0, r * 0.42f, fill);
+                    fill.setColor(0xFFE8E8E8);
+                    c.drawRect(-r * 0.5f, -r * 0.08f, -r * 0.2f, r * 0.08f, fill);
+                }
+                if (e.role == Entity.ROLE_RIOT) {
+                    // Riot shield in front.
+                    fill.setColor(0xB0202A3A);
+                    oval.set(r * 0.9f, -r * 1.25f, r * 1.35f, r * 1.25f);
+                    c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
+                    fill.setColor(0xCCE8E8E8);
+                    c.drawRect(r * 1.05f, -r * 0.5f, r * 1.2f, r * 0.5f, fill);
+                }
+            } else if (e.type == Entity.BLOATER) {
+                // Swollen, covered in boils.
+                fill.setColor(0xFF9CAA5A);
+                c.drawCircle(-r * 0.1f, 0, r * 0.95f, fill);
+                fill.setColor(0xFFB8C86A);
+                c.drawCircle(-r * 0.4f, -r * 0.4f, r * 0.22f, fill);
+                c.drawCircle(r * 0.1f, r * 0.45f, r * 0.18f, fill);
+                c.drawCircle(-r * 0.5f, r * 0.3f, r * 0.15f, fill);
+            } else if (e.type == Entity.BRUTE) {
+                // A hunched hump of shoulders, wider than the rest of it.
+                fill.setColor(0xFF3A2E3C);
+                oval.set(-r * 0.55f, -r * 1.2f, r * 0.4f, r * 1.2f);
+                c.drawOval(oval, fill);
+                fill.setColor(0xFF4C3E4E);
+                oval.set(-r * 0.4f, -r * 0.8f, r * 0.2f, r * 0.8f);
+                c.drawOval(oval, fill);
+            }
+
+            fill.setColor(e.head);
+            c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
+            if (scale > 2.5f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
+                    || e.type == Entity.RUNNER)) drawHair(c, e, r);
+            if (e.type == Entity.COP) {
+                if (e.agency == 4) {
+                    // Federal agents: bareheaded, a dark cap of hair.
+                    fill.setColor(0xFF2A2420);
+                    c.drawCircle(r * 0.08f, 0, r * 0.4f, fill);
+                } else if (e.agency > 0) {
+                    // Troopers, deputies and park rangers: a wide-brimmed hat.
+                    fill.setColor(e.agency == 2 ? 0xFF5A4630 : e.agency == 3 ? 0xFF6E5A36 : 0xFF8A7650);
+                    c.drawCircle(r * 0.08f, 0, r * 0.62f, fill);
+                    fill.setColor(e.agency == 2 ? 0xFF6E5A3E : e.agency == 3 ? 0xFF8C7448 : 0xFFA08C62);
+                    c.drawCircle(r * 0.08f, 0, r * 0.36f, fill);
+                } else if (e.role == Entity.ROLE_SAR) {
+                    // Rescue: a white helmet.
+                    fill.setColor(0xFFF2F2F2);
+                    c.drawCircle(r * 0.08f, 0, r * 0.5f, fill);
+                    fill.setColor(0xFFD8302A);
+                    c.drawRect(-r * 0.05f, -r * 0.12f, r * 0.21f, r * 0.12f, fill);
+                } else {
+                    fill.setColor(0xFF0B1022);
+                    oval.set(r * 0.35f, -r * 0.45f, r * 0.85f, r * 0.45f);
+                    c.drawOval(oval, fill);
+                }
+            } else if (e.type == Entity.SOLDIER) {
+                if (e.role == Entity.ROLE_COMMANDER) {
+                    // Beret with a gold badge.
+                    fill.setColor(0xFF6E1414);
+                    c.drawCircle(-r * 0.12f, -r * 0.12f, r * 0.38f, fill);
+                    fill.setColor(0xFFF2C94C);
+                    c.drawCircle(r * 0.18f, -r * 0.2f, r * 0.14f, fill);
+                } else if (e.role == Entity.ROLE_SNIPER) {
+                    // Ghillie hood.
+                    fill.setColor(0xFF4E5A2E);
+                    c.drawCircle(-r * 0.1f, r * 0.15f, r * 0.22f, fill);
+                    c.drawCircle(-r * 0.2f, -r * 0.25f, r * 0.2f, fill);
+                } else {
+                    fill.setColor(0xFF4C5833);
+                    c.drawCircle(r * 0.0f, -r * 0.1f, r * 0.2f, fill);
+                }
+            } else if (e.isZombie()) {
+                fill.setColor(0xFF5A1414);
+                c.drawCircle(-r * 0.1f, r * 0.18f, r * 0.2f, fill);
+                if (e.type == Entity.RUNNER) {
+                    fill.setColor(0xFFFF3B2F);
+                    c.drawCircle(r * 0.45f, -r * 0.18f, r * 0.08f, fill);
+                    c.drawCircle(r * 0.45f, r * 0.18f, r * 0.08f, fill);
+                }
             }
         }
         if (e.infected) {
@@ -6702,7 +6821,7 @@ final class GameView extends View implements Menu.Host {
                         world.ctrlAction(ctxActions[k]);
                         return true;
                     }
-                if (world.controlledIn == null && Math.hypot(x - attackX, y - attackY) < attackR * 1.3f) {
+                if (world.controlledIn == null && World.hypot(x - attackX, y - attackY) < attackR * 1.3f) {
                     attackId = id;
                     world.ctrlAttack = true;
                 } else if (action == MotionEvent.ACTION_DOWN && hitUi(x, y)) {
@@ -7923,14 +8042,14 @@ final class GameView extends View implements Menu.Host {
         }
         if (a < 0 || b < 0) return;
         float x0 = ev.getX(a), y0 = ev.getY(a), x1 = ev.getX(b), y1 = ev.getY(b);
-        pinchDist = (float) Math.hypot(x1 - x0, y1 - y0);
+        pinchDist = (float) World.hypot(x1 - x0, y1 - y0);
         pinchMidX = (x0 + x1) / 2;
         pinchMidY = (y0 + y1) / 2;
     }
 
     private void doPinch(MotionEvent ev) {
         float x0 = ev.getX(0), y0 = ev.getY(0), x1 = ev.getX(1), y1 = ev.getY(1);
-        float d = (float) Math.hypot(x1 - x0, y1 - y0);
+        float d = (float) World.hypot(x1 - x0, y1 - y0);
         float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
         float wx = worldX(pinchMidX), wy = worldY(pinchMidY);
         if (pinchDist > 10 && d > 10) {
