@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 48;
+    private static final int VERSION = 49;
 
     private SaveGame() {
     }
@@ -308,6 +308,9 @@ final class SaveGame {
             out.writeInt(w.fled);
             out.writeInt(w.cameHome);
             out.writeInt(w.exodusSaid);
+            // (Version 49: who's making the decisions, and which they've made.)
+            out.writeInt(w.command);
+            out.writeInt(w.decisions);
         } finally {
             out.close();
         }
@@ -689,6 +692,10 @@ final class SaveGame {
                 w.fled = in.readInt();
                 w.cameHome = in.readInt();
                 w.exodusSaid = in.readInt();
+            }
+            if (version >= 49) {
+                w.command = in.readInt();
+                w.decisions = in.readInt();
             }
             d.copCount = copCount;
             d.soldierCount = soldierCount;

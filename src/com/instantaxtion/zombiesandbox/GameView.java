@@ -5078,6 +5078,9 @@ final class GameView extends View implements Menu.Host {
             }
     }
 
+    /** (11.5) The districts' names, letter-spaced for the map. */
+    private final java.util.HashMap<City.District, String> spacedNames = new java.util.HashMap<City.District, String>();
+
     /** Map labels already placed this frame: a label that would land on one of them (or on the panels) is skipped. */
     private final RectF[] placed = new RectF[80];
     private int placedCount;
@@ -5368,19 +5371,45 @@ final class GameView extends View implements Menu.Host {
         // Zoomed out: the names of the districts across the map.
         float districtAlpha = Math.max(0, Math.min(1, (3.2f - scale) / 1.2f));
         if (districtAlpha > 0) {
-            text.setTextSize(15 * dp);
+            // ((11.5) As on a printed map: letter-spaced capitals, bigger for a bigger district, with a dark outline
+            // to stand off the streets; and when something else has its middle, a clear spot just beside it instead
+            // of no name at all.)
             for (int i = 0, n = world.city.districts.size(); i < n; i++) {
                 City.District d = world.city.districts.get(i);
                 if (d.tiles < 40) continue;
-                float sx = screenX(d.cx), sy = screenY(d.cy);
-                if (sx < -150 * dp || sx > getWidth() + 150 * dp || sy < 0 || sy > barTop) continue;
-                String label = d.name.toUpperCase();
+                float sx0 = screenX(d.cx), sy0 = screenY(d.cy);
+                if (sx0 < -200 * dp || sx0 > getWidth() + 200 * dp || sy0 < -40 * dp || sy0 > barTop + 40 * dp) continue;
+                String label = spacedNames.get(d);
+                if (label == null) {
+                    StringBuilder sb = new StringBuilder();
+                    String up = d.name.toUpperCase(java.util.Locale.ROOT);
+                    for (int k = 0; k < up.length(); k++) {
+                        if (k > 0) sb.append(up.charAt(k) == ' ' || up.charAt(k - 1) == ' ' ? " " : "\u200A");
+                        if (up.charAt(k) != ' ') sb.append(up.charAt(k));
+                        else sb.append(' ');
+                    }
+                    label = sb.toString();
+                    spacedNames.put(d, label);
+                }
+                float size = Math.max(12.5f, Math.min(19, 11 + (float) Math.sqrt(d.tiles) / 14)) * dp;
+                text.setTextSize(size);
                 float tw = text.measureText(label);
-                oval.set(sx - tw / 2, sy - 14 * dp, sx + tw / 2, sy + 3 * dp);
-                if (!claim(oval)) continue;
-                text.setColor(alpha(0xFF000000, districtAlpha * 0.6f));
-                c.drawText(label, sx + 1.5f * dp, sy + 1.5f * dp, text);
-                text.setColor(alpha(0xFFF4EED8, districtAlpha * 0.85f));
+                boolean put = false;
+                float sx = sx0, sy = sy0;
+                for (int k = 0; k < 5 && !put; k++) {
+                    sx = sx0 + (k == 3 ? -tw * 0.4f : k == 4 ? tw * 0.4f : 0);
+                    sy = sy0 + (k == 1 ? -size * 1.8f : k == 2 ? size * 1.8f : 0);
+                    if (sy < size || sy > barTop) continue;
+                    oval.set(sx - tw / 2 - 3 * dp, sy - size, sx + tw / 2 + 3 * dp, sy + 4 * dp);
+                    put = claim(oval);
+                }
+                if (!put) continue;
+                text.setStyle(Paint.Style.STROKE);
+                text.setStrokeWidth(3.2f * dp);
+                text.setColor(alpha(0xFF101418, districtAlpha * 0.55f));
+                c.drawText(label, sx, sy, text);
+                text.setStyle(Paint.Style.FILL);
+                text.setColor(alpha(d.type == City.DT_INDUSTRIAL ? 0xFFE6DCC8 : d.type == City.DT_PARKSIDE ? 0xFFDDEFC8 : 0xFFF6F1E2, districtAlpha * 0.92f));
                 c.drawText(label, sx, sy, text);
             }
             // (10.46) Infection zones: their name, how many of the dead are in them, and whether they're held.

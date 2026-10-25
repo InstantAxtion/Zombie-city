@@ -375,6 +375,108 @@ final class World {
         if (rnd.nextFloat() < 0.3f) trait[TR_SWIFT] = true;
         if (rnd.nextFloat() < 0.25f) trait[TR_RESTLESS] = true;
         strainName = "Strain " + (char) ('A' + rnd.nextInt(26)) + "-" + (1 + rnd.nextInt(99));
+        command = rnd.nextInt(CMD_COUNT);
+    }
+
+    // ------------------------------------------------------------------ (11.5) how this city's leaders decide
+
+    /**
+     * (11.5) Who's making the decisions this time, hidden like the strain: a hawk (seals districts off early, bombs
+     * sooner), a cautious hand (keeps people indoors, calls in the Guard), slow to act (everything late), or a town
+     * that arms its people. Together with the strain and how ready the city was, no two outbreaks go the same way.
+     */
+    static final int CMD_BALANCED = 0, CMD_HAWK = 1, CMD_CAUTIOUS = 2, CMD_SLOW = 3, CMD_ARMED = 4, CMD_COUNT = 5;
+    int command;
+    /** Which of the city's emergency decisions have been taken (bits by DEC_), and time until it next thinks. */
+    int decisions;
+    private float decideCd = 45;
+    static final int DEC_CURFEW = 1, DEC_QUARANTINE = 2, DEC_GUNS = 4, DEC_GUARD = 8, DEC_CONVOY = 16;
+
+    /** How much sooner (below 1) or later the army escalates. */
+    private float escalationPace() {
+        return command == CMD_HAWK ? 0.7f : command == CMD_SLOW ? 1.45f : command == CMD_CAUTIOUS ? 1.15f : 1f;
+    }
+
+    /**
+     * (11.5) The city's leaders weigh up how it's going every so often and act - each at most once, and which and
+     * when depends on who they are and what the dead are doing: a curfew, sealing off the one district where it's
+     * all happening, opening the gun stores, calling the Guard out early, or a convoy of ammunition to the police.
+     */
+    private void leadersDecide(float dt) {
+        if (!outbreak || alert < 1 || (decideCd -= dt) > 0) return;
+        decideCd = 30 + rnd.nextFloat() * 30;
+        int zs = zombieCount();
+        if (zs < 6) return;
+        float[] wt = new float[5];
+        int[] bit = {DEC_CURFEW, DEC_QUARANTINE, DEC_GUNS, DEC_GUARD, DEC_CONVOY};
+        wt[0] = command == CMD_CAUTIOUS ? 3 : command == CMD_ARMED ? 0.3f : 1;
+        int worst = worstDistrict(), inWorst = 0;
+        if (worst >= 0) {
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (!e.dead && e.isZombie() && city.districtIndex(e.x, e.y) == worst) inWorst++;
+            }
+            // (Only worth it while most of the dead are in the one place.)
+            if (inWorst >= 10 && inWorst > zs * 0.6f && (city.mainBase() != null || counts[Entity.SOLDIER] > 0))
+                wt[1] = command == CMD_HAWK ? 3 : command == CMD_SLOW ? 0.4f : 1;
+        }
+        boolean stores = false;
+        for (City.Building b : city.buildings) if (b.kind == City.SHOP && b.shopType == 1 && !b.collapsed) stores = true;
+        if (stores && alert >= 2) wt[2] = command == CMD_ARMED ? 4 : command == CMD_HAWK ? 0.2f : 0.5f;
+        if (!guardCalled && alert >= 2 && city.armory != null) wt[3] = command == CMD_CAUTIOUS || command == CMD_HAWK ? 2 : 0.6f;
+        if (alert >= 2 && counts[Entity.COP] > 0) wt[4] = command == CMD_SLOW ? 0.3f : 0.8f;
+        // (The slow ones mostly talk about it.)
+        float act = command == CMD_SLOW ? 0.35f : 0.75f;
+        if (rnd.nextFloat() > act) return;
+        float total = 0;
+        for (int k = 0; k < wt.length; k++) if ((decisions & bit[k]) != 0) wt[k] = 0; else total += wt[k];
+        if (total <= 0) return;
+        float pick = rnd.nextFloat() * total;
+        int k = 0;
+        while (k < wt.length - 1 && (pick -= wt[k]) > 0) k++;
+        if (wt[k] <= 0) return;
+        decisions |= bit[k];
+        float mx = city.worldW() / 2f, my = city.worldH() / 2f;
+        switch (bit[k]) {
+            case DEC_CURFEW: {
+                banner("CURFEW", "Everyone off the streets and indoors until further notice.");
+                dispatch.say(Dispatch.WHO_INFO, null, "News: The Mayor has declared a curfew. Stay indoors, lock your doors, wait for help.", mx, my);
+                for (int i = 0, n = entities.size(); i < n; i++) {
+                    Entity e = entities.get(i);
+                    if (!e.dead && e.type == Entity.CIVILIAN && !e.aware && rnd.nextFloat() < 0.8f) e.aware = true;
+                }
+                boardUp();
+                break;
+            }
+            case DEC_QUARANTINE: {
+                if (sealDistrict(worst) > 0) escalation = Math.max(escalation, 1);
+                break;
+            }
+            case DEC_GUNS: {
+                banner("GUN STORES OPEN", "The city is handing out guns to anyone who can use one.");
+                dispatch.say(Dispatch.WHO_INFO, null, "News: The gun stores are open and giving everything away. Anyone who can shoot, go and get armed.", mx, my);
+                for (City.Building b : city.buildings) {
+                    if (b.kind != City.SHOP || b.shopType != 1 || b.collapsed) continue;
+                    b.stock = Math.max(b.stock, gunStock());
+                    for (int i = 0, n = entities.size(); i < n; i++) {
+                        Entity e = entities.get(i);
+                        if (!e.dead && e.type == Entity.CIVILIAN && !e.hasGun && e.building == null
+                                && World.hypot(e.x - b.doorX, e.y - b.doorY) < 500 && rnd.nextFloat() < 0.15f) armCivilian(e, 18);
+                    }
+                }
+                break;
+            }
+            case DEC_GUARD:
+                dispatch.say(Dispatch.WHO_INFO, null, "News: The governor isn't waiting: the National Guard is being called out now.", mx, my);
+                callNationalGuard();
+                break;
+            case DEC_CONVOY:
+                // An ammunition run to every police station.
+                for (City.Facility f : city.facilities)
+                    if (f.kind == City.FACILITY_POLICE && !f.fallen) f.ammo = Math.max(f.ammo, 3000);
+                dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Ammunition trucks have reached every station. Officers, restock and get back out there.", mx, my);
+                break;
+        }
     }
 
     /** How long a bite takes to turn someone, for this strain. */
@@ -5732,6 +5834,7 @@ final class World {
         updateAlert();
         callNationalGuard();
         escalate();
+        leadersDecide(1);
         supplies();
         militias();
         if (outbreak) updateWar();
@@ -8428,11 +8531,13 @@ final class World {
         if (!outbreak) return;
         boolean army = city.mainBase() != null || counts[Entity.SOLDIER] > 0;
         if (!army) return;
-        if (escalation == 0 && outbreakTime > 240 && warBalance < 0.42f) {
+        // ((11.5) Sooner or later, depending on who's in charge.)
+        float pace = escalationPace(), bias = command == CMD_HAWK ? 0.06f : command == CMD_SLOW ? -0.06f : 0;
+        if (escalation == 0 && outbreakTime > 240 * pace && warBalance < 0.42f + bias) {
             int d = worstDistrict();
             if (d >= 0 && sealDistrict(d) > 0) escalation = 1;
             else escalation = 1;
-        } else if (escalation == 1 && outbreakTime > 420 && warBalance < 0.3f) {
+        } else if (escalation == 1 && outbreakTime > 420 * pace && warBalance < 0.3f + bias) {
             escalation = 2;
             // Aim at the thickest crowd of the dead.
             float bx = 0, by = 0;

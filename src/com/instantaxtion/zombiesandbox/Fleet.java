@@ -2729,8 +2729,12 @@ final class Fleet {
                         float x2 = ex != 0 ? (E % W + 0.5f) * City.T : le, y2 = ex != 0 ? le : (E / W + 0.5f) * City.T;
                         rbA0 = (float) Math.atan2(v.cor[v.corN * 2 - 1] - rbCy, v.cor[v.corN * 2 - 2] - rbCx);
                         float a1 = (float) Math.atan2(y2 - rbCy, x2 - rbCx), d = a1 - rbA0;
-                        while (d >= -0.3f) d -= (float) (Math.PI * 2);
-                        while (d < -Math.PI * 2 - 0.3f) d += (float) (Math.PI * 2);
+                        // ((11.5) Round the way the traffic goes, and no further: what's left of the way round once
+                        // it's partway there (worked out again on each tile) is just that - the old rule sent anyone
+                        // with less than a sixth of a turn to go right round again, over the island. Only a U-turn,
+                        // whose way out is just behind its way in, goes all the way round.)
+                        while (d > 0.25f) d -= (float) (Math.PI * 2);
+                        while (d <= -Math.PI * 2 + 0.25f) d += (float) (Math.PI * 2);
                         rbD = d;
                         rbOn = true;
                     }

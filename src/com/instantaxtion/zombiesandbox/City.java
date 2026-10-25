@@ -306,6 +306,24 @@ final class City {
             }
             usedUnique[d.type] = true;
             String wd = words.get(word++ % words.size());
+            // ((11.5) More of the names an American city's districts go by.)
+            if (cfg.civic >= 28 && !front) {
+                String[] opts;
+                switch (d.type) {
+                    case DT_DOWNTOWN: opts = usedUnique[DT_COUNT - 1] ? new String[]{wd + " Center", "Uptown", "The Financial District"} : new String[]{"Downtown"}; break;
+                    case DT_MIDTOWN: opts = new String[]{wd + " Village", wd + " Square", wd + " Crossing", "Midtown", wd + " Junction"}; break;
+                    case DT_OLDTOWN: opts = new String[]{"Old Town", "The Old Quarter", "The Historic District", wd + " Historic District"}; break;
+                    case DT_SUBURB: opts = new String[]{wd + " Heights", wd + " Hills", wd + " Gardens", wd + " Grove", wd + " Meadows", wd + " Ridge", wd + " Estates", wd + " Woods"}; break;
+                    case DT_INDUSTRIAL: opts = new String[]{wd + " Industrial Park", wd + " Works", wd + " Rail Yards", "The Warehouse District", wd + " Flats"}; break;
+                    case DT_CAMPUS: opts = new String[]{"University District", "College Hill"}; break;
+                    default: opts = new String[]{wd + " Common", wd + " Green", wd + " Fields", wd + " Park"}; break;
+                }
+                d.name = opts[r.nextInt(opts.length)];
+                for (District o : districts) if (o.name.equals(d.name)) d.name = wd + " " + DISTRICT_KINDS[d.type];
+                if (d.type == DT_DOWNTOWN) usedUnique[DT_COUNT - 1] = true;
+                districts.add(d);
+                continue;
+            }
             switch (d.type) {
                 case DT_DOWNTOWN: d.name = usedUnique[DT_COUNT - 1] ? wd + " Center" : "Downtown"; break;
                 case DT_MIDTOWN: d.name = r.nextBoolean() ? wd + " Village" : wd + " Square"; break;
@@ -2287,8 +2305,11 @@ final class City {
             default: maxLeaf = 13 + rnd.nextInt(6); break;
         }
         // On the biggest maps a stretch of suburb is laid out as a neighbourhood of its own, not more grid.
-        if (w >= 400 && depth >= 1 && bw >= 44 && bh >= 44 && bw <= 76 && bh <= 76
-                && rnd.nextFloat() < (dt == DT_SUBURB || dt == DT_PARKSIDE ? 0.8f : dt == DT_MIDTOWN ? (d > 0.45f ? 0.55f : 0.2f)
+        // ((11.5) From the Large size up, and the old town too: not everything on the one grid.)
+        boolean more = cfg.civic >= 28;
+        if (w >= (more ? 300 : 400) && depth >= 1 && bw >= 44 && bh >= 44 && bw <= 76 && bh <= 76
+                && rnd.nextFloat() < (dt == DT_SUBURB || dt == DT_PARKSIDE ? (more ? 0.9f : 0.8f) : dt == DT_MIDTOWN ? (d > 0.45f ? 0.55f : 0.2f)
+                        : more && dt == DT_OLDTOWN ? 0.35f
                         : dt == DT_INDUSTRIAL ? 0.45f : 0f)
                 && neighbourhood(x0, y0, x1, y1, d)) return -1;
         if (d > 0.8f) maxLeaf += 2;
@@ -7155,7 +7176,8 @@ final class City {
                     : r < 0.25f ? NB_CLOSES : r < 0.45f ? NB_CRESCENT : r < 0.65f ? NB_GREEN : r < 0.8f ? NB_ESTATE : NB_GATED;
         }
         // (Since 10.25 roads needn't be straight: some suburbs are laid out with winding streets instead.)
-        if (cfg.civic >= 10 && (type == NB_CLOSES || type == NB_CRESCENT) && rnd.nextFloat() < 0.4f) type = NB_WINDING;
+        if (cfg.civic >= 10 && (type == NB_CLOSES || type == NB_CRESCENT || (cfg.civic >= 28 && type == NB_GREEN))
+                && rnd.nextFloat() < (cfg.civic >= 28 ? 0.75f : 0.4f)) type = NB_WINDING;
         int[] green = null;
         switch (type) {
             case NB_WINDING:
@@ -7639,7 +7661,9 @@ final class City {
                     int dx = ddx[k], dy = ddy[k];
                     if (!paved(x + dx, y + dy)) continue;
                     int hw = min + rnd.nextInt(max - min + 1), hd = min + rnd.nextInt(max - min + 1);
-                    int fx = x - dx * (1 + setback), fy = y - dy * (1 + setback);
+                    // ((11.5) Not all in one ruler-straight line: each a little further back or nearer than the next.)
+                    int back = cfg.civic >= 28 && setback >= 2 ? Math.max(1, setback + rnd.nextInt(3) - 1) : setback;
+                    int fx = x - dx * (1 + back), fy = y - dy * (1 + back);
                     int lx, ly, lw, lh;
                     if (dx != 0) {
                         lw = hd;
@@ -7667,7 +7691,7 @@ final class City {
                     }
                     addLot(lx, ly, lw, lh, kind);
                     // A drive from the road to the house.
-                    for (int s = 1; s <= setback; s++) {
+                    for (int s = 1; s <= back; s++) {
                         int ax = x - dx * s, ay = y - dy * s;
                         if (tiles[ay * w + ax] == GRASS) tiles[ay * w + ax] = SIDEWALK;
                     }
