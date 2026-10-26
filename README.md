@@ -417,7 +417,9 @@ mounting up, and lighter running with big populations.
 **Steady movement when the frame rate dips (11.6):** when the phone falls behind and the simulation catches up with a
 longer step (and at the faster speeds), everyone being worked out every frame - everyone on screen - now moves through
 it in ordinary-sized sub-steps, so a single odd moment no longer turns them right round. Units twitching back and forth
-went from dozens per run to one or two in tests.
+went from dozens per run to one or two in tests. Soldiers in a squad wedge also keep their side: each lines up on the
+way the squad is actually moving (eased round over a second, held while the leader pauses) instead of swapping sides
+whenever the leader hesitates.
 
 **Much faster (11.5):** a Large or Massive city in a full panic (about ten thousand people) takes about a third less
 time per simulation step, with its worst spikes roughly halved; car routes come from a per-map table, open ground is known at a

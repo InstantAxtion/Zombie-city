@@ -10,6 +10,7 @@ final class PatchNotes {
             {
                     "11.6  -  Steady movement when the frame rate dips",
                     "People, police, soldiers and the dead no longer twitch, spin round or jitter back and forth when the phone falls behind and the game catches up with a longer step (or at 2x to 8x speed): anyone on screen now walks that longer moment as several ordinary ones. In tests, units flip-flopping back and forth went from dozens per minute of play to one or two.",
+                    "Soldiers moving as a squad keep their places in the wedge: each lines up on the way the squad is actually going, turning with it over a second or so and holding steady while the leader pauses, instead of swapping sides whenever the leader hesitated.",
             },
             {
                     "11.5  -  Much faster; a new look; smarter police and army; buildings that matter",

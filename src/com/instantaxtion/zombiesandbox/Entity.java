@@ -109,6 +109,8 @@ final class Entity {
 
     /** Family: followers stay with their leader. A dog's owner is its leader too. */
     Entity leader;
+    /** ((11.6) The way a soldier's squad is heading, eased, for their place in the wedge: 0, 0 for not yet known.) */
+    transient float formHx, formHy;
     /** Zombie hordes: members follow a leader who roams the city. */
     Entity hordeLeader;
     boolean leadsHorde;

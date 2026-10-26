@@ -7739,9 +7739,17 @@ final class World {
                     steer(e, lx / ld, ly / ld, e.runSpeed);
                     return;
                 }
-                // On the move with the squad: keep a wedge behind the leader.
-                if (lead.want > 1 && e.fear <= 0) {
-                    float hx = lead.mx, hy = lead.my, hl = (float) Math.sqrt(hx * hx + hy * hy) + 0.001f;
+                // On the move with the squad: keep a wedge behind the leader. ((11.6) Lined up on the way the leader
+                // is actually going, eased round over a second or so and held while they pause - not the way they
+                // wish to go this very moment, which swung to and fro and sent the wedge swapping sides.)
+                float lsp = (float) Math.sqrt(lead.vx * lead.vx + lead.vy * lead.vy);
+                if (lsp > 4) {
+                    float k = e.formHx == 0 && e.formHy == 0 ? 1 : Math.min(1, dt * 2.5f);
+                    e.formHx += (lead.vx / lsp - e.formHx) * k;
+                    e.formHy += (lead.vy / lsp - e.formHy) * k;
+                }
+                if (lsp > 4 && e.fear <= 0 && (e.formHx != 0 || e.formHy != 0)) {
+                    float hx = e.formHx, hy = e.formHy, hl = (float) Math.sqrt(hx * hx + hy * hy) + 0.001f;
                     hx /= hl;
                     hy /= hl;
                     int m = e.member + 1;
