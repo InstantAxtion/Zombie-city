@@ -68,7 +68,13 @@ final class Synth {
             case Sfx.HUNTING: out = hunting(r); break;
             default: out = click(); break;
         }
-        return toPcm(out, id == Sfx.CLICK ? 0.5f : 0.92f);
+        // ((11.7) Gunshots a bit louder: driven into a soft clip, so they hit harder at the same peak.)
+        if (Sfx.gun(id)) {
+            float max = 1e-6f;
+            for (float v : out) max = Math.max(max, Math.abs(v));
+            for (int i = 0; i < out.length; i++) out[i] = (float) Math.tanh(out[i] / max * 2.2f);
+        }
+        return toPcm(out, id == Sfx.CLICK ? 0.5f : Sfx.gun(id) ? 0.97f : 0.92f);
     }
 
     private static float[] gunshot(Random r, float dur, float decay, float bright, float thump) {

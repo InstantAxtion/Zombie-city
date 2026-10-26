@@ -17,7 +17,7 @@ import java.util.Random;
  */
 final class Sound {
     /** Bump when the synthesized audio changes so old cached files are regenerated. */
-    private static final int AUDIO_VERSION = 2;
+    private static final int AUDIO_VERSION = 3;
     /** (10.52) The music on its own: ten pieces now. */
     private static final int MUSIC_VERSION = 3;
 

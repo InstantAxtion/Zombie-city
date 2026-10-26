@@ -1640,8 +1640,9 @@ final class GameView extends View implements Menu.Host {
             case Sfx.EXPLOSION: case Sfx.CANNON: case Sfx.COLLAPSE: return 3.2f;
             case Sfx.ROTOR: case Sfx.JET: return 2.6f;
             case Sfx.SIREN: case Sfx.AMB_SIREN: case Sfx.ALARM: return 2.2f;
-            case Sfx.MG: case Sfx.RIFLE: case Sfx.SHOTGUN: case Sfx.SNIPER: case Sfx.HUNTING: case Sfx.BURST: return 1.9f;
-            case Sfx.PISTOL: case Sfx.REVOLVER: case Sfx.CRASH: case Sfx.HORN: return 1.4f;
+            case Sfx.MG: case Sfx.RIFLE: case Sfx.SHOTGUN: case Sfx.SNIPER: case Sfx.HUNTING: case Sfx.BURST: return 2.2f;
+            case Sfx.PISTOL: case Sfx.REVOLVER: return 1.6f;
+            case Sfx.CRASH: case Sfx.HORN: return 1.4f;
             case Sfx.GROAN: case Sfx.GROAN_DEEP: case Sfx.BITE: case Sfx.SPIT: return 0.7f;
             default: return 1f;
         }
@@ -1662,6 +1663,8 @@ final class GameView extends View implements Menu.Host {
             float f = d / r;
             float vol = master * (1 - 0.85f * f) * (1 - 0.15f * f * f);
             if (type == Sfx.GROAN || type == Sfx.GROAN_DEEP || type == Sfx.SCREAM) vol *= 0.6f;
+            // ((11.7) Gunshots a bit louder, near and far.)
+            if (Sfx.gun(type)) vol *= 1.3f;
             sound.play(type, vol, Math.max(-1, Math.min(1, ddx / (vw / 2))) * 0.8f);
         }
         world.evCount = 0;

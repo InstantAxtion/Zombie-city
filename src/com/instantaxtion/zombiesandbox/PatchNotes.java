@@ -13,6 +13,7 @@ final class PatchNotes {
                     "A car coming to pick officers or soldiers up heads for where they are now, not where they were when it set off; they wait where they are and run to it once it's close, instead of chasing it down the street.",
                     "Police and soldiers get across the map quicker: anything more than a few blocks away they drive, they'll take an empty car or truck from further off, and on foot over a long way, with none of the dead about, they sprint - flat out until they're out of breath, then a jog until they get it back.",
                     "A more realistic response: before anyone knows what this is, officers treat the first attackers as violent suspects - warnings, and no shooting until one is right on them or on someone else. They're trained to aim for the body, so at first it takes a lot of rounds to put one down; once word gets round (Police Command: aim for the head) they go for the head. Health officials announce that it spreads by the bite, and hospitals ask people to stay away.",
+                    "Gunshots are a bit louder: punchier up close, carrying further across the city, and no longer fading to a patter in a long firefight.",
             },
             {
                     "11.6  -  Steady movement when the frame rate dips",

@@ -419,7 +419,7 @@ mounting up, and lighter running with big populations.
 officers walk. Bases send out their own parked trucks. Pickups head for where people are now and they wait for it.
 Units drive anything over a few blocks and sprint long distances on foot. Early on, police hold fire on "violent
 suspects" until they're close and aim for the body until word spreads to aim for the head; health officials announce
-that bites spread it.
+that bites spread it. Gunshots are a bit louder, carry further and stay loud through long firefights.
 
 **Steady movement when the frame rate dips (11.6):** when the phone falls behind and the simulation catches up with a
 longer step (and at the faster speeds), everyone being worked out every frame - everyone on screen - now moves through

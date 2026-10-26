@@ -45,8 +45,15 @@ final class Sfx {
             if (since < gap * 1000) return 0;
             last[id] = now;
             heat[id] = h + 1;
+            // ((11.7) Gunfire stays loud through a long firefight: it fades a little as shots pile up, not to a patter.)
+            if (gun(id)) return Math.max(0.55f, 1 / (1 + h * 0.3f));
             return rep ? Math.max(0.25f, 1 / (1 + h * 0.6f)) : Math.max(0.6f, 1 / (1 + h * 0.03f));
         }
+    }
+
+    /** (11.7) A gunshot of any kind. */
+    static boolean gun(int id) {
+        return id == PISTOL || id == RIFLE || id == MG || id == SNIPER || id == BURST || id == SHOTGUN || id == REVOLVER || id == HUNTING;
     }
 
     private Sfx() {
