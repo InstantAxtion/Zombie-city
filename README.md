@@ -414,6 +414,13 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Real police cars, faster responses, a realistic outbreak (11.7):** police stations start with their own parked cars
+(one per two officers, two to eight) and only those go out, each with a real officer at the wheel; with none left,
+officers walk. Bases send out their own parked trucks. Pickups head for where people are now and they wait for it.
+Units drive anything over a few blocks and sprint long distances on foot. Early on, police hold fire on "violent
+suspects" until they're close and aim for the body until word spreads to aim for the head; health officials announce
+that bites spread it.
+
 **Steady movement when the frame rate dips (11.6):** when the phone falls behind and the simulation catches up with a
 longer step (and at the faster speeds), everyone being worked out every frame - everyone on screen - now moves through
 it in ordinary-sized sub-steps, so a single odd moment no longer turns them right round. Units twitching back and forth

@@ -2067,8 +2067,11 @@ public final class GameTests {
                 inc.x = far[0];
                 inc.y = far[1];
                 inc.place = "the test";
-                int before = w.fleet.vehicles.size();
-                check(w.fleet.stationCar(two, sat, inc) && w.fleet.vehicles.size() == before + 1, "a car for them at the station");
+                // ((11.7) One of the cars parked there - none appear from nowhere.)
+                int before = w.fleet.vehicles.size(), parked = 0;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.standby && v.type == Fleet.CRUISER && Math.hypot(v.x - sat.x, v.y - sat.y) < sat.r + 300) parked++;
+                check(parked >= 2, "the station has cars parked on its lot (" + parked + ")");
+                check(w.fleet.stationCar(two, sat, inc) && w.fleet.vehicles.size() == before, "one of the station's cars for them");
                 Fleet.Vehicle car = w.fleet.vehicles.get(w.fleet.vehicles.size() - 1);
                 boolean rolled = false;
                 for (int f = 0; f < 30 * 60 && !rolled; f++) {

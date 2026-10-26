@@ -751,6 +751,7 @@ final class World {
         dispatch.policeAir = cfg.nature() && stations > 0 ? 2 : 0;
         populateWilds(cops > 0);
         fleet.stationHelis();
+        fleet.stockStations();
         // Out of town: highway patrol on the highway, and (in the USA) sheriff's deputies on the country roads.
         // (About one patrol car to every fifty tiles of highway, four at the least.)
         if (city.hwyAxis >= 0) for (int i = 0, n = Math.max(4, (city.hwyAxis == 0 ? city.w : city.h) / 50); i < n; i++) fleet.startAgencyPatrol(1);
@@ -1572,11 +1573,15 @@ final class World {
         for (Entity e : entities) if (e.role == Entity.ROLE_CORPSMAN && e.type == Entity.SOLDIER) e.role = Entity.ROLE_GRENADIER;
         findWilds();
         buildRoster();
+        // ((11.7) A saved game well into it already knows.)
+        headsKnown = alert >= 2 || zombiesKilled >= 25;
+        biteKnown = alert >= 1 && bites >= 8;
         launchBoats();
         spawnBirds();
         spawnWildlife();
         fleet.trafficTarget = Fleet.trafficFor(city);
         fleet.stationHelis();
+        fleet.stockStations();
         int cops = 0;
         for (Entity e : entities) if (!e.dead && e.type == Entity.COP) cops++;
         // ((11.4) Counting those aboard the patrol cars too.)
@@ -4365,6 +4370,9 @@ final class World {
     }
 
     /** Once a second: word of the outbreak gets round. */
+    /** (11.7) Whether the city has learned that a bite spreads it, and that only a shot to the head stops one. */
+    boolean biteKnown, headsKnown;
+
     private void updateAlert() {
         // A good while after the last of them is gone, the all-clear: people get back to their lives.
         if (alert > 0 && zombies == 0 && lurking == 0 && calmTime > 40) {
@@ -4391,6 +4399,19 @@ final class World {
         if (alert < 2 && seen && (outbreakTime > t2 || zombies >= z2 || dispatch.calls >= c2)) {
             alert = 2;
             timeline("Emergency broadcast: everyone indoors");
+        }
+        // ((11.7) What everyone learns, in the order they'd learn it: that it spreads by the bite, then that only the
+        // head stops them.)
+        if (!biteKnown && alert >= 1 && bites >= 8) {
+            biteKnown = true;
+            timeline("Health officials: it spreads by the bite");
+            dispatch.say(Dispatch.WHO_INFO, null, "News: Health officials say the illness spreads through bites. Anyone bitten should be kept apart and watched. Hospitals are asking people not to come in.",
+                    city.worldW() / 2, city.worldH() / 2);
+        }
+        if (!headsKnown && (alert >= 2 || zombiesKilled >= 25)) {
+            headsKnown = true;
+            dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Body shots don't put them down. All units: aim for the head.",
+                    city.worldW() / 2, city.worldH() / 2);
         }
         if (alert == was) return;
         String where = outbreakPlace != null ? outbreakPlace : "the city";
@@ -4468,6 +4489,14 @@ final class World {
             return false;
         }
         float ddx = v.x - e.x, ddy = v.y - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
+        // ((11.7) A car or truck on its way to pick them up: they wait where they are, watching for it, and only run
+        // to it once it's close - not off towards it as it drives on to where they were.)
+        if (v.state == Fleet.DRIVE && v.pickup && d > 140) {
+            steer(e, 0, 0, 0);
+            e.paused = false;
+            if (e.want < 1) e.angle = turn(e.angle, (float) Math.atan2(ddy, ddx), 0.1f);
+            return true;
+        }
         // (10.34) Climbing in from a little further off, at a run, and round whatever's in the way.
         if (d < 20) {
             fleet.board(v, e);
@@ -7546,7 +7575,7 @@ final class World {
         if (e.task == Dispatch.T_POST && e.postX > 0) {
             float pd = (float) World.hypot(e.postX - e.x, e.postY - e.y);
             if (pd > 24 && (t == null || World.hypot(t.x - e.x, t.y - e.y) > 90)) {
-                walkToSpot(e, e.postX, e.postY, pd > 200 ? e.runSpeed * 0.9f : e.speed * 1.3f);
+                walkToSpot(e, e.postX, e.postY, pd > 200 ? transit(e, pd) : e.speed * 1.3f);
                 return;
             }
         }
@@ -7656,10 +7685,10 @@ final class World {
                 float ang = (float) Math.atan2(e.y - inc.y, e.x - inc.x) + ((e.member % 3) - 1) * 0.35f;
                 float px = inc.x + (float) Math.cos(ang) * pr, py = inc.y + (float) Math.sin(ang) * pr;
                 if (d > pr + 80) {
-                    if (!followField(e, inc.field, e.runSpeed * 0.95f)) {
+                    if (!followField(e, inc.field, transit(e, d))) {
                         // ((10.54) A call without a way worked out (past the budget): find the way there as anyone would.)
-                        if (inc.field == null && d > 60) walkToSpot(e, inc.x, inc.y, e.runSpeed * 0.95f);
-                        else steer(e, ddx / d, ddy / d, e.runSpeed * 0.95f);
+                        if (inc.field == null && d > 60) walkToSpot(e, inc.x, inc.y, transit(e, d));
+                        else steer(e, ddx / d, ddy / d, transit(e, d));
                     }
                     return;
                 }
@@ -7679,10 +7708,10 @@ final class World {
             if (soldier && e.onScene && city.fieldAt(city.zombieDist, e.x, e.y) < 30
                     && followField(e, city.zombieDist, e.runSpeed * 0.8f)) return;
             if (d > 40) {
-                if (!followField(e, inc.field, e.runSpeed * 0.95f)) {
+                if (!followField(e, inc.field, transit(e, d))) {
                         // ((10.54) A call without a way worked out (past the budget): find the way there as anyone would.)
-                        if (inc.field == null && d > 60) walkToSpot(e, inc.x, inc.y, e.runSpeed * 0.95f);
-                        else steer(e, ddx / d, ddy / d, e.runSpeed * 0.95f);
+                        if (inc.field == null && d > 60) walkToSpot(e, inc.x, inc.y, transit(e, d));
+                        else steer(e, ddx / d, ddy / d, transit(e, d));
                     }
                 return;
             }
@@ -8214,6 +8243,16 @@ final class World {
         }
         holdPost(e, gx, gy, (float) Math.atan2(base.gateY - gy, base.gateX - gx), dt);
         return true;
+    }
+
+    /**
+     * (11.7) How fast an officer or soldier goes to where they're needed: a long way off, with none of the dead
+     * about, flat out - a sprint, for as long as their breath lasts (then a jog until they have it back); nearer,
+     * or with the dead close, at a steady run.
+     */
+    private float transit(Entity e, float d) {
+        if (d > 260 && e.stamina > 0.2f && countZombiesNear(e.x, e.y, 70) == 0) return e.runSpeed * 1.25f;
+        return e.runSpeed * 0.95f;
     }
 
     /** (11.3) On the beat, or on duty on base, while the city is quiet. */
@@ -9303,6 +9342,9 @@ final class World {
             base = e.role == Entity.ROLE_GUNNER ? 0.1f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
         else return HEADSHOT;
         float f = Math.max(0.35f, 1.25f - d / range);
+        // ((11.7) Trained to aim for the body, as anyone is: until word gets round that only the head stops them,
+        // most shots go into the chest, and it takes a lot of them.)
+        if (!headsKnown) f *= 0.35f;
         if (t.type == Entity.RUNNER) f *= 0.6f;
         // A clearer shot from the high ground.
         if (city.elev != null && city.elevation(e.x, e.y) > city.elevation(t.x, t.y) + 3) f *= 1.2f;
@@ -9316,6 +9358,9 @@ final class World {
     private boolean holdFire(Entity e, Entity t, float d, float range) {
         if (e.type != Entity.COP && e.type != Entity.SOLDIER) return false;
         if (e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e == controlled || !t.isZombie()) return false;
+        // ((11.7) Before anyone knows what this is, an officer facing one of them sees a violent suspect, not a monster:
+        // they shout warnings and hold fire until it's right on them or on someone else.)
+        if (alert == 0 && e.type == Entity.COP && e.role != Entity.ROLE_SWAT && d > 34 && !peopleNear(t.x, t.y, 22)) return true;
         float effective = e.type == Entity.COP ? (e.role == Entity.ROLE_SWAT ? 150 : 110) : 165;
         return d > effective && t.biteCd <= 0 && !peopleNear(t.x, t.y, 45);
     }

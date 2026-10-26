@@ -177,6 +177,11 @@ final class Fleet {
          * seat. They go inside once it's parked back home, and get out if it's wrecked.
          */
         Entity driver;
+        /** ((11.7) The driver is one of the city's own officers or soldiers, taken from the station or base, who goes
+         * back to it when the vehicle is parked home again.) */
+        boolean realDriver;
+        /** ((11.7) Out to pick people up: seconds until it looks again for where they actually are.) */
+        float aimCd;
         /** A patrol car (not a backup cruiser): drives a beat and answers calls. */
         boolean patrol;
         /** Whose car it is: 0 the city police, 1 highway patrol, 2 the sheriff, 3 the park rangers. */
@@ -3242,6 +3247,26 @@ final class Fleet {
             }
             return false;
         }
+        // ((11.7) Out to pick people up: it heads for where they are now, not where they were when it set off.)
+        if (v.state == DRIVE && v.pickup && !v.squad.isEmpty() && (v.aimCd -= dt) <= 0) {
+            v.aimCd = 3;
+            float sx = 0, sy = 0;
+            int n = 0;
+            for (int i = 0; i < v.squad.size(); i++) {
+                Entity e = v.squad.get(i);
+                if (e.dead || e.removed || e.rig != v) continue;
+                sx += e.x;
+                sy += e.y;
+                n++;
+            }
+            if (n > 0) {
+                sx /= n;
+                sy /= n;
+                float[] spot = city.nearestDrivable(sx, sy);
+                if (spot != null && World.hypot(spot[0] - v.tx, spot[1] - v.ty) > 60 && World.hypot(sx - v.x, sy - v.y) > 90)
+                    route(v, spot[0], spot[1]);
+            }
+        }
         if (v.state == DRIVE && v.pickup && v.stuckTimer > 12) {
             v.state = PICKUP;
             v.timer = 0;
@@ -4576,9 +4601,18 @@ final class Fleet {
             }
             boolean home = v.parked || v.standby || v.state == ABANDONED || v.player != null;
             if (home) {
+                // ((11.7) One of the station's own goes back inside; a driver from outside goes with the vehicle.)
+                if (v.driver != null && v.realDriver) {
+                    float a = v.angle - 1.57f;
+                    w.release(v.driver, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);
+                    v.driver.rig = null;
+                }
                 v.driver = null;
+                v.realDriver = false;
                 continue;
             }
+            // ((11.7) Waiting at the station for its crew to climb in: whoever gets in first drives.)
+            if (v.state == MUSTER) continue;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
                 int type = v.type == AMBULANCE ? Entity.CIVILIAN : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
                 Entity d = w.create(type, v.x, v.y);
@@ -4595,6 +4629,12 @@ final class Fleet {
         Entity d = v.driver;
         v.driver = null;
         float a = v.angle - 1.57f;
+        if (v.realDriver) {
+            v.realDriver = false;
+            d.rig = null;
+            if (w.release(d, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10)) d.hp *= 0.7f;
+            return;
+        }
         Entity e = w.spawn(d.type, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);
         if (e == null) return;
         e.nameSeed = d.nameSeed;
@@ -4691,20 +4731,8 @@ final class Fleet {
                     if (o.standby && o.type == (type == Entity.COP ? CRUISER : TRUCK) && !o.broken && o.kind != K_BIKE
                             && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
                 }
-                if (v == null) {
-                    // (None there: one comes out from the station or base anyway.)
-                    float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
-                    if (g == null) continue;
-                    v = make(type == Entity.COP ? CRUISER : TRUCK);
-                    v.x = g[0];
-                    v.y = g[1];
-                    v.homeX = g[0];
-                    v.homeY = g[1];
-                    if (type == Entity.COP) v.agency = e.agency;
-                    v.standby = true;
-                    v.parked = true;
-                    vehicles.add(v);
-                }
+                // ((11.7) None there, or nobody there to drive it: they make their own way back.)
+                if (v == null || freeDriver(f, type, null) == null) continue;
                 ArrayList<Entity> group = new ArrayList<Entity>();
                 for (int j = 0; j < n && group.size() < (v.type == CRUISER ? SEATS : 10); j++) {
                     Entity o = w.entities.get(j);
@@ -4728,6 +4756,7 @@ final class Fleet {
                 v.state = DRIVE;
                 v.stuckTimer = 0;
                 v.place = city.placeName(spot[0], spot[1]);
+                seatDriver(v, freeDriver(f, type, group));
                 // (They wait for it where they are.)
                 for (Entity o : group) o.strandedFor = -90;
                 // (Not on the radio every time: one in a while is enough to know it's happening.)
@@ -5056,7 +5085,15 @@ final class Fleet {
                 if (World.hypot(e.x - f.x, e.y - f.y) < 220) two.add(e);
             }
             if (two.size() < want) continue;
-            float[] p = bay(city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y), f);
+            // ((11.7) Only the cars parked at the station, and two always kept back for calls: when the rest are out,
+            // officers walk their beat instead.)
+            int parked = 0;
+            for (int i = 0, n = vehicles.size(); i < n; i++) {
+                Vehicle o = vehicles.get(i);
+                if (o.standby && o.type == CRUISER && !o.broken && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) parked++;
+            }
+            if (parked <= 2) continue;
+            float[] p = takeStandby(CRUISER, f.x, f.y, f.r + 300);
             if (p == null) continue;
             Vehicle v = make(CRUISER);
             v.x = p[0];
@@ -5086,7 +5123,9 @@ final class Fleet {
         if (officers.isEmpty() || inc == null) return false;
         float[] p = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
         if (p == null || !canDrive(p[0], p[1], inc.x, inc.y)) return false;
-        p = bay(p, f);
+        // ((11.7) One of the cars parked there, if there's one left: none appear out of nowhere.)
+        p = takeStandby(CRUISER, f.x, f.y, f.r + 300);
+        if (p == null) return false;
         Vehicle v = make(CRUISER);
         v.x = p[0];
         v.y = p[1];
@@ -5183,8 +5222,8 @@ final class Fleet {
     /** A truck (or, kind >= 0, a vehicle of that kind) for this squad from the base. */
     boolean troopTruck(java.util.List<Entity> squad, City.Facility base, Dispatch.Incident inc, int forceKind) {
         // (One of the trucks parked on the base, if there's one left; otherwise one comes round to the gate.)
+        // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
         float[] p = city.takeParkedTruck(base.x, base.y, Math.max(260, base.r * 2.5f));
-        if (p == null) p = city.nearestDrivable(base.gateX > 0 ? base.gateX : base.x, base.gateY > 0 ? base.gateY : base.y);
         if (p == null || squad.isEmpty()) return false;
         int kind = 0;
         if (city.cfg.nature()) {
@@ -5315,8 +5354,8 @@ final class Fleet {
      * any of the dead it passes. They stay aboard unless the Humvee is wrecked.
      */
     boolean basePatrol(java.util.List<Entity> squad, City.Facility base, float tx, float ty) {
+        // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
         float[] p = city.takeParkedTruck(base.x, base.y, Math.max(260, base.r * 2.5f));
-        if (p == null) p = city.nearestDrivable(base.gateX > 0 ? base.gateX : base.x, base.gateY > 0 ? base.gateY : base.y);
         if (p == null || squad.isEmpty()) return false;
         p = bay(p, base);
         Vehicle v = make(TRUCK);
@@ -5363,6 +5402,78 @@ final class Fleet {
     }
 
     /**
+     * (11.7) Someone free at a station or base to drive one of its vehicles out: an officer or soldier with nothing
+     * to do, inside the grounds, not one of those it's going for. Null if there's nobody.
+     */
+    Entity freeDriver(City.Facility f, int type, java.util.List<Entity> not) {
+        if (f == null) return null;
+        Entity best = null;
+        float bd = f.r + 200;
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.type != type || e.task != Dispatch.T_NONE || e.rig != null || e.ride != null || e.aiming || e == w.controlled) continue;
+            if (e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_MARKSMAN) continue;
+            if (not != null && not.contains(e)) continue;
+            float d = (float) World.hypot(e.x - f.x, e.y - f.y);
+            if (d < bd) {
+                bd = d;
+                best = e;
+            }
+        }
+        return best;
+    }
+
+    /** (11.7) Puts someone at the wheel: they're off the street, in the vehicle, until it's parked home again. */
+    private void seatDriver(Vehicle v, Entity d) {
+        if (d == null) return;
+        d.task = Dispatch.T_NONE;
+        d.rig = v;
+        d.dead = true;
+        d.removed = true;
+        d.vx = d.vy = 0;
+        v.driver = d;
+        v.realDriver = true;
+    }
+
+    /**
+     * (11.7) Each police station's spare cars, parked on its lot from the start (besides those out on patrol): one
+     * for every two of the officers based there, two at the least, eight at the most. Calls and new patrols take
+     * these; when they're all out, officers go on foot until one comes back.
+     */
+    void stockStations() {
+        for (City.Facility f : city.facilities) {
+            if (f.kind != City.FACILITY_POLICE) continue;
+            int have = 0, officers = 0;
+            for (int i = 0, n = vehicles.size(); i < n; i++) {
+                Vehicle v = vehicles.get(i);
+                if (v.type == CRUISER && v.standby && World.hypot(v.x - f.x, v.y - f.y) < f.r + 300) have++;
+            }
+            for (int i = 0, n = w.entities.size(); i < n; i++) {
+                Entity e = w.entities.get(i);
+                if (!e.dead && e.type == Entity.COP && World.hypot(e.x - f.x, e.y - f.y) < f.r + 250) officers++;
+            }
+            int want = Math.max(2, Math.min(8, (officers + 1) / 2)) - have;
+            float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
+            for (int k = 0; k < want && g != null; k++) {
+                float[] p = bay(g, f);
+                if (p == null) break;
+                Vehicle v = make(CRUISER);
+                v.x = p[0];
+                v.y = p[1];
+                v.homeX = p[0];
+                v.homeY = p[1];
+                v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
+                v.depot = f;
+                v.state = IDLE;
+                v.speed = 0;
+                v.parked = true;
+                v.standby = true;
+                vehicles.add(v);
+            }
+        }
+    }
+
+    /**
      * (11.0) Officers or soldiers sent to a call a long way off don't walk it: an empty police car or army truck
      * close by takes them, or with none, one comes out from the station or base to pick them up, and drives them
      * there. False if there's nothing to take them (they go on foot).
@@ -5378,7 +5489,8 @@ final class Fleet {
         sx /= group.size();
         sy /= group.size();
         Vehicle v = null;
-        float bd = 320;
+        // ((11.7) An empty one a bit further off is still quicker than walking.)
+        float bd = 450;
         for (int i = 0, m = vehicles.size(); i < m; i++) {
             Vehicle o = vehicles.get(i);
             if (o.type != vtype || o.broken || o.burnt || o.player != null || o.removedFromFleet || !o.crew.isEmpty() || o.block != null
@@ -5398,21 +5510,15 @@ final class Fleet {
                 Vehicle o = vehicles.get(i);
                 if (o.standby && o.type == vtype && !o.broken && o.kind != K_BIKE && o.pickupFor == null && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
             }
-            boolean made = false;
-            if (v == null) {
-                float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
-                if (g == null) return false;
-                v = make(vtype);
-                v.x = g[0];
-                v.y = g[1];
-                v.homeX = g[0];
-                v.homeY = g[1];
-                made = true;
-            }
+            // ((11.7) Only a car or truck parked there, and only with someone there to drive it out: nothing comes
+            // out of a station or base with nobody in it, and none appear from nowhere when they're all out.)
+            if (v == null) return false;
+            Entity drv = freeDriver(f, type, group);
+            if (drv == null) return false;
             float[] spot = city.nearestDrivable(sx, sy);
             if (spot == null || !route(v, spot[0], spot[1])) return false;
-            // (A new one only once there's a way: none left standing at the gate for nothing.)
-            if (made) vehicles.add(v);
+            seatDriver(v, drv);
+            v.aimCd = 3;
             v.state = DRIVE;
             v.stuckTimer = 0;
             v.place = city.placeName(spot[0], spot[1]);

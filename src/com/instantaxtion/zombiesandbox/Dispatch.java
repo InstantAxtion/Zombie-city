@@ -1475,7 +1475,7 @@ final class Dispatch {
             int driven = 0;
             for (int i = 0; i < units.size(); i++) {
                 Entity e = units.get(i);
-                if (World.hypot(e.x - inc.x, e.y - inc.y) < 500) continue;
+                if (World.hypot(e.x - inc.x, e.y - inc.y) < 380) continue;
                 City.Facility f = city.nearestFacility(City.FACILITY_POLICE, e.x, e.y);
                 if (f == null || World.hypot(e.x - f.x, e.y - f.y) > 220) continue;
                 ArrayList<Entity> pair = new ArrayList<Entity>();
@@ -1507,12 +1507,13 @@ final class Dispatch {
         int driven = 0, seats = type == Entity.COP ? 4 : 8;
         for (int i = 0; i < units.size(); i++) {
             Entity e = units.get(i);
-            if (World.hypot(e.x - inc.x, e.y - inc.y) < 600) continue;
+            // ((11.7) Anything more than a few blocks: they drive.)
+            if (World.hypot(e.x - inc.x, e.y - inc.y) < 380) continue;
             ArrayList<Entity> group = new ArrayList<Entity>();
             group.add(e);
             for (int j = i + 1; j < units.size() && group.size() < seats; j++) {
                 Entity o = units.get(j);
-                if (World.hypot(o.x - e.x, o.y - e.y) < 160 && World.hypot(o.x - inc.x, o.y - inc.y) >= 600) group.add(o);
+                if (World.hypot(o.x - e.x, o.y - e.y) < 160 && World.hypot(o.x - inc.x, o.y - inc.y) >= 380) group.add(o);
             }
             if (!w.fleet.driveTo(group, inc)) continue;
             units.removeAll(group);

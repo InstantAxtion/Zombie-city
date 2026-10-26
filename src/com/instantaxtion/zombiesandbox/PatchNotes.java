@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "11.6";
-    static final int VERSION_CODE = 108;
+    static final String VERSION = "11.7";
+    static final int VERSION_CODE = 109;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "11.7  -  Real police cars, faster responses, a realistic outbreak",
+                    "No more police cars and drivers out of nowhere. Each station has its own cars parked on its lot from the start (one for every two officers based there, two to eight), and patrols and calls take those (two are always kept back for calls). A car only goes out to pick officers up if one is parked there and someone at the station is free to drive it; they go back inside when it's home. When every car is out, officers go on foot. Army bases send out the trucks parked there, not new ones.",
+                    "A car coming to pick officers or soldiers up heads for where they are now, not where they were when it set off; they wait where they are and run to it once it's close, instead of chasing it down the street.",
+                    "Police and soldiers get across the map quicker: anything more than a few blocks away they drive, they'll take an empty car or truck from further off, and on foot over a long way, with none of the dead about, they sprint - flat out until they're out of breath, then a jog until they get it back.",
+                    "A more realistic response: before anyone knows what this is, officers treat the first attackers as violent suspects - warnings, and no shooting until one is right on them or on someone else. They're trained to aim for the body, so at first it takes a lot of rounds to put one down; once word gets round (Police Command: aim for the head) they go for the head. Health officials announce that it spreads by the bite, and hospitals ask people to stay away.",
+            },
             {
                     "11.6  -  Steady movement when the frame rate dips",
                     "People, police, soldiers and the dead no longer twitch, spin round or jitter back and forth when the phone falls behind and the game catches up with a longer step (or at 2x to 8x speed): anyone on screen now walks that longer moment as several ordinary ones. In tests, units flip-flopping back and forth went from dozens per minute of play to one or two.",
