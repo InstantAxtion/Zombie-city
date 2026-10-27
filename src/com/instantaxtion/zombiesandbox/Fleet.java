@@ -4669,7 +4669,12 @@ final class Fleet {
             if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
                 int type = v.type == AMBULANCE ? Entity.CIVILIAN : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
+                // ((12.0) A driver from outside isn't on the city's roll: they used to take a callsign or a place in a
+                // squad, so the officers and squads after them were numbered with gaps and squads came up short.)
+                int cops = w.dispatch.copCount, soldiers = w.dispatch.soldierCount;
                 Entity d = w.create(type, v.x, v.y);
+                w.dispatch.copCount = cops;
+                w.dispatch.soldierCount = soldiers;
                 if (type == Entity.COP && v.agency > 0) w.makeAgency(d, v.agency);
                 if (v.guardUnit) w.applyRole(d, Entity.ROLE_GUARD);
                 d.rig = v;

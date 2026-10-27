@@ -5736,10 +5736,19 @@ final class GameView extends View implements Menu.Host {
             if ((portrait || underStats) && !miniRect.isEmpty() && y < miniRect.bottom && y + lineH > miniRect.top && miniRect.left > left)
                 rightLimit = Math.min(rightLimit, miniRect.left - 6 * dp);
             float maxText = rightLimit - left - whoW - 20 * dp;
-            String body = m.text;
-            if (text.measureText(body) > maxText) {
-                while (body.length() > 4 && text.measureText(body + "...") > maxText) body = body.substring(0, body.length() - 1);
-                body = body + "...";
+            // ((12.0) Cut to fit once, not a letter at a time again every frame it's up.)
+            String body = feedFit.get(m);
+            if (body == null || feedFitW.get(m) != maxText) {
+                body = m.text;
+                if (text.measureText(body) > maxText) {
+                    // (A first guess from the widths, then letter by letter from there.)
+                    int guess = Math.max(4, (int) (body.length() * maxText / text.measureText(body)));
+                    if (guess < body.length()) body = body.substring(0, guess);
+                    while (body.length() > 4 && text.measureText(body + "...") > maxText) body = body.substring(0, body.length() - 1);
+                    body = body + "...";
+                }
+                feedFit.put(m, body);
+                feedFitW.put(m, maxText);
             }
             float lw = whoW + text.measureText(body) + 16 * dp;
             RectF r = feedLines[feedCount];
@@ -5756,6 +5765,10 @@ final class GameView extends View implements Menu.Host {
             feedBottom = y;
         }
     }
+
+    /** ((12.0) Each radio line as cut to fit the screen, and the width it was cut for.) */
+    private final java.util.WeakHashMap<Dispatch.Message, String> feedFit = new java.util.WeakHashMap<Dispatch.Message, String>();
+    private final java.util.WeakHashMap<Dispatch.Message, Float> feedFitW = new java.util.WeakHashMap<Dispatch.Message, Float>();
 
     private int fade(int color) {
         return wallFade >= 1 ? color : alpha(color, wallFade);

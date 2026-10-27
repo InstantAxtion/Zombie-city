@@ -7123,6 +7123,13 @@ final class World {
                 e.pathBest = Float.MAX_VALUE;
                 continue;
             }
+            // ((12.0) The first corner out of sight from here (they've been pushed or wandered since it was planned,
+            // and a wall's in the way): planned again from where they are, not slid to and fro along the wall.)
+            if (e.pathIdx == 0 && dd > 20 && time - e.replanAt > 3 && !city.los(e.x, e.y, px, py)) {
+                e.replanAt = time;
+                e.path = null;
+                return false;
+            }
             // Pushed well off the line it was walking: plan it again from here. (10.49) Not on the way to the first
             // corner: with no corner before it, that measured the way still to go, and threw out (and planned again,
             // every moment) every route whose first leg was long.

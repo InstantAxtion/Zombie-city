@@ -277,6 +277,8 @@ final class Entity {
     transient float pathBest = Float.MAX_VALUE, pathStall;
     transient int[] pathSeen;
     transient int pathRetries;
+    /** ((12.0) When their route was last thrown out for a first corner they couldn't see.) */
+    transient float replanAt = -99;
     /** (10.37) What the brain has them doing (World.G_*), until it thinks again, and the building it had in mind. */
     int goal;
     transient float goalCd, goalTime;
