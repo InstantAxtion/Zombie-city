@@ -330,6 +330,19 @@ final class CityConfig implements OptionSet {
     /** The character for each map in a city code. */
     private static final String CODE_MAPS = "123456789ABCDEFGHIJKLMNOPQRST";
 
+    /** (12.0) The same city with the same options, to play again from the start. */
+    CityConfig copy() {
+        CityConfig c = new CityConfig();
+        System.arraycopy(v, 0, c.v, 0, Math.min(v.length, c.v.length));
+        c.seed = seed;
+        c.outskirts = outskirts;
+        c.exodus = exodus;
+        c.civic = civic;
+        for (int[] e : edits) c.edits.add(e.clone());
+        c.normalize();
+        return c;
+    }
+
     /** Reads a city code. Returns false (changing nothing) if it isn't one. */
     boolean applyCode(String text) {
         if (text == null) return false;

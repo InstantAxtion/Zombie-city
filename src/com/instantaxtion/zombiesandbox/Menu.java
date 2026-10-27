@@ -65,7 +65,9 @@ final class Menu {
     private static final int A_CONTINUE = 0, A_NEW = 1, A_SETTINGS = 2, A_NOTES = 3, A_QUIT = 4, A_RESUME = 5,
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
-            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_SLOT = 100, A_LOAD_SLOT = 150, A_LOG_ROW = 200;
+            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_SLOT = 100, A_LOAD_SLOT = 150, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
+    /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
+    private int logFilter;
 
     // ((11.5) No How to Play pages any more.)
 
@@ -464,9 +466,11 @@ final class Menu {
 
     private void drawPause(Canvas c, int w, int h) {
         backdrop(c, w, h, 0.6f);
-        String[] labels = {"Resume", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", "New Game", "Settings",
-                "Main Menu"};
-        int[] actions = {A_RESUME, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_NEW, A_SETTINGS, A_MAIN_MENU};
+        // ((12.0) Restart: the same city from the start, with a second tap to be sure.)
+        boolean sure = time - restartArmedAt < 4;
+        String[] labels = {"Resume", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", sure ? "Tap again to restart" : "Restart City",
+                "New Game", "Settings", "Main Menu"};
+        int[] actions = {A_RESUME, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
         int cols = w > h ? 2 : 1, rowsN = (labels.length + cols - 1) / cols;
         float gap = 7 * dp, bh = Math.min(46 * dp, (h - 120 * dp - gap * (rowsN - 1)) / rowsN);
         float colW = Math.min(300 * dp, (w - 60 * dp) / cols);
@@ -540,6 +544,9 @@ final class Menu {
         }
     }
 
+    /** ((12.0) When Restart City was first tapped.) */
+    private float restartArmedAt = -99;
+
     /** ((12.0) The slot waiting for a second tap to be overwritten, and when it was first tapped.) */
     private int armedSlot = -1;
     private float armedAt;
@@ -550,16 +557,25 @@ final class Menu {
     /** Every radio message this game, newest first. Tap one to go there. */
     private void drawLog(Canvas c, int w, int h) {
         float top = header(c, w, h, "Radio Log");
-        listArea.set(0, top, w, h - 12 * dp);
         float side = 16 * dp, maxW = Math.min(w - side * 2, 720 * dp), x0 = (w - maxW) / 2;
+        // ((12.0) Filters: everything, or just the 911 calls, the police, the army or the news.)
+        String[] tabs = {"All", "911", "Police", "Military", "News"};
+        float tg = 6 * dp, tw = (maxW - tg * (tabs.length - 1)) / tabs.length, th = 34 * dp;
+        for (int k = 0; k < tabs.length; k++)
+            button(tabs[k], A_LOG_FILTER + k, logFilter == k, x0 + k * (tw + tg), top, x0 + k * (tw + tg) + tw, top + th);
+        top += th + 8 * dp;
+        listArea.set(0, top, w, h - 12 * dp);
         c.save();
         c.clipRect(listArea);
         float y = top + 8 * dp - scroll;
         java.util.ArrayList<Dispatch.Message> log = host.world().dispatch.log;
         plain.setTextSize(13 * dp);
         text.setTextSize(13 * dp);
+        int shown = 0;
         for (int i = log.size() - 1; i >= 0; i--) {
             Dispatch.Message m = log.get(i);
+            if (logFilter > 0 && m.color != Dispatch.WHO_COLORS[logFilter - 1]) continue;
+            shown++;
             text.setTextAlign(Paint.Align.LEFT);
             float whoW = text.measureText(m.who + ": ");
             // ((12.0) Each message wrapped once, not every frame.)
@@ -586,10 +602,10 @@ final class Menu {
             y += rh + 6 * dp;
         }
         c.restore();
-        if (log.isEmpty()) {
+        if (shown == 0) {
             plain.setTextAlign(Paint.Align.CENTER);
             plain.setColor(MUTED);
-            c.drawText("Nothing on the radio yet.", w / 2f, top + 40 * dp, plain);
+            c.drawText(log.isEmpty() ? "Nothing on the radio yet." : "Nothing like that on the radio yet.", w / 2f, top + 40 * dp, plain);
         }
         contentHeight = y + scroll - top;
         clampScroll();
@@ -686,6 +702,12 @@ final class Menu {
                 {"People turned", String.valueOf(world.turned)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"Left by bus or train", String.valueOf(world.fledByTransit)},
+                // ((12.0) More of what the game was already keeping count of.)
+                {"Fled the city (came home)", world.fled + " (" + world.cameHome + ")"},
+                {"Bites", String.valueOf(world.bites)},
+                {"Biggest horde", String.valueOf(world.biggestHorde)},
+                {"Most police, army at once", world.peakCops + ", " + world.peakSoldiers},
+                {"Cars wrecked, buildings collapsed", world.carsWrecked + ", " + world.collapsedCount},
                 {"911 calls", String.valueOf(world.dispatch.calls)},
                 {"Shots fired", String.valueOf(world.shotsFired)},
                 {"Volunteers joined (said no)", world.recruits + " (" + world.refused + ")"},
@@ -1407,6 +1429,13 @@ final class Menu {
         return lines;
     }
 
+    /** ((12.0) The mouse wheel turned v notches over a list: it scrolls it.) */
+    void wheel(float v) {
+        flingV = 0;
+        scroll -= v * 60 * dp;
+        clampScroll();
+    }
+
     private void clampScroll() {
         float max = Math.max(0, contentHeight - listArea.height() + 12 * dp);
         scroll = Math.max(0, Math.min(max, scroll));
@@ -1504,6 +1533,11 @@ final class Menu {
     }
 
     private void act(int action) {
+        if (action >= A_LOG_FILTER) {
+            logFilter = action - A_LOG_FILTER;
+            scroll = 0;
+            return;
+        }
         if (action >= A_LOG_ROW) {
             java.util.ArrayList<Dispatch.Message> log = host.world().dispatch.log;
             int idx = log.size() - 1 - (action - A_LOG_ROW);
@@ -1615,6 +1649,14 @@ final class Menu {
             case A_SHOT:
                 host.continueGame();
                 host.screenshot();
+                break;
+            case A_RESTART:
+                if (time - restartArmedAt >= 4) {
+                    restartArmedAt = time;
+                    break;
+                }
+                restartArmedAt = -99;
+                host.startGame(host.world().city.cfg.copy());
                 break;
         }
     }

@@ -9,6 +9,8 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -272,6 +274,142 @@ final class GameView extends View implements Menu.Host {
         demo.v[CityConfig.OPT_ZOMBIES] = 2;
         loadWorld(demo);
         applySettings();
+        // ((12.0) For a keyboard and mouse: a Chromebook, or a phone with a keyboard plugged in.)
+        setFocusable(true);
+        setFocusableInTouchMode(true);
+        requestFocus();
+    }
+
+    // ------------------------------------------------------------------ (12.0) keyboard and mouse
+
+    /** The arrow keys (or W, A, S, D) held down. */
+    private boolean keyUp, keyDown, keyLeft, keyRight, keyMoved;
+
+    @Override
+    public boolean onKeyDown(int code, KeyEvent ev) {
+        if (loading) return true;
+        if (menu.isOpen()) {
+            if (code == KeyEvent.KEYCODE_ESCAPE) {
+                onBack();
+                return true;
+            }
+            return super.onKeyDown(code, ev);
+        }
+        if (setKey(code, true)) return true;
+        switch (code) {
+            case KeyEvent.KEYCODE_SPACE:
+                // (Fire, swing or bite while you're someone; otherwise pause.)
+                if (world.controlled != null) world.ctrlAttack = true;
+                else if (ev.getRepeatCount() == 0) pressTop(BTN_PAUSE);
+                return true;
+            case KeyEvent.KEYCODE_P:
+                if (ev.getRepeatCount() == 0) pressTop(BTN_PAUSE);
+                return true;
+            case KeyEvent.KEYCODE_1:
+            case KeyEvent.KEYCODE_2:
+            case KeyEvent.KEYCODE_3:
+            case KeyEvent.KEYCODE_4:
+                speedIdx = Math.min(SPEEDS.length - 1, code - KeyEvent.KEYCODE_1);
+                click();
+                return true;
+            case KeyEvent.KEYCODE_EQUALS:
+            case KeyEvent.KEYCODE_PLUS:
+            case KeyEvent.KEYCODE_NUMPAD_ADD:
+                zoomBy(1.25f, getWidth() / 2f, barTop / 2f);
+                return true;
+            case KeyEvent.KEYCODE_MINUS:
+            case KeyEvent.KEYCODE_NUMPAD_SUBTRACT:
+                zoomBy(0.8f, getWidth() / 2f, barTop / 2f);
+                return true;
+            case KeyEvent.KEYCODE_H:
+                if (ev.getRepeatCount() == 0) hudHidden = !hudHidden;
+                return true;
+            case KeyEvent.KEYCODE_M:
+            case KeyEvent.KEYCODE_ESCAPE:
+                if (ev.getRepeatCount() > 0) return true;
+                if (tactical) tactical = false;
+                else if (world.controlled != null && code == KeyEvent.KEYCODE_ESCAPE) releaseControl();
+                else if (picker >= 0 || clearMenu) {
+                    picker = -1;
+                    clearMenu = false;
+                } else menu.open(Menu.PAUSE);
+                click();
+                return true;
+        }
+        return super.onKeyDown(code, ev);
+    }
+
+    @Override
+    public boolean onKeyUp(int code, KeyEvent ev) {
+        if (setKey(code, false)) return true;
+        if (code == KeyEvent.KEYCODE_SPACE && world != null) {
+            world.ctrlAttack = false;
+            return true;
+        }
+        return super.onKeyUp(code, ev);
+    }
+
+    private boolean setKey(int code, boolean down) {
+        switch (code) {
+            case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_W: keyUp = down; return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN: case KeyEvent.KEYCODE_S: keyDown = down; return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_A: keyLeft = down; return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: case KeyEvent.KEYCODE_D: keyRight = down; return true;
+            default: return false;
+        }
+    }
+
+    /** The keys held down this frame: they walk whoever you're controlling, or move the map. */
+    private void applyKeys(float dt) {
+        int kx = (keyRight ? 1 : 0) - (keyLeft ? 1 : 0), ky = (keyDown ? 1 : 0) - (keyUp ? 1 : 0);
+        if (world.controlled != null) {
+            if (kx != 0 || ky != 0) {
+                float l = (float) Math.sqrt(kx * kx + ky * ky);
+                world.joyX = kx / l;
+                world.joyY = ky / l;
+                keyMoved = true;
+            } else if (keyMoved) {
+                // (Let go of the keys: stop, unless a thumb's on the stick.)
+                keyMoved = false;
+                if (joyId < 0) world.joyX = world.joyY = 0;
+            }
+            return;
+        }
+        keyMoved = false;
+        if (kx == 0 && ky == 0 || menu.isOpen()) return;
+        follow = null;
+        followV = null;
+        panVX = panVY = 0;
+        float sp = 700 * dp / scale * dt;
+        camX += kx * sp;
+        camY += ky * sp;
+        clampCamera();
+    }
+
+    /** Zooms by f, keeping the spot under (sx, sy) on the screen where it is. */
+    private void zoomBy(float f, float sx, float sy) {
+        float wx = worldX(sx), wy = worldY(sy);
+        float minScale = Math.min(getWidth() / world.city.worldW(), getHeight() / world.city.worldH()) * 0.8f;
+        scale = Math.max(minScale, Math.min(10f, scale * f));
+        if (follow == null && followV == null) {
+            camX = wx - sx / scale;
+            camY = wy - sy / scale;
+        }
+        clampCamera();
+    }
+
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent ev) {
+        // The mouse wheel: zooms the map in and out round the pointer, or scrolls a menu's list.
+        if ((ev.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0 && ev.getActionMasked() == MotionEvent.ACTION_SCROLL && !loading) {
+            float v = ev.getAxisValue(MotionEvent.AXIS_VSCROLL);
+            if (v != 0) {
+                if (menu.isOpen()) menu.wheel(v);
+                else zoomBy(v > 0 ? 1.15f : 1 / 1.15f, ev.getX(), ev.getY());
+            }
+            return true;
+        }
+        return super.onGenericMotionEvent(ev);
     }
 
     private void buildIcons() {
@@ -903,6 +1041,7 @@ final class GameView extends View implements Menu.Host {
                 if (Math.abs(panVX) + Math.abs(panVY) < 8) panVX = panVY = 0;
             }
         }
+        if (!menu.isOpen()) applyKeys(dt);
         if (menu.liveBackground()) driftCamera(dt);
         else if (follow != null) {
             if (follow.dead && follow != world.controlled) {
