@@ -377,7 +377,11 @@ final class Menu {
         plain.setTextAlign(Paint.Align.CENTER);
         plain.setTextSize(Math.max(11 * dp, size * 0.24f));
         plain.setColor(MUTED);
-        c.drawText("S A N D B O X   ·   S U R V I V E   T H E   O U T B R E A K", cx, uy + plain.getTextSize() * 1.9f, plain);
+        String tag = "S A N D B O X   ·   S U R V I V E   T H E   O U T B R E A K";
+        // ((12.0) Smaller to fit a narrow screen: it ran off both sides.)
+        float tagW = plain.measureText(tag);
+        if (tagW > maxW) plain.setTextSize(plain.getTextSize() * maxW / tagW);
+        c.drawText(tag, cx, uy + plain.getTextSize() * 1.9f, plain);
     }
 
     private void drawBadge(Canvas c, float cx, float cy, float r) {
@@ -965,7 +969,8 @@ final class Menu {
             Row r = new Row();
             r.index = i;
             r.r.set(x, y, x + colW, y + rowH);
-            float vw = Math.min(190 * dp, colW * 0.55f);
+            // ((12.0) A narrower value pill on a narrow screen, so the setting's name isn't cut to a word.)
+            float vw = Math.min(190 * dp, colW * (colW < 320 * dp ? 0.46f : 0.55f));
             r.prev.set(r.r.right - vw, y, r.r.right - vw + 44 * dp, y + rowH);
             rows.add(r);
 
@@ -1030,11 +1035,13 @@ final class Menu {
             plain.setTextAlign(Paint.Align.LEFT);
             plain.setTextSize(14.5f * dp);
             plain.setColor(0xFFB8BDC4);
-            c.drawText(Records.RECORD_NAMES[i], x0, y + 14 * dp, plain);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setTextSize(14.5f * dp);
             text.setColor(0xFFFFFFFF);
-            c.drawText(records.recordText(i), x0 + maxW, y + 14 * dp, text);
+            String val = records.recordText(i);
+            // ((12.0) The name cut short of its figure: on a narrow screen they ran into each other.)
+            c.drawText(fit(plain, Records.RECORD_NAMES[i], maxW - text.measureText(val) - 12 * dp), x0, y + 14 * dp, plain);
+            c.drawText(val, x0 + maxW, y + 14 * dp, text);
             y += 26 * dp;
         }
         c.restore();
@@ -1096,6 +1103,10 @@ final class Menu {
         int perRow = (shown + lines - 1) / lines;
         int rows = (shown + perRow - 1) / perRow;
         float pad = 4 * dp, bh = 38 * dp, bw = (width - pad * 2) / perRow;
+        // ((12.0) One size of writing for the whole row, the largest every choice fits at: each was sized to its own
+        // length, so "Large" stood out bigger than "Massive" beside it.)
+        float rowSize = 14 * dp;
+        for (int k = 0; k < shown; k++) rowSize = Math.min(rowSize, bw / Math.max(3, values[index[k]].length()) * 1.5f);
         tmp.set(x, y, x + width, y + rows * bh + pad * 2);
         fill.setColor(CARD);
         c.drawRoundRect(tmp, 14 * dp, 14 * dp, fill);
@@ -1109,7 +1120,7 @@ final class Menu {
                 c.drawRoundRect(sg.r, 11 * dp, 11 * dp, fill);
             }
             text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(Math.min(14 * dp, bw / Math.max(3, values[i].length()) * 1.5f));
+            text.setTextSize(rowSize);
             text.setColor(on ? ACCENT_INK : 0xFFC4CBD3);
             c.drawText(values[i], sg.r.centerX(), sg.r.centerY() + text.getTextSize() * 0.36f, text);
         }
@@ -1389,13 +1400,17 @@ final class Menu {
         }
         for (int e = 0; e < PatchNotes.NOTES.length; e++) {
             String[] entry = PatchNotes.NOTES[e];
-            if (y + 32 * dp > top - 40 * dp && y < h) {
-                text.setTextAlign(Paint.Align.LEFT);
-                text.setTextSize(17 * dp);
-                text.setColor(ACCENT);
-                c.drawText(entry[0], x0, y + 18 * dp, text);
+            // ((12.0) A long heading wraps instead of running off the side.)
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(17 * dp);
+            ArrayList<String> head = wrap(entry[0], maxW, text);
+            for (int k = 0; k < head.size(); k++) {
+                if (y + 32 * dp > top - 40 * dp && y < h) {
+                    text.setColor(ACCENT);
+                    c.drawText(head.get(k), x0, y + 18 * dp, text);
+                }
+                y += k < head.size() - 1 ? 22 * dp : 32 * dp;
             }
-            y += 32 * dp;
             plain.setTextSize(14.5f * dp);
             plain.setTextAlign(Paint.Align.LEFT);
             for (ArrayList<String> lines : notesLines.get(e)) {

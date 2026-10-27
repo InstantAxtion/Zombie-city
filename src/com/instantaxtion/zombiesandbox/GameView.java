@@ -1287,8 +1287,15 @@ final class GameView extends View implements Menu.Host {
                 miniRect.set(getWidth() - 10 * dp - size, statsRect.top, getWidth() - 10 * dp, statsRect.top + size);
             else
                 miniRect.set(getWidth() - 10 * dp - size, uiFloor() - 10 * dp - size, getWidth() - 10 * dp, uiFloor() - 10 * dp);
-            int collapsed = 0;
-            for (int i = 0; i < world.city.buildings.size(); i++) if (world.city.buildings.get(i).collapsed) collapsed++;
+            // ((12.0) The fallen buildings counted once a second, not every frame: tens of thousands on a big map.)
+            if (world != miniCountWorld || world.time - miniCountAt > 1 || world.time < miniCountAt) {
+                miniCountWorld = world;
+                miniCountAt = world.time;
+                int n = 0;
+                for (int i = 0; i < world.city.buildings.size(); i++) if (world.city.buildings.get(i).collapsed) n++;
+                miniCount = n;
+            }
+            int collapsed = miniCount;
             if (miniMap == null || miniWorld != world || miniCollapsed != collapsed) {
                 // Redrawn only when the city changes.
                 miniWorld = world;
@@ -1650,6 +1657,9 @@ final class GameView extends View implements Menu.Host {
         return toolsFolded ? barTop : foldTab.top;
     }
 
+    private World miniCountWorld;
+    private float miniCountAt;
+    private int miniCount;
     private android.graphics.Bitmap miniDots;
     private Canvas miniDotsCanvas;
     private float miniTimer;
@@ -6690,7 +6700,8 @@ final class GameView extends View implements Menu.Host {
         int w = getWidth();
         float top = portrait ? Math.max(feedBottom, Math.max(meterBottom, statsShown.bottom)) + 12 * dp : barTop * 0.4f;
         text.setTextAlign(Paint.Align.CENTER);
-        if (!headlines.isEmpty()) {
+        // ((12.0) Not over the Clear menu while it's open: its lower choices were hidden under the band.)
+        if (!headlines.isEmpty() && !clearMenu) {
             Object[] hd = headlines.get(0);
             float a = Math.min(1, Math.min(headTime * 4, (HEAD_SECONDS - headTime) / 0.6f));
             String title = (String) hd[0], sub = (String) hd[1];
@@ -6709,7 +6720,8 @@ final class GameView extends View implements Menu.Host {
             }
             top += bandH + 8 * dp;
         }
-        if (world.messageTime > 0 && world.message != null) {
+        // ((12.0) Not over an open picker: it was drawn across the top of it.)
+        if (world.messageTime > 0 && world.message != null && picker < 0) {
             float a = Math.min(1, world.messageTime);
             text.setTextSize(17 * dp);
             // Fit between whatever else is on screen at that height (stats, meter, minimap, Auto cam).
@@ -6833,7 +6845,9 @@ final class GameView extends View implements Menu.Host {
         c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
         text.setColor(0xFFFFFFFF);
         // ((12.0) Cut to fit, clear of the buttons: a long name or a long street ran off the card, or under them.)
-        float bw = 110 * dp, bh = 30 * dp;
+        // ((12.0) Narrower buttons on a narrow card, so the name still has room.)
+        boolean narrow = cw < 380 * dp;
+        float bw = narrow ? 76 * dp : 110 * dp, bh = 30 * dp;
         c.drawText(fitText(title, cw - 14 * dp - bw - bh - 28 * dp), left + 14 * dp, top + 22 * dp, text);
         text.setTextSize(12.5f * dp);
         text.setColor(0xFFB8BDC4);
@@ -6853,7 +6867,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(12.5f * dp);
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(0xFFFFFFFF);
-        c.drawText("Take control", takeRect.centerX(), takeRect.centerY() + 4.5f * dp, text);
+        c.drawText(narrow ? "Control" : "Take control", takeRect.centerX(), takeRect.centerY() + 4.5f * dp, text);
     }
 
     /** The card for a vehicle being followed: what it is, what it's doing, how fast, who's aboard, damage. */
@@ -6872,7 +6886,9 @@ final class GameView extends View implements Menu.Host {
         String people = aboard == 0 ? (v.player != null ? "you're driving" : driver != null ? "driver only (" + driver + ")"
                 : v.occupied() ? "driver only" : "nobody aboard")
                 : (aboard + (v.driver != null ? 1 : 0)) + " aboard";
-        lines.add((Fleet.airborne(v) ? "flying" : kmh < 2 ? "stopped" : kmh + " km/h") + (v.lightsOn() ? ", lights and siren" : "")
+        // ((12.0) A helicopter still on its pad isn't "flying".)
+        boolean flying = Fleet.airborne(v) && (v.type != Fleet.HELI || v.alt > 0.05f);
+        lines.add((flying ? "flying" : Fleet.airborne(v) ? "on the ground" : kmh < 2 ? "stopped" : kmh + " km/h") + (v.lightsOn() ? ", lights and siren" : "")
                 + "  -  " + people + "  -  " + (v.maxHp > 0 ? Math.max(0, Math.round(100 * v.hp / v.maxHp)) + "% condition" : "")
                 // ((12.0) And how much is in the tank: everyday cars run dry, and are left where they stop.)
                 + (v.type == Fleet.CAR && v.player == null && v.model != Fleet.M_BUS && !v.broken ? "  -  fuel " + Math.round(v.fuel * 100) + "%" : ""));
@@ -7044,6 +7060,16 @@ final class GameView extends View implements Menu.Host {
             float cx = w / 2f, cy = (top + bottom) / 2, dx = sx - cx, dy = sy - cy;
             float k = Math.min(Math.abs((w / 2f - 26 * dp) / (dx == 0 ? 0.001f : dx)), Math.abs(((bottom - top) / 2 - 26 * dp) / (dy == 0 ? 0.001f : dy)));
             float ix = cx + dx * k, iy = cy + dy * k;
+            // ((12.0) Two pinned people off the same way: side by side along the edge, not one on top of the other.)
+            boolean side = Math.abs(ix - cx) > (w / 2f - 30 * dp);
+            for (int tries = 0; tries < 6; tries++) {
+                boolean hit = false;
+                for (int q = 0; q < pinCount && !hit; q++)
+                    if (Math.abs(pinRects[q].centerX() - ix) < 40 * dp && Math.abs(pinRects[q].centerY() - iy) < 40 * dp) hit = true;
+                if (!hit) break;
+                if (side) iy = iy + 42 * dp > bottom - 22 * dp ? iy - 42 * dp * (tries + 1) : iy + 42 * dp;
+                else ix = ix + 42 * dp > w - 22 * dp ? ix - 42 * dp * (tries + 1) : ix + 42 * dp;
+            }
             RectF r = pinRects[pinCount];
             r.set(ix - 20 * dp, iy - 20 * dp, ix + 20 * dp, iy + 20 * dp);
             pinIcons[pinCount++] = p;
@@ -7229,6 +7255,11 @@ final class GameView extends View implements Menu.Host {
         c.drawText(info, w / 2f, top + 18 * dp, text);
         float bw = 150 * dp, bh = 34 * dp, by = top - bh - 10 * dp;
         releaseRect.set((w - bw) / 2, by, (w + bw) / 2, by + bh);
+        // ((12.0) On a narrow screen, clear of the attack button: it was drawn half over it.)
+        if (releaseRect.right > attackX - attackR - 6 * dp) {
+            float right = attackX - attackR - 8 * dp;
+            releaseRect.set(Math.max(10 * dp, right - bw), by, right, by + bh);
+        }
         fill.setColor(0xE0202227);
         c.drawRoundRect(releaseRect, 9 * dp, 9 * dp, fill);
         stroke.setColor(0x80FFFFFF);
