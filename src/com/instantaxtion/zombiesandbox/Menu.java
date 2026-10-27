@@ -54,6 +54,9 @@ final class Menu {
 
         /** Asks the player to type a city code (shows the current one to copy or edit). */
         void askCityCode(String current);
+
+        /** (12.0) Puts text on the clipboard; false if it couldn't. */
+        boolean copyText(String label, String text);
     }
 
     static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
@@ -65,7 +68,7 @@ final class Menu {
     private static final int A_CONTINUE = 0, A_NEW = 1, A_SETTINGS = 2, A_NOTES = 3, A_QUIT = 4, A_RESUME = 5,
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
-            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_SLOT = 100, A_LOAD_SLOT = 150, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
+            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_LOAD_SLOT = 150, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -489,7 +492,12 @@ final class Menu {
         plain.setTextSize(12 * dp);
         plain.setColor(MUTED);
         World world = host.world();
-        c.drawText(world.city.name + "  -  city code " + world.city.cfg.code(), w / 2f, tmp.top + 58 * dp, plain);
+        // ((12.0) Tap it to copy the code, to share the city.)
+        boolean copied = time - copiedAt < 2;
+        String line = copied ? "City code copied" : world.city.name + "  -  city code " + world.city.cfg.code() + "  (tap to copy)";
+        plain.setColor(copied ? ACCENT : MUTED);
+        c.drawText(fit(plain, line, tmp.width() - 24 * dp), w / 2f, tmp.top + 58 * dp, plain);
+        button("", A_COPY_CODE, false, tmp.left + 20 * dp, tmp.top + 44 * dp, tmp.right - 20 * dp, tmp.top + 64 * dp).invisible = true;
         float top = tmp.top + 72 * dp;
         for (int i = 0; i < labels.length; i++) {
             int col = cols == 2 ? i % 2 : 0, row = cols == 2 ? i / 2 : i;
@@ -543,6 +551,9 @@ final class Menu {
             c.drawText(note, w / 2f, h - 23 * dp, text);
         }
     }
+
+    /** ((12.0) When the city code was last copied.) */
+    private float copiedAt = -99;
 
     /** ((12.0) When Restart City was first tapped.) */
     private float restartArmedAt = -99;
@@ -1649,6 +1660,9 @@ final class Menu {
             case A_SHOT:
                 host.continueGame();
                 host.screenshot();
+                break;
+            case A_COPY_CODE:
+                if (host.copyText("City code", host.world().city.cfg.code())) copiedAt = time;
                 break;
             case A_RESTART:
                 if (time - restartArmedAt >= 4) {

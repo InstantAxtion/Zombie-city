@@ -1,6 +1,6 @@
 package android.content;
 import java.util.HashMap;
-public class Context { public static final int MODE_PRIVATE=0; final android.content.res.Resources r=new android.content.res.Resources();
+public class Context { public static final int MODE_PRIVATE=0; public static final String CLIPBOARD_SERVICE="clipboard"; final ClipboardManager clipboard=new ClipboardManager(); public Object getSystemService(String n){return CLIPBOARD_SERVICE.equals(n)?clipboard:null;} final android.content.res.Resources r=new android.content.res.Resources();
  public android.content.res.Resources getResources(){return r;} public java.io.File getFilesDir(){ java.io.File d=new java.io.File("savetest"); d.mkdirs(); return d;}
  final HashMap<String,Integer> map=new HashMap<>();
  public SharedPreferences getSharedPreferences(String n,int m){ return new SharedPreferences(){

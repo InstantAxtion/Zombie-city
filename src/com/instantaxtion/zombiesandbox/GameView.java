@@ -555,6 +555,18 @@ final class GameView extends View implements Menu.Host {
     }
 
     @Override
+    public boolean copyText(String label, String text) {
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm == null) return false;
+            cm.setPrimaryClip(android.content.ClipData.newPlainText(label, text));
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    @Override
     public boolean canContinue() {
         return hasGame || saveFile().exists();
     }
@@ -1366,6 +1378,23 @@ final class GameView extends View implements Menu.Host {
                 c.drawLine(hx + (float) Math.sin(a) * rr, hy - (float) Math.cos(a) * rr, hx - (float) Math.sin(a) * rr, hy + (float) Math.cos(a) * rr, stroke);
                 fill.setColor(col);
                 c.drawCircle(hx, hy, 1.4f * dp, fill);
+            }
+            // ((12.0) The people you've pinned: a gold star-point each, and whoever you're following or controlling
+            // ringed.)
+            for (int i = 0; i < pinned.size(); i++) {
+                Entity p = pinned.get(i);
+                if (p.dead && world.controlled != p) continue;
+                float px = mx(p.x), py = my(p.y);
+                fill.setColor(0xE0101216);
+                c.drawCircle(px, py, 3.4f * dp, fill);
+                fill.setColor(0xFFE8C547);
+                c.drawCircle(px, py, 2.2f * dp, fill);
+            }
+            Entity you = world.controlled != null ? world.controlled : follow;
+            if (you != null && !you.dead) {
+                stroke.setColor(0xFFFFFFFF);
+                stroke.setStrokeWidth(1.4f * dp);
+                c.drawCircle(mx(you.x), my(you.y), (3.5f + 1.5f * (float) Math.abs(Math.sin(world.time * 4))) * dp, stroke);
             }
             stroke.setColor(0xFFFFFFFF);
             stroke.setStrokeWidth(1 * dp);
@@ -8053,6 +8082,9 @@ final class GameView extends View implements Menu.Host {
 
     private float boxX0, boxY0, boxX1, boxY1;
     private boolean boxing;
+    /** ((12.0) The last tap on the map, for a double tap.) */
+    private long lastTapAt;
+    private float lastTapX, lastTapY;
 
     private void worldUp(float x, float y) {
         if (tool == TOOL_ORDER) {
@@ -8080,6 +8112,16 @@ final class GameView extends View implements Menu.Host {
             }
         }
         if (tool != TOOL_PAN || dragged) return;
+        // ((12.0) A double tap zooms in on the spot.)
+        long now = System.nanoTime();
+        if (now - lastTapAt < 320000000L && World.hypot(x - lastTapX, y - lastTapY) < 32 * dp) {
+            lastTapAt = 0;
+            zoomBy(1.8f, x, y);
+            return;
+        }
+        lastTapAt = now;
+        lastTapX = x;
+        lastTapY = y;
         float wx = worldX(x), wy = worldY(y);
         float best = Math.max(12, 28 * dp / scale);
         best *= best;

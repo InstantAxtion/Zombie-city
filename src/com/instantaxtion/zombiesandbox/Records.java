@@ -6,7 +6,9 @@ import android.content.SharedPreferences;
 /** Best results across every game played, saved on the phone. ((11.5) No achievements any more.) */
 final class Records {
     static final String[] RECORD_NAMES = {"Longest outbreak survived", "Most zombies killed in a game",
-            "Biggest horde", "Most volunteers in a game", "Zombies killed, all games", "Games played"};
+            "Biggest horde", "Most volunteers in a game", "Zombies killed, all games", "Games played",
+            // ((12.0) Two more.)
+            "Most kills by one person", "Most people alive when the city survived"};
 
     private final SharedPreferences prefs;
 
@@ -51,5 +53,8 @@ final class Records {
         best(1, w.zombiesKilled);
         best(2, w.biggestHorde);
         best(3, w.recruits);
+        java.util.ArrayList<int[]> top = w.heroes(1);
+        if (!top.isEmpty()) best(6, top.get(0)[3]);
+        if (w.warResult == 1) best(7, w.humans);
     }
 }
