@@ -346,7 +346,12 @@ final class CityConfig implements OptionSet {
     /** Reads a city code. Returns false (changing nothing) if it isn't one. */
     boolean applyCode(String text) {
         if (text == null) return false;
-        String t = text.trim().replace(" ", "");
+        // ((12.0) As pasted from a message: any kind of space, quotes round it, the "CITY" the New Game screen
+        // shows before it, and a dash that a chat app made of the hyphen all came out as "That isn't a city code".)
+        String t = text.replaceAll("[\\s\u00A0\u2007\u202F\"'\u201C\u201D\u2018\u2019]", "")
+                .replaceAll("[\u2010\u2011\u2012\u2013\u2014\u2212]", "-");
+        if (t.regionMatches(true, 0, "CITY", 0, 4)) t = t.substring(4);
+        if (t.startsWith(":")) t = t.substring(1);
         String ed = null;
         int tilde = t.indexOf('~');
         if (tilde > 0) {

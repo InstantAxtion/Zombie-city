@@ -373,6 +373,8 @@ final class Fleet {
                 }
             case AMBULANCE:
                 if (v.broken) return "Ambulance: Broken down";
+                // ((12.0) Parked at its station: it said "Responding".)
+                if (v.parked || v.standby) return "Ambulance: Parked, ready";
                 if (v.state == RETURN) return v.riders.isEmpty() ? "Ambulance: Returning" : "Ambulance: Patient on board";
                 if (v.state == LOAD) return "Ambulance: Loading patient";
                 return "Ambulance: Responding";
@@ -385,6 +387,10 @@ final class Fleet {
                 // ((12.0) A wreck is a wreck, whatever it was doing: it went on saying "Responding" or "On patrol".)
                 if (v.broken) return who + ": Wrecked";
                 if (v.standby) return who + ": Parked at " + (v.depot != null ? v.depot.name : "base") + ", ready";
+                // ((12.0) Left where it stopped, or parked, or off to restock: it said "Returning" or "Responding".)
+                if (v.state == ABANDONED) return who + ": Left where it stopped, nobody aboard";
+                if (v.ammoRun != null && v.state == DRIVE) return who + ": Off to " + v.ammoRun.name + " to restock ammo";
+                if (v.parked && v.crew.isEmpty() && v.driver == null) return who + ": Parked";
                 if (v.state == PICKUP) return who + ": Picking up its " + (v.passengerType == Entity.SOLDIER ? "squad" : "officers");
                 if (v.pickup && v.state == DRIVE) return who + ": Going to pick up its " + (v.passengerType == Entity.SOLDIER ? "squad" : "officers")
                         + (v.driver != null && v.realDriver ? ", " + Names.person(v.driver.nameSeed) + " driving" : "");
@@ -1266,7 +1272,7 @@ final class Fleet {
                     if (z != null) w.dispatch.sighting(z.x, z.y, null);
                     if (w.time - v.reconSaid > 20) {
                         v.reconSaid = w.time;
-                        w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Recon " + v.number + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : n + " hostiles")
+                        w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Recon " + v.number + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "hostile", "hostiles"))
                                 + " on " + city.placeName(v.x, v.y) + ". Marked. Moving on.", v.x, v.y);
                     }
                 }
@@ -2076,6 +2082,7 @@ final class Fleet {
     }
 
     void update(float dt) {
+        frameNo++;
         patrolCount = patrolCars();
         staffPatrols(dt);
         driverTimer -= dt;
@@ -4006,7 +4013,10 @@ final class Fleet {
                 // oncoming one.)
                 if (city.lanesEachWay(bx, by, ddx, ddy) > 1 && city.junctionIdAt(v.x, v.y) < 0)
                     off = city.laneOffset(bx, by, ddx, ddy, laneOf(v) == 0 ? 2 : 0);
-                else off -= (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
+                // ((12.0) Always to the driver's left, towards the middle of the road. It went by the sign of the
+                // offset, and where the route ran along the outside tile of the road the offset was negative: it
+                // swung out the other way, off the road - into the lake, along a lakeside road.)
+                else off -= City.T * 1.1f;
             }
         }
         // Into a junction in your own lane (measured on the road you're on): the turn is made inside it,
@@ -4839,7 +4849,7 @@ final class Fleet {
                 if (w.time > fetchSaidAt) {
                     fetchSaidAt = w.time + 25;
                     w.dispatch.say(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, e,
-                        (v.type == TRUCK ? "Truck" : "Car") + " coming out to " + v.place + " to pick up " + group.size() + (type == Entity.COP ? " officers." : " soldiers."), v.x, v.y);
+                        (v.type == TRUCK ? "Truck" : "Car") + " coming out to " + v.place + " to pick up " + (type == Entity.COP ? World.count(group.size(), "officer", "officers") : World.count(group.size(), "soldier", "soldiers")) + ".", v.x, v.y);
                 }
                 return;
             }
@@ -4991,8 +5001,9 @@ final class Fleet {
     /** Calls the crew on foot back aboard. Returns how many are still out. */
     int recall(Vehicle v) {
         int out = 0;
-        for (int i = 0, n = w.entities.size(); i < n; i++) {
-            Entity e = w.entities.get(i);
+        ArrayList<Entity> mine = onFoot(v);
+        for (int i = 0; i < mine.size(); i++) {
+            Entity e = mine.get(i);
             if (e.dead || e.rig != v) continue;
             out++;
             if (e.task != Dispatch.T_BOARD) {
@@ -5006,11 +5017,45 @@ final class Fleet {
     /** Crew members still on foot. */
     int crewOnFoot(Vehicle v) {
         int out = 0;
-        for (int i = 0, n = w.entities.size(); i < n; i++) {
-            Entity e = w.entities.get(i);
+        ArrayList<Entity> mine = onFoot(v);
+        for (int i = 0; i < mine.size(); i++) {
+            Entity e = mine.get(i);
             if (!e.dead && e.rig == v) out++;
         }
         return out;
+    }
+
+    /** ((12.0) Who belongs to which vehicle while out of it, gathered in one look through everyone a frame.) */
+    private final java.util.IdentityHashMap<Vehicle, ArrayList<Entity>> rigIndex = new java.util.IdentityHashMap<Vehicle, ArrayList<Entity>>();
+    private final ArrayList<ArrayList<Entity>> rigPool = new ArrayList<ArrayList<Entity>>();
+    private static final ArrayList<Entity> NOBODY = new ArrayList<Entity>();
+    private int frameNo, rigFrame = -1;
+
+    /**
+     * (12.0) Those out of v who belong to it (its crew on foot), as they were when first asked this frame: callers
+     * still check each one's rig, as someone sent off since will have had theirs cleared.
+     */
+    ArrayList<Entity> onFoot(Vehicle v) {
+        if (rigFrame != frameNo) {
+            rigFrame = frameNo;
+            for (ArrayList<Entity> l : rigIndex.values()) {
+                l.clear();
+                rigPool.add(l);
+            }
+            rigIndex.clear();
+            for (int i = 0, n = w.entities.size(); i < n; i++) {
+                Entity e = w.entities.get(i);
+                if (e.dead || e.rig == null) continue;
+                ArrayList<Entity> l = rigIndex.get(e.rig);
+                if (l == null) {
+                    l = rigPool.isEmpty() ? new ArrayList<Entity>() : rigPool.remove(rigPool.size() - 1);
+                    rigIndex.put(e.rig, l);
+                }
+                l.add(e);
+            }
+        }
+        ArrayList<Entity> l = rigIndex.get(v);
+        return l == null ? NOBODY : l;
     }
 
     /** People aboard vehicles, by type (they still count). */
@@ -5654,8 +5699,10 @@ final class Fleet {
      */
     /** (11.1) Someone of the crew still walking up to the car and nearly there (they come in off the beat now). */
     private boolean partnerComing(Vehicle v) {
-        for (int i = 0, n = w.entities.size(); i < n; i++) {
-            Entity e = w.entities.get(i);
+        // ((12.0) From the list of who belongs to which car: asked every frame while a car waits, it looked through everyone.)
+        ArrayList<Entity> mine = onFoot(v);
+        for (int i = 0; i < mine.size(); i++) {
+            Entity e = mine.get(i);
             if (!e.dead && e.rig == v && e.task == Dispatch.T_BOARD && Math.abs(e.x - v.x) < 160 && Math.abs(e.y - v.y) < 160) return true;
         }
         return false;
@@ -5690,16 +5737,19 @@ final class Fleet {
                 // Waits while its officers deal with it, then calls them back. (10.48) Not for those who've been
                 // given somewhere else to be - a perimeter, a post, another call a long way off: the car goes on
                 // without them (and they find their own way, or another car, later).
-                for (int i = 0, n = w.entities.size(); i < n; i++) {
-                    Entity e = w.entities.get(i);
+                // ((12.0) Its own people, from the list of who belongs to which car: these four looked through
+                // everyone in the city, for every car at a scene.)
+                ArrayList<Entity> mine = onFoot(v);
+                for (int i = 0; i < mine.size(); i++) {
+                    Entity e = mine.get(i);
                     if (e.dead || e.rig != v) continue;
                     if (e.task == Dispatch.T_CORDON || e.task == Dispatch.T_POST || e.task == Dispatch.T_GUARD
                             || World.hypot(e.x - v.x, e.y - v.y) > 500) e.rig = null;
                 }
                 // ((10.60) One of its officers out of rounds, with the station a long walk off: everyone back in
                 // the car, and it drives them there to restock instead of them walking it with the dead behind.)
-                for (int i = 0, n = w.entities.size(); i < n; i++) {
-                    Entity e = w.entities.get(i);
+                for (int i = 0; i < mine.size(); i++) {
+                    Entity e = mine.get(i);
                     if (e.dead || e.rig != v || e.task != Dispatch.T_RESUPPLY || World.hypot(e.x - v.x, e.y - v.y) > 320) continue;
                     City.Facility f = w.restockFor(e);
                     if (f == null || World.hypot(f.x - v.x, f.y - v.y) < 450) continue;
@@ -5712,8 +5762,8 @@ final class Fleet {
                 // ((10.56) Its officers sent on to another call a fair way off, and nothing left here: they come
                 // back to the car and it drives them there, instead of it waiting here while they walk.)
                 if (!busy && v.onward == null) {
-                    for (int i = 0, n = w.entities.size(); i < n; i++) {
-                        Entity e = w.entities.get(i);
+                    for (int i = 0; i < mine.size(); i++) {
+                        Entity e = mine.get(i);
                         if (e.dead || e.rig != v || e.task != Dispatch.T_RESPOND || e.incident == null || e.incident == v.incident || e.incident.resolved) continue;
                         if (World.hypot(e.incident.x - v.x, e.incident.y - v.y) < 450) continue;
                         v.onward = e.incident;
@@ -5722,8 +5772,8 @@ final class Fleet {
                         return false;
                     }
                 }
-                for (int i = 0, n = w.entities.size(); i < n && !busy; i++) {
-                    Entity e = w.entities.get(i);
+                for (int i = 0; i < mine.size() && !busy; i++) {
+                    Entity e = mine.get(i);
                     if (!e.dead && e.rig == v && e.task == Dispatch.T_RESPOND) busy = true;
                 }
                 v.quiet = busy ? 0 : v.quiet + 0.5f;

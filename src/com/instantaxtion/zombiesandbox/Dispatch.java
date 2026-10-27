@@ -1283,7 +1283,7 @@ final class Dispatch {
             }
             if (first != null)
                 say(WHO_POLICE, null, "Dispatch: " + name(first) + (moved > 1 ? " and partner" : "") + ", divert to " + starved.place
-                        + ". " + starved.zombiesNear + " hostiles and nobody on it.", starved.x, starved.y);
+                        + ". " + World.count(starved.zombiesNear, "hostile", "hostiles") + " and nobody on it.", starved.x, starved.y);
         }
     }
 
@@ -1608,8 +1608,8 @@ final class Dispatch {
         militaryCd = 20;
         if (inc != null) inc.militaryRequested = true;
         int hostiles = w.countZombiesNear(x, y, 160);
-        say(WHO_POLICE, null, "Police Command: Requesting military support at " + place + ". " + hostiles
-                + " hostiles.", x, y);
+        say(WHO_POLICE, null, "Police Command: Requesting military support at " + place + ". " + World.count(hostiles, "hostile", "hostiles")
+                + ".", x, y);
         ArrayList<Entity> squad = nearestFree(Entity.SOLDIER, x, y, 4, Float.MAX_VALUE);
         if (!squad.isEmpty() && zone == null && (w.fleet.mountUp(squad, inc)
                 || (World.hypot(squad.get(0).x - x, squad.get(0).y - y) > 600 && w.fleet.driveTo(squad, inc)))) {
@@ -1672,9 +1672,9 @@ final class Dispatch {
         armyEta = Math.max(240, 420 - w.outbreakTime) + rnd.nextFloat() * 90;
         airCd = Math.max(airCd, 180);
         int mins = Math.max(2, Math.round(armyEta / 60f));
-        say(WHO_MILITARY, null, "Military: Request approved. A quick reaction force of " + qrf + " soldiers in Humvees is about two minutes out. "
-                + (squadReserve > 0 ? "The main convoy, " + squadReserve + " soldiers with armour, is mobilising: ETA about " + mins + " minutes. " : "")
-                + (air > 0 ? air + " more stand by to be flown in by helicopter wherever they're needed." : ""), x, y);
+        say(WHO_MILITARY, null, "Military: Request approved. A quick reaction force of " + World.count(qrf, "soldier", "soldiers") + " in Humvees is about two minutes out. "
+                + (squadReserve > 0 ? "The main convoy, " + World.count(squadReserve, "soldier", "soldiers") + " with armour, is mobilising: ETA about " + mins + " minutes. " : "")
+                + (air > 0 ? air + (air == 1 ? " more stands" : " more stand") + " by to be flown in by helicopter wherever they're needed." : ""), x, y);
         return true;
     }
 
@@ -1762,8 +1762,8 @@ final class Dispatch {
         }
         boolean hwy = city.onHighway(p[0], p[1]);
         say(WHO_MILITARY, null, "Military: The army convoy is entering the city from " + sideOfMap(p[0], p[1])
-                + (hwy && city.hwyName != null ? " on " + city.hwyName : "") + ": " + soldiers + " soldiers in " + trucks
-                + " vehicles" + (tanks > 0 ? ", " + tanks + " tank" + (tanks > 1 ? "s" : "") : "")
+                + (hwy && city.hwyName != null ? " on " + city.hwyName : "") + ": " + World.count(soldiers, "soldier", "soldiers") + " in " + World.count(trucks, "vehicle", "vehicles")
+                + "" + (tanks > 0 ? ", " + tanks + " tank" + (tanks > 1 ? "s" : "") : "")
                 + (air > 0 ? ", " + air + " helicopter" + (air > 1 ? "s" : "") + " flying cover" : "") + ". Heading for " + place + ".", p[0], p[1]);
         callout(p[0], p[1], "ARMY CONVOY", WHO_COLORS[WHO_MILITARY]);
     }
@@ -2035,8 +2035,8 @@ final class Dispatch {
         inc.backupNeed = want;
         inc.backupBy = name(e);
         boolean army = e.type == Entity.SOLDIER;
-        say(army ? WHO_MILITARY : WHO_POLICE, e, (army ? "Contact at " : "Shots fired at ") + inc.place + ", " + hostiles
-                + " hostiles on us. Requesting backup!", e.x, e.y);
+        say(army ? WHO_MILITARY : WHO_POLICE, e, (army ? "Contact at " : "Shots fired at ") + inc.place + ", " + World.count(hostiles, "hostile", "hostiles")
+                + " on us. Requesting backup!", e.x, e.y);
         callout(e.x, e.y, "BACKUP", WHO_COLORS[army ? WHO_MILITARY : WHO_POLICE]);
         if (army) {
             // Soldiers send soldiers.
@@ -2256,7 +2256,7 @@ final class Dispatch {
             boolean hwy = city.onHighway(p[0], p[1]);
             say(army ? WHO_MILITARY : WHO_POLICE, null, (army ? (a.qrf ? "Military: Quick reaction force, " + cars + " Humvees," : "Military: Reserve truck") : "Dispatch: " + (a.label != null ? a.label : "Backup") + ", " + cars + (a.swat ? " armoured van," : cars == 1 ? " car," : " cars,"))
                     + " entering the city from " + sideOfMap(p[0], p[1]) + (hwy && city.hwyName != null ? " on " + city.hwyName : "")
-                    + ". " + a.count + (army ? " soldiers" : " officers") + " for " + a.place + ".", p[0], p[1]);
+                    + ". " + (army ? World.count(a.count, "soldier", "soldiers") : World.count(a.count, "officer", "officers")) + " for " + a.place + ".", p[0], p[1]);
             return;
         }
         if (!army) {
@@ -2405,13 +2405,19 @@ final class Dispatch {
                             + z.place + " safe zone is full (" + z.capacity + "). The gates are shut to newcomers.", z.x, z.y);
                 }
             }
-            if (z.sheltered < z.capacity * 0.8f) z.fullAnnounced = false;
+            if (z.sheltered < z.capacity * 0.8f && z.fullAnnounced) {
+                z.fullAnnounced = false;
+                // ((12.0) And when there's room again: it said when the gates shut, never when they opened again.)
+                if (z.open && !z.removed)
+                    say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military" : "Police") + ": The "
+                            + z.place + " safe zone has room again. The gates are open to newcomers.", z.x, z.y);
+            }
             z.statusTimer += step;
             if (z.statusTimer > 60) {
                 z.statusTimer = 0;
                 if (z.sheltered > 0)
                     say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military" : "Police") + ": "
-                            + z.place + " safe zone is holding. " + z.sheltered + " civilians inside"
+                            + z.place + " safe zone is holding. " + World.count(z.sheltered, "civilian", "civilians") + " inside"
                             + (z.breaches > 0 ? ", " + z.breaches + " breach" + (z.breaches == 1 ? "" : "es") + " in the wall" : "") + ".", z.x, z.y);
             }
         }
@@ -2855,7 +2861,7 @@ final class Dispatch {
         }
         zonesDirty = true;
         if (military)
-            say(WHO_MILITARY, null, "Military: " + got + " soldiers moving to " + z.place
+            say(WHO_MILITARY, null, "Military: " + World.count(got, "soldier", "soldiers") + " moving to " + z.place
                     + " to wall it in as a safe zone. It opens once the wall is up.", z.x, z.y);
         else
             say(WHO_POLICE, null, "Police Command: Officers on the way to wall in " + z.place

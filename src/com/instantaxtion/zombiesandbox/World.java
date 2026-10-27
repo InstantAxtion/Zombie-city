@@ -12,6 +12,11 @@ final class World {
     }
 
     /** ((12.0) A game clock: m:ss, or h:mm:ss once past an hour - it read 75:03.) */
+    /** ((12.0) "1 hostile", "3 hostiles": a count and the word for that many.) */
+    static String count(int n, String one, String many) {
+        return n + " " + (n == 1 ? one : many);
+    }
+
     static String clock(int secs) {
         secs = Math.max(0, secs);
         if (secs >= 3600) return String.format("%d:%02d:%02d", secs / 3600, secs / 60 % 60, secs % 60);
@@ -398,6 +403,8 @@ final class World {
     int command;
     /** Which of the city's emergency decisions have been taken (bits by DEC_), and time until it next thinks. */
     int decisions;
+    /** ((12.0) Zombies put down by the police, the army and civilians (the rest went to cars, blasts and the like).) */
+    final int[] killsBy = new int[3];
     private float decideCd = 45;
     static final int DEC_CURFEW = 1, DEC_QUARANTINE = 2, DEC_GUNS = 4, DEC_GUARD = 8, DEC_CONVOY = 16;
 
@@ -2033,8 +2040,8 @@ final class World {
                 timeline("The outbreak is over: the city survives");
                 int t = (int) outbreakTime;
                 banner(h < startHumans * 0.35f ? "THE CITY SURVIVES, BARELY" : "THE CITY SURVIVES", "The outbreak is over after "
-                        + clock(t) + ". " + zombiesKilled + " zombies destroyed, "
-                        + civiliansLost + " civilians lost.");
+                        + clock(t) + ". " + count(zombiesKilled, "zombie", "zombies") + " destroyed, "
+                        + count(civiliansLost, "civilian", "civilians") + " lost.");
                 startAftermath(AFTER_RECOVERY);
                 calmDown();
             } else if (h == 0 || (h <= startHumans * FALLEN && z > h) || (armed == 0 && h <= Math.max(5, startHumans / 12) && z > h)) {
@@ -2402,6 +2409,7 @@ final class World {
     private void killMade(Entity e) {
         int before = rank(e);
         e.kills++;
+        if (!e.isZombie()) killsBy[e.type == Entity.COP ? 0 : e.type == Entity.SOLDIER ? 1 : 2]++;
         int after = rank(e);
         if (after > before && !e.isZombie()) {
             e.maxHp *= 1.08f;
@@ -7454,9 +7462,9 @@ final class World {
             dispatch.trackConvoy(Entity.SOLDIER, Country.guard()[1].toUpperCase(), before, from[0], from[1], tx, ty, city.placeName(tx, ty));
         if (fleet.vehicles.size() > before)
             dispatch.say(Dispatch.WHO_MILITARY, null, g[2] + ": " + (hall && !hallLost ? "At the Mayor's request, I" : "I")
-                    + "'m calling out the " + g[1] + ". " + (muster ? "Guardsmen are mustering at " + arm.name + "; " + trucks
-                    + " trucks will head for " : "With " + (arm != null ? arm.name + " overrun" : "no armory in town")
-                    + ", " + trucks + " trucks are coming from out of town to ") + city.placeName(tx, ty) + ".", from[0], from[1]);
+                    + "'m calling out the " + g[1] + ". " + (muster ? "Guardsmen are mustering at " + arm.name + "; " + count(trucks, "truck", "trucks")
+                    + " will head for " : "With " + (arm != null ? arm.name + " overrun" : "no armory in town")
+                    + ", " + count(trucks, "truck is", "trucks are") + " coming from out of town to ") + city.placeName(tx, ty) + ".", from[0], from[1]);
         else guardCalled = false;
     }
 
@@ -9452,8 +9460,8 @@ final class World {
         h.stash += e.carryAmmo;
         if (e.carryFood + e.carryAmmo > 0)
             dispatch.say(Dispatch.WHO_INFO, null, "News: A supply run is back at " + h.name + " with "
-                    + (e.carryFood > 0 ? e.carryFood + " days of food" : "") + (e.carryFood > 0 && e.carryAmmo > 0 ? " and " : "")
-                    + (e.carryAmmo > 0 ? e.carryAmmo + " rounds" : "") + ".", h.x, h.y);
+                    + (e.carryFood > 0 ? count(e.carryFood, "day", "days") + " of food" : "") + (e.carryFood > 0 && e.carryAmmo > 0 ? " and " : "")
+                    + (e.carryAmmo > 0 ? count(e.carryAmmo, "round", "rounds") : "") + ".", h.x, h.y);
         e.carryFood = e.carryAmmo = 0;
         e.homeward = false;
         if (!e.militia) {
@@ -9932,6 +9940,8 @@ final class World {
                 int eat = (b.occupants.size() + 3) / 4;
                 b.food = Math.max(0, b.food - eat);
             }
+            // ((12.0) Restocked since: if it runs out again, that's news again.)
+            if (b.food > 0) b.outOfFood = false;
             if (b.food <= 0 && (b.holdout == null || b.holdout.runTimer > 200)) {
                 if (!b.outOfFood) {
                     b.outOfFood = true;
@@ -12554,7 +12564,7 @@ final class World {
         if (away.isEmpty()) return;
         if ((exodusSaid & 1) == 0) {
             exodusSaid |= 1;
-            banner("COMING HOME", away.size() + " people who fled the city are on their way back.");
+            banner("COMING HOME", (away.size() == 1 ? "1 person who fled the city is" : away.size() + " people who fled the city are") + " on their way back.");
             timeline("Those who fled start coming home");
         }
         float[] x = exits[rnd.nextInt(exits.length)];
@@ -12577,7 +12587,7 @@ final class World {
         }
         if (away.isEmpty() && (exodusSaid & 2) == 0) {
             exodusSaid |= 2;
-            dispatch.say(Dispatch.WHO_INFO, null, "News: The last of those who fled are back. " + cameHome + " people have come home.",
+            dispatch.say(Dispatch.WHO_INFO, null, "News: The last of those who fled are back. " + (cameHome == 1 ? "1 person has" : cameHome + " people have") + " come home.",
                     city.worldW() / 2, city.worldH() / 2);
         }
     }

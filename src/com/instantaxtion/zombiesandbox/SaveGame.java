@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 49;
+    private static final int VERSION = 50;
 
     private SaveGame() {
     }
@@ -318,6 +318,13 @@ final class SaveGame {
             // (Version 49: who's making the decisions, and which they've made.)
             out.writeInt(w.command);
             out.writeInt(w.decisions);
+            // ((12.0) Version 50: the zombies put down by police, army and civilians.)
+            for (int k = 0; k < 3; k++) out.writeInt(w.killsBy[k]);
+            // (And the totals on the Stats screen that weren't kept: they came back as 0.)
+            out.writeInt(w.carsWrecked);
+            out.writeInt(w.biggestHorde);
+            out.writeInt(w.fledByTransit);
+            out.writeInt(w.tanksDeployed);
         } finally {
             moved = null;
             homeIndex = null;
@@ -711,6 +718,16 @@ final class SaveGame {
                 w.command = in.readInt();
                 w.decisions = in.readInt();
             }
+            if (version >= 50) {
+                for (int k = 0; k < 3; k++) w.killsBy[k] = in.readInt();
+                w.carsWrecked = in.readInt();
+                w.biggestHorde = in.readInt();
+                w.fledByTransit = in.readInt();
+                w.tanksDeployed = in.readInt();
+            }
+            // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
+            w.collapsedCount = 0;
+            for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
             d.copCount = copCount;
             d.soldierCount = soldierCount;
             w.afterLoad();

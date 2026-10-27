@@ -50,7 +50,11 @@ final class Sound {
         pool.setOnLoadCompleteListener(new SoundPool.OnLoadCompleteListener() {
             @Override
             public void onLoadComplete(SoundPool soundPool, int sampleId, int status) {
-                for (int i = 0; i < Sfx.COUNT; i++) if (ids[i] == sampleId && status == 0) loaded[i] = true;
+                for (int i = 0; i < Sfx.COUNT; i++) {
+                    if (ids[i] != sampleId) continue;
+                    if (status == 0) loaded[i] = true;
+                    else rebuild(sfxFile(i), i, false);
+                }
             }
         });
         Thread t = new Thread(new Runnable() {
@@ -67,7 +71,7 @@ final class Sound {
         File dir = ctx.getCacheDir();
         for (int i = 0; i < Sfx.COUNT; i++) {
             final int id = i;
-            final File f = new File(dir, "sfx" + AUDIO_VERSION + "_" + i + ".wav");
+            final File f = sfxFile(i);
             try {
                 if (!f.exists()) writeSafely(f, Synth.effect(i));
             } catch (Exception e) {
@@ -80,15 +84,18 @@ final class Sound {
                 }
             });
         }
-        // (Music from before is cleared out.)
+        // (Music from before is cleared out. ((12.0) The sound effects from before too, and anything half written.))
         File[] old = dir.listFiles();
         if (old != null)
-            for (File o : old)
-                if (o.getName().startsWith("music") && !o.getName().startsWith("music" + MUSIC_VERSION + "_")) o.delete();
+            for (File o : old) {
+                String n = o.getName();
+                if ((n.startsWith("music") && !n.startsWith("music" + MUSIC_VERSION + "_")) || (n.startsWith("sfx") && !n.startsWith("sfx" + AUDIO_VERSION + "_"))
+                        || n.endsWith(".wav.part")) o.delete();
+            }
         // Menu music first: it is what the player hears first.
         for (int track = 0; track < Synth.TRACKS; track++) {
             final int tr = track;
-            final File f = new File(dir, "music" + MUSIC_VERSION + "_" + track + ".wav");
+            final File f = musicFile(track);
             try {
                 if (!f.exists()) writeSafely(f, Synth.music(track));
             } catch (Exception e) {
@@ -102,6 +109,50 @@ final class Sound {
                 }
             });
         }
+    }
+
+    private File sfxFile(int i) {
+        return new File(ctx.getCacheDir(), "sfx" + AUDIO_VERSION + "_" + i + ".wav");
+    }
+
+    private File musicFile(int track) {
+        return new File(ctx.getCacheDir(), "music" + MUSIC_VERSION + "_" + track + ".wav");
+    }
+
+    /** ((12.0) Sounds already being made again, so a bad file isn't redone twice at once.) */
+    private final boolean[] rebuildingSfx = new boolean[Sfx.COUNT], rebuildingMusic = new boolean[Synth.TRACKS];
+
+    /**
+     * (12.0) A sound or piece of music that won't play (one left broken by an earlier version, half written when the
+     * app was closed) is thrown away and made again, once, instead of staying silent for good.
+     */
+    private void rebuild(final File f, final int index, final boolean music) {
+        boolean[] busy = music ? rebuildingMusic : rebuildingSfx;
+        if (released || busy[index]) return;
+        busy[index] = true;
+        f.delete();
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    writeSafely(f, music ? Synth.music(index) : Synth.effect(index));
+                } catch (Exception e) {
+                    return;
+                }
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (released) return;
+                        if (music) {
+                            trackPaths[index] = f.getPath();
+                            updateMusic();
+                        } else ids[index] = pool.load(f.getPath(), 1);
+                    }
+                });
+            }
+        }, "synth");
+        t.setPriority(Thread.MIN_PRIORITY);
+        t.start();
     }
 
     /**
@@ -159,6 +210,9 @@ final class Sound {
                     playingTrack = target;
                 } catch (Exception e) {
                     stopPlayer();
+                    // ((12.0) It won't play: made again, and played when it's ready.)
+                    trackPaths[target] = null;
+                    rebuild(musicFile(target), target, true);
                 }
             }
         }

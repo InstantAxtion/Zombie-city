@@ -538,6 +538,15 @@ final class GameView extends View implements Menu.Host {
         return slotText[slot];
     }
 
+    @Override
+    public boolean deleteSlot(int slot) {
+        java.io.File f = slotFile(slot), info = new java.io.File(f.getPath() + ".info");
+        boolean ok = !f.exists() || f.delete();
+        info.delete();
+        slotKnown[slot] = false;
+        return ok;
+    }
+
     private String readSlotInfo(int slot) {
         java.io.File f = new java.io.File(slotFile(slot).getPath() + ".info");
         if (!slotFile(slot).exists()) return null;
@@ -800,6 +809,25 @@ final class GameView extends View implements Menu.Host {
             tactical = false;
             click();
             return true;
+        }
+        // ((12.0) Back shuts whatever is open over the city first - a picker, the Clear menu, a card, being someone -
+        // as on any other app, instead of going straight to the pause menu.)
+        if (!menu.isOpen() && hasGame) {
+            boolean shut = true;
+            if (world.controlled != null) releaseControl();
+            else if (picker >= 0 || clearMenu) {
+                picker = -1;
+                clearMenu = false;
+            } else if (follow != null || followV != null || inspectB != null || inspectZ != null) {
+                follow = null;
+                followV = null;
+                inspectB = null;
+                inspectZ = null;
+            } else shut = false;
+            if (shut) {
+                click();
+                return true;
+            }
         }
         boolean handled = menu.back();
         if (handled) click();
@@ -5608,10 +5636,11 @@ final class GameView extends View implements Menu.Host {
             if (v.type == Fleet.CAR && !close) continue;
             // Zoomed out, only the ones on a call (lights going) or in the air.
             if (!close && !v.lightsOn() && !Fleet.airborne(v) && v.type != Fleet.TANK) continue;
-            String label = world.fleet.status(v);
-            if (label == null) continue;
+            // ((12.0) Only those on screen have their label worked out: it was put together for every vehicle on the map, every frame.)
             float sx = screenX(v.x), sy = screenY(v.y) - (v.type == Fleet.HELI ? 22 + 14 * v.alt : 14) * dp;
             if (sx < -80 * dp || sx > getWidth() + 80 * dp || sy < 0 || sy > barTop) continue;
+            String label = world.fleet.status(v);
+            if (label == null) continue;
             float tw = text.measureText(label);
             oval.set(sx - tw / 2 - 6 * dp, sy - 11 * dp, sx + tw / 2 + 6 * dp, sy + 4 * dp);
             if (!claim(oval)) continue;
@@ -5759,6 +5788,11 @@ final class GameView extends View implements Menu.Host {
                 feedOn.remove(i);
                 feedOnAge.remove(i);
             } else feedOnAge.set(i, age);
+        }
+        // (Fewer lines chosen in Settings: down to that many now.)
+        while (feedOn.size() > maxLines) {
+            feedOn.remove(0);
+            feedOnAge.remove(0);
         }
         feedGap -= dt;
         if (!feedQueue.isEmpty() && feedGap <= 0) {
@@ -7077,11 +7111,25 @@ final class GameView extends View implements Menu.Host {
             if (now != null) {
                 pinned.set(i, now);
                 if (now.isZombie()) world.say(Names.person(p.nameSeed) + " has turned");
-            } else if (!p.removed) {
-                // Dead for good (or gone into a building and not out yet: keep them a while).
+            } else if (!p.removed || !stillAround(p)) {
+                // Dead for good (or gone into a building and not out yet: keep them a while). ((12.0) But not for good:
+                // one who died in there, or turned in there, stayed pinned, the icon pointing at nobody.)
                 pinned.remove(i);
             }
         }
+    }
+
+    /** ((12.0) Someone out of sight - in a building, a vehicle or out of town - who is still somewhere.) */
+    private boolean stillAround(Entity p) {
+        for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
+            City.Building b = world.city.buildings.get(i);
+            if (b.occupants.contains(p) || b.visitors.contains(p)) return true;
+        }
+        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = world.fleet.vehicles.get(i);
+            if (v.driver == p || v.crew.contains(p) || v.riders.contains(p)) return true;
+        }
+        return world.away.contains(p);
     }
 
     // ------------------------------------------------------------------ reinforcements (10.17)
@@ -7351,9 +7399,15 @@ final class GameView extends View implements Menu.Host {
         ctxCount = world.ctrlOptions(ctxActions);
         float cbw = 118 * dp, cbh = 38 * dp, cby = attackY - attackR - 12 * dp - cbh;
         text.setTextSize(13 * dp);
+        // ((12.0) As many as fit under the buttons along the top, then another column to the left: on a short screen
+        // held sideways the stack went up off the top of it.)
+        float ceiling = topRects[0].isEmpty() ? 8 * dp : topRects[0].bottom + 8 * dp;
+        int perCol = Math.max(1, (int) ((cby - ceiling) / (cbh + 8 * dp)) + 1);
         for (int k = 0; k < ctxCount; k++) {
             RectF r = ctxRects[k];
-            r.set(attackX + attackR - cbw, cby - k * (cbh + 8 * dp), attackX + attackR, cby - k * (cbh + 8 * dp) + cbh);
+            int col = k / perCol, row = k % perCol;
+            float rx = attackX + attackR - col * (cbw + 8 * dp);
+            r.set(rx - cbw, cby - row * (cbh + 8 * dp), rx, cby - row * (cbh + 8 * dp) + cbh);
             fill.setColor(0xE02F5E2B);
             c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
             stroke.setColor(0x909BE08A);
@@ -7427,6 +7481,15 @@ final class GameView extends View implements Menu.Host {
         if (e.isArmed() && e.reload > 0) return "Reloading";
         if (e.fleeTimer > 0 && !e.isArmed()) return "Running for their life";
         if (e.ride != null) return "Riding along";
+        // ((12.0) Survivors' groups, lookouts and pilots called up: it said "On patrol", "Taking a stroll" or "Going to sign up".)
+        if (e.type == Entity.CIVILIAN) {
+            String group = e.holdout != null && !e.holdout.gone && e.holdout.name != null ? e.holdout.name : null;
+            if (e.militia) return "Defending " + (group != null ? group : "their street") + " with the militia";
+            if (e.scavenge != null) return "Scavenging supplies" + (group != null ? " for " + group : "");
+            if (e.homeward) return "Bringing supplies back" + (group != null ? " to " + group : "");
+            if (e.job == Entity.J_LOOKOUT && e.aloft) return "Keeping lookout from the fire tower";
+            if (e.task == Dispatch.T_ENLIST && e.pilotFor != null) return "Called up: on the way to fly the helicopter";
+        }
         // ((12.0) Run themselves out: slowed to a jog until they get their breath back.)
         float sp = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
         boolean sprinting = e.isArmed() && sp > e.runSpeed * 1.08f;
@@ -7452,7 +7515,7 @@ final class GameView extends View implements Menu.Host {
             case Dispatch.T_MOVE: return "Following orders";
             case Dispatch.T_HOLD: return "Holding position";
             case Dispatch.T_HIDE: return "Running to hide indoors";
-            case Dispatch.T_PICKUP: return "Grabbing a dropped gun";
+            case Dispatch.T_PICKUP: return e.hasGun ? "Picking up rounds lying in the street" : "Grabbing a dropped gun";
             case Dispatch.T_RESUPPLY: return "Going to restock ammo";
             case Dispatch.T_HEAL: return "Going to get patched up";
             case Dispatch.T_RIDE: return "Running for a car";

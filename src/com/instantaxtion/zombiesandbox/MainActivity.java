@@ -14,8 +14,11 @@ import android.provider.MediaStore;
 import android.widget.Toast;
 import android.text.InputType;
 import android.widget.EditText;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.widget.TextView;
 
 public class MainActivity extends Activity {
     private GameView game;
@@ -55,7 +58,8 @@ public class MainActivity extends Activity {
                     "Zombie City " + System.currentTimeMillis(), "Zombie City Sandbox screenshot");
             if (url == null) throw new IllegalStateException();
             Intent send = new Intent(Intent.ACTION_SEND);
-            send.setType("image/png");
+            // ((12.0) The gallery keeps it as a JPEG: said to be a PNG, some apps wouldn't take it.)
+            send.setType("image/jpeg");
             send.putExtra(Intent.EXTRA_STREAM, Uri.parse(url));
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(send, "Share screenshot"));
@@ -81,7 +85,10 @@ public class MainActivity extends Activity {
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         input.setText(current);
         input.setSelectAllOnFocus(true);
-        new AlertDialog.Builder(this)
+        // ((12.0) One line, and Go (or Enter on a keyboard) uses the code, as the button does.)
+        input.setSingleLine(true);
+        input.setImeOptions(EditorInfo.IME_ACTION_GO);
+        final AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("City code")
                 .setMessage("Type a code to play that city, or share this one so friends can play it.")
                 .setView(input)
@@ -99,6 +106,17 @@ public class MainActivity extends Activity {
                     }
                 })
                 .show();
+        input.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                boolean enter = event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN;
+                if (actionId != EditorInfo.IME_ACTION_GO && !enter) return false;
+                game.cityCodeEntered(input.getText().toString());
+                dialog.dismiss();
+                hideSystemUi();
+                return true;
+            }
+        });
     }
 
     @Override

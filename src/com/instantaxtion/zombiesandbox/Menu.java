@@ -46,6 +46,9 @@ final class Menu {
 
         String slotInfo(int slot);
 
+        /** (12.0) Deletes a saved game; false if it couldn't. */
+        boolean deleteSlot(int slot);
+
         /** Moves the camera to a spot. */
         void jumpTo(float x, float y);
 
@@ -68,7 +71,7 @@ final class Menu {
     private static final int A_CONTINUE = 0, A_NEW = 1, A_SETTINGS = 2, A_NOTES = 3, A_QUIT = 4, A_RESUME = 5,
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
-            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_LOAD_SLOT = 150, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
+            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -553,7 +556,7 @@ final class Menu {
             plain.setColor(0xFFB4BCC6);
             String[] lines = info == null ? new String[]{"Empty"} : info.split("\n");
             // ((12.0) Clear of the button: a long city name ran under it.)
-            for (int k = 0; k < lines.length && k < 3; k++) c.drawText(fit(plain, lines[k], maxW - (savingMode && info != null ? 244 : 150) * dp), x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
+            for (int k = 0; k < lines.length && k < 3; k++) c.drawText(fit(plain, lines[k], maxW - (info != null ? 244 : 150) * dp), x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
             boolean can = savingMode || info != null;
             // ((12.0) Overwriting a save asks for a second tap; and a save can be loaded from here too, not only
             // from the main menu - the pause menu's "Save / Load" only saved.)
@@ -562,6 +565,11 @@ final class Menu {
                     x0 + maxW - 120 * dp, y + 22 * dp, x0 + maxW - 14 * dp, y + 64 * dp);
             if (savingMode && info != null)
                 button("Load", A_LOAD_SLOT + slot, false, x0 + maxW - 214 * dp, y + 22 * dp, x0 + maxW - 128 * dp, y + 64 * dp);
+            // ((12.0) And a save can be deleted, with a second tap to be sure.)
+            if (!savingMode && info != null) {
+                boolean sure = deleteArmed == slot && time - deleteArmedAt < 4;
+                button(sure ? "Sure?" : "Delete", A_DELETE_SLOT + slot, false, x0 + maxW - 214 * dp, y + 22 * dp, x0 + maxW - 128 * dp, y + 64 * dp);
+            }
             y += 96 * dp;
         }
         contentHeight = y + scroll - top;
@@ -582,6 +590,10 @@ final class Menu {
 
     /** ((12.0) When Restart City was first tapped.) */
     private float restartArmedAt = -99;
+
+    /** ((12.0) The slot waiting for a second tap to be deleted, and when it was first tapped.) */
+    private int deleteArmed = -1;
+    private float deleteArmedAt;
 
     /** ((12.0) The slot waiting for a second tap to be overwritten, and when it was first tapped.) */
     private int armedSlot = -1;
@@ -755,6 +767,8 @@ final class Menu {
                 {"Zombies now", String.valueOf(world.zombieCount())},
                 {"Most zombies at once", String.valueOf(world.peakZombies)},
                 {"Zombies killed", String.valueOf(world.zombiesKilled)},
+                // ((12.0) And by whom.)
+                {"   by police / army / civilians", world.killsBy[0] + " / " + world.killsBy[1] + " / " + world.killsBy[2]},
                 {"People turned", String.valueOf(world.turned)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"Left by bus or train", String.valueOf(world.fledByTransit)},
@@ -849,7 +863,7 @@ final class Menu {
                 mostN = en.getValue();
                 most = en.getKey();
             }
-        return "Patient zero " + Names.person(w.patientZeroSeed) + ": " + ch[0] + " people, " + ch[1] + " generations"
+        return "Patient zero " + Names.person(w.patientZeroSeed) + ": " + World.count(ch[0], "person", "people") + ", " + World.count(ch[1], "generation", "generations")
                 + (most != null ? ". Worst: " + Names.person(most) + " (" + mostN + ")" : "");
     }
 
@@ -1083,7 +1097,9 @@ final class Menu {
             text.setColor(0xFFFFFFFF);
             String val = records.recordText(i);
             // ((12.0) The name cut short of its figure: on a narrow screen they ran into each other.)
-            c.drawText(fit(plain, Records.RECORD_NAMES[i], maxW - text.measureText(val) - 12 * dp), x0, y + 14 * dp, plain);
+            float room = maxW - text.measureText(val) - 12 * dp, nw = plain.measureText(Records.RECORD_NAMES[i]);
+            if (nw > room) plain.setTextSize(Math.max(11 * dp, 14.5f * dp * room / nw));
+            c.drawText(fit(plain, Records.RECORD_NAMES[i], room), x0, y + 14 * dp, plain);
             c.drawText(val, x0 + maxW, y + 14 * dp, text);
             y += 26 * dp;
         }
@@ -1641,6 +1657,18 @@ final class Menu {
                 host.continueGame();
                 host.jumpTo(m.x, m.y);
             }
+            return;
+        }
+        if (action >= A_DELETE_SLOT) {
+            int slot = action - A_DELETE_SLOT;
+            if (!(deleteArmed == slot && time - deleteArmedAt < 4)) {
+                deleteArmed = slot;
+                deleteArmedAt = time;
+                return;
+            }
+            deleteArmed = -1;
+            note = host.deleteSlot(slot) ? (slot == 0 ? "Autosave deleted." : "Slot " + slot + " deleted.") : "That save couldn't be deleted.";
+            noteTime = 3;
             return;
         }
         if (action >= A_LOAD_SLOT) {
