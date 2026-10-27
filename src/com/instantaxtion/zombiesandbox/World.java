@@ -4474,7 +4474,14 @@ final class World {
         for (int i = 0; i < dispatch.zones.size(); i++) {
             Dispatch.SafeZone q = dispatch.zones.get(i);
             if (q.open && !q.removed && q.inside(e.x, e.y)) {
-                dispatch.admitInside(e, q);
+                // ((12.0) While there's room. A wall put up round homes had their people coming out of their front
+                // doors into it and taking a place each, two hundred and more in a zone with room for thirty; with
+                // it full, they're inside the wall all the same, and stop looking for a place.)
+                if (q.sheltered < q.capacity) dispatch.admitInside(e, q);
+                else {
+                    e.task = Dispatch.T_NONE;
+                    e.refused = true;
+                }
                 return true;
             }
         }
@@ -4486,6 +4493,10 @@ final class World {
             Dispatch.SafeZone q = dispatch.zones.get(i);
             if (q.removed || q.full || q.gateOut.length == 0) continue;
             float d = (q.x - e.x) * (q.x - e.x) + (q.y - e.y) * (q.y - e.y);
+            // ((12.0) One that's open beats one still going up unless that's a good deal nearer, and one whose wall
+            // hasn't been started after most of a minute isn't waited for while another has room: the crowd at its
+            // gate stood there for good with an open zone across town half empty.)
+            if (!q.open) d *= q.built <= 0 && q.age > 45 ? 25 : 2.5f;
             if (d < bd) {
                 bd = d;
                 z = q;
@@ -4521,9 +4532,11 @@ final class World {
             queueAt(e, out[0], out[1], a, 18, 0.5f);
             return true;
         }
-        // At the gate: checked for bites, then through when it opens.
+        // At the gate: checked for bites, then through when it opens. ((12.0) And only while there's room: the
+        // whole queue went through an open gate at once before the zone counted itself full, two hundred people
+        // into a zone with room for thirty.)
         if (checkpoint(e, z)) return true;
-        if (z.gateOpen[g]) {
+        if (z.gateOpen[g] && z.sheltered < z.capacity) {
             float ix = in[0] - e.x, iy = in[1] - e.y, id = (float) Math.sqrt(ix * ix + iy * iy) + 0.001f;
             steer(e, ix / id, iy / id, e.speed * 1.2f);
         } else {
@@ -7964,7 +7977,10 @@ final class World {
             if (lead != null && !lead.dead && lead != e) {
                 float lx = lead.x - e.x, ly = lead.y - e.y, ld = (float) Math.sqrt(lx * lx + ly * ly) + 0.001f;
                 if (ld > 80) {
-                    steer(e, lx / ld, ly / ld, e.runSpeed);
+                    // ((12.0) The way to them, round whatever's between: straight at them from across town, they ran
+                    // into the side of the first building and stayed there.)
+                    if (e.blocked || (ld > 120 && !city.los(e.x, e.y, lead.x, lead.y))) walkToSpot(e, lead.x, lead.y, e.runSpeed);
+                    else steer(e, lx / ld, ly / ld, e.runSpeed);
                     return;
                 }
                 // On the move with the squad: keep a wedge behind the leader. ((11.6) Lined up on the way the leader
@@ -7985,7 +8001,9 @@ final class World {
                     float sx = lead.x - hx * back - hy * side, sy = lead.y - hy * back + hx * side;
                     float dx = sx - e.x, dy = sy - e.y, sd = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
                     if (sd > 5 && !city.solidAt(sx, sy)) {
-                        steer(e, dx / sd, dy / sd, Math.min(e.runSpeed, lead.want + sd * 0.8f));
+                        // ((12.0) Round the building in the way, not into it.)
+                        if (e.blocked || (sd > 30 && !city.los(e.x, e.y, sx, sy))) walkToSpot(e, sx, sy, Math.min(e.runSpeed, lead.want + sd * 0.8f));
+                        else steer(e, dx / sd, dy / sd, Math.min(e.runSpeed, lead.want + sd * 0.8f));
                         return;
                     }
                 }
@@ -8001,6 +8019,10 @@ final class World {
                 if (cover) {
                     steer(e, 0, 0, 0);
                     e.angle = turn(e.angle, (float) Math.atan2(ly, lx), dt * 4);
+                } else if (ld > 30 && (e.blocked || !city.los(e.x, e.y, e.threatX, e.threatY))) {
+                    // ((12.0) The way there, round whatever's between: straight at it, they walked into the side of
+                    // a building and stayed there, the squad with them.)
+                    walkToSpot(e, e.threatX, e.threatY, e.speed * 1.2f);
                 } else {
                     steer(e, lx / ld, ly / ld, e.speed * 1.2f);
                 }

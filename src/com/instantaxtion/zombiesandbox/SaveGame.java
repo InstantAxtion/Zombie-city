@@ -325,6 +325,9 @@ final class SaveGame {
             out.writeInt(w.biggestHorde);
             out.writeInt(w.fledByTransit);
             out.writeInt(w.tanksDeployed);
+            // (And the police and army line on the Stats chart, which came back as nothing before the load.)
+            out.writeInt(w.histCount);
+            for (int i = 0; i < w.histCount; i++) out.writeInt(w.histArmed[i]);
         } finally {
             moved = null;
             homeIndex = null;
@@ -724,6 +727,11 @@ final class SaveGame {
                 w.biggestHorde = in.readInt();
                 w.fledByTransit = in.readInt();
                 w.tanksDeployed = in.readInt();
+                int hn = in.readInt();
+                for (int i = 0; i < hn; i++) {
+                    int a = in.readInt();
+                    if (i < w.histArmed.length) w.histArmed[i] = a;
+                }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;

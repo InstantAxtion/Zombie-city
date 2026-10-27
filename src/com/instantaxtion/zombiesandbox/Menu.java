@@ -478,12 +478,15 @@ final class Menu {
         tiles.add(new Object[]{settings.hasUnreadNotes() ? "What's New  •" : "What's New", A_NOTES});
         tiles.add(new Object[]{"Quit", A_QUIT});
         float tw = (colW - gap) / 2;
+        // ((12.0) All the tiles at one size: "What's New" was smaller than the rest.)
+        int firstTile = buttons.size();
         for (int k = 0; k < tiles.size(); k++) {
             boolean lone = k == tiles.size() - 1 && tiles.size() % 2 == 1;
             float l = lone ? x0 : x0 + (k % 2) * (tw + gap), r = lone ? x0 + colW : l + tw;
             button((String) tiles.get(k)[0], (Integer) tiles.get(k)[1], false, l, y, r, y + tileH);
             if (k % 2 == 1 || lone) y += tileH + gap;
         }
+        sameSize(firstTile);
         plain.setTextSize(12 * dp);
         plain.setTextAlign(Paint.Align.RIGHT);
         plain.setColor(0x88FFFFFF);
@@ -556,7 +559,8 @@ final class Menu {
             plain.setColor(0xFFB4BCC6);
             String[] lines = info == null ? new String[]{"Empty"} : info.split("\n");
             // ((12.0) Clear of the button: a long city name ran under it.)
-            for (int k = 0; k < lines.length && k < 3; k++) c.drawText(fit(plain, lines[k], maxW - (info != null ? 244 : 150) * dp), x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
+            for (int k = 0; k < lines.length && k < 3; k++)
+                c.drawText(fit(plain, lines[k], maxW - (info != null ? 244 : savingMode ? 150 : 28) * dp), x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
             boolean can = savingMode || info != null;
             // ((12.0) Overwriting a save asks for a second tap; and a save can be loaded from here too, not only
             // from the main menu - the pause menu's "Save / Load" only saved.)
@@ -713,7 +717,9 @@ final class Menu {
             stroke.setColor(0x30FFFFFF);
             c.drawLine(plot.left, y, plot.right, y, stroke);
             plain.setColor(0xFF8A9099);
-            c.drawText(String.valueOf(max * k / 4), plot.left - 6 * dp, y + 4 * dp, plain);
+            // ((12.0) On a square-root scale: on a straight one, a few hundred of the dead beside fifteen thousand
+            // people was a flat line along the bottom.)
+            c.drawText(String.valueOf(Math.round(max * (k / 4f) * (k / 4f))), plot.left - 6 * dp, y + 4 * dp, plain);
         }
         plain.setTextAlign(Paint.Align.LEFT);
         int secs = (int) (n * world.statStep);
@@ -729,8 +735,8 @@ final class Menu {
                 stroke.setStrokeWidth(2.2f * dp);
                 for (int i = 1; i < n; i++) {
                     float x0 = plot.left + plot.width() * (i - 1) / (n - 1), x1 = plot.left + plot.width() * i / (n - 1);
-                    float y0 = plot.bottom - plot.height() * series[sIdx][i - 1] / max;
-                    float y1 = plot.bottom - plot.height() * series[sIdx][i] / max;
+                    float y0 = plot.bottom - plot.height() * (float) Math.sqrt(series[sIdx][i - 1] / (float) max);
+                    float y1 = plot.bottom - plot.height() * (float) Math.sqrt(series[sIdx][i] / (float) max);
                     c.drawLine(x0, y0, x1, y1, stroke);
                 }
             }
