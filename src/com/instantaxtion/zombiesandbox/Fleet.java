@@ -376,20 +376,23 @@ final class Fleet {
                         : v.kind == K_BIKE ? "Police motorcycle" : v.kind == K_BEARCAT ? "BearCat" : v.type == CRUISER ? "Police car" : v.swat ? "SWAT van" : "Army truck";
                 if (v.restock) return v.state == RETURN ? "Supply truck: Heading out of town"
                         : "Supply truck: Delivering" + (where != null ? " to " + where : "");
+                // ((12.0) A wreck is a wreck, whatever it was doing: it went on saying "Responding" or "On patrol".)
+                if (v.broken) return who + ": Wrecked";
                 if (v.standby) return who + ": Parked at " + (v.depot != null ? v.depot.name : "base") + ", ready";
                 if (v.state == PICKUP) return who + ": Picking up its " + (v.passengerType == Entity.SOLDIER ? "squad" : "officers");
-                if (v.pickup && v.state == DRIVE) return who + ": Going to pick up its " + (v.passengerType == Entity.SOLDIER ? "squad" : "officers");
+                if (v.pickup && v.state == DRIVE) return who + ": Going to pick up its " + (v.passengerType == Entity.SOLDIER ? "squad" : "officers")
+                        + (v.driver != null && v.realDriver ? ", " + Names.person(v.driver.nameSeed) + " driving" : "");
+                // ((12.0) Waiting at the station or base while its crew climb in: it said "Returning".)
+                if (v.state == MUSTER) return who + (v.type == CRUISER ? ": Officers getting in" : policeTruck(v) ? ": Officers mounting up" : ": Squad mounting up");
                 if (v.parkHome && v.state == RETURN) return who + ": Back to " + (v.depot != null ? v.depot.name : "base") + (v.crew.isEmpty() ? "" : " with " + v.crew.size() + " aboard");
                 if (v.type == CRUISER && v.state == SCENE && !v.patrol) return who + ": At the scene" + (where != null ? " on " + where : "");
                 if (v.type == TRUCK && v.state == SCENE) return who + ": Fire support" + (where != null ? " at " + where : "");
                 if (v.loop && v.state == DRIVE) return who + ": Patrolling" + (where != null ? " to " + where : "");
-                if (v.broken) return who + ": Wrecked";
                 if (v.state == BLOCK) return "Police car: Roadblock" + (where != null ? " on " + where : "");
                 if (v.block != null && v.state == DRIVE) return "Police car: Setting up a roadblock" + (where != null ? " on " + where : "");
                 if (v.patrol && v.state == PATROL) return who + ": On patrol";
                 if (v.patrol && v.state == SCENE) return who + ": At the scene" + (where != null ? " on " + where : "");
                 if (v.patrol && v.state == RECALL) return who + ": Picking up its officers";
-                if (v.type == TRUCK && v.state == MUSTER) return who + (policeTruck(v) ? ": Officers mounting up" : ": Squad mounting up");
                 if (v.state == WAIT) return who + ": Loading up";
                 if (v.state == DRIVE) return who + ": " + (army(v) ? "Carrying squad" : "Responding") + (where != null ? " to " + where : "");
                 return who + ": Returning";
@@ -2125,8 +2128,10 @@ final class Fleet {
                 Vehicle o = vehicles.get(i);
                 // (A wreck left in the middle of a junction goes first.)
                 boolean blocking = o.parked && city.junctionIdAt(o.x, o.y) >= 0;
-                // ((12.0) Only people's cars: a station's police cars or a base's trucks parked up ready aren't towed.)
-                if (o.type != CAR || o.standby) continue;
+                // ((12.0) Not a station's police cars or a base's trucks parked up ready on their lot - but anything left
+                // in a junction is, police car or army truck: one abandoned there locked the junction up for good.)
+                if (o.standby && !blocking) continue;
+                if (o.type != CAR && !blocking && o.state != ABANDONED && !o.broken) continue;
                 if (o.parked && o.block == null && o.riders.isEmpty() && o.player == null && (++parked > 25 || blocking)
                         && !inView(o.x, o.y)) {
                     o.removedFromFleet = true;
@@ -2189,7 +2194,7 @@ final class Fleet {
             else done = updateCar(v, vdt);
             if (done) {
                 // ((12.0) One of the city's own officers or soldiers at the wheel gets out, rather than vanishing.)
-                if (v.driver != null && v.realDriver) driverOut(v);
+                if (v.driver != null && v.realDriver) driverOut(v, false);
                 // (10.48) Whoever was still aboard a car fleeing the city went with it.
                 if (v.exodus && !v.riders.isEmpty()) w.droveOut(v.riders);
                 v.removedFromFleet = true;
@@ -2373,7 +2378,7 @@ final class Fleet {
         w.carsWrecked++;
         // The crew bails out (and the driver).
         if (!v.crew.isEmpty()) crewOut(v, true);
-        if (v.driver != null) driverOut(v);
+        if (v.driver != null) driverOut(v, true);
         v.speed = 0;
         v.field = null;
         w.emit(Sfx.THUD, v.x, v.y);
@@ -3158,7 +3163,10 @@ final class Fleet {
         for (int cx = c0x; cx <= c1x; cx++)
         for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
             Vehicle o = gridV[i];
-            if (o == v || o.removedFromFleet) continue;
+            // ((12.0) A queue is traffic: something parked, wrecked or left in the lane isn't one to sit behind. It
+            // kept the car's stuck timer down, so it never went round or found another way - it crept along behind
+            // the wreck for good.)
+            if (o == v || o.removedFromFleet || o.parked || o.broken || o.standby || o.state == ABANDONED) continue;
             float dx = o.x - v.x, dy = o.y - v.y;
             float ahead = dx * fx + dy * fy, side = Math.abs(dx * -fy + dy * fx);
             if (ahead > 0 && ahead < 24 && side < 8) return true;
@@ -4578,6 +4586,18 @@ final class Fleet {
     }
 
     /** Everyone aboard gets out beside it. They stay its crew (unless it's home: then they're off duty). */
+    /**
+     * (12.0) Takes a vehicle off the map for good (a wreck towed away, one you undo): whoever was still in it gets
+     * out first, and anything still tied to it knows it's gone.
+     */
+    void discard(Vehicle v) {
+        if (!v.crew.isEmpty()) crewOut(v, true);
+        if (v.driver != null && v.realDriver) driverOut(v, false);
+        v.driver = null;
+        v.removedFromFleet = true;
+        vehicles.remove(v);
+    }
+
     void crewOut(Vehicle v, boolean offDuty) {
         for (int i = 0; i < v.crew.size(); i++) {
             Entity e = v.crew.get(i);
@@ -4601,12 +4621,12 @@ final class Fleet {
             Vehicle v = vehicles.get(i);
             if (v.type != CRUISER && v.type != TRUCK && v.type != AMBULANCE) continue;
             if (v.removedFromFleet) {
-                if (v.driver != null && v.realDriver) driverOut(v);
+                if (v.driver != null && v.realDriver) driverOut(v, false);
                 v.driver = null;
                 continue;
             }
             if (v.broken) {
-                if (v.driver != null) driverOut(v);
+                if (v.driver != null) driverOut(v, true);
                 continue;
             }
             boolean home = v.parked || v.standby || v.state == ABANDONED || v.player != null;
@@ -4637,14 +4657,16 @@ final class Fleet {
     }
 
     /** (11.3) The driver of a wrecked vehicle gets out and carries on on foot. */
-    private void driverOut(Vehicle v) {
+    /** The driver gets out: shaken and hurt if it's been wrecked. */
+    private void driverOut(Vehicle v, boolean hurt) {
         Entity d = v.driver;
         v.driver = null;
         float a = v.angle - 1.57f;
         if (v.realDriver) {
             v.realDriver = false;
             d.rig = null;
-            if (w.release(d, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10)) d.hp *= 0.7f;
+            // ((12.0) Only hurt in a wreck: one just getting out at the end of the trip lost a third of their health.)
+            if (w.release(d, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10) && hurt) d.hp *= 0.7f;
             return;
         }
         Entity e = w.spawn(d.type, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);

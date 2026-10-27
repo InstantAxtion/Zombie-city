@@ -13089,8 +13089,15 @@ final class City {
 
     private boolean nearZombiesOnly;
 
+    /** ((12.0) The tiles each field's last search reached, so only those are cleared next time - not the whole map.) */
+    private int[] touchedZ, touchedH;
+    private int nTouchedZ = -1, nTouchedH = -1;
+
     private void bfs(int[] dist, List<Entity> entities, boolean zombies, int limit) {
-        Arrays.fill(dist, FAR);
+        int[] tch = zombies ? touchedZ : touchedH;
+        int nt = zombies ? nTouchedZ : nTouchedH;
+        if (nt < 0 || tch == null) Arrays.fill(dist, FAR);
+        else for (int i = 0; i < nt; i++) dist[tch[i]] = FAR;
         int tail = 0;
         if (!zombies && extraScent != null)
             for (int i = 0; i < extraScentN; i++) {
@@ -13122,7 +13129,16 @@ final class City {
                     queue[tail++] = t;
                 }
             }
-        spread(dist, tail, limit);
+        int end = spread(dist, tail, limit);
+        if (tch == null || tch.length < end) tch = new int[end + end / 2 + 64];
+        System.arraycopy(queue, 0, tch, 0, end);
+        if (zombies) {
+            touchedZ = tch;
+            nTouchedZ = end;
+        } else {
+            touchedH = tch;
+            nTouchedH = end;
+        }
     }
 
     private int spread(int[] dist, int tail, int limit) {

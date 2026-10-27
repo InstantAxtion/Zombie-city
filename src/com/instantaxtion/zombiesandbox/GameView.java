@@ -345,12 +345,13 @@ final class GameView extends View implements Menu.Host {
     @Override
     public boolean saveSlot(int slot) {
         if (!hasGame) return false;
+        slotKnown[slot] = false;
         try {
             SaveGame.save(world, slotFile(slot));
             // A short description to show in the slot list without loading the whole game.
             int t = (int) world.time;
             String info = world.city.name + " (" + CityConfig.PRESETS[world.city.cfg.v[CityConfig.OPT_PRESET]] + ")\n"
-                    + String.format("%d:%02d played, %d people, %d zombies", t / 60, t % 60, world.humans, world.zombies) + "\n"
+                    + World.clock(t) + String.format(" played, %d people, %d zombies", world.humans, world.zombies) + "\n"
                     + new java.text.SimpleDateFormat("d MMM HH:mm").format(new java.util.Date());
             java.io.FileOutputStream out = new java.io.FileOutputStream(slotFile(slot).getPath() + ".info");
             out.write(info.getBytes("UTF-8"));
@@ -361,8 +362,20 @@ final class GameView extends View implements Menu.Host {
         }
     }
 
+    /** ((12.0) What's in each save slot, read once rather than off the storage every frame the menu is up.) */
+    private final String[] slotText = new String[4];
+    private final boolean[] slotKnown = new boolean[4];
+
     @Override
     public String slotInfo(int slot) {
+        if (!slotKnown[slot]) {
+            slotText[slot] = readSlotInfo(slot);
+            slotKnown[slot] = true;
+        }
+        return slotText[slot];
+    }
+
+    private String readSlotInfo(int slot) {
         java.io.File f = new java.io.File(slotFile(slot).getPath() + ".info");
         if (!slotFile(slot).exists()) return null;
         if (!f.exists()) return "Saved game";
@@ -6304,10 +6317,10 @@ final class GameView extends View implements Menu.Host {
                     : world.aftermath == World.AFTER_FALLEN ? "   City fallen" : "";
             int secs0 = (int) world.time;
             String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   Zombies " + world.zombieCount()
-                    + phase + String.format("   %d:%02d", secs0 / 60, secs0 % 60);
+                    + phase + "   " + World.clock(secs0);
             // (Short of the buttons along the top in landscape.)
             float room = (portrait ? getWidth() - 10 * dp : topRects[0].left - 8 * dp) - statsRect.left - 24 * dp;
-            String clock = String.format("   %d:%02d", secs0 / 60, secs0 % 60);
+            String clock = "   " + World.clock(secs0);
             if (text.measureText(line) > room) line = line.substring(0, line.length() - clock.length());
             if (text.measureText(line) > room && !phase.isEmpty()) line = line.substring(0, line.length() - phase.length());
             float tw = Math.min(text.measureText(line), room);
@@ -6317,7 +6330,7 @@ final class GameView extends View implements Menu.Host {
             c.drawRoundRect(oval, 10 * dp, 10 * dp, fill);
             text.setTextAlign(Paint.Align.LEFT);
             text.setColor(0xFFE6E6E6);
-            c.drawText(line, statsRect.left + 12 * dp, statsRect.top + 19 * dp, text);
+            c.drawText(fitText(line, room), statsRect.left + 12 * dp, statsRect.top + 19 * dp, text);
         } else {
             statsShown.set(statsRect);
             fill.setColor(0xB0101114);
@@ -6354,13 +6367,14 @@ final class GameView extends View implements Menu.Host {
             c.drawText("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding,
                     pad + 12 * dp, y, text);
             y += lh;
-            c.drawText("Outside help: " + d.policeReserve + " police, " + (d.squadReserve + d.airReserve) + " army"
+            // ((12.0) Cut to the panel: on a narrow screen it ran off the edge.)
+            c.drawText(fitText("Outside help: " + d.policeReserve + " police, " + (d.squadReserve + d.airReserve) + " army"
                     + (d.armyCalled && !d.armyArrived ? " (convoy in " + Math.max(0, (int) d.armyEta) + "s)" : "")
-                    + (d.pressure > 0 ? "   " + PRESSURE[d.pressure] : ""),
+                    + (d.pressure > 0 ? "   " + PRESSURE[d.pressure] : ""), statsRect.width() - 24 * dp),
                     pad + 12 * dp, y, text);
             y += lh;
             int secs = (int) world.time;
-            c.drawText(String.format("Time %d:%02d", secs / 60, secs % 60), pad + 12 * dp, y, text);
+            c.drawText("Time " + World.clock(secs), pad + 12 * dp, y, text);
             // ((10.59) The war so far: the living, the dead and those with guns, over the whole game.)
             drawLiveGraph(c, statsRect.left + 12 * dp, y + 8 * dp, statsRect.right - 12 * dp, statsRect.bottom - 8 * dp);
         }
@@ -6587,7 +6601,9 @@ final class GameView extends View implements Menu.Host {
             title = Country.swat()[1] + " " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SAR) title = "Rescue specialist " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.COP) title = (e.agency == 1 ? world.city.country.hpName + " " : e.agency == 2 ? world.city.country.ruralName + "'s deputy "
-                : e.agency == 3 ? "Park ranger " : e.agency == 4 ? Dispatch.federal(world.city.country) + " agent " : e.role == Entity.ROLE_PILOT ? "Pilot " : "Officer ")
+                : e.agency == 3 ? "Park ranger " : e.agency == 4 ? Dispatch.federal(world.city.country) + " agent " : e.role == Entity.ROLE_PILOT ? "Pilot "
+                // ((12.0) The specialists say what they are.)
+                : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman " : "Officer ")
                 + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.SOLDIER) title = Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
         else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
@@ -6633,12 +6649,13 @@ final class GameView extends View implements Menu.Host {
         fill.setColor(e.isZombie() ? 0xFF7CC24E : e.isArmed() ? 0xFF4F7BE0 : 0xFFF0AD4E);
         c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
         text.setColor(0xFFFFFFFF);
-        c.drawText(title, left + 14 * dp, top + 22 * dp, text);
+        // ((12.0) Cut to fit, clear of the buttons: a long name or a long street ran off the card, or under them.)
+        float bw = 110 * dp, bh = 30 * dp;
+        c.drawText(fitText(title, cw - 14 * dp - bw - bh - 28 * dp), left + 14 * dp, top + 22 * dp, text);
         text.setTextSize(12.5f * dp);
         text.setColor(0xFFB8BDC4);
-        for (int i = 0; i < lines.size(); i++) c.drawText(lines.get(i), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
+        for (int i = 0; i < lines.size(); i++) c.drawText(fitText(lines.get(i), cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
         // Pin them (a star), and take control of them.
-        float bw = 110 * dp, bh = 30 * dp;
         takeRect.set(left + cw - bw - 10 * dp, top + 8 * dp, left + cw - 10 * dp, top + 8 * dp + bh);
         pinRect.set(takeRect.left - bh - 8 * dp, takeRect.top, takeRect.left - 8 * dp, takeRect.bottom);
         boolean isPinned = pinned.contains(e);
@@ -6673,7 +6690,22 @@ final class GameView extends View implements Menu.Host {
                 : v.occupied() ? "driver only" : "nobody aboard")
                 : (aboard + (v.driver != null ? 1 : 0)) + " aboard";
         lines.add((Fleet.airborne(v) ? "flying" : kmh < 2 ? "stopped" : kmh + " km/h") + (v.lightsOn() ? ", lights and siren" : "")
-                + "  -  " + people + "  -  " + (v.maxHp > 0 ? Math.max(0, Math.round(100 * v.hp / v.maxHp)) + "% condition" : ""));
+                + "  -  " + people + "  -  " + (v.maxHp > 0 ? Math.max(0, Math.round(100 * v.hp / v.maxHp)) + "% condition" : "")
+                // ((12.0) And how much is in the tank: everyday cars run dry, and are left where they stop.)
+                + (v.type == Fleet.CAR && v.player == null && v.model != Fleet.M_BUS && !v.broken ? "  -  fuel " + Math.round(v.fuel * 100) + "%" : ""));
+        // ((12.0) Who's aboard, by name: the crew of a police car or truck, those who climbed in.)
+        StringBuilder who = new StringBuilder();
+        int named = 0, more = 0;
+        for (int k = 0; k < v.crew.size() + v.riders.size(); k++) {
+            Entity o = k < v.crew.size() ? v.crew.get(k) : v.riders.get(k - v.crew.size());
+            if (o == v.driver) continue;
+            if (named >= 3) {
+                more++;
+                continue;
+            }
+            who.append(named++ == 0 ? "" : ", ").append(Names.person(o.nameSeed));
+        }
+        if (named > 0) lines.add("With " + who + (more > 0 ? " and " + more + " more" : ""));
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 16 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
@@ -6685,11 +6717,11 @@ final class GameView extends View implements Menu.Host {
         fill.setColor(v.lightsOn() ? 0xFF4F7BE0 : v.broken ? 0xFF8A9099 : 0xFFF0AD4E);
         c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
         text.setColor(0xFFFFFFFF);
-        c.drawText(title, left + 14 * dp, top + 22 * dp, text);
+        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
         text.setTextSize(12.5f * dp);
         for (int i = 0; i < lines.size(); i++) {
             text.setColor(0xFFB8BDC4);
-            c.drawText(lines.get(i), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
+            c.drawText(fitText(lines.get(i), cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
         }
     }
 
@@ -7002,6 +7034,10 @@ final class GameView extends View implements Menu.Host {
                 + (e.infected ? "   BITTEN: " + Math.max(0, (int) e.infectTimer) + "s" : "")
                 + (!e.isZombie() && e.stamina < 0.3f ? "   Out of breath" : "");
         text.setTextSize(13 * dp);
+        // ((12.0) Smaller when it won't fit across the screen, rather than running off both sides.)
+        float room = w - 24 * dp;
+        if (text.measureText(info) > room) text.setTextSize(Math.max(9 * dp, 13 * dp * room / text.measureText(info)));
+        info = fitText(info, room);
         float tw = text.measureText(info) + 24 * dp, top = barTop - 34 * dp;
         oval.set((w - tw) / 2, top, (w + tw) / 2, top + 26 * dp);
         fill.setColor(0xD0101216);
@@ -7031,8 +7067,10 @@ final class GameView extends View implements Menu.Host {
             return "Wandering, hungry";
         }
         String s = doingNow(e);
-        // ((11.3) And how they're holding up.)
-        if (e.hp < e.maxHp * 0.35f) s += " (badly hurt)";
+        // ((11.3) And how they're holding up.) ((12.0) Both, when it's both.)
+        boolean hurt = e.hp < e.maxHp * 0.35f;
+        if (hurt && e.infected) s += " (badly hurt, bitten)";
+        else if (hurt) s += " (badly hurt)";
         else if (e.infected) s += " (bitten)";
         return s;
     }
@@ -7044,12 +7082,23 @@ final class GameView extends View implements Menu.Host {
         if (e.isArmed() && e.reload > 0) return "Reloading";
         if (e.fleeTimer > 0 && !e.isArmed()) return "Running for their life";
         if (e.ride != null) return "Riding along";
+        // ((12.0) Run themselves out: slowed to a jog until they get their breath back.)
+        float sp = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+        boolean sprinting = e.isArmed() && sp > e.runSpeed * 1.08f;
+        if (e.isArmed() && e.stamina < 0.2f && sp > 2 && e.task == Dispatch.T_RESPOND && !e.onScene) return "Out of breath, jogging on to " + (e.incident != null ? e.incident.place : "the call");
         switch (e.task) {
-            case Dispatch.T_RESPOND: return (e.onScene ? "At the scene" : "Responding to a 911 call") + (e.incident != null ? " on " + e.incident.place : "");
+            case Dispatch.T_RESPOND: return (e.onScene ? "At the scene" : sprinting ? "Sprinting to a 911 call" : "Responding to a 911 call") + (e.incident != null ? " on " + e.incident.place : "");
             case Dispatch.T_GUARD: return "Guarding the " + (e.zone != null ? e.zone.place + " " : "") + "safe zone";
-            case Dispatch.T_SEEK: return "Heading for a safe zone";
+            case Dispatch.T_SEEK: return world.queueingAtGate(e) ? "Queueing at the safe zone gate" : "Heading for a safe zone";
             case Dispatch.T_SHELTER: return "Sheltering in a safe zone";
-            case Dispatch.T_POST: return "On guard duty";
+            case Dispatch.T_POST: {
+                // ((12.0) Where, and whether they've had to step back from it.)
+                float pd = (float) Math.hypot(e.postX - e.x, e.postY - e.y);
+                if (pd > 30 && e.aiming) return "Falling back from their post, shooting";
+                if (pd > 30) return "Heading back to their post";
+                String at = world.postName(e.postX, e.postY);
+                return at != null ? "On guard at " + at : "On guard duty";
+            }
             case Dispatch.T_CORDON: return "Holding the perimeter";
             case Dispatch.T_EVACUATE: return "Getting out of the danger zone";
             case Dispatch.T_LEAVE: return "Fleeing the city";
@@ -7066,7 +7115,14 @@ final class GameView extends View implements Menu.Host {
             case Dispatch.T_CLEANUP: return "Clearing away bodies";
             case Dispatch.T_LOOT: return "On a supply run";
             case Dispatch.T_PATROL: return "Leading an armed patrol";
-            case Dispatch.T_BOARD: return e.rig != null ? "Getting into the " + world.fleet.describe(e.rig).split("  -  ")[0].toLowerCase() : "Mounting up";
+            // ((12.0) The rescue: it said "On patrol", or nothing at all for those being rescued.)
+            case Dispatch.T_RESCUE:
+                if (e.isArmed()) return e.roping > 0 ? "Coming down the winch line" : e.escort != null ? "Bringing " + Names.person(e.escort.nameSeed) + " to the helicopter" : "Searching for people to bring out";
+                return "Waiting to be winched up";
+            case Dispatch.T_BOARD:
+                // ((12.0) A ride on its way: waiting where they are for it.)
+                if (e.rig != null && e.rig.pickup && e.rig.state == Fleet.DRIVE) return "Waiting for their ride (" + world.fleet.describe(e.rig).split("  -  ")[0].toLowerCase() + " on its way)";
+                return e.rig != null ? "Getting into the " + world.fleet.describe(e.rig).split("  -  ")[0].toLowerCase() : "Mounting up";
         }
         if (e.isArmed()) {
             if (e.ammo <= 0 && e.reserve <= 0) return "Out of ammo";
@@ -7868,7 +7924,8 @@ final class GameView extends View implements Menu.Host {
                 float x0 = Math.min(boxX0, boxX1), x1 = Math.max(boxX0, boxX1), y0 = Math.min(boxY0, boxY1), y1 = Math.max(boxY0, boxY1);
                 for (int i = 0, n = world.entities.size(); i < n; i++) {
                     Entity e = world.entities.get(i);
-                    if (e.isArmed() && e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) selection.add(e);
+                    // ((12.0) Not the fallen, still lying where they fell.)
+                    if (e.isArmed() && !e.dead && e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) selection.add(e);
                 }
                 if (selection.isEmpty()) world.say("No police or soldiers in that box");
             }
@@ -7890,6 +7947,9 @@ final class GameView extends View implements Menu.Host {
         Entity pick = null;
         for (int i = 0, n = world.entities.size(); i < n; i++) {
             Entity e = world.entities.get(i);
+            // ((12.0) Only someone you can see: not one of the dead shut in a building out of sight, or someone
+            // who's just died and is about to be taken off the map.)
+            if (e.dead || e.hidden) continue;
             float ddx = e.x - wx, ddy = e.y - wy, d2 = ddx * ddx + ddy * ddy;
             if (d2 < best) {
                 best = d2;
@@ -7961,7 +8021,7 @@ final class GameView extends View implements Menu.Host {
             case City.MARKET: role = "Food and hunting ammo; can become a safe zone"; break;
             case City.MALL: role = "Plenty of food and room; can become a safe zone"; break;
             case City.SCHOOL: case City.CHURCH: case City.STADIUM: role = "Can become a safe zone"; break;
-            case City.PHARMACY: role = "Patches people up and sometimes stops a bite"; break;
+            case City.PHARMACY: role = "Patches up the hurt (nothing stops a bite)"; break;
             case City.FIRE_STATION: role = "The fire station (no crews any more): the paramedics are based here"; break;
             case City.HOUSE: case City.APARTMENT: role = "Home: the people who live here run back to it"; break;
             case City.CITY_HALL: role = "The Mayor's office"; break;
@@ -8001,12 +8061,12 @@ final class GameView extends View implements Menu.Host {
         fill.setColor(b.infestKnown && b.lurkers > 0 ? 0xFF7CC24E : !b.occupants.isEmpty() ? 0xFFB08A5A : 0xFF8A9099);
         c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
         text.setColor(0xFFFFFFFF);
-        c.drawText(title, left + 14 * dp, top + 22 * dp, text);
+        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
         text.setTextSize(12.5f * dp);
         for (int i = 0; i < lines.size(); i++) {
             String l = lines.get(i);
             text.setColor(l.startsWith("INFESTED") || l.startsWith("BLACKOUT") || l.startsWith("FALLEN") || l.startsWith("EMPTY") ? 0xFFFF8A6A : 0xFFB8BDC4);
-            c.drawText(l, left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
+            c.drawText(fitText(l, cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
         }
         // Outline the building on the map so it's clear which one this is.
         stroke.setColor(0xCCFFD24A);
@@ -8120,7 +8180,13 @@ final class GameView extends View implements Menu.Host {
             } else if (o instanceof World.Pickup) {
                 world.pickups.remove(o);
             } else if (o instanceof Fleet.Vehicle) {
-                world.fleet.vehicles.remove(o);
+                // ((12.0) Properly gone: its officers no longer think it's theirs.)
+                Fleet.Vehicle v = (Fleet.Vehicle) o;
+                v.crew.clear();
+                v.driver = null;
+                v.removedFromFleet = true;
+                world.fleet.vehicles.remove(v);
+                if (followV == v) followV = null;
             }
         }
         lastAction.clear();

@@ -11,6 +11,13 @@ final class World {
         return Math.sqrt(x * x + y * y);
     }
 
+    /** ((12.0) A game clock: m:ss, or h:mm:ss once past an hour - it read 75:03.) */
+    static String clock(int secs) {
+        secs = Math.max(0, secs);
+        if (secs >= 3600) return String.format("%d:%02d:%02d", secs / 3600, secs / 60 % 60, secs % 60);
+        return String.format("%d:%02d", secs / 60, secs % 60);
+    }
+
     private static final float TAU = (float) (Math.PI * 2);
 
     private static final int[] SHIRTS = {
@@ -5664,7 +5671,7 @@ final class World {
 
     void clearWrecks() {
         for (int i = fleet.vehicles.size() - 1; i >= 0; i--)
-            if (fleet.vehicles.get(i).broken && fleet.vehicles.get(i).riders.isEmpty()) fleet.vehicles.remove(i);
+            if (fleet.vehicles.get(i).broken && fleet.vehicles.get(i).riders.isEmpty()) fleet.discard(fleet.vehicles.get(i));
         pendingBlasts.clear();
     }
 
@@ -5957,7 +5964,7 @@ final class World {
         if (rnd.nextFloat() < 0.07f)
             for (int i = 0; i < fleet.vehicles.size(); i++)
                 if (fleet.vehicles.get(i).broken && fleet.vehicles.get(i).riders.isEmpty()) {
-                    fleet.vehicles.remove(i);
+                    fleet.discard(fleet.vehicles.get(i));
                     break;
                 }
         // After a while the safe zones close and everyone goes home.
@@ -8285,6 +8292,30 @@ final class World {
         return e.runSpeed * 0.95f;
     }
 
+    /** (12.0) Someone on their way to a safe zone who's reached the gate and is waiting at it. */
+    boolean queueingAtGate(Entity e) {
+        for (int i = 0; i < dispatch.zones.size(); i++) {
+            Dispatch.SafeZone z = dispatch.zones.get(i);
+            if (z.removed || z.gateOut.length == 0) continue;
+            int g = z.gateNear(e.x, e.y);
+            if (World.hypot(z.gateOut[g][0] - e.x, z.gateOut[g][1] - e.y) < 34 && !z.inside(e.x, e.y)) return true;
+        }
+        return false;
+    }
+
+    /** (12.0) What a guard post at (x, y) is: a base's gate, the armory, a checkpoint, or null. */
+    String postName(float x, float y) {
+        City.Facility base = city.nearestFacility(City.FACILITY_BASE, x, y);
+        if (base != null && World.hypot(base.x - x, base.y - y) < base.r * 2 && base.name != null) return "the gate of " + base.name.trim();
+        if (city.armory != null && World.hypot(city.armory.doorX - x, city.armory.doorY - y) < 120) return "the armory";
+        for (float[] p : city.checkpointPosts) if (World.hypot(p[0] - x, p[1] - y) < 40) return "a checkpoint on " + city.placeName(x, y);
+        for (int i = 0; i < infection.size(); i++) {
+            InfectionZone z = infection.get(i);
+            if (World.hypot(z.x - x, z.y - y) < z.r + 120) return "the checkpoint into the infection zone";
+        }
+        return null;
+    }
+
     /** (11.3) On the beat, or on duty on base, while the city is quiet. */
     boolean onDuty(Entity e) {
         if (alert != 0) return false;
@@ -8882,8 +8913,7 @@ final class World {
             for (int i = fleet.vehicles.size() - 1; i >= 0; i--) {
                 Fleet.Vehicle v = fleet.vehicles.get(i);
                 if ((v.broken || v.burnt) && v.riders.isEmpty() && v.player == null && !fleet.inView(v.x, v.y)) {
-                    fleet.vehicles.remove(i);
-                    v.removedFromFleet = true;
+                    fleet.discard(v);
                     towed++;
                     break;
                 }

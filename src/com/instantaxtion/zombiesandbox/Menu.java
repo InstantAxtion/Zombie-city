@@ -65,7 +65,7 @@ final class Menu {
     private static final int A_CONTINUE = 0, A_NEW = 1, A_SETTINGS = 2, A_NOTES = 3, A_QUIT = 4, A_RESUME = 5,
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
-            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_SLOT = 100, A_LOG_ROW = 200;
+            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_SLOT = 100, A_LOAD_SLOT = 150, A_LOG_ROW = 200;
 
     // ((11.5) No How to Play pages any more.)
 
@@ -121,6 +121,8 @@ final class Menu {
     /** A short line shown above the New Game buttons (city code accepted or not). */
     private String note;
     private float noteTime;
+    /** ((12.0) This frame's length: the note above the buttons lasted twice as long at 30 frames a second.) */
+    private float frameDt = 1 / 60f;
     private float time;
 
     private boolean dragging, pressed;
@@ -203,6 +205,7 @@ final class Menu {
 
     void draw(Canvas c, int w, int h, float dt) {
         time += dt;
+        frameDt = dt;
         // ((11.5) Momentum: a flicked list keeps going, easing off.)
         float flung = -1;
         if (!dragging && Math.abs(flingV) > 4 * dp) {
@@ -234,6 +237,13 @@ final class Menu {
         for (Button b : buttons) drawButton(c, b);
         // (Run into the end of the list: stop there.)
         if (flung >= 0 && scroll != flung) flingV = 0;
+    }
+
+    /** ((12.0) s cut to fit width in paint p, with "..." where it was cut.) */
+    private static String fit(Paint p, String s, float width) {
+        if (p.measureText(s) <= width) return s;
+        while (s.length() > 4 && p.measureText(s + "...") > width) s = s.substring(0, s.length() - 1);
+        return s + "...";
     }
 
     private Button button(String label, int action, boolean primary, float l, float t, float r, float b) {
@@ -505,15 +515,37 @@ final class Menu {
             plain.setTextSize(12.5f * dp);
             plain.setColor(0xFFB4BCC6);
             String[] lines = info == null ? new String[]{"Empty"} : info.split("\n");
-            for (int k = 0; k < lines.length && k < 3; k++) c.drawText(lines[k], x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
+            // ((12.0) Clear of the button: a long city name ran under it.)
+            for (int k = 0; k < lines.length && k < 3; k++) c.drawText(fit(plain, lines[k], maxW - (savingMode && info != null ? 244 : 150) * dp), x0 + 14 * dp, y + 46 * dp + k * 15 * dp, plain);
             boolean can = savingMode || info != null;
-            if (can) button(savingMode ? (info == null ? "Save" : "Overwrite") : "Load", A_SLOT + slot, true,
+            // ((12.0) Overwriting a save asks for a second tap; and a save can be loaded from here too, not only
+            // from the main menu - the pause menu's "Save / Load" only saved.)
+            boolean confirm = savingMode && info != null && armedSlot == slot && time - armedAt < 4;
+            if (can) button(savingMode ? (info == null ? "Save" : confirm ? "Sure?" : "Overwrite") : "Load", A_SLOT + slot, true,
                     x0 + maxW - 120 * dp, y + 22 * dp, x0 + maxW - 14 * dp, y + 64 * dp);
+            if (savingMode && info != null)
+                button("Load", A_LOAD_SLOT + slot, false, x0 + maxW - 214 * dp, y + 22 * dp, x0 + maxW - 128 * dp, y + 64 * dp);
             y += 96 * dp;
         }
         contentHeight = y + scroll - top;
         clampScroll();
+        if (noteTime > 0 && note != null) {
+            noteTime -= frameDt;
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(13 * dp);
+            fill.setColor(0xF0121418);
+            c.drawRect(0, h - 44 * dp, w, h - 12 * dp, fill);
+            text.setColor(0xFFFFE27A);
+            c.drawText(note, w / 2f, h - 23 * dp, text);
+        }
     }
+
+    /** ((12.0) The slot waiting for a second tap to be overwritten, and when it was first tapped.) */
+    private int armedSlot = -1;
+    private float armedAt;
+
+    private final java.util.WeakHashMap<Dispatch.Message, ArrayList<String>> logLines = new java.util.WeakHashMap<Dispatch.Message, ArrayList<String>>();
+    private float logW;
 
     /** Every radio message this game, newest first. Tap one to go there. */
     private void drawLog(Canvas c, int w, int h) {
@@ -530,7 +562,13 @@ final class Menu {
             Dispatch.Message m = log.get(i);
             text.setTextAlign(Paint.Align.LEFT);
             float whoW = text.measureText(m.who + ": ");
-            ArrayList<String> lines = wrap(m.text, maxW - whoW - 24 * dp, plain);
+            // ((12.0) Each message wrapped once, not every frame.)
+            if (logW != maxW) {
+                logW = maxW;
+                logLines.clear();
+            }
+            ArrayList<String> lines = logLines.get(m);
+            if (lines == null) logLines.put(m, lines = wrap(m.text, maxW - whoW - 24 * dp, plain));
             float rh = 12 * dp + lines.size() * 18 * dp;
             if (y + rh > top && y < h) {
                 tmp.set(x0, y, x0 + maxW, y + rh);
@@ -606,7 +644,7 @@ final class Menu {
         plain.setColor(0xFF8A9099);
         c.drawText("0:00", plot.left, plot.bottom + 16 * dp, plain);
         plain.setTextAlign(Paint.Align.RIGHT);
-        c.drawText(String.format("%d:%02d", secs / 60, secs % 60), plot.right, plot.bottom + 16 * dp, plain);
+        c.drawText(World.clock(secs), plot.right, plot.bottom + 16 * dp, plain);
         if (n >= 2) {
             int[][] series = {world.histHumans, world.histZombies, world.histArmed};
             int[] colors = {0xFF6FA8FF, 0xFF7CC24E, 0xFFE8C547};
@@ -640,7 +678,7 @@ final class Menu {
 
         int t = (int) world.time;
         String[][] totals = {
-                {"Time", String.format("%d:%02d", t / 60, t % 60)},
+                {"Time", World.clock(t)},
                 {"People now", String.valueOf(world.humanCount() + world.hiding + world.riding + world.visiting)},
                 {"Zombies now", String.valueOf(world.zombieCount())},
                 {"Most zombies at once", String.valueOf(world.peakZombies)},
@@ -678,21 +716,25 @@ final class Menu {
             for (int i = 0; i < show; i++) {
                 World.Moment m = world.timeline.get(world.timeline.size() <= 10 ? i : (i == 0 ? 0 : world.timeline.size() - show + i));
                 int mt = (int) m.time;
-                withTimeline[totals.length + 1 + i] = new String[]{"   " + m.text, String.format("%d:%02d", mt / 60, mt % 60)};
+                withTimeline[totals.length + 1 + i] = new String[]{"   " + m.text, World.clock(mt)};
             }
             totals = withTimeline;
         }
         float tx0 = landscape ? chart.right + 24 * dp : side, tx1 = w - side;
         float ty = landscape ? top + 26 * dp : chart.bottom + 30 * dp, lh = Math.min(26 * dp, (h - ty - 10 * dp) / totals.length);
-        plain.setTextSize(14 * dp);
+        // ((12.0) The writing as big as the rows have room for, and each figure kept clear of its label: with a long
+        // timeline the rows were drawn over each other, and a long figure ran into its label.)
+        float ts = Math.max(9 * dp, Math.min(14 * dp, lh * 0.85f));
+        plain.setTextSize(ts);
         for (String[] row : totals) {
             plain.setTextAlign(Paint.Align.LEFT);
             plain.setColor(0xFFB8BDC4);
-            c.drawText(row[0], tx0, ty, plain);
             text.setTextAlign(Paint.Align.RIGHT);
-            text.setTextSize(14 * dp);
+            text.setTextSize(ts);
             text.setColor(0xFFFFFFFF);
-            c.drawText(row[1], tx1, ty, text);
+            float vw = Math.min(text.measureText(row[1]), (tx1 - tx0) * 0.6f);
+            c.drawText(fit(plain, row[0], tx1 - tx0 - vw - 10 * dp), tx0, ty, plain);
+            c.drawText(fit(text, row[1], vw), tx1, ty, text);
             ty += lh;
         }
     }
@@ -797,7 +839,7 @@ final class Menu {
         text.setColor(0xFFFFFFFF);
         float ly = replayMap.bottom + 22 * dp;
         text.setTextAlign(Paint.Align.CENTER);
-        c.drawText(String.format("%d:%02d", secs / 60, secs % 60), replayMap.centerX(), ly, text);
+        c.drawText(World.clock(secs), replayMap.centerX(), ly, text);
         ly += 22 * dp;
         text.setTextSize(13 * dp);
         text.setTextAlign(Paint.Align.RIGHT);
@@ -844,6 +886,7 @@ final class Menu {
         if (showing != null) {
             text.setTextAlign(Paint.Align.CENTER);
             text.setTextSize(14 * dp);
+            showing = fit(text, showing, replayMap.width() - 40 * dp);
             float tw = text.measureText(showing) + 24 * dp;
             tmp.set(replayMap.centerX() - tw / 2, replayMap.top + 8 * dp, replayMap.centerX() + tw / 2, replayMap.top + 34 * dp);
             fill.setColor(0xE0101216);
@@ -886,7 +929,7 @@ final class Menu {
             plain.setTextSize(15 * dp);
             plain.setTextAlign(Paint.Align.LEFT);
             plain.setColor(INK);
-            c.drawText(opts.label(i), x + 16 * dp, y + rowH / 2 + 5 * dp, plain);
+            c.drawText(fit(plain, opts.label(i), colW - vw - 24 * dp), x + 16 * dp, y + rowH / 2 + 5 * dp, plain);
 
             tmp.set(r.r.right - vw, y + 7 * dp, r.r.right - 7 * dp, y + rowH - 7 * dp);
             fill.setColor(CARD_HI);
@@ -913,7 +956,7 @@ final class Menu {
             button(config.keepCity ? config.code() : "City code", A_CODE, false, x + bw + bgap, by, x + bw * 2 + bgap, by + bh);
             button("Start  ›", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
             if (noteTime > 0 && note != null) {
-                noteTime -= 1 / 60f;
+                noteTime -= frameDt;
                 fill.setColor(0xF0121418);
                 c.drawRect(0, by - 30 * dp, w, by - 4 * dp, fill);
                 text.setTextAlign(Paint.Align.CENTER);
@@ -1250,7 +1293,7 @@ final class Menu {
         button("City code", A_CODE, false, x + bw + bgap, by, x + bw * 2 + bgap, by + bh);
         button("Start  ›", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
         if (noteTime > 0 && note != null) {
-            noteTime -= 1 / 60f;
+            noteTime -= frameDt;
             fill.setColor(0xF0121418);
             c.drawRect(0, by - 30 * dp, w, by - 4 * dp, fill);
             text.setTextAlign(Paint.Align.CENTER);
@@ -1276,6 +1319,9 @@ final class Menu {
             0xFFD8C050, 0xFF50A0C0, 0xFFC050C0, 0xFF90B060, 0xFF3A9AD8, 0xFF2F6EA8, 0xFF48B0B0, 0xFF6A8098, 0xFF30B8D0,
             0xFFE8A040, 0xFF4E9A5A, 0xFF5A86B0, 0xFFC8C8C8, 0xFF3AA8D0, 0xFFE05A6A, 0xFFB898D0};
 
+    private ArrayList<ArrayList<ArrayList<String>>> notesLines;
+    private float notesW;
+
     private void drawNotes(Canvas c, int w, int h) {
         float top = header(c, w, h, "Patch Notes");
         listArea.set(0, top, w, h - 12 * dp);
@@ -1283,24 +1329,38 @@ final class Menu {
         c.save();
         c.clipRect(listArea);
         float y = top + 10 * dp - scroll;
-        for (String[] entry : PatchNotes.NOTES) {
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setTextSize(17 * dp);
-            text.setColor(ACCENT);
-            c.drawText(entry[0], x0, y + 18 * dp, text);
+        plain.setTextSize(14.5f * dp);
+        // ((12.0) Every note is wrapped into lines once for the screen's width, not again every frame - and only
+        // what's on screen is drawn. With hundreds of notes the page crawled when scrolled.)
+        if (notesLines == null || notesW != maxW) {
+            notesW = maxW;
+            notesLines = new ArrayList<ArrayList<ArrayList<String>>>();
+            for (String[] entry : PatchNotes.NOTES) {
+                ArrayList<ArrayList<String>> items = new ArrayList<ArrayList<String>>();
+                for (int i = 1; i < entry.length; i++) items.add(wrap(entry[i], maxW - 18 * dp, plain));
+                notesLines.add(items);
+            }
+        }
+        for (int e = 0; e < PatchNotes.NOTES.length; e++) {
+            String[] entry = PatchNotes.NOTES[e];
+            if (y + 32 * dp > top - 40 * dp && y < h) {
+                text.setTextAlign(Paint.Align.LEFT);
+                text.setTextSize(17 * dp);
+                text.setColor(ACCENT);
+                c.drawText(entry[0], x0, y + 18 * dp, text);
+            }
             y += 32 * dp;
             plain.setTextSize(14.5f * dp);
             plain.setTextAlign(Paint.Align.LEFT);
-            for (int i = 1; i < entry.length; i++) {
-                ArrayList<String> lines = wrap(entry[i], maxW - 18 * dp, plain);
-                fill.setColor(ACCENT);
-                c.drawCircle(x0 + 5 * dp, y + 10 * dp, 2.5f * dp, fill);
-                plain.setColor(0xFFDADDE2);
-                for (String line : lines) {
-                    c.drawText(line, x0 + 18 * dp, y + 15 * dp, plain);
-                    y += 21 * dp;
+            for (ArrayList<String> lines : notesLines.get(e)) {
+                float ih = lines.size() * 21 * dp;
+                if (y + ih > top - 40 * dp && y < h) {
+                    fill.setColor(ACCENT);
+                    c.drawCircle(x0 + 5 * dp, y + 10 * dp, 2.5f * dp, fill);
+                    plain.setColor(0xFFDADDE2);
+                    for (int k = 0; k < lines.size(); k++) c.drawText(lines.get(k), x0 + 18 * dp, y + 15 * dp + k * 21 * dp, plain);
                 }
-                y += 6 * dp;
+                y += ih + 6 * dp;
             }
             y += 18 * dp;
         }
@@ -1454,8 +1514,21 @@ final class Menu {
             }
             return;
         }
+        if (action >= A_LOAD_SLOT) {
+            if (!host.loadSlot(action - A_LOAD_SLOT)) {
+                note = "That save couldn't be loaded.";
+                noteTime = 3;
+            }
+            return;
+        }
         if (action >= A_SLOT) {
             int slot = action - A_SLOT;
+            if (savingMode && host.slotInfo(slot) != null && !(armedSlot == slot && time - armedAt < 4)) {
+                armedSlot = slot;
+                armedAt = time;
+                return;
+            }
+            armedSlot = -1;
             if (savingMode) {
                 boolean ok = host.saveSlot(slot);
                 host.world().say(ok ? "Saved to slot " + slot : "Could not save");

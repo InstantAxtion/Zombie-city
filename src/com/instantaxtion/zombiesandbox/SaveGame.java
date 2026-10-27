@@ -80,6 +80,10 @@ final class SaveGame {
 
             // People in vehicles are saved as if they had just got out.
             ArrayList<Entity> all = new ArrayList<Entity>();
+            // ((12.0) Saved where they'd come out, without moving anyone in the game that carries on after the save;
+            // and the stand-ins for those still aboard don't use up callsigns and squad places in it.)
+            moved = new java.util.IdentityHashMap<Entity, float[]>();
+            int copCount = d.copCount, soldierCount = d.soldierCount;
             // Roadblock officers are left out: the zone sets up its roadblocks again when it is loaded.
             java.util.HashSet<Entity> posted = new java.util.HashSet<Entity>();
             for (Fleet.Vehicle v : w.fleet.vehicles) if (v.guard != null) posted.add(v.guard);
@@ -87,20 +91,16 @@ final class SaveGame {
             // People inside on errands come back out at the door.
             for (City.Building b : w.city.buildings)
                 for (Entity e : b.visitors) {
-                    e.x = b.doorX;
-                    e.y = b.doorY;
+                    moved.put(e, new float[]{b.doorX, b.doorY});
                     all.add(e);
                 }
             for (Fleet.Vehicle v : w.fleet.vehicles) {
                 for (Entity e : v.riders) {
-                    e.x = v.x;
-                    e.y = v.y;
+                    moved.put(e, new float[]{v.x, v.y});
                     all.add(e);
                 }
                 for (Entity e : v.crew) {
-                    e.x = v.x;
-                    e.y = v.y;
-                    e.rig = null;
+                    moved.put(e, new float[]{v.x, v.y});
                     all.add(e);
                 }
                 if (Fleet.airborne(v) || v.type == Fleet.TRAIN || v.passengers <= 0 || v.state > 1 || v.broken) continue;
@@ -116,10 +116,17 @@ final class SaveGame {
                     all.add(p);
                 }
             }
+            d.copCount = copCount;
+            d.soldierCount = soldierCount;
             out.writeInt(all.size());
             for (Entity e : all) writeEntity(out, e, d);
-            // Families: who follows whom.
-            for (Entity e : all) out.writeInt(e.leader == null ? -1 : all.indexOf(e.leader));
+            // Families: who follows whom. ((12.0) Looked up, not searched for one by one through everyone.)
+            java.util.IdentityHashMap<Entity, Integer> index = new java.util.IdentityHashMap<Entity, Integer>();
+            for (int i = 0; i < all.size(); i++) index.put(all.get(i), i);
+            for (Entity e : all) {
+                Integer li = e.leader == null ? null : index.get(e.leader);
+                out.writeInt(li == null ? -1 : li);
+            }
 
             int occupied = 0;
             for (City.Building b : w.city.buildings) if (!b.occupants.isEmpty()) occupied++;
@@ -312,6 +319,8 @@ final class SaveGame {
             out.writeInt(w.command);
             out.writeInt(w.decisions);
         } finally {
+            moved = null;
+            homeIndex = null;
             out.close();
         }
         if (!tmp.renameTo(file)) throw new IOException("Could not write " + file);
@@ -330,8 +339,9 @@ final class SaveGame {
 
     private static void writeEntity(DataOutputStream out, Entity e, Dispatch d) throws IOException {
         out.writeInt(e.type);
-        out.writeFloat(e.x);
-        out.writeFloat(e.y);
+        float[] at = moved != null ? moved.get(e) : null;
+        out.writeFloat(at != null ? at[0] : e.x);
+        out.writeFloat(at != null ? at[1] : e.y);
         out.writeFloat(e.angle);
         out.writeFloat(e.hp);
         out.writeFloat(e.maxHp);
@@ -388,6 +398,8 @@ final class SaveGame {
 
     /** Each building's place in the city's list, while saving. */
     private static java.util.IdentityHashMap<City.Building, Integer> homeIndex;
+    /** Where those inside or aboard something are saved as standing, while saving. */
+    private static java.util.IdentityHashMap<Entity, float[]> moved;
 
     static World load(File file) throws IOException {
         DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
@@ -592,6 +604,8 @@ final class SaveGame {
                 w.firebombX = in.readFloat();
                 w.firebombY = in.readFloat();
                 w.firebombPlace = in.readUTF();
+                // ((12.0) No air strike called: none, not one on a place with no name.)
+                if (w.firebombPlace.length() == 0) w.firebombPlace = null;
                 w.trampled = in.readInt();
                 int facs = in.readInt();
                 for (int i = 0; i < facs; i++) {

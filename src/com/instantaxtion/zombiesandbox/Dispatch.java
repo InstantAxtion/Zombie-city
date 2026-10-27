@@ -306,6 +306,8 @@ final class Dispatch {
                     column.add(q);
                     q.cv.pending++;
                 } else if (q.type == Entity.COP) policeReserve += q.count;
+                // ((12.0) Soldiers who never found a way in go back into the reserve too, rather than vanish.)
+                else if (q.type == Entity.SOLDIER && !q.tank) squadReserve += q.count;
                 continue;
             }
             Fleet.Vehicle v = w.fleet.vehicles.get(w.fleet.vehicles.size() - 1);
@@ -1035,6 +1037,9 @@ final class Dispatch {
         }
         for (int i = 0; i < byNeed.size(); i++) {
             Incident inc = byNeed.get(i);
+            // ((12.0) Closed already this round, to make room for a new call or merged into another: nothing more to
+            // do for it - it used to be closed a second time, and could even call for help from outside.)
+            if (inc.resolved) continue;
             inc.age += step;
             if (inc.onScene) inc.sceneTime += step;
             inc.zombiesNear = w.countZombiesNear(inc.x, inc.y, 140);
@@ -2446,6 +2451,13 @@ final class Dispatch {
     /** Guards patch up the breaches once the dead have been driven off from them. */
     private void repairWall(SafeZone z, float step) {
         int down = 0;
+        // ((12.0) The zone's guards found once, not by going through everyone in the city for every dented section
+        // of wall: a battered wall cost tens of thousands of checks twice a second.)
+        zoneGuards.clear();
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
+            Entity e = w.entities.get(i);
+            if (!e.dead && e.task == T_GUARD && e.zone == z) zoneGuards.add(e);
+        }
         for (int k = 0; k < z.wall.length; k++) {
             if (z.up[k] && z.hp[k] < 100) {
                 // Dented sections still standing are shored up once it's quiet there.
@@ -2470,10 +2482,12 @@ final class Dispatch {
         z.breaches = down;
     }
 
+    private final ArrayList<Entity> zoneGuards = new ArrayList<Entity>();
+
     private boolean guardNear(SafeZone z, float x, float y, float r) {
-        for (int i = 0, n = w.entities.size(); i < n; i++) {
-            Entity e = w.entities.get(i);
-            if (!e.dead && e.task == T_GUARD && e.zone == z && Math.abs(e.x - x) < r && Math.abs(e.y - y) < r) return true;
+        for (int i = 0, n = zoneGuards.size(); i < n; i++) {
+            Entity e = zoneGuards.get(i);
+            if (Math.abs(e.x - x) < r && Math.abs(e.y - y) < r) return true;
         }
         return false;
     }
@@ -2992,9 +3006,25 @@ final class Dispatch {
     }
 
     /** The way to the gates of the zones with room. */
+    /** ((12.0) Which gates the field was last worked out to: the same gates, the same field.) */
+    private long zoneFieldSig = Long.MIN_VALUE;
+    private float zoneFieldAge;
+
     private void updateZoneField() {
+        boolean dirty = zonesDirty;
         zonesDirty = false;
         zoneFieldTimer = 2;
+        long sig = 17;
+        for (int i = 0; i < zones.size(); i++) {
+            SafeZone z = zones.get(i);
+            if (z.full || !z.open) continue;
+            for (int g = 0; g < z.gateOut.length; g++)
+                sig = sig * 31 + Float.floatToIntBits(z.gateOut[g][0]) * 7L + Float.floatToIntBits(z.gateOut[g][1]);
+        }
+        // (Still worked out again now and then, for a wall, a barricade or a fallen building in the way since.)
+        if (!dirty && sig == zoneFieldSig && (zoneFieldAge += 2) < 20) return;
+        zoneFieldAge = 0;
+        zoneFieldSig = sig;
         int n = 0;
         for (int i = 0; i < zones.size(); i++) n += zones.get(i).gateOut.length;
         float[] xs = new float[n], ys = new float[n];

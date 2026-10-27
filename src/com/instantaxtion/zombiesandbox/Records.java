@@ -20,7 +20,7 @@ final class Records {
 
     String recordText(int i) {
         int v = record(i);
-        if (i == 0) return String.format("%d:%02d", v / 60, v % 60);
+        if (i == 0) return World.clock(v);
         return String.valueOf(v);
     }
 
