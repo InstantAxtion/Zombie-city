@@ -1344,7 +1344,9 @@ final class GameView extends View implements Menu.Host {
             else {
                 miniRect.set(getWidth() - 10 * dp - size, uiFloor() - 10 * dp - size, getWidth() - 10 * dp, uiFloor() - 10 * dp);
                 // ((12.0) Down there it's where a card opens: hidden while one is, rather than poking out round it.)
-                if (picker < 0 && (follow != null || followV != null || (tool == TOOL_PAN && (inspectZ != null || inspectB != null)))) {
+                if (picker < 0 && (follow != null || followV != null || (tool == TOOL_PAN && (inspectZ != null || inspectB != null))
+                        // ((12.0) Or over the open stats panel, with big text on a narrow screen.)
+                        || (!statsCollapsed && RectF.intersects(miniRect, statsShown)))) {
                     miniRect.setEmpty();
                     camChip.setEmpty();
                     return;
@@ -6646,6 +6648,13 @@ final class GameView extends View implements Menu.Host {
             c.drawRoundRect(statsRect, 10 * dp, 10 * dp, fill);
             int perCol = portrait ? 2 : rows.length;
             float colW = portrait ? statsRect.width() / 2 : statsRect.width();
+            // ((12.0) Every row at the one size the longest fits at: each shrank on its own, "Civilians 14921" small
+            // beside a large "Cops 414".)
+            float rowScale = 1;
+            for (int t = 0; t < rows.length; t++) {
+                float need = text.measureText(ROW_LABELS[t]) + text.measureText(String.valueOf(rows[t]));
+                rowScale = Math.min(rowScale, (colW - 46 * dp) / need);
+            }
             for (int t = 0; t < rows.length; t++) {
                 float x0 = statsRect.left + (t / perCol) * colW;
                 float ty = statsRect.top + 6 * dp + lh * 0.8f + (t % perCol) * lh;
@@ -6655,9 +6664,8 @@ final class GameView extends View implements Menu.Host {
                 text.setTextAlign(Paint.Align.LEFT);
                 // Label and number never run into each other: shrink the row if the column is narrow.
                 String num = String.valueOf(rows[t]);
-                float room = colW - 26 * dp - 12 * dp - 8 * dp, need = text.measureText(ROW_LABELS[t]) + text.measureText(num);
                 float size = text.getTextSize();
-                if (need > room) text.setTextSize(size * room / need);
+                if (rowScale < 1) text.setTextSize(size * rowScale);
                 c.drawText(ROW_LABELS[t], x0 + 26 * dp, ty, text);
                 text.setTextAlign(Paint.Align.RIGHT);
                 c.drawText(num, x0 + colW - 12 * dp, ty, text);
@@ -6668,12 +6676,14 @@ final class GameView extends View implements Menu.Host {
             float y = statsRect.top + 6 * dp + lh * 0.8f + perCol * lh;
             text.setColor(0xFFA0A4AA);
             text.setTextSize(11.5f * dp);
-            c.drawText("Turned " + world.turned + "   Killed " + world.zombiesKilled
-                    + (world.recruits + world.refused > 0 ? "   Recruits " + world.recruits : ""), pad + 12 * dp, y, text);
+            // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
+            float lineRoom = statsRect.width() - 24 * dp;
+            c.drawText(fitText("Turned " + world.turned + "   Killed " + world.zombiesKilled
+                    + (world.recruits + world.refused > 0 ? "   Recruits " + world.recruits : ""), lineRoom), pad + 12 * dp, y, text);
             y += lh;
-            c.drawText("911 calls " + d.calls + "   Safe zones " + d.zones.size(), pad + 12 * dp, y, text);
+            c.drawText(fitText("911 calls " + d.calls + "   Safe zones " + d.zones.size(), lineRoom), pad + 12 * dp, y, text);
             y += lh;
-            c.drawText("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding,
+            c.drawText(fitText("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding, lineRoom),
                     pad + 12 * dp, y, text);
             y += lh;
             // ((12.0) Cut to the panel: on a narrow screen it ran off the edge.)
@@ -6848,20 +6858,24 @@ final class GameView extends View implements Menu.Host {
                 }
             }
             float bandH = sub == null ? 44 * dp : sub2 == null ? 64 * dp : 82 * dp;
-            fill.setColor(alpha(0xE6101114, a));
-            c.drawRect(0, top, w, top + bandH, fill);
-            fill.setColor(alpha((Integer) hd[2], a));
-            c.drawRect(0, top, w, top + 2 * dp, fill);
-            text.setTextSize(Math.min(26 * dp, w / 18f));
-            text.setColor(alpha((Integer) hd[2], a));
-            c.drawText(fitText(title, w - 24 * dp), w / 2f, top + 32 * dp, text);
-            if (sub != null) {
-                text.setTextSize(13 * dp);
-                text.setColor(alpha(0xFFE6E6E6, a));
-                c.drawText(fitText(sub, w - 24 * dp), w / 2f, top + 53 * dp, text);
-                if (sub2 != null) c.drawText(fitText(sub2, w - 24 * dp), w / 2f, top + 71 * dp, text);
+            // ((12.0) Not when an open stats panel has pushed it down onto the tool bar: the panel is what's being
+            // looked at then.)
+            if (top + bandH <= barTop - 8 * dp) {
+                fill.setColor(alpha(0xE6101114, a));
+                c.drawRect(0, top, w, top + bandH, fill);
+                fill.setColor(alpha((Integer) hd[2], a));
+                c.drawRect(0, top, w, top + 2 * dp, fill);
+                text.setTextSize(Math.min(26 * dp, w / 18f));
+                text.setColor(alpha((Integer) hd[2], a));
+                c.drawText(fitText(title, w - 24 * dp), w / 2f, top + 32 * dp, text);
+                if (sub != null) {
+                    text.setTextSize(13 * dp);
+                    text.setColor(alpha(0xFFE6E6E6, a));
+                    c.drawText(fitText(sub, w - 24 * dp), w / 2f, top + 53 * dp, text);
+                    if (sub2 != null) c.drawText(fitText(sub2, w - 24 * dp), w / 2f, top + 71 * dp, text);
+                }
+                top += bandH + 8 * dp;
             }
-            top += bandH + 8 * dp;
         }
         // ((12.0) Not over an open picker: it was drawn across the top of it.)
         if (world.messageTime > 0 && world.message != null && picker < 0 && !clearMenu) {

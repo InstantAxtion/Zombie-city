@@ -76,6 +76,11 @@ final class Settings implements OptionSet {
     @Override public String[] values(int i) { return VALUES[i]; }
     @Override public int get(int i) { return v[i]; }
 
+    /** (12.0) Every setting back as it comes. */
+    void reset() {
+        for (int i = 0; i < v.length; i++) set(i, DEFAULTS[i]);
+    }
+
     @Override
     public void set(int i, int value) {
         v[i] = value;

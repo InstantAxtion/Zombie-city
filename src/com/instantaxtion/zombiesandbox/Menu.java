@@ -71,7 +71,7 @@ final class Menu {
     private static final int A_CONTINUE = 0, A_NEW = 1, A_SETTINGS = 2, A_NOTES = 3, A_QUIT = 4, A_RESUME = 5,
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
-            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
+            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -592,6 +592,9 @@ final class Menu {
     /** ((12.0) When the city code was last copied.) */
     private float copiedAt = -99;
 
+    /** ((12.0) When Reset to defaults was first tapped.) */
+    private float resetArmedAt = -99;
+
     /** ((12.0) When Restart City was first tapped.) */
     private float restartArmedAt = -99;
 
@@ -1026,7 +1029,8 @@ final class Menu {
     /** A list of settings (or New Game choices), each a card with its value between arrows. */
     private void drawOptions(Canvas c, int w, int h, String title, OptionSet opts, boolean setup) {
         float top = header(c, w, h, title);
-        float footer = setup ? 72 * dp : 12 * dp;
+        // ((12.0) Settings has a way back to how everything came, along the bottom.)
+        float footer = setup ? 72 * dp : 66 * dp;
         listArea.set(0, top, w, h - footer);
         int cols = w >= 700 * dp ? 2 : 1;
         float gap = 10 * dp, side = 16 * dp, rowH = 50 * dp;
@@ -1074,6 +1078,11 @@ final class Menu {
         }
         c.restore();
         drawScrollHint(c, w);
+        if (!setup) {
+            boolean sure = time - resetArmedAt < 4;
+            float bw = Math.min(260 * dp, w - 32 * dp);
+            button(sure ? "Tap again to reset everything" : "Reset to defaults", A_RESET_SETTINGS, false, (w - bw) / 2, h - footer + 10 * dp, (w + bw) / 2, h - 12 * dp);
+        }
 
         if (setup) {
             float bgap = 8 * dp, bw = Math.min(180 * dp, (w - 32 * dp - bgap * 2) / 3), bh = 50 * dp, by = h - footer + 11 * dp;
@@ -1803,6 +1812,15 @@ final class Menu {
                 }
                 restartArmedAt = -99;
                 host.startGame(host.world().city.cfg.copy());
+                break;
+            case A_RESET_SETTINGS:
+                if (time - resetArmedAt >= 4) {
+                    resetArmedAt = time;
+                    break;
+                }
+                resetArmedAt = -99;
+                settings.reset();
+                host.settingsChanged();
                 break;
         }
     }
