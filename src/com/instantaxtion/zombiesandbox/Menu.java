@@ -700,7 +700,8 @@ final class Menu {
         button("Replay", A_REPLAY, true, w - 12 * dp - 110 * dp, 12 * dp, w - 12 * dp, 12 * dp + 42 * dp);
         boolean landscape = w > h;
         float side = 20 * dp;
-        RectF chart = new RectF(side, top + 10 * dp, landscape ? w * 0.58f : w - side,
+        // ((12.0) Half the width each sideways: at 58% for the chart, the list beside it cut most of its names short.)
+        RectF chart = new RectF(side, top + 10 * dp, landscape ? w * 0.5f : w - side,
                 landscape ? h - 20 * dp : top + Math.min(260 * dp, h * 0.36f));
         fill.setColor(0xFF1C1F24);
         c.drawRoundRect(chart, 10 * dp, 10 * dp, fill);
@@ -774,7 +775,7 @@ final class Menu {
                 {"Most zombies at once", String.valueOf(world.peakZombies)},
                 {"Zombies killed", String.valueOf(world.zombiesKilled)},
                 // ((12.0) And by whom.)
-                {"   by police / army / civilians", world.killsBy[0] + " / " + world.killsBy[1] + " / " + world.killsBy[2]},
+                {"   by police, army, civilians", world.killsBy[0] + " / " + world.killsBy[1] + " / " + world.killsBy[2]},
                 {"People turned", String.valueOf(world.turned)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"Left by bus or train", String.valueOf(world.fledByTransit)},
@@ -841,7 +842,10 @@ final class Menu {
             text.setTextSize(ts);
             text.setColor(0xFFFFFFFF);
             float vw = Math.min(text.measureText(row[1]), (tx1 - tx0) * 0.6f);
-            c.drawText(fit(plain, row[0], tx1 - tx0 - vw - 10 * dp), tx0, ty, plain);
+            // (A name a little smaller before it's cut short.)
+            float nameRoom = tx1 - tx0 - vw - 10 * dp, nw = plain.measureText(row[0]);
+            plain.setTextSize(nw > nameRoom ? Math.max(ts * 0.8f, ts * nameRoom / nw) : ts);
+            c.drawText(fit(plain, row[0], nameRoom), tx0, ty, plain);
             c.drawText(fit(text, row[1], vw), tx1, ty, text);
             ty += lh;
         }
@@ -913,7 +917,14 @@ final class Menu {
         }
         float barH = 44 * dp, bottom = h - 16 * dp - barH - 56 * dp;
         float size = Math.min(w - 32 * dp, bottom - top);
-        replayMap.set((w - size) / 2, top, (w + size) / 2, top + size);
+        // ((12.0) Sideways, the map on the left and the time, counts and controls beside it: under it, on a phone
+        // held sideways the map was a thumbnail and the timeline had no room at all.)
+        boolean beside = w > h;
+        if (beside) size = Math.max(0, Math.min(h - top - 16 * dp, w * 0.5f));
+        if (beside) replayMap.set(16 * dp, top, 16 * dp + size, top + size);
+        else replayMap.set((w - size) / 2, top, (w + size) / 2, top + size);
+        float colL = beside ? replayMap.right + 24 * dp : replayMap.left, colR = beside ? w - 16 * dp : replayMap.right;
+        float colCX = (colL + colR) / 2;
         City city = world.city;
         fill.setColor(0xFF1C1F24);
         c.drawRect(replayMap, fill);
@@ -951,9 +962,9 @@ final class Menu {
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         text.setColor(0xFFFFFFFF);
-        float ly = replayMap.bottom + 22 * dp;
+        float ly = beside ? top + 30 * dp : replayMap.bottom + 22 * dp;
         text.setTextAlign(Paint.Align.CENTER);
-        c.drawText(World.clock(secs), replayMap.centerX(), ly, text);
+        c.drawText(World.clock(secs), colCX, ly, text);
         ly += 22 * dp;
         text.setTextSize(13 * dp);
         text.setTextAlign(Paint.Align.RIGHT);
@@ -961,7 +972,7 @@ final class Menu {
         for (int i = 0, n = world.turnEvents.size(); i < n && world.turnEvents.get(i)[0] <= m[0]; i++) turnedSoFar++;
         text.setColor(0xFF6FA8FF);
         String counts = "People " + (int) m[2];
-        float cx = (w + text.measureText(counts + "   Zombies " + (int) m[1] + "   Turned " + turnedSoFar)) / 2;
+        float cx = colCX + text.measureText(counts + "   Zombies " + (int) m[1] + "   Turned " + turnedSoFar) / 2;
         c.drawText(counts, cx - text.measureText("   Zombies " + (int) m[1] + "   Turned " + turnedSoFar), ly, text);
         text.setColor(0xFF8BE05A);
         c.drawText("   Zombies " + (int) m[1], cx - text.measureText("   Turned " + turnedSoFar), ly, text);
@@ -970,8 +981,8 @@ final class Menu {
         // The timeline: drag it to scrub, the button plays and pauses.
         float bw = 90 * dp;
         float by = Math.min(h - 16 * dp - barH, ly + 18 * dp);
-        button(replayPlaying ? "Pause" : replayPos >= 1 ? "Again" : "Play", A_REPLAY_PLAY, true, replayMap.left, by, replayMap.left + bw, by + barH);
-        replayBar.set(replayMap.left + bw + 14 * dp, by, replayMap.right, by + barH);
+        button(replayPlaying ? "Pause" : replayPos >= 1 ? "Again" : "Play", A_REPLAY_PLAY, true, colL, by, colL + bw, by + barH);
+        replayBar.set(colL + bw + 14 * dp, by, colR, by + barH);
         float mid = replayBar.centerY();
         fill.setColor(0xFF2A2E34);
         tmp.set(replayBar.left, mid - 4 * dp, replayBar.right, mid + 4 * dp);

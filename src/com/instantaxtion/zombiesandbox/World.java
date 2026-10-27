@@ -4244,8 +4244,14 @@ final class World {
     private void switchGoal(Entity e, int goal, float threatDist) {
         int was = e.goal;
         e.goal = goal;
-        if (goal == was) return;
-        e.goalTime = 0;
+        // ((12.0) The plan is made to match the goal even when the goal hasn't changed: a plan changed under them (a
+        // hiding place given by a survivors' group and no good by now, a place in a zone lost when it filled) was
+        // left as it was, and they wandered about "running to hide indoors", or set on a zone with no plan to get
+        // there, back and forth on the spot for good.)
+        // (Only for someone left with no plan, or a hiding place gone stale: a lift, a call-up or a rescue handed to
+        // them by others while the goal stayed the same are theirs to keep.)
+        if (goal == was && !(e.task == Dispatch.T_NONE || (goal == G_ROUTINE && e.task == Dispatch.T_HIDE))) return;
+        if (goal != was) e.goalTime = 0;
         if (goal == G_FLEE || goal == G_FIGHT) return;
         switch (goal) {
             case G_HIDE:
@@ -10421,8 +10427,19 @@ final class World {
             float[] out = z.gateOut[g], in = z.gateIn[g];
             float dx = out[0] - in[0], dy = out[1] - in[1], l = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
             float side = e.slot % 2 == 0 ? -1 : 1;
-            px = in[0] - dy / l * 16 * side;
-            py = in[1] + dx / l * 16 * side;
+            // ((12.0) A step further in than the gate's inner end: that's right on the edge of what counts as inside
+            // the wall, and a guard there was inside one moment - off to their post - and outside the next - off
+            // round to the gate - back and forth on the spot for good.)
+            // (And nearer the middle where the side of the gate is a building's wall: a gate in a narrow alley had
+            // its guards' places inside the buildings either side, and they stood pushing at them.)
+            float off = 16;
+            px = in[0] - dx / l * 10 - dy / l * off * side;
+            py = in[1] - dy / l * 10 + dx / l * off * side;
+            while (off > 0 && city.solidAt(px, py)) {
+                off -= 4;
+                px = in[0] - dx / l * 10 - dy / l * off * side;
+                py = in[1] - dy / l * 10 + dx / l * off * side;
+            }
             face = (float) Math.atan2(dy, dx);
         } else {
             float[] breach = z.breaches > 0 && e.slot % 2 == 0 ? dispatch.nearestBreach(z, e.x, e.y) : null;
