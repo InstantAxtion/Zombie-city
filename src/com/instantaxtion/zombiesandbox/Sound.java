@@ -69,7 +69,7 @@ final class Sound {
             final int id = i;
             final File f = new File(dir, "sfx" + AUDIO_VERSION + "_" + i + ".wav");
             try {
-                if (!f.exists()) Synth.writeWav(f, Synth.effect(i));
+                if (!f.exists()) writeSafely(f, Synth.effect(i));
             } catch (Exception e) {
                 continue;
             }
@@ -90,7 +90,7 @@ final class Sound {
             final int tr = track;
             final File f = new File(dir, "music" + MUSIC_VERSION + "_" + track + ".wav");
             try {
-                if (!f.exists()) Synth.writeWav(f, Synth.music(track));
+                if (!f.exists()) writeSafely(f, Synth.music(track));
             } catch (Exception e) {
                 continue;
             }
@@ -101,6 +101,19 @@ final class Sound {
                     updateMusic();
                 }
             });
+        }
+    }
+
+    /**
+     * (12.0) Writes a sound to a file under another name first, then renames it: if the app was closed while it was
+     * being written, the half-written file used to be kept and that sound (or piece of music) was broken for good.
+     */
+    private static void writeSafely(File f, short[] samples) throws Exception {
+        File tmp = new File(f.getPath() + ".part");
+        Synth.writeWav(tmp, samples);
+        if (!tmp.renameTo(f)) {
+            tmp.delete();
+            throw new java.io.IOException("Could not keep " + f);
         }
     }
 

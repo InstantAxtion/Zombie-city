@@ -76,7 +76,9 @@ public class MainActivity extends Activity {
     /** A native text box for typing (or copying) a city code. */
     private void askCode(String current) {
         final EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_PHONE);
+        // ((12.0) A text keyboard: codes have letters and signs in them (the map, "!", the "~" of built changes), and
+        // the phone keypad it had couldn't type them.)
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         input.setText(current);
         input.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this)
@@ -104,6 +106,8 @@ public class MainActivity extends Activity {
         super.onResume();
         hideSystemUi();
         game.resume();
+        // (Keys go to the game again after a dialog.)
+        game.requestFocus();
     }
 
     @Override
