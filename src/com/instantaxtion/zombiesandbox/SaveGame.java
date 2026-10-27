@@ -328,6 +328,16 @@ final class SaveGame {
             // (And the police and army line on the Stats chart, which came back as nothing before the load.)
             out.writeInt(w.histCount);
             for (int i = 0; i < w.histCount; i++) out.writeInt(w.histArmed[i]);
+            // (And the radio log, which came back empty.)
+            out.writeInt(d.log.size());
+            for (Dispatch.Message m : d.log) {
+                out.writeUTF(m.who);
+                out.writeUTF(m.text);
+                out.writeInt(m.color);
+                out.writeFloat(m.x);
+                out.writeFloat(m.y);
+                out.writeFloat(m.time);
+            }
         } finally {
             moved = null;
             homeIndex = null;
@@ -731,6 +741,13 @@ final class SaveGame {
                 for (int i = 0; i < hn; i++) {
                     int a = in.readInt();
                     if (i < w.histArmed.length) w.histArmed[i] = a;
+                }
+                int ln = in.readInt();
+                for (int i = 0; i < ln; i++) {
+                    Dispatch.Message m = new Dispatch.Message(in.readUTF(), in.readUTF(), in.readInt(), in.readFloat(), in.readFloat());
+                    m.time = in.readFloat();
+                    m.age = 999;
+                    d.log.add(Math.min(i, d.log.size()), m);
                 }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)

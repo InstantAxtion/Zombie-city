@@ -414,6 +414,14 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**200 fixes and improvements (12.0):** a large clean-up release of 80 bug fixes, 38 new features, 64 interface
+improvements, 17 performance improvements and one other fix. People heading for a safe zone, a hiding place or a call now
+get there instead of getting stuck at walls and gates; full zones turn people away and say when they have room again;
+vehicles stop driving into lakes when passing and untangle head-on standoffs; kills are only credited once. Cards, the
+big map, headlines, the stats panel and the menus fit phones and landscape screens better, with text that wraps rather
+than being cut. Pins follow people into buildings and vehicles. Saves can be deleted, settings can be reset, the number
+of feed lines can be chosen, and a save that won't load says why. Busy cities run lighter with cached lookups.
+
 **Real police cars, faster responses, a realistic outbreak (11.7):** police stations start with their own parked cars
 (one per two officers, two to eight) and only those go out, each with a real officer at the wheel; with none left,
 officers walk. Bases send out their own parked trucks. Pickups head for where people are now and they wait for it.

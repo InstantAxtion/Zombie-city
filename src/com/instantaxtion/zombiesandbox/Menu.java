@@ -467,6 +467,23 @@ final class Menu {
         if (game) {
             button("Continue", A_CONTINUE, true, x0, y, x0 + colW, y + bigH);
             y += bigH + gap;
+            // ((12.0) Which game that is: the city and how long it's been going.)
+            String which = null;
+            if (host.hasGame() && host.world() != null) which = host.world().city.name + "  -  " + World.clock((int) host.world().time) + " played";
+            else {
+                String info = host.slotInfo(0);
+                if (info != null) {
+                    String[] parts = info.split("\n");
+                    which = parts[0] + (parts.length > 1 ? "  -  " + parts[1].split(",")[0] : "");
+                }
+            }
+            if (which != null) {
+                plain.setTextSize(12 * dp);
+                plain.setTextAlign(Paint.Align.CENTER);
+                plain.setColor(0xCCFFFFFF);
+                c.drawText(fit(plain, which, colW), x0 + colW / 2, y + 6 * dp, plain);
+                y += 18 * dp;
+            }
             button("New Game", A_NEW, false, x0, y, x0 + colW, y + tileH);
         } else button("New Game", A_NEW, true, x0, y, x0 + colW, y + bigH);
         y += (game ? tileH : bigH) + gap * 1.6f;

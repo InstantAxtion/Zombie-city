@@ -990,9 +990,11 @@ final class GameView extends View implements Menu.Host {
         for (int sIdx = 0; sIdx < 3; sIdx++) {
             stroke.setColor(colors[sIdx]);
             int[] h = series[sIdx];
-            float px = bx, py = by - ph * h[0] / max;
+            // ((12.0) On a square-root scale, as on the Stats screen: the dead and the armed were a flat line along the
+            // bottom beside thousands of people.)
+            float px = bx, py = by - ph * (float) Math.sqrt(h[0] / (float) max);
             for (int i = step; i < n; i += step) {
-                float nx = bx + pw * i / (n - 1), ny = by - ph * h[i] / max;
+                float nx = bx + pw * i / (n - 1), ny = by - ph * (float) Math.sqrt(h[i] / (float) max);
                 c.drawLine(px, py, nx, ny, stroke);
                 px = nx;
                 py = ny;
@@ -1023,7 +1025,13 @@ final class GameView extends View implements Menu.Host {
                 loading = false;
                 boolean oom = buildError instanceof OutOfMemoryError;
                 if (loadingSave) {
-                    loadFailed = oom ? "Not enough memory to load that game on this phone." : "That save couldn't be loaded.";
+                    // ((12.0) And why, where the save says: a map no longer in the game, or a version this one can't read.)
+                    Throwable why = buildError.getCause() != null ? buildError.getCause() : buildError;
+                    String reason = why instanceof java.io.IOException && why.getMessage() != null
+                            ? (why.getMessage().contains("no longer in the game") ? ": its map is no longer in the game"
+                            : why.getMessage().contains("Unsupported save version") ? ": it's from a version of the game this one can't read" : "")
+                            : "";
+                    loadFailed = oom ? "Not enough memory to load that game on this phone." : "That save couldn't be loaded" + reason + ".";
                     // (A broken autosave goes, so Continue doesn't keep failing; one too big for memory stays.)
                     if (!oom && loadingFile != null && loadingFile.equals(saveFile())) loadingFile.delete();
                 } else loadFailed = oom
@@ -1119,6 +1127,13 @@ final class GameView extends View implements Menu.Host {
                 // Got into a car, a patrol car or a truck: follow that instead.
                 Fleet.Vehicle in = follow.removed ? (follow.ride != null ? follow.ride : follow.rig) : null;
                 if (in != null && !in.removedFromFleet && world.fleet.vehicles.contains(in)) followV = in;
+                else if (follow.removed) {
+                    // ((12.0) Gone indoors (or into a car some other way): that building's card, or that car,
+                    // instead of the card just closing.)
+                    Object at = whereIs(follow);
+                    if (at instanceof Fleet.Vehicle) followV = (Fleet.Vehicle) at;
+                    else if (at instanceof City.Building && tool == TOOL_PAN) inspectB = (City.Building) at;
+                }
                 follow = null;
             }
             else {
@@ -1468,8 +1483,9 @@ final class GameView extends View implements Menu.Host {
             // ringed.)
             for (int i = 0; i < pinned.size(); i++) {
                 Entity p = pinned.get(i);
-                if (p.dead && world.controlled != p) continue;
-                float px = mx(p.x), py = my(p.y);
+                float[] at = pinAt(p);
+                if (at == null) continue;
+                float px = mx(at[0]), py = my(at[1]);
                 fill.setColor(0xE0101216);
                 c.drawCircle(px, py, 3.4f * dp, fill);
                 fill.setColor(0xFFE8C547);
@@ -1538,10 +1554,13 @@ final class GameView extends View implements Menu.Host {
         fill.setColor(0xFA101216);
         c.drawRect(0, 0, getWidth(), getHeight(), fill);
         tacUsed.clear();
-        float top = 46 * dp, size = Math.min(getWidth() - 24 * dp, getHeight() - top - 70 * dp);
+        // ((12.0) Held sideways, the key goes beside the map rather than under it, and the map takes the height.)
+        boolean keySide = !portrait && getWidth() - 24 * dp - (getHeight() - 46 * dp - 16 * dp) >= 180 * dp;
+        float top = 46 * dp, size = keySide ? getHeight() - top - 16 * dp : Math.min(getWidth() - 24 * dp, getHeight() - top - 70 * dp);
         float aspect = city.worldW() / city.worldH();
         float mw = aspect >= 1 ? size : size * aspect, mh = aspect >= 1 ? size / aspect : size;
-        tacRect.set((getWidth() - mw) / 2, top, (getWidth() + mw) / 2, top + mh);
+        float tacL = keySide ? Math.max(12 * dp, (getWidth() - mw - 190 * dp) / 2) : (getWidth() - mw) / 2;
+        tacRect.set(tacL, top, tacL + mw, top + mh);
         int collapsed = 0;
         for (int i = 0; i < city.buildings.size(); i++) if (city.buildings.get(i).collapsed) collapsed++;
         if (tacMap == null || tacWorld != world || tacCollapsed != collapsed) {
@@ -1702,7 +1721,16 @@ final class GameView extends View implements Menu.Host {
         }
         // ((12.0) On two lines where one won't fit: it ran off both sides of a phone held upright.)
         String key = "Dead " + dead + "   Living (outdoors) " + living, hint = "Rings: calls   Tap to go there";
-        if (text.measureText(key + "   " + hint) <= getWidth() - 16 * dp)
+        if (keySide) {
+            text.setTextAlign(Paint.Align.LEFT);
+            float kx = tacRect.right + 16 * dp, ky = tacRect.top + 20 * dp, kw = getWidth() - kx - 12 * dp;
+            String[] keyLines = {"Dead " + dead, "Living (outdoors) " + living, "Rings: calls", "Tap to go there"};
+            for (String l : keyLines) {
+                c.drawText(fitText(l, kw), kx, ky, text);
+                ky += 18 * dp;
+            }
+            text.setTextAlign(Paint.Align.CENTER);
+        } else if (text.measureText(key + "   " + hint) <= getWidth() - 16 * dp)
             c.drawText(key + "   " + hint, getWidth() / 2f, tacRect.bottom + 20 * dp, text);
         else {
             c.drawText(fitText(key, getWidth() - 16 * dp), getWidth() / 2f, tacRect.bottom + 20 * dp, text);
@@ -6556,6 +6584,13 @@ final class GameView extends View implements Menu.Host {
         return java.util.Arrays.asList(s.substring(0, cut), s.substring(cut + 1).trim());
     }
 
+    /** ((12.0) s at the text size set now, or a little smaller (down to 80%) if that's what it takes, then cut to fit.) */
+    private String shrinkToFit(String s, float width) {
+        float size = text.getTextSize(), w = text.measureText(s);
+        if (w > width) text.setTextSize(Math.max(size * 0.8f, size * width / w));
+        return fitText(s, width);
+    }
+
     private String fitText(String s, float width) {
         if (text.measureText(s) <= width) return s;
         while (s.length() > 4 && text.measureText(s + "...") > width) s = s.substring(0, s.length() - 1);
@@ -6681,19 +6716,23 @@ final class GameView extends View implements Menu.Host {
             text.setTextSize(11.5f * dp);
             // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
             float lineRoom = statsRect.width() - 24 * dp;
-            c.drawText(fitText("Turned " + world.turned + "   Killed " + world.zombiesKilled
+            c.drawText(shrinkToFit("Turned " + world.turned + "   Killed " + world.zombiesKilled
                     + (world.recruits + world.refused > 0 ? "   Recruits " + world.recruits : ""), lineRoom), pad + 12 * dp, y, text);
+            text.setTextSize(11.5f * dp);
             y += lh;
-            c.drawText(fitText("911 calls " + d.calls + "   Safe zones " + d.zones.size(), lineRoom), pad + 12 * dp, y, text);
+            c.drawText(shrinkToFit("911 calls " + d.calls + "   Safe zones " + d.zones.size(), lineRoom), pad + 12 * dp, y, text);
+            text.setTextSize(11.5f * dp);
             y += lh;
-            c.drawText(fitText("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding, lineRoom),
+            c.drawText(shrinkToFit("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding, lineRoom),
                     pad + 12 * dp, y, text);
+            text.setTextSize(11.5f * dp);
             y += lh;
             // ((12.0) Cut to the panel: on a narrow screen it ran off the edge.)
-            c.drawText(fitText("Outside help: " + d.policeReserve + " police, " + (d.squadReserve + d.airReserve) + " army"
+            c.drawText(shrinkToFit("Outside help: " + d.policeReserve + " police, " + (d.squadReserve + d.airReserve) + " army"
                     + (d.armyCalled && !d.armyArrived ? " (convoy in " + Math.max(0, (int) d.armyEta) + "s)" : "")
                     + (d.pressure > 0 ? "   " + PRESSURE[d.pressure] : ""), statsRect.width() - 24 * dp),
                     pad + 12 * dp, y, text);
+            text.setTextSize(11.5f * dp);
             y += lh;
             int secs = (int) world.time;
             c.drawText("Time " + World.clock(secs), pad + 12 * dp, y, text);
@@ -7058,7 +7097,9 @@ final class GameView extends View implements Menu.Host {
         String title = world.fleet.describe(v);
         String st = world.fleet.status(v);
         if (st != null && st.indexOf(": ") > 0) st = st.substring(st.indexOf(": ") + 2);
-        lines.add(st != null ? st : v.parked ? "Parked" : Math.abs(v.speed) < 3 ? "Waiting" : "Driving");
+        // ((12.0) And where an everyday car is going.)
+        String to = v.field != null && (v.tx > 0 || v.ty > 0) ? world.city.placeName(v.tx, v.ty) : null;
+        lines.add(st != null ? st : v.parked ? "Parked" : (Math.abs(v.speed) < 3 ? "Waiting" : "Driving") + (to != null ? ", on the way to " + to : ""));
         // (Against the size of a car: about 0.15 m a unit at the pace things move here.)
         int kmh = Math.round(Math.abs(v.speed) * 0.55f);
         int aboard = v.crew.size() + v.riders.size() + v.passengers;
@@ -7087,6 +7128,11 @@ final class GameView extends View implements Menu.Host {
             who.append(named++ == 0 ? "" : ", ").append(Names.person(o.nameSeed));
         }
         if (named > 0) lines.add("With " + who + (more > 0 ? " and " + more + " more" : ""));
+        // ((12.0) And its own people out of it, on foot at the scene.)
+        if (v.type == Fleet.CRUISER || v.type == Fleet.TRUCK) {
+            int out = world.fleet.crewOnFoot(v);
+            if (out > 0) lines.add((v.type == Fleet.CRUISER || Fleet.policeTruck(v) ? World.count(out, "officer", "officers") : World.count(out, "soldier", "soldiers")) + " out on foot");
+        }
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 16 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
@@ -7121,6 +7167,14 @@ final class GameView extends View implements Menu.Host {
 
     /** Keeps pins on the right people: someone who turned is followed as the zombie they became. */
     private void updatePins() {
+        pinWhere.clear();
+        for (int i = 0; i < pinned.size(); i++) {
+            Entity p = pinned.get(i);
+            if (p.dead && p.removed && world.controlled != p) {
+                Object at = whereIs(p);
+                if (at != null) pinWhere.put(p, at);
+            }
+        }
         for (int i = pinned.size() - 1; i >= 0; i--) {
             Entity p = pinned.get(i);
             if (!p.dead || world.controlled == p) continue;
@@ -7142,15 +7196,35 @@ final class GameView extends View implements Menu.Host {
 
     /** ((12.0) Someone out of sight - in a building, a vehicle or out of town - who is still somewhere.) */
     private boolean stillAround(Entity p) {
+        return whereIs(p) != null || world.away.contains(p);
+    }
+
+    /** ((12.0) The building or vehicle someone out of sight is in, or null. */
+    private Object whereIs(Entity p) {
         for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
             City.Building b = world.city.buildings.get(i);
-            if (b.occupants.contains(p) || b.visitors.contains(p)) return true;
+            if (b.occupants.contains(p) || b.visitors.contains(p)) return b;
         }
         for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.driver == p || v.crew.contains(p) || v.riders.contains(p)) return true;
+            if (v.driver == p || v.crew.contains(p) || v.riders.contains(p)) return v;
         }
-        return world.away.contains(p);
+        return null;
+    }
+
+    /**
+     * ((12.0) Where the pinned who are out of sight are - the building they went into, the car they got in - so
+     * their pins still point there instead of vanishing until they come out.)
+     */
+    private final java.util.IdentityHashMap<Entity, Object> pinWhere = new java.util.IdentityHashMap<Entity, Object>();
+
+    /** Where a pinned person is to be shown: {x, y}, or null if nowhere. */
+    private float[] pinAt(Entity p) {
+        if (!p.dead || world.controlled == p) return new float[]{p.x, p.y};
+        Object at = pinWhere.get(p);
+        if (at instanceof City.Building) return new float[]{((City.Building) at).doorX, ((City.Building) at).doorY};
+        if (at instanceof Fleet.Vehicle && !((Fleet.Vehicle) at).removedFromFleet) return new float[]{((Fleet.Vehicle) at).x, ((Fleet.Vehicle) at).y};
+        return null;
     }
 
     // ------------------------------------------------------------------ reinforcements (10.17)
@@ -7251,8 +7325,9 @@ final class GameView extends View implements Menu.Host {
         if (bottom - top < 44 * dp) bottom = top + 44 * dp;
         for (int i = 0; i < pinned.size(); i++) {
             Entity p = pinned.get(i);
-            if (p.dead && world.controlled != p) continue;
-            float sx = screenX(p.x), sy = screenY(p.y);
+            float[] at = pinAt(p);
+            if (at == null) continue;
+            float sx = screenX(at[0]), sy = screenY(at[1]);
             boolean on = sx > 0 && sx < w && sy > top && sy < bottom;
             text.setTextAlign(Paint.Align.CENTER);
             if (on) {
@@ -8117,9 +8192,23 @@ final class GameView extends View implements Menu.Host {
         for (int k = 0; k < pinCount; k++)
             if (pinRects[k].contains(x, y)) {
                 click();
-                follow = pinIcons[k];
+                Entity p = pinIcons[k];
+                Object at = p.dead && world.controlled != p ? pinWhere.get(p) : null;
                 inspectB = null;
                 inspectZ = null;
+                if (at instanceof Fleet.Vehicle) {
+                    // ((12.0) In a car: the car, followed; in a building: the building's card, there on screen.)
+                    follow = null;
+                    followV = (Fleet.Vehicle) at;
+                } else if (at instanceof City.Building) {
+                    City.Building b = (City.Building) at;
+                    follow = null;
+                    followV = null;
+                    if (tool == TOOL_PAN) inspectB = b;
+                    camX = b.doorX - getWidth() / scale / 2;
+                    camY = b.doorY - barTop / scale / 2;
+                    clampCamera();
+                } else follow = p;
                 return true;
             }
         if (world.controlled == null && follow != null && !follow.dead && picker < 0 && !clearMenu && takeRect.contains(x, y)) {
@@ -8511,6 +8600,9 @@ final class GameView extends View implements Menu.Host {
             lines.add("In " + d.name);
         }
         if (b.collapsed) lines.add("Collapsed: just a pile of rubble now");
+        // ((12.0) With people still in there fighting them, that's what it says - not "Keep out!" as if they'd gone.)
+        else if (b.lurkers > 0 && !b.occupants.isEmpty())
+            lines.add("FIGHTING: " + World.count(b.occupants.size(), "person", "people") + " inside against " + (b.lurkers == 1 ? "one of the dead" : "about " + b.lurkers + " of the dead"));
         else if (b.infestKnown && b.lurkers > 0) lines.add("INFESTED: " + (b.lurkers == 1 ? "one of them" : "about " + b.lurkers + " of them") + " inside. Keep out!");
         else if (!b.occupants.isEmpty())
             lines.add(b.occupants.size() + " hiding inside, door barricaded (" + Math.max(0, (int) b.barricade) + "%)");
@@ -8585,7 +8677,7 @@ final class GameView extends View implements Menu.Host {
         java.util.ArrayList<String> wrapped = new java.util.ArrayList<String>();
         java.util.ArrayList<Boolean> warn = new java.util.ArrayList<Boolean>();
         for (String l : lines) {
-            boolean red = l.startsWith("INFESTED") || l.startsWith("BLACKOUT") || l.startsWith("FALLEN") || l.startsWith("EMPTY");
+            boolean red = l.startsWith("INFESTED") || l.startsWith("FIGHTING") || l.startsWith("BLACKOUT") || l.startsWith("FALLEN") || l.startsWith("EMPTY");
             for (String part : wrap2(l, cw - 24 * dp)) {
                 wrapped.add(part);
                 warn.add(red);
@@ -8659,6 +8751,7 @@ final class GameView extends View implements Menu.Host {
         int n = BRUSHES[brushIdx];
         // Only one commander at a time.
         if (tool == TOOL_MIL && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;
+        int failed = 0;
         for (int i = 0; i < n; i++) {
             float ox = 0, oy = 0;
             if (n > 1) {
@@ -8669,7 +8762,12 @@ final class GameView extends View implements Menu.Host {
             Entity e = tool == TOOL_MIL ? world.spawnSoldier(MIL_ROLES[milVariant], wx + ox, wy + oy)
                     : tool == TOOL_COP ? world.spawnCop(COP_ROLES[copVariant], wx + ox, wy + oy) : world.spawn(type, wx + ox, wy + oy);
             if (e != null) lastAction.add(e);
+            else failed++;
         }
+        // ((12.0) Nobody placed: say why, rather than nothing happening at all.)
+        if (failed == n && n > 0 && world.messageTime <= 0)
+            world.say(world.entities.size() >= world.maxEntities ? "The city is full: no room for anyone else (Max population, in Settings)"
+                    : "Nowhere to put them there");
     }
 
     /** The Place tool: vehicles, barricades, supply crates and medkits. */
