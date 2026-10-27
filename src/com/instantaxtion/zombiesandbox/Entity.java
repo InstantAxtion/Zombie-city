@@ -281,6 +281,8 @@ final class Entity {
     transient float replanAt = -99;
     /** ((12.0) Until when a field that led nowhere from here is left alone, for a planned route instead.) */
     transient float fieldOffUntil = -99;
+    /** ((12.0) Inside the wall of the zone they guard, as of the last look.) */
+    transient boolean wasInside;
     /** (10.37) What the brain has them doing (World.G_*), until it thinks again, and the building it had in mind. */
     int goal;
     transient float goalCd, goalTime;

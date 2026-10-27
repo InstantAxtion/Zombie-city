@@ -10392,6 +10392,14 @@ final class World {
             city.walkFieldFromPoints(z.field, xs, ys, gates + 1);
         }
         float far = Math.max(Math.abs(e.x - z.x) - (z.right() - z.left()) / 2, Math.abs(e.y - z.y) - (z.bottom() - z.top()) / 2);
+        // ((12.0) Through the wall one way or the other: the way planned from the other side is no good now. A guard
+        // in through the nearer gate kept the route to their post planned from outside - back out, round the wall
+        // and in at the far gate - and went out, and in, and out again, for good.)
+        boolean ins = z.inside(e.x, e.y);
+        if (ins != e.wasInside) {
+            e.wasInside = ins;
+            e.path = null;
+        }
         if (far > 160 && followField(e, z.field, e.runSpeed * speedFactor)) return;
         if (!z.open) {
             // Building the wall: at the stretch going up now.
@@ -10406,8 +10414,10 @@ final class World {
             return;
         }
         if (!z.inside(e.x, e.y)) {
-            // In through the nearest gate.
-            int g = z.gateNear(e.x, e.y);
+            // In through the nearest gate. ((12.0) A gate's own guards in through their own gate: in through the
+            // nearer one, with the inside cut in two by buildings, the way to their post led back out, round, and
+            // in at the other - and in at the nearer one again, for good.)
+            int g = e.slot < gates * 2 ? e.slot / 2 : z.gateNear(e.x, e.y);
             float[] out = z.gateOut[g], in = z.gateIn[g];
             // ((12.0) Within reach of the inside once nearer it than the gate is long: there was a stretch in the
             // gateway out of reach of both, and a guard there walked out, then in, then out again, for good.)

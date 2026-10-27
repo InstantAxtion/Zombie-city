@@ -3154,6 +3154,10 @@ final class Fleet {
             // Something stopped for good in the lane (parked, wrecked, or stood there a while and not just
             // queueing): pull out and go round it, slowly, rather than wait behind it for ever.
             boolean stuckThere = o.parked || o.broken || (o.stillT > 5 && !o.held && !o.queued)
+                    // ((12.0) Nose to nose with one coming the other way in the same lane, both stopped: each waited
+                    // for the other for good. Both go round, each to its own side, and they pass.)
+                    || (gap < 16 && Math.abs(v.speed) < 3 && Math.abs(o.speed) < 3 && v.stillT > 1.5f && o.stillT > 1.5f && o.player == null
+                        && (float) Math.cos(v.angle - o.angle) < -0.7f)
                     // ((12.0) A police car, army truck or ambulance stopped at a scene, loading, or waiting for its
                     // crew (not a roadblock: that's there to stop them): it isn't going anywhere. Its "queued" was left over from before it stopped, so the
                     // traffic behind it took it for a queue and sat there with it for good.)
@@ -5340,7 +5344,7 @@ final class Fleet {
         v.stuckTimer = 0;
         w.emit(Sfx.SIREN, v.x, v.y);
         w.dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: " + callsign(v) + ", respond to " + inc.place + ".", inc.x, inc.y);
-        w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
+        if (!v.crew.isEmpty()) w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
         return true;
     }
 
