@@ -5041,6 +5041,8 @@ final class Fleet {
     /** What a patrol car is called on the radio. */
     String callsign(Vehicle v) {
         Country c = city.country;
+        // ((12.0) A car out of the station with no number of its own yet gets one: on the radio it was "Car 0".)
+        if (v.number <= 0) v.number = ++unitCount;
         return v.agency == 1 ? c.hpName + " " + v.number : v.agency == 2 ? c.ruralName + " " + v.number : v.agency == 3 ? "Ranger " + v.number
                 : v.agency == 4 ? Dispatch.federal(c) + " " + v.number : (v.kind == K_BIKE ? "Motor " : "Car ") + v.number;
     }

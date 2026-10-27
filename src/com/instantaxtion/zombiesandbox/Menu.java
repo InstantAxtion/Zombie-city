@@ -755,9 +755,16 @@ final class Menu {
         }
         float tx0 = landscape ? chart.right + 24 * dp : side, tx1 = w - side;
         float ty = landscape ? top + 26 * dp : chart.bottom + 30 * dp, lh = Math.min(26 * dp, (h - ty - 10 * dp) / totals.length);
-        // ((12.0) The writing as big as the rows have room for, and each figure kept clear of its label: with a long
-        // timeline the rows were drawn over each other, and a long figure ran into its label.)
-        float ts = Math.max(9 * dp, Math.min(14 * dp, lh * 0.85f));
+        // ((12.0) Each figure kept clear of its label; and when the rows don't all fit, they scroll rather than
+        // shrink to nothing.)
+        lh = Math.max(lh, 19 * dp);
+        float ts = Math.max(9 * dp, Math.min(14 * dp, lh * 0.75f));
+        listArea.set(tx0Of(landscape, chart, side), ty - lh, w, h - 6 * dp);
+        contentHeight = totals.length * lh + 10 * dp;
+        clampScroll();
+        c.save();
+        c.clipRect(listArea);
+        ty -= scroll;
         plain.setTextSize(ts);
         for (String[] row : totals) {
             plain.setTextAlign(Paint.Align.LEFT);
@@ -770,6 +777,12 @@ final class Menu {
             c.drawText(fit(text, row[1], vw), tx1, ty, text);
             ty += lh;
         }
+        c.restore();
+        drawScrollHint(c, w, listArea.left);
+    }
+
+    private float tx0Of(boolean landscape, RectF chart, float side) {
+        return landscape ? chart.right + 24 * dp : 0;
     }
 
     // ------------------------------------------------------------------ outbreak replay
@@ -1475,7 +1488,7 @@ final class Menu {
                 }
                 if (!dragging && Math.abs(y - downY) > 10 * dp && listArea.contains(downX, downY)
                         && (screen == SETUP || screen == SETTINGS || screen == NOTES || screen == RECORDS || screen == LOG
-                        || screen == SAVES)) dragging = true;
+                        || screen == SAVES || screen == STATS)) dragging = true;
                 if (dragging) {
                     scroll -= y - lastY;
                     clampScroll();

@@ -5717,7 +5717,8 @@ final class GameView extends View implements Menu.Host {
         float left = underStats ? statsRect.left : feedRect.left;
         if (underStats) y = statsShown.bottom + 8 * dp;
         // In portrait the war meter sits where the messages start: they go below it.
-        if (portrait && meterBottom > 0) y = Math.max(y, meterBottom + 8 * dp);
+        // ((12.0) Under the folded stats in landscape too: it was drawn on top of the meter there.)
+        if ((portrait || underStats) && meterBottom > 0) y = Math.max(y, meterBottom + 8 * dp);
         // Never down over the Auto cam switch (or the minimap) on the right.
         float limit = portrait ? barTop : (camChip.isEmpty() ? barTop : camChip.top) - 6 * dp;
         while (shown > 0 && y + shown * (lineH + gap) > limit) shown--;
@@ -6655,7 +6656,8 @@ final class GameView extends View implements Menu.Host {
         if (picker >= 0) drawPicker(c);
 
         drawHeadlines(c);
-        float infoY = barTop - 12 * dp;
+        // ((12.0) Clear of the tab that folds the tool bar away: cards and lines here used to sit over it.)
+        float infoY = barTop - 24 * dp;
         drawConvoys(c);
         drawPins(c);
         text.setTextSize(13 * dp);
@@ -6823,7 +6825,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 8 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
+        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
         fill.setColor(0xE8101216);
         c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
@@ -6891,7 +6893,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(14 * dp);
         float lh = 16 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 8 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
+        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
         fill.setColor(0xE8101216);
         c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
@@ -7219,7 +7221,7 @@ final class GameView extends View implements Menu.Host {
         float room = w - 24 * dp;
         if (text.measureText(info) > room) text.setTextSize(Math.max(9 * dp, 13 * dp * room / text.measureText(info)));
         info = fitText(info, room);
-        float tw = text.measureText(info) + 24 * dp, top = barTop - 34 * dp;
+        float tw = text.measureText(info) + 24 * dp, top = barTop - 46 * dp;
         oval.set((w - tw) / 2, top, (w + tw) / 2, top + 26 * dp);
         fill.setColor(0xD0101216);
         c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
@@ -8182,7 +8184,8 @@ final class GameView extends View implements Menu.Host {
         String kind = b.typeName() != null ? b.typeName() : b.kind == City.SHOP ? (b.shopType == 1 ? "Gun store" : b.shopType == 2 ? "Diner" : "Shop")
                 : KIND_NAMES[Math.min(KIND_NAMES.length - 1, b.kind)];
         City.District d = world.city.districtOf((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-        String title = (b.name != null ? b.name + "  -  " + kind : kind) + (d != null ? "  -  " + d.name : "");
+        // ((12.0) Not "City Hall - City hall": the kind only when the name doesn't already say it.)
+        String title = (b.name != null ? (b.name.equalsIgnoreCase(kind) ? b.name : b.name + "  -  " + kind) : kind) + (d != null ? "  -  " + d.name : "");
         if (b.collapsed) lines.add("Collapsed: just a pile of rubble now");
         else if (b.infestKnown && b.lurkers > 0) lines.add("INFESTED: there are zombies inside. Keep out!");
         else if (!b.occupants.isEmpty())
@@ -8194,6 +8197,10 @@ final class GameView extends View implements Menu.Host {
             if (in[1] > 0) s += (in[0] > 0 ? ", " : "") + in[1] + (b.kind == City.SCHOOL ? " at school" : " at work");
             if (in[2] > 0) s += (in[0] + in[1] > 0 ? ", " : "") + in[2] + " visiting";
             lines.add(s);
+        }
+        // ((12.0) "Empty" only when it is: with people hiding inside it said both at once.)
+        else if (!b.occupants.isEmpty() || b.collapsed) {
+            if (!b.collapsed && b.capacity > b.occupants.size()) lines.add("Room for " + (b.capacity - b.occupants.size()) + " more");
         }
         else if (b.infestKnown) lines.add("Zombies were inside. Nobody has gone back in.");
         else lines.add(b.capacity > 0 ? "Empty (room for " + b.capacity + " to hide)" : "Nobody can shelter here");
@@ -8248,7 +8255,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 8 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
+        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
         fill.setColor(0xE8101216);
         c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
