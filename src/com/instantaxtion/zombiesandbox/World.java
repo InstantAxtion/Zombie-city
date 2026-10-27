@@ -61,7 +61,9 @@ final class World {
 
     final City city;
     final Dispatch dispatch;
-    final Random rnd = new Random();
+    /** ((12.0) For tests and tools: a fixed seed makes a run repeat exactly; -1, the default, is different each game.) */
+    static long testSeed = -1;
+    final Random rnd = testSeed >= 0 ? new Random(testSeed) : new Random();
     final ArrayList<Entity> entities = new ArrayList<Entity>();
     final ArrayList<Corpse> corpses = new ArrayList<Corpse>();
     final ArrayList<Grenade> grenades = new ArrayList<Grenade>();
@@ -2185,6 +2187,12 @@ final class World {
             }
         }
         if (e.leader != null && (e.leader.dead && !e.leader.removed)) e.leader = null;
+        // ((12.0) Still down as crew of a car or truck that's gone - parked up and taken out again, wrecked and towed,
+        // or off the map - left an officer tied to nothing, passed over for every car and patrol after.)
+        if (e.rig != null && e.rig.removedFromFleet) {
+            e.rig = null;
+            if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
+        }
         if (e.task == Dispatch.T_BOARD) {
             // (10.37) Police and soldiers on their way to a vehicle stop to deal with one of the dead that gets
             // close, instead of walking on with it biting them.
@@ -4349,7 +4357,9 @@ final class World {
         int g = z.gateNear(e.x, e.y);
         float[] out = z.gateOut[g], in = z.gateIn[g];
         float ox = out[0] - e.x, oy = out[1] - e.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
-        boolean atGate = od < 22 || (z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < od);
+        // ((12.0) Near enough to be in the queue: a little further out than the queue reaches, so the crowd's shoving
+        // doesn't keep pushing someone out of it and walking back in again, over and over.)
+        boolean atGate = od < 34 || (z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < od);
         if (!atGate) {
             if (!z.open || !followField(e, dispatch.zoneField, speed)) walkToSpot(e, out[0], out[1], speed);
             return true;
@@ -4365,7 +4375,13 @@ final class World {
         if (z.gateOpen[g]) {
             float ix = in[0] - e.x, iy = in[1] - e.y, id = (float) Math.sqrt(ix * ix + iy * iy) + 0.001f;
             steer(e, ix / id, iy / id, e.speed * 1.2f);
-        } else standAt(e, out[0], out[1], 0.4f);
+        } else {
+            // ((12.0) Waiting for it to open: each in their own place in a loose crowd out in front of it, not all
+            // shoving for the one spot.)
+            float gx = out[0] - in[0], gy = out[1] - in[1], gl = (float) Math.sqrt(gx * gx + gy * gy) + 0.001f;
+            float a = (float) Math.atan2(gy, gx) + (((e.nameSeed >> 3) & 63) / 63f - 0.5f) * 2.2f, r = 6 + ((e.nameSeed >> 9) & 15);
+            standAt(e, out[0] + (float) Math.cos(a) * r, out[1] + (float) Math.sin(a) * r, 0.4f);
+        }
         return true;
     }
 
@@ -5315,9 +5331,16 @@ final class World {
             steer(e, ddx / d, ddy / d, e.runSpeed);
             return true;
         }
-        if (d > 16) steer(e, ddx / d, ddy / d, d > 50 ? e.runSpeed : Math.max(e.speed * 1.3f, lead.want));
-        else if (lead.want > 1) steer(e, lead.mx, lead.my, lead.want);
-        else steer(e, 0, 0, 0);
+        // ((12.0) Alongside them, going the way they're actually going - not the way they'd like to: someone pushing
+        // against a wall or a crowd wanted to go one way while standing still, and whoever was with them shuffled
+        // back and forth round them for minutes. Close enough and not moving: stand with them.)
+        float lsp = (float) Math.sqrt(lead.vx * lead.vx + lead.vy * lead.vy);
+        if (d > 18) steer(e, ddx / d, ddy / d, d > 50 ? e.runSpeed : Math.max(e.speed * 1.3f, Math.min(lead.want, lsp + d)));
+        else if (lsp > 3) steer(e, lead.vx / lsp, lead.vy / lsp, lsp * (d > 10 ? 1.1f : 1f));
+        else {
+            steer(e, 0, 0, 0);
+            if (d > 2) e.angle = turn(e.angle, (float) Math.atan2(ddy, ddx), 0.08f);
+        }
         return true;
     }
 
@@ -7682,7 +7705,14 @@ final class World {
             // shooting whatever comes out. (SWAT and the riot squad still go in.) The military goes in after them.
             if (!soldier && inc.zombiesNear >= 4 && e.role != Entity.ROLE_SWAT && e.role != Entity.ROLE_RIOT) {
                 float pr = 100 + Math.min(90, inc.zombiesNear * 3);
-                float ang = (float) Math.atan2(e.y - inc.y, e.x - inc.x) + ((e.member % 3) - 1) * 0.35f;
+                // ((12.0) Their place on the ring is picked once, from the side they came in on: worked out afresh
+                // from where they stood each moment, a third of a turn to one side, it moved on ahead of them as they
+                // walked, and they went round and round the perimeter for good.)
+                if (e.ringOf != inc) {
+                    e.ringOf = inc;
+                    e.ringA = (float) Math.atan2(e.y - inc.y, e.x - inc.x) + ((e.member % 3) - 1) * 0.35f;
+                }
+                float ang = e.ringA;
                 float px = inc.x + (float) Math.cos(ang) * pr, py = inc.y + (float) Math.sin(ang) * pr;
                 if (d > pr + 80) {
                     if (!followField(e, inc.field, transit(e, d))) {
@@ -9260,8 +9290,13 @@ final class World {
     private void standAt(Entity e, float x, float y, float speedFactor) {
         float ddx = x - e.x, ddy = y - e.y;
         float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
-        if (d > 5) steer(e, ddx / d, ddy / d, (d > 30 ? e.runSpeed : e.speed) * speedFactor);
-        else steer(e, 0, 0, 0);
+        // ((12.0) Eased in, and up against something within a few steps of it counts as there: no shuffling to and
+        // fro round a spot they can't quite reach.)
+        if (d > 5 && !(e.blocked && d < 16)) steer(e, ddx / d, ddy / d, Math.min((d > 30 ? e.runSpeed : e.speed) * speedFactor, d * 2.5f + 4));
+        else {
+            steer(e, 0, 0, 0);
+            e.blocked = false;
+        }
     }
 
     /** Aims and shoots. Returns false if the shot is blocked by someone standing in the way. */
@@ -10178,7 +10213,7 @@ final class World {
         }
         float ddx = px - e.x, ddy = py - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
         if (d > 40) walkToSpot(e, px, py, run);
-        else if (d > 4) steer(e, ddx / d, ddy / d, d > 20 ? run : walk);
+        else if (d > 4 && !(e.blocked && d < 16)) steer(e, ddx / d, ddy / d, Math.min(d > 20 ? run : walk, d * 2.5f + 4));
         else {
             steer(e, 0, 0, 0);
             if (!e.aiming) e.angle = turn(e.angle, face, 0.1f);
@@ -10356,9 +10391,23 @@ final class World {
                             && !city.solidAt(e.x + (float) Math.cos(left) * City.T, e.y + (float) Math.sin(left) * City.T);
                     boolean rOk = city.tiles[city.tileIndex(e.x + (float) Math.cos(right) * City.T, e.y + (float) Math.sin(right) * City.T)] != City.ROAD
                             && !city.solidAt(e.x + (float) Math.cos(right) * City.T, e.y + (float) Math.sin(right) * City.T);
+                    float back = e.wanderAngle + (float) Math.PI;
+                    float bx = e.x + (float) Math.cos(back) * City.T * 0.8f, by = e.y + (float) Math.sin(back) * City.T * 0.8f;
+                    boolean bOk = city.tileIndex(bx, by) >= 0 && city.tiles[city.tileIndex(bx, by)] != City.ROAD && !city.solidAt(bx, by);
                     if (lOk && (!rOk || rnd.nextBoolean())) e.wanderAngle = left;
                     else if (rOk) e.wanderAngle = right;
-                    else e.wanderAngle += (float) Math.PI;
+                    else if (bOk) e.wanderAngle = back;
+                    else {
+                        // ((12.0) On a strip of grass between two roads, road every way: turning round only faced
+                        // the other road, and they turned round again and again for good. They cross, once it's clear.)
+                        e.wanderTimer = Math.max(e.wanderTimer, 3);
+                        if (carComing(ax, ay)) {
+                            steer(e, 0, 0, 0);
+                            return;
+                        }
+                        steer(e, (float) Math.cos(e.wanderAngle), (float) Math.sin(e.wanderAngle), speed);
+                        return;
+                    }
                     e.wanderTimer = Math.max(e.wanderTimer, 3);
                 } else if (carComing(ax, ay)) {
                     steer(e, 0, 0, 0);
@@ -11671,8 +11720,15 @@ final class World {
     /** Walks to a spot by a planned route (round buildings and water), or straight there when it's close. */
     private void walkToSpot(Entity e, float x, float y, float speed) {
         float dx = x - e.x, dy = y - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        // ((12.0) Arriving: easing off over the last few steps and stopping on the spot, instead of running round and
+        // round it at full speed; and a spot right up against a wall counts as reached once they're against it.)
+        if (d < 3 || (e.blocked && d < 14)) {
+            steer(e, 0, 0, 0);
+            e.blocked = false;
+            return;
+        }
         if (d < 26 && !e.blocked) {
-            steer(e, dx / d, dy / d, speed);
+            steer(e, dx / d, dy / d, Math.min(speed, d * 3 + 3));
             return;
         }
         // (10.49) A spot that's crept a little (a cordon post as the zone shifts) keeps the way already planned

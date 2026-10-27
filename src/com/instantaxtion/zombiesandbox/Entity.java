@@ -82,6 +82,9 @@ final class Entity {
     // Dispatch: current job, radio callsign and speech icons.
     int task;
     Dispatch.Incident incident;
+    /** ((12.0) The call whose perimeter they have a place on, and where on it.) */
+    transient Dispatch.Incident ringOf;
+    transient float ringA;
     Dispatch.SafeZone zone;
     int slot, callsign, squad, member;
     boolean onScene, outOfAmmoSaid;

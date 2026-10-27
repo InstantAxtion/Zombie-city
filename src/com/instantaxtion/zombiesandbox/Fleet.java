@@ -2125,6 +2125,8 @@ final class Fleet {
                 Vehicle o = vehicles.get(i);
                 // (A wreck left in the middle of a junction goes first.)
                 boolean blocking = o.parked && city.junctionIdAt(o.x, o.y) >= 0;
+                // ((12.0) Only people's cars: a station's police cars or a base's trucks parked up ready aren't towed.)
+                if (o.type != CAR || o.standby) continue;
                 if (o.parked && o.block == null && o.riders.isEmpty() && o.player == null && (++parked > 25 || blocking)
                         && !inView(o.x, o.y)) {
                     o.removedFromFleet = true;
@@ -2186,6 +2188,8 @@ final class Fleet {
             else if (v.patrol) done = updatePatrol(v, vdt);
             else done = updateCar(v, vdt);
             if (done) {
+                // ((12.0) One of the city's own officers or soldiers at the wheel gets out, rather than vanishing.)
+                if (v.driver != null && v.realDriver) driverOut(v);
                 // (10.48) Whoever was still aboard a car fleeing the city went with it.
                 if (v.exodus && !v.riders.isEmpty()) w.droveOut(v.riders);
                 v.removedFromFleet = true;
@@ -3053,6 +3057,10 @@ final class Fleet {
         float look = 30 + Math.abs(v.speed) * 1.6f, limit = Float.MAX_VALUE;
         v.queued = false;
         int depth = 0;
+        // ((12.0) On a roundabout the traffic already going round has the right of way: nobody on it stops for one
+        // waiting at the entry to come on - they were each waiting on the other, and the roundabout locked solid.)
+        int ring = city.junctionIdAt(v.x, v.y);
+        if (ring >= 0 && city.junctions.get(ring)[4] != City.J_ROUNDABOUT) ring = -1;
         int c0x = Math.max(0, (int) ((v.x - look) / GC)), c1x = Math.min(gridW - 1, (int) ((v.x + look) / GC));
         int c0y = Math.max(0, (int) ((v.y - look) / GC)), c1y = Math.min(gridH - 1, (int) ((v.y + look) / GC));
         for (int cy = c0y; cy <= c1y; cy++)
@@ -3060,6 +3068,7 @@ final class Fleet {
         for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
             Vehicle o = gridV[i];
             if (o == v || o.removedFromFleet || levels(v, o)) continue;
+            if (ring >= 0 && Math.abs(o.speed) < 3 && !o.parked && !o.broken && city.junctionIdAt(o.x, o.y) != ring) continue;
             float dx = o.x - v.x, dy = o.y - v.y;
             float ahead = dx * fx + dy * fy;
             float side = Math.abs(dx * -fy + dy * fx);
@@ -4592,6 +4601,7 @@ final class Fleet {
             Vehicle v = vehicles.get(i);
             if (v.type != CRUISER && v.type != TRUCK && v.type != AMBULANCE) continue;
             if (v.removedFromFleet) {
+                if (v.driver != null && v.realDriver) driverOut(v);
                 v.driver = null;
                 continue;
             }
@@ -4613,6 +4623,8 @@ final class Fleet {
             }
             // ((11.7) Waiting at the station for its crew to climb in: whoever gets in first drives.)
             if (v.state == MUSTER) continue;
+            // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
+            if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
                 int type = v.type == AMBULANCE ? Entity.CIVILIAN : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
                 Entity d = w.create(type, v.x, v.y);

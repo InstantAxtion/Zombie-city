@@ -176,7 +176,7 @@ final class Dispatch {
 
     private final World w;
     private final City city;
-    private final Random rnd = new Random();
+    private final Random rnd = World.testSeed >= 0 ? new Random(World.testSeed + 1) : new Random();
     final ArrayList<Incident> incidents = new ArrayList<Incident>();
     final ArrayList<SafeZone> zones = new ArrayList<SafeZone>();
     final ArrayList<Message> log = new ArrayList<Message>();
