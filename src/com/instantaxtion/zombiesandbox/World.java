@@ -1552,6 +1552,17 @@ final class World {
     }
 
     /** The best zombie killers of this game, living or fallen: {name seed, type, role, kills, alive}. */
+    /** ((12.0) The most kills by any one of the living, standing or fallen, without sorting everyone for it.) */
+    int bestKills() {
+        int best = 0;
+        for (int i = 0, c = entities.size(); i < c; i++) {
+            Entity e = entities.get(i);
+            if (e.kills > best && !e.isZombie()) best = e.kills;
+        }
+        for (int[] h : fallenHeroes) best = Math.max(best, h[3]);
+        return best;
+    }
+
     ArrayList<int[]> heroes(int n) {
         ArrayList<int[]> all = new ArrayList<int[]>();
         for (int i = 0, c = entities.size(); i < c; i++) {
@@ -2022,7 +2033,7 @@ final class World {
                 timeline("The outbreak is over: the city survives");
                 int t = (int) outbreakTime;
                 banner(h < startHumans * 0.35f ? "THE CITY SURVIVES, BARELY" : "THE CITY SURVIVES", "The outbreak is over after "
-                        + t / 60 + ":" + (t % 60 < 10 ? "0" : "") + t % 60 + ". " + zombiesKilled + " zombies destroyed, "
+                        + clock(t) + ". " + zombiesKilled + " zombies destroyed, "
                         + civiliansLost + " civilians lost.");
                 startAftermath(AFTER_RECOVERY);
                 calmDown();
@@ -2115,7 +2126,8 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = wantZombie ? cellStart[c] : cellStart[c] + zCount[c], end = wantZombie ? cellStart[c] + zCount[c] : cellStart[c] + cellCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o.dead || o.isZombie() != wantZombie || o == from) continue;
+                    // ((12.0) Not one already finished off this moment, waiting to be cleared away.)
+                    if (o.dead || o.hp <= 0 || o.isZombie() != wantZombie || o == from) continue;
                     float ddx = o.x - from.x, ddy = o.y - from.y, d2 = ddx * ddx + ddy * ddy;
                     if (o.hidden && d2 > 22 * 22) continue;
                     if (d2 >= best) continue;
@@ -2187,7 +2199,7 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o.dead || !o.isZombie()) continue;
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - x, ddy = o.y - y;
                     if (ddx * ddx + ddy * ddy < radius * radius) count++;
                 }
@@ -2327,7 +2339,7 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o.dead || !o.isZombie()) continue;
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - x, ddy = o.y - y;
                     if (ddx * ddx + ddy * ddy > radius * radius) continue;
                     // Already there and found nothing: it doesn't keep them hanging around.
@@ -3504,6 +3516,7 @@ final class World {
         e.swingAt = time;
         float ddx = z.x - e.x, ddy = z.y - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
         e.angle = (float) Math.atan2(ddy, ddx);
+        boolean wasUp = z.hp > 0;
         if (z.isZombie() && z.type != Entity.BRUTE && rnd.nextFloat() < (axe ? 0.25f : 0.1f)) z.hp = 0;
         else z.hp -= axe ? 36 : 22;
         z.hurt = 1;
@@ -3511,7 +3524,7 @@ final class World {
         tryMove(z, ddx / d * (axe ? 5 : 9) / z.mass, ddy / d * (axe ? 5 : 9) / z.mass);
         bloodBurst(z.x, z.y, 3, ddx / d, ddy / d);
         emit(Sfx.THUD, z.x, z.y);
-        if (z.hp <= 0 && z.isZombie()) killMade(e);
+        if (wasUp && z.hp <= 0 && z.isZombie()) killMade(e);
     }
 
     /** Shotgun pellets catch whoever is standing next to the target too. */
@@ -3523,7 +3536,7 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o == t || o.dead) continue;
+                    if (o == t || o.dead || o.hp <= 0) continue;
                     if ((o.x - t.x) * (o.x - t.x) + (o.y - t.y) * (o.y - t.y) > 16 * 16) continue;
                     o.hp -= dmg * 0.4f * GUN_DAMAGE;
                     o.hurt = 1;
@@ -3864,7 +3877,7 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o.dead || !o.isZombie()) continue;
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - e.x, ddy = o.y - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
                     if (d > range) continue;
                     float dot = (ddx * fx + ddy * fy) / d;
@@ -4188,7 +4201,8 @@ final class World {
         if (idle && e.hasGun && threatDist > 70 && e.ammo + e.reserve <= 2) goalScore[G_RESTOCK] = 0.45f;
         // ... or one lying in the street.
         if (e.task == Dispatch.T_PICKUP) goalScore[G_PICKUP] = threatDist < 40 ? -1 : 0.55f;
-        else if (idle && !e.hasGun && threat == null) {
+        // ((12.0) Or with their gun run dry: rounds lying there are as good as a walk to the shop.)
+        else if (idle && (!e.hasGun || e.ammo + e.reserve <= 2) && threat == null) {
             Pickup p = nearestPickup(e.x, e.y, 110);
             e.pickCandidate = p != null && countZombiesNear(p.x, p.y, 50) == 0 ? p : null;
             if (e.pickCandidate != null) goalScore[G_PICKUP] = 0.38f + 0.15f * brave;
@@ -4410,8 +4424,14 @@ final class World {
         float ddx = p.x - e.x, ddy = p.y - e.y;
         float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
         if (d < 6 && p.drop <= 0) {
-            armCivilian(e, p.rounds);
-            if (p.weapon != Entity.W_STD) setGun(e, p.weapon, p.rounds);
+            if (e.hasGun && (p.weapon == Entity.W_STD || p.weapon == e.gunKind())) {
+                // ((12.0) Rounds for the gun they have: loaded up, not their gun swapped for a six-shot one.)
+                e.reserve += p.rounds;
+                if (e.ammo <= 0 && e.reload <= 0) e.reload = 1.6f;
+            } else {
+                armCivilian(e, p.rounds);
+                if (p.weapon != Entity.W_STD) setGun(e, p.weapon, p.rounds);
+            }
             if (p.uses > 0) {
                 if (--p.uses <= 0) pickups.remove(p);
             } else pickups.remove(p);
@@ -8613,7 +8633,7 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o.dead || !o.isZombie()) continue;
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - x, ddy = o.y - y;
                     if (ddx * ddx + ddy * ddy < radius * radius) {
                         sx += o.x;
@@ -9501,7 +9521,7 @@ final class World {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
-                    if (o.dead || !o.isZombie()) continue;
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - e.x, ddy = o.y - e.y, d2 = ddx * ddx + ddy * ddy;
                     if (d2 > range * range) continue;
                     float score = (float) Math.sqrt(d2);
@@ -9747,6 +9767,7 @@ final class World {
         float hit = accuracy * (1 - (scoped ? 0.1f : 0.4f) * d / range) + (t.type == Entity.BRUTE ? 0.1f : 0);
         if (t.type == Entity.CRAWLER) hit *= 0.6f;
         if (rnd.nextFloat() < hit) {
+            boolean wasUp = t.hp > 0;
             // Only a hit to the head really stops a zombie; body shots just wear it down.
             boolean headshot = t.isZombie() && rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : 1);
             if (headshot) {
@@ -9760,7 +9781,7 @@ final class World {
                 t.hp -= t.isZombie() ? dmg * GUN_DAMAGE * (t.armored ? 0.5f : 1) : dmg;
             }
             t.hurt = 1;
-            if (t.hp <= 0 && t.isZombie()) {
+            if (wasUp && t.hp <= 0 && t.isZombie()) {
                 killMade(e);
                 if (e.kills == 10 || e.kills == 25 || e.kills == 50 || e.kills == 100) killStreak(e);
             }
@@ -10172,7 +10193,7 @@ final class World {
                 continue;
             }
             Entity z = nearestZombie(cx, cy, reach);
-            if (z == null || z.hidden) return;
+            if (z == null || z.hidden || z.hp <= 0) return;
             o.cooldown = 1.1f + rnd.nextFloat() * 0.8f;
             o.ammo--;
             shotsFired++;
@@ -11241,7 +11262,7 @@ final class World {
         float bd = radius * radius;
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity o = entities.get(i);
-            if (o.dead || !o.isZombie()) continue;
+            if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
             float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
             if (d < bd) {
                 bd = d;
@@ -11268,7 +11289,7 @@ final class World {
         float bd = radius * radius;
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity o = entities.get(i);
-            if (o.dead || !o.isZombie()) continue;
+            if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
             float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
             if (d < bd && city.los(x, y, o.x, o.y)) {
                 bd = d;

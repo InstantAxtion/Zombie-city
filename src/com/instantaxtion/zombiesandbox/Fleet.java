@@ -53,6 +53,9 @@ final class Fleet {
         int type, state;
         /** Where it is in the step's grid of who's near whom; set once it has left the fleet. */
         int gi;
+        /** ((12.0) Up on a bridge deck (1), on the road near one (0), or near none (-1), as of where and which way it was last asked.) */
+        transient int deck = -2;
+        transient float deckX, deckY, deckA;
         boolean removedFromFleet;
         /** Seconds stopped; pulling out round something stopped in the lane (seconds left); queued behind traffic. */
         float stillT, passing;
@@ -3868,8 +3871,20 @@ final class Fleet {
     /** One on a bridge and the other on the highway under it: they pass without touching. */
     private boolean levels(Vehicle a, Vehicle b) {
         if (city.overpasses.isEmpty()) return false;
-        if (city.overpassAt(a.x, a.y) < 0 && city.overpassAt(b.x, b.y) < 0) return false;
-        return onDeck(a) != onDeck(b);
+        // ((12.0) Each car's level worked out once where it is, not again for every car near it.)
+        int da = deck(a), db = deck(b);
+        if (da < 0 && db < 0) return false;
+        return (da == 1) != (db == 1);
+    }
+
+    private int deck(Vehicle v) {
+        if (v.deck == -2 || v.deckX != v.x || v.deckY != v.y || v.deckA != v.angle) {
+            v.deckX = v.x;
+            v.deckY = v.y;
+            v.deckA = v.angle;
+            v.deck = city.overpassAt(v.x, v.y) < 0 ? -1 : onDeck(v) ? 1 : 0;
+        }
+        return v.deck;
     }
 
     boolean onBridge(Vehicle v) {

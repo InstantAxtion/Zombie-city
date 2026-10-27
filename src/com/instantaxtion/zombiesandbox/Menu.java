@@ -79,6 +79,8 @@ final class Menu {
         String label;
         int action;
         boolean primary, invisible;
+        /** ((12.0) The size to write it at, if one is set for its whole row; otherwise 0.) */
+        float size;
     }
 
     /** One tappable choice on the New Game screen: an option set to a value. */
@@ -257,6 +259,7 @@ final class Menu {
         btn.action = action;
         btn.primary = primary;
         btn.invisible = false;
+        btn.size = 0;
         btn.r.set(l, t, r, b);
         buttons.add(btn);
         return btn;
@@ -283,11 +286,24 @@ final class Menu {
             c.drawRoundRect(b.r, r, r, stroke);
         }
         text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(Math.min(16.5f * dp, b.r.height() * 0.36f));
-        float fit = text.measureText(b.label);
-        if (fit > b.r.width() - 18 * dp) text.setTextSize(text.getTextSize() * (b.r.width() - 18 * dp) / fit);
+        text.setTextSize(b.size > 0 ? b.size : labelSize(b));
         text.setColor(b.primary ? ACCENT_INK : INK);
         c.drawText(b.label, b.r.centerX(), b.r.centerY() + text.getTextSize() * 0.36f, text);
+    }
+
+    /** The size a button's label fits at, on its own. */
+    private float labelSize(Button b) {
+        text.setTextSize(Math.min(16.5f * dp, b.r.height() * 0.36f));
+        float fit = text.measureText(b.label);
+        if (fit > b.r.width() - 18 * dp) return text.getTextSize() * (b.r.width() - 18 * dp) / fit;
+        return text.getTextSize();
+    }
+
+    /** ((12.0) The buttons made since index `from` all written at one size, the one the longest label fits at.) */
+    private void sameSize(int from) {
+        float size = Float.MAX_VALUE;
+        for (int i = from; i < buttons.size(); i++) size = Math.min(size, labelSize(buttons.get(i)));
+        for (int i = from; i < buttons.size(); i++) buttons.get(i).size = size;
     }
 
     /** ((11.5) The backdrop behind the menus: the city dimmed under a dusk-to-night fade.) */
@@ -479,9 +495,9 @@ final class Menu {
                 "New Game", "Settings", "Main Menu"};
         int[] actions = {A_RESUME, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
         int cols = w > h ? 2 : 1, rowsN = (labels.length + cols - 1) / cols;
-        float gap = 7 * dp, bh = Math.min(46 * dp, (h - 120 * dp - gap * (rowsN - 1)) / rowsN);
+        float gap = 7 * dp, bh = Math.min(46 * dp, (h - 138 * dp - gap * (rowsN - 1)) / rowsN);
         float colW = Math.min(300 * dp, (w - 60 * dp) / cols);
-        float pw = colW * cols + gap * (cols - 1) + 40 * dp, ph = 76 * dp + bh * rowsN + gap * (rowsN - 1) + 20 * dp;
+        float pw = colW * cols + gap * (cols - 1) + 40 * dp, ph = 94 * dp + bh * rowsN + gap * (rowsN - 1) + 20 * dp;
         tmp.set((w - pw) / 2, (h - ph) / 2, (w + pw) / 2, (h + ph) / 2);
         fill.setColor(0xF2161A20);
         c.drawRoundRect(tmp, 22 * dp, 22 * dp, fill);
@@ -502,7 +518,12 @@ final class Menu {
         plain.setColor(copied ? ACCENT : MUTED);
         c.drawText(fit(plain, line, tmp.width() - 24 * dp), w / 2f, tmp.top + 58 * dp, plain);
         button("", A_COPY_CODE, false, tmp.left + 20 * dp, tmp.top + 44 * dp, tmp.right - 20 * dp, tmp.top + 64 * dp).invisible = true;
-        float top = tmp.top + 72 * dp;
+        // ((12.0) How it stands, at a glance.)
+        plain.setColor(MUTED);
+        String now = World.clock((int) world.time) + " played  -  " + world.humans + (world.humans == 1 ? " person" : " people") + ", "
+                + world.zombies + (world.zombies == 1 ? " zombie" : " zombies");
+        c.drawText(fit(plain, now, tmp.width() - 24 * dp), w / 2f, tmp.top + 76 * dp, plain);
+        float top = tmp.top + 90 * dp;
         for (int i = 0; i < labels.length; i++) {
             int col = cols == 2 ? i % 2 : 0, row = cols == 2 ? i / 2 : i;
             float bx = tmp.left + 20 * dp + col * (colW + gap), by = top + row * (bh + gap);
@@ -576,8 +597,10 @@ final class Menu {
         // ((12.0) Filters: everything, or just the 911 calls, the police, the army or the news.)
         String[] tabs = {"All", "911", "Police", "Military", "News"};
         float tg = 6 * dp, tw = (maxW - tg * (tabs.length - 1)) / tabs.length, th = 34 * dp;
+        int firstTab = buttons.size();
         for (int k = 0; k < tabs.length; k++)
             button(tabs[k], A_LOG_FILTER + k, logFilter == k, x0 + k * (tw + tg), top, x0 + k * (tw + tg) + tw, top + th);
+        sameSize(firstTab);
         top += th + 8 * dp;
         listArea.set(0, top, w, h - 12 * dp);
         c.save();
@@ -703,19 +726,27 @@ final class Menu {
             plain.setTextAlign(Paint.Align.CENTER);
             c.drawText("Play a little longer to see the chart.", plot.centerX(), plot.centerY(), plain);
         }
-        // Legend.
+        // Legend. ((12.0) Spaced to the words, and smaller where it won't fit: "Police & army" ran off the chart.)
         text.setTextSize(12 * dp);
         text.setTextAlign(Paint.Align.LEFT);
-        fill.setColor(0xFF6FA8FF);
-        c.drawCircle(chart.left + 16 * dp, chart.top + 16 * dp, 4.5f * dp, fill);
+        String[] keys = {"People", "Zombies", "Police & army"};
+        int[] keyCols = {0xFF6FA8FF, 0xFF7CC24E, 0xFFE8C547};
+        float keysW = 0;
+        for (String k : keys) keysW += 10 * dp + text.measureText(k) + 18 * dp;
+        float room = chart.width() - 22 * dp;
+        if (keysW > room) {
+            text.setTextSize(12 * dp * Math.max(0.7f, room / keysW));
+            keysW = 0;
+            for (String k : keys) keysW += 10 * dp + text.measureText(k) + 18 * dp;
+        }
+        float kx = chart.left + 16 * dp, kgap = keysW > room ? 10 * dp : 18 * dp;
         text.setColor(0xFFE6E6E6);
-        c.drawText("People", chart.left + 26 * dp, chart.top + 20 * dp, text);
-        fill.setColor(0xFF7CC24E);
-        c.drawCircle(chart.left + 96 * dp, chart.top + 16 * dp, 4.5f * dp, fill);
-        c.drawText("Zombies", chart.left + 106 * dp, chart.top + 20 * dp, text);
-        fill.setColor(0xFFE8C547);
-        c.drawCircle(chart.left + 186 * dp, chart.top + 16 * dp, 4.5f * dp, fill);
-        c.drawText("Police & army", chart.left + 196 * dp, chart.top + 20 * dp, text);
+        for (int k = 0; k < keys.length; k++) {
+            fill.setColor(keyCols[k]);
+            c.drawCircle(kx, chart.top + 16 * dp, 4.5f * dp, fill);
+            c.drawText(keys[k], kx + 10 * dp, chart.top + 20 * dp, text);
+            kx += 10 * dp + text.measureText(keys[k]) + kgap;
+        }
 
         int t = (int) world.time;
         String[][] totals = {
@@ -958,7 +989,7 @@ final class Menu {
         c.drawCircle(replayBar.left + replayBar.width() * replayPos, mid, 10 * dp, fill);
     }
 
-    /** The How to Play cards. */
+    /** A list of settings (or New Game choices), each a card with its value between arrows. */
     private void drawOptions(Canvas c, int w, int h, String title, OptionSet opts, boolean setup) {
         float top = header(c, w, h, title);
         float footer = setup ? 72 * dp : 12 * dp;
@@ -1013,9 +1044,11 @@ final class Menu {
         if (setup) {
             float bgap = 8 * dp, bw = Math.min(180 * dp, (w - 32 * dp - bgap * 2) / 3), bh = 50 * dp, by = h - footer + 11 * dp;
             float x = (w - bw * 3 - bgap * 2) / 2;
+            int firstFoot = buttons.size();
             button("Surprise me", A_RANDOM, false, x, by, x + bw, by + bh);
             button(config.keepCity ? config.code() : "City code", A_CODE, false, x + bw + bgap, by, x + bw * 2 + bgap, by + bh);
             button("Start  ›", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
+            sameSize(firstFoot);
             if (noteTime > 0 && note != null) {
                 noteTime -= frameDt;
                 fill.setColor(0xF0121418);
@@ -1181,41 +1214,51 @@ final class Menu {
         boolean landscape = w > h;
         float footer = 72 * dp, side = 16 * dp;
         // The city preview: left in landscape, on top in portrait.
-        float pv = landscape ? Math.min(h - top - footer - 72 * dp, w * 0.34f) : Math.min(w - side * 2, (h - top) * 0.3f);
+        // ((12.0) Never less than nothing: on a short screen held sideways it went negative and was drawn inside out.)
+        float pv = Math.max(0, landscape ? Math.min(h - top - footer - 72 * dp, w * 0.34f) : Math.min(w - side * 2, (h - top) * 0.3f));
+        // (Too small to see sideways: no picture, and the column keeps a width for the words.)
+        if (landscape && pv < 64 * dp) pv = 0;
+        float col = landscape ? Math.max(pv, 170 * dp) : pv;
         float px = landscape ? side : (w - pv) / 2, py = top + 4 * dp;
-        tmp.set(px - 4 * dp, py - 4 * dp, px + pv + 4 * dp, py + pv + 4 * dp);
-        fill.setColor(CARD);
-        c.drawRoundRect(tmp, 18 * dp, 18 * dp, fill);
-        Bitmap bmp = preview;
         boolean current = config.code().equals(previewKey);
-        if (bmp != null) {
-            bmpSrc.set(0, 0, bmp.getWidth(), bmp.getHeight());
-            tmp.set(px, py, px + pv, py + pv);
-            bmpPaint.setAlpha(current ? 255 : 110);
-            c.drawBitmap(bmp, bmpSrc, tmp, bmpPaint);
+        Bitmap bmp = preview;
+        if (pv > 0) {
+            tmp.set(px - 4 * dp, py - 4 * dp, px + pv + 4 * dp, py + pv + 4 * dp);
+            fill.setColor(CARD);
+            c.drawRoundRect(tmp, 18 * dp, 18 * dp, fill);
+            if (bmp != null) {
+                bmpSrc.set(0, 0, bmp.getWidth(), bmp.getHeight());
+                tmp.set(px, py, px + pv, py + pv);
+                bmpPaint.setAlpha(current ? 255 : 110);
+                c.drawBitmap(bmp, bmpSrc, tmp, bmpPaint);
+            }
+            // ((11.5) Rounded corners on the picture, and a fine edge.)
+            stroke.setColor(CARD);
+            stroke.setStrokeWidth(8 * dp);
+            tmp.set(px - 4 * dp, py - 4 * dp, px + pv + 4 * dp, py + pv + 4 * dp);
+            c.drawRoundRect(tmp, 18 * dp, 18 * dp, stroke);
+            stroke.setColor(EDGE);
+            stroke.setStrokeWidth(1 * dp);
+            c.drawRoundRect(tmp, 18 * dp, 18 * dp, stroke);
         }
-        // ((11.5) Rounded corners on the picture, and a fine edge.)
-        stroke.setColor(CARD);
-        stroke.setStrokeWidth(8 * dp);
-        tmp.set(px - 4 * dp, py - 4 * dp, px + pv + 4 * dp, py + pv + 4 * dp);
-        c.drawRoundRect(tmp, 18 * dp, 18 * dp, stroke);
-        stroke.setColor(EDGE);
-        stroke.setStrokeWidth(1 * dp);
-        c.drawRoundRect(tmp, 18 * dp, 18 * dp, stroke);
-        if (!current) {
+        // ((12.0) In portrait, New Map goes beside the picture where there's room; otherwise in its corner, with the
+        // "Building city" note lifted clear of it - the button sat over the words.)
+        boolean besideRoom = !landscape && w - side - (px + pv) >= 118 * dp;
+        float lift = !landscape && !besideRoom ? Math.max(0, py + pv / 2 + 26 * dp - (py + pv - 42 * dp)) : 0;
+        if (!current && pv > 0) {
             // (A spinning arc while the city is built.)
             stroke.setColor(ACCENT);
             stroke.setStrokeWidth(3 * dp);
-            tmp.set(px + pv / 2 - 16 * dp, py + pv / 2 - 30 * dp, px + pv / 2 + 16 * dp, py + pv / 2 + 2 * dp);
+            tmp.set(px + pv / 2 - 16 * dp, py + pv / 2 - 30 * dp - lift, px + pv / 2 + 16 * dp, py + pv / 2 + 2 * dp - lift);
             c.drawArc(tmp, time * 360, 260, false, stroke);
             text.setTextAlign(Paint.Align.CENTER);
             text.setTextSize(14 * dp);
             text.setColor(INK);
-            c.drawText("Building city...", px + pv / 2, py + pv / 2 + 26 * dp, text);
+            c.drawText("Building city...", px + pv / 2, py + pv / 2 + 26 * dp - lift, text);
         }
         int preset = config.v[CityConfig.OPT_PRESET];
         float infoY = py + pv + 20 * dp;
-        float infoW = landscape ? pv : w - side * 2, infoX = landscape ? px : side;
+        float infoW = landscape ? col : w - side * 2, infoX = landscape ? px : side;
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(19 * dp);
         text.setColor(INK);
@@ -1232,16 +1275,17 @@ final class Menu {
         c.drawText(chip, tmp.centerX(), infoY - 0.5f * dp, plain);
         float ly = infoY + 10 * dp;
         if (landscape) {
-            button("New map", A_REROLL, false, px, ly, px + pv, ly + 34 * dp);
+            button("New map", A_REROLL, false, px, ly, px + col, ly + 34 * dp);
         } else {
             ly = drawInfo(c, preset, infoX, infoY + 18 * dp, infoW);
         }
 
         // The options, scrolling if they don't fit.
-        float lx = landscape ? px + pv + 24 * dp : side, lw = w - lx - side;
+        float lx = landscape ? px + col + 24 * dp : side, lw = w - lx - side;
         float listTop = landscape ? top : ly + 2 * dp;
         if (!landscape) {
-            button("New map", A_REROLL, false, w - side - 110 * dp, py + pv - 36 * dp, w - side - 6 * dp, py + pv - 6 * dp);
+            if (besideRoom) button("New map", A_REROLL, false, w - side - 104 * dp, py + pv - 30 * dp, w - side, py + pv + 4 * dp);
+            else button("New map", A_REROLL, false, w - side - 110 * dp, py + pv - 36 * dp, w - side - 6 * dp, py + pv - 6 * dp);
         }
         listArea.set(0, listTop, w, h - footer);
         c.save();
@@ -1356,9 +1400,11 @@ final class Menu {
         c.drawRect(0, h - footer, w, h - footer + 1 * dp, fill);
         float bgap = 10 * dp, bw = Math.min(180 * dp, (w - 32 * dp - bgap * 2) / 3), bh = 50 * dp, by = h - footer + 11 * dp;
         float x = (w - bw * 3 - bgap * 2) / 2;
+        int firstFoot = buttons.size();
         button("Surprise me", A_RANDOM, false, x, by, x + bw, by + bh);
         button("City code", A_CODE, false, x + bw + bgap, by, x + bw * 2 + bgap, by + bh);
         button("Start  ›", A_START, true, x + bw * 2 + bgap * 2, by, x + bw * 3 + bgap * 2, by + bh);
+        sameSize(firstFoot);
         if (noteTime > 0 && note != null) {
             noteTime -= frameDt;
             fill.setColor(0xF0121418);

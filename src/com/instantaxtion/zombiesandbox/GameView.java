@@ -342,6 +342,13 @@ final class GameView extends View implements Menu.Host {
                 return true;
             }
             case KeyEvent.KEYCODE_M:
+                // (M: the big map, open and shut. It used to open the pause menu when the map wasn't up.)
+                if (ev.getRepeatCount() > 0 || world.controlled != null) return true;
+                tactical = !tactical;
+                tacDown = false;
+                tacTimer = 0;
+                click();
+                return true;
             case KeyEvent.KEYCODE_ESCAPE:
                 if (ev.getRepeatCount() > 0) return true;
                 if (tactical) tactical = false;
@@ -1050,7 +1057,8 @@ final class GameView extends View implements Menu.Host {
                 System.err.println("Zombie City: a simulation step failed: " + ex);
             }
         }
-        if (inGame && hintTime > 0) hintTime -= dt;
+        // ((12.0) The tip waits while a headline is up: it was written across it.)
+        if (inGame && hintTime > 0 && headlines.isEmpty()) hintTime -= dt;
         if (orderMarker > 0) orderMarker -= dt;
         for (int i = selection.size() - 1; i >= 0; i--) if (selection.get(i).dead) selection.remove(i);
         // The camera stays on whoever you control; if they die, say so.
@@ -1305,8 +1313,15 @@ final class GameView extends View implements Menu.Host {
             if (portrait && size < 70 * dp) size = 90 * dp;
             if (portrait && size >= 70 * dp && getWidth() - statsRect.right - 18 * dp >= 70 * dp)
                 miniRect.set(getWidth() - 10 * dp - size, statsRect.top, getWidth() - 10 * dp, statsRect.top + size);
-            else
+            else {
                 miniRect.set(getWidth() - 10 * dp - size, uiFloor() - 10 * dp - size, getWidth() - 10 * dp, uiFloor() - 10 * dp);
+                // ((12.0) Down there it's where a card opens: hidden while one is, rather than poking out round it.)
+                if (picker < 0 && (follow != null || followV != null || (tool == TOOL_PAN && (inspectZ != null || inspectB != null)))) {
+                    miniRect.setEmpty();
+                    camChip.setEmpty();
+                    return;
+                }
+            }
             // ((12.0) The fallen buildings counted once a second, not every frame: tens of thousands on a big map.)
             if (world != miniCountWorld || world.time - miniCountAt > 1 || world.time < miniCountAt) {
                 miniCountWorld = world;
@@ -1612,6 +1627,7 @@ final class GameView extends View implements Menu.Host {
             }
             if (f.kind == City.FACILITY_BASE) {
                 String label = f.fallen ? "BASE (OVERRUN)" : "ARMY BASE";
+                x = tacX(label, x);
                 if (!tacClaim(label, x, y + r + 10 * dp)) continue;
                 text.setColor(0xFF000000);
                 c.drawText(label, x + 1, y + r + 11 * dp + 1, text);
@@ -1624,7 +1640,7 @@ final class GameView extends View implements Menu.Host {
         for (int i = 0, n = city.districts.size(); i < n; i++) {
             City.District d = city.districts.get(i);
             if (d.tiles < 40) continue;
-            float x = tacRect.left + d.cx * sx, y = tacRect.top + d.cy * sy;
+            float x = tacX(d.name, tacRect.left + d.cx * sx), y = tacRect.top + d.cy * sy;
             if (!tacClaim(d.name, x, y)) continue;
             text.setColor(0xC0000000);
             c.drawText(d.name, x + 1, y + 1, text);
@@ -1639,7 +1655,11 @@ final class GameView extends View implements Menu.Host {
         // Title, key and close.
         text.setTextSize(15 * dp);
         text.setColor(0xFFF2F2F2);
-        c.drawText(city.name + " - tactical map", getWidth() / 2f, 30 * dp, text);
+        // ((12.0) Short of the close button on a narrow screen.)
+        float titleRoom = getWidth() - 2 * 52 * dp;
+        String title = city.name + " - tactical map";
+        if (text.measureText(title) > titleRoom) title = city.name;
+        c.drawText(fitText(title, titleRoom), getWidth() / 2f, 30 * dp, text);
         text.setTextSize(11 * dp);
         text.setColor(0xFFB8BCC4);
         int dead = 0, living = 0;
@@ -1647,8 +1667,14 @@ final class GameView extends View implements Menu.Host {
             dead += tacZ[k];
             living += tacH[k];
         }
-        c.drawText("Dead " + dead + "   Living (outdoors) " + living + "   Rings: calls   Tap to go there",
-                getWidth() / 2f, tacRect.bottom + 20 * dp, text);
+        // ((12.0) On two lines where one won't fit: it ran off both sides of a phone held upright.)
+        String key = "Dead " + dead + "   Living (outdoors) " + living, hint = "Rings: calls   Tap to go there";
+        if (text.measureText(key + "   " + hint) <= getWidth() - 16 * dp)
+            c.drawText(key + "   " + hint, getWidth() / 2f, tacRect.bottom + 20 * dp, text);
+        else {
+            c.drawText(fitText(key, getWidth() - 16 * dp), getWidth() / 2f, tacRect.bottom + 20 * dp, text);
+            c.drawText(fitText(hint, getWidth() - 16 * dp), getWidth() / 2f, tacRect.bottom + 36 * dp, text);
+        }
         tacClose.set(getWidth() - 44 * dp, 8 * dp, getWidth() - 8 * dp, 40 * dp);
         fill.setColor(0xE0303238);
         c.drawRoundRect(tacClose, 9 * dp, 9 * dp, fill);
@@ -1662,6 +1688,12 @@ final class GameView extends View implements Menu.Host {
     private final java.util.ArrayList<RectF> tacUsed = new java.util.ArrayList<RectF>();
 
     /** Room for a label centred on (x, y) on the tactical map, without running into one already there. */
+    /** ((12.0) A label's middle moved in so all of it is on the map: names at the edge were cut off by it.) */
+    private float tacX(String label, float x) {
+        float half = text.measureText(label) / 2 + 2 * dp;
+        return Math.max(tacRect.left + half, Math.min(tacRect.right - half, x));
+    }
+
     private boolean tacClaim(String label, float x, float y) {
         float tw = text.measureText(label) / 2 + 2 * dp;
         RectF r = new RectF(x - tw, y - text.getTextSize(), x + tw, y + 3 * dp);
@@ -5747,7 +5779,8 @@ final class GameView extends View implements Menu.Host {
         feedCount = 0;
         feedBottom = 0;
         if (!settings.radio()) return;
-        int maxLines = 2;
+        // ((12.0) As many as the setting says.)
+        int maxLines = settings.feedLines();
         paceFeed(frameDt, maxLines);
         int shown = feedOn.size();
         float lineH = 22 * dp, gap = 3 * dp, y = feedRect.top;
@@ -6464,6 +6497,26 @@ final class GameView extends View implements Menu.Host {
     private final RectF meterRect = new RectF();
 
     /** The text, cut short with "..." to fit the width (in the current text size). */
+    /** ((12.0) Each of the lines on one line or two, as {@link #wrap2} has it, at the text size set now.) */
+    private java.util.ArrayList<String> wrapAll(java.util.List<String> lines, float width) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<String>();
+        for (String l : lines) out.addAll(wrap2(l, width));
+        return out;
+    }
+
+    /** ((12.0) s on one line if it fits in width, else on two, broken between words (the second cut to fit if it must). */
+    private java.util.List<String> wrap2(String s, float width) {
+        if (text.measureText(s) <= width) return java.util.Collections.singletonList(s);
+        int cut = s.length();
+        while (true) {
+            int sp = s.lastIndexOf(' ', cut - 1);
+            if (sp <= 0) return java.util.Collections.singletonList(s);
+            cut = sp;
+            if (text.measureText(s.substring(0, cut)) <= width) break;
+        }
+        return java.util.Arrays.asList(s.substring(0, cut), s.substring(cut + 1).trim());
+    }
+
     private String fitText(String s, float width) {
         if (text.measureText(s) <= width) return s;
         while (s.length() > 4 && text.measureText(s + "...") > width) s = s.substring(0, s.length() - 1);
@@ -6535,7 +6588,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(12.5f * dp);
         if (statsCollapsed) {
             int at = (int) world.afterTime;
-            String phase = world.aftermath == World.AFTER_RECOVERY ? "   Recovery " + at / 60 + ":" + (at % 60 < 10 ? "0" : "") + at % 60
+            String phase = world.aftermath == World.AFTER_RECOVERY ? "   Recovery " + World.clock(at)
                     : world.aftermath == World.AFTER_FALLEN ? "   City fallen" : "";
             int secs0 = (int) world.time;
             String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   Zombies " + world.zombieCount()
@@ -6717,7 +6770,7 @@ final class GameView extends View implements Menu.Host {
             else drawZoneInspect(c, inspectZ);
         } else if (inspectB != null && tool == TOOL_PAN) {
             drawBuildingInspect(c, inspectB);
-        } else if (hintTime > 0 && picker < 0) {
+        } else if (hintTime > 0 && picker < 0 && headlines.isEmpty()) {
             drawBanner(c, "Pick a unit or tool below, then tap the city.  Use Move to drag around, pinch to zoom.",
                     w / 2f, infoY);
         } else if (simPaused) {
@@ -6734,11 +6787,31 @@ final class GameView extends View implements Menu.Host {
         float top = portrait ? Math.max(feedBottom, Math.max(meterBottom, statsShown.bottom)) + 12 * dp : barTop * 0.4f;
         text.setTextAlign(Paint.Align.CENTER);
         // ((12.0) Not over the Clear menu while it's open: its lower choices were hidden under the band.)
-        if (!headlines.isEmpty() && !clearMenu) {
+        // ((12.0) Nor over an open picker, or the buttons while you're controlling someone.)
+        if (!headlines.isEmpty() && !clearMenu && picker < 0 && world.controlled == null) {
             Object[] hd = headlines.get(0);
             float a = Math.min(1, Math.min(headTime * 4, (HEAD_SECONDS - headTime) / 0.6f));
             String title = (String) hd[0], sub = (String) hd[1];
-            float bandH = sub == null ? 44 * dp : 64 * dp;
+            // ((12.0) The line under the headline goes onto a second line where it must, rather than being cut short.)
+            String sub2 = null;
+            if (sub != null) {
+                text.setTextSize(13 * dp);
+                float room = w - 24 * dp;
+                if (text.measureText(sub) > room) {
+                    int cut = sub.length();
+                    while (cut > 0) {
+                        int sp = sub.lastIndexOf(' ', cut - 1);
+                        if (sp <= 0) break;
+                        cut = sp;
+                        if (text.measureText(sub.substring(0, cut)) <= room) break;
+                    }
+                    if (cut > 0 && cut < sub.length()) {
+                        sub2 = sub.substring(cut + 1);
+                        sub = sub.substring(0, cut);
+                    }
+                }
+            }
+            float bandH = sub == null ? 44 * dp : sub2 == null ? 64 * dp : 82 * dp;
             fill.setColor(alpha(0xE6101114, a));
             c.drawRect(0, top, w, top + bandH, fill);
             fill.setColor(alpha((Integer) hd[2], a));
@@ -6750,6 +6823,7 @@ final class GameView extends View implements Menu.Host {
                 text.setTextSize(13 * dp);
                 text.setColor(alpha(0xFFE6E6E6, a));
                 c.drawText(fitText(sub, w - 24 * dp), w / 2f, top + 53 * dp, text);
+                if (sub2 != null) c.drawText(fitText(sub2, w - 24 * dp), w / 2f, top + 71 * dp, text);
             }
             top += bandH + 8 * dp;
         }
@@ -6879,7 +6953,13 @@ final class GameView extends View implements Menu.Host {
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
-        float ch = 30 * dp + lines.size() * lh + 8 * dp;
+        // ((12.0) The first line clear of the star and Control buttons: below them, where it's too long to go beside.)
+        boolean narrowCard = cw < 380 * dp;
+        float besideRoom = cw - 14 * dp - (narrowCard ? 76 * dp : 110 * dp) - 30 * dp - 28 * dp;
+        text.setTextSize(12.5f * dp);
+        float drop = !lines.isEmpty() && text.measureText(lines.get(0)) > besideRoom ? 10 * dp : 0;
+        text.setTextSize(14 * dp);
+        float ch = 30 * dp + lines.size() * lh + 8 * dp + drop;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
         fill.setColor(0xE8101216);
@@ -6891,10 +6971,14 @@ final class GameView extends View implements Menu.Host {
         // ((12.0) Narrower buttons on a narrow card, so the name still has room.)
         boolean narrow = cw < 380 * dp;
         float bw = narrow ? 76 * dp : 110 * dp, bh = 30 * dp;
-        c.drawText(fitText(title, cw - 14 * dp - bw - bh - 28 * dp), left + 14 * dp, top + 22 * dp, text);
+        // (A little smaller before it's cut short.)
+        float titleRoom = cw - 14 * dp - bw - bh - 28 * dp, titleW = text.measureText(title);
+        if (titleW > titleRoom) text.setTextSize(Math.max(11.5f * dp, 14 * dp * titleRoom / titleW));
+        c.drawText(fitText(title, titleRoom), left + 14 * dp, top + 22 * dp, text);
         text.setTextSize(12.5f * dp);
         text.setColor(0xFFB8BDC4);
-        for (int i = 0; i < lines.size(); i++) c.drawText(fitText(lines.get(i), cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
+        for (int i = 0; i < lines.size(); i++)
+            c.drawText(fitText(lines.get(i), i == 0 && drop == 0 ? besideRoom : cw - 24 * dp), left + 14 * dp, top + 22 * dp + drop + (i + 1) * lh, text);
         // Pin them (a star), and take control of them.
         takeRect.set(left + cw - bw - 10 * dp, top + 8 * dp, left + cw - 10 * dp, top + 8 * dp + bh);
         pinRect.set(takeRect.left - bh - 8 * dp, takeRect.top, takeRect.left - 8 * dp, takeRect.bottom);
@@ -6951,6 +7035,10 @@ final class GameView extends View implements Menu.Host {
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 16 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
+        // ((12.0) A line too long for the card goes on to a second one rather than being cut short.)
+        text.setTextSize(12.5f * dp);
+        lines = wrapAll(lines, cw - 24 * dp);
+        text.setTextSize(14 * dp);
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
@@ -8280,6 +8368,10 @@ final class GameView extends View implements Menu.Host {
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
+        // ((12.0) A line too long for the card goes on to a second one rather than being cut short.)
+        text.setTextSize(12.5f * dp);
+        lines = wrapAll(lines, cw - 24 * dp);
+        text.setTextSize(14 * dp);
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
@@ -8313,6 +8405,12 @@ final class GameView extends View implements Menu.Host {
         City.District d = world.city.districtOf((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
         // ((12.0) Not "City Hall - City hall": the kind only when the name doesn't already say it.)
         String title = (b.name != null ? (b.name.equalsIgnoreCase(kind) ? b.name : b.name + "  -  " + kind) : kind) + (d != null ? "  -  " + d.name : "");
+        // ((12.0) Too long for the card: the district goes on a line of its own under it, instead of off the end.)
+        text.setTextSize(14 * dp);
+        if (d != null && text.measureText(title) > Math.min(getWidth() - 20 * dp, 460 * dp) - 24 * dp) {
+            title = b.name != null ? (b.name.equalsIgnoreCase(kind) ? b.name : b.name + "  -  " + kind) : kind;
+            lines.add("In " + d.name);
+        }
         if (b.collapsed) lines.add("Collapsed: just a pile of rubble now");
         else if (b.infestKnown && b.lurkers > 0) lines.add("INFESTED: " + (b.lurkers == 1 ? "one of them" : "about " + b.lurkers + " of them") + " inside. Keep out!");
         else if (!b.occupants.isEmpty())
@@ -8382,8 +8480,20 @@ final class GameView extends View implements Menu.Host {
         if ((b.kind == City.HOUSE || b.kind == City.APARTMENT) && b.residents > 0 && !b.collapsed)
             lines.add("Home to " + (b.residents == 1 ? "one person" : b.residents + " people"));
         text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
+        // ((12.0) A line too long for the card goes on to a second one, in the same colour, rather than being cut short.)
+        text.setTextSize(12.5f * dp);
+        java.util.ArrayList<String> wrapped = new java.util.ArrayList<String>();
+        java.util.ArrayList<Boolean> warn = new java.util.ArrayList<Boolean>();
+        for (String l : lines) {
+            boolean red = l.startsWith("INFESTED") || l.startsWith("BLACKOUT") || l.startsWith("FALLEN") || l.startsWith("EMPTY");
+            for (String part : wrap2(l, cw - 24 * dp)) {
+                wrapped.add(part);
+                warn.add(red);
+            }
+        }
+        lines = wrapped;
+        text.setTextSize(14 * dp);
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
@@ -8396,7 +8506,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(12.5f * dp);
         for (int i = 0; i < lines.size(); i++) {
             String l = lines.get(i);
-            text.setColor(l.startsWith("INFESTED") || l.startsWith("BLACKOUT") || l.startsWith("FALLEN") || l.startsWith("EMPTY") ? 0xFFFF8A6A : 0xFFB8BDC4);
+            text.setColor(warn.get(i) ? 0xFFFF8A6A : 0xFFB8BDC4);
             c.drawText(fitText(l, cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
         }
         // Outline the building on the map so it's clear which one this is.

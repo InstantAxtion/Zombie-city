@@ -8,7 +8,7 @@ final class Records {
     static final String[] RECORD_NAMES = {"Longest outbreak survived", "Most zombies killed in a game",
             "Biggest horde", "Most volunteers in a game", "Zombies killed, all games", "Games played",
             // ((12.0) Two more.)
-            "Most kills by one person", "Most people alive when the city survived"};
+            "Most kills by one person", "Most survivors, city saved"};
 
     private final SharedPreferences prefs;
 
@@ -53,8 +53,7 @@ final class Records {
         best(1, w.zombiesKilled);
         best(2, w.biggestHorde);
         best(3, w.recruits);
-        java.util.ArrayList<int[]> top = w.heroes(1);
-        if (!top.isEmpty()) best(6, top.get(0)[3]);
+        best(6, w.bestKills());
         if (w.warResult == 1) best(7, w.humans);
     }
 }
