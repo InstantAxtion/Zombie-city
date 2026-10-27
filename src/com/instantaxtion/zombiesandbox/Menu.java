@@ -592,7 +592,12 @@ final class Menu {
             if (logFilter > 0 && m.color != Dispatch.WHO_COLORS[logFilter - 1]) continue;
             shown++;
             text.setTextAlign(Paint.Align.LEFT);
-            float whoW = text.measureText(m.who + ": ");
+            // ((12.0) When it was said, in front.)
+            String when = World.clock((int) m.time) + "  ";
+            plain.setTextSize(11.5f * dp);
+            float whenW = plain.measureText(when);
+            plain.setTextSize(13 * dp);
+            float whoW = text.measureText(m.who + ": ") + whenW;
             // ((12.0) Each message wrapped once, not every frame.)
             if (logW != maxW) {
                 logW = maxW;
@@ -605,8 +610,13 @@ final class Menu {
                 tmp.set(x0, y, x0 + maxW, y + rh);
                 fill.setColor(0xE0202328);
                 c.drawRoundRect(tmp, 8 * dp, 8 * dp, fill);
+                plain.setTextSize(11.5f * dp);
+                plain.setColor(MUTED);
+                plain.setTextAlign(Paint.Align.LEFT);
+                c.drawText(when, x0 + 10 * dp, y + 20 * dp, plain);
+                plain.setTextSize(13 * dp);
                 text.setColor(m.color);
-                c.drawText(m.who + ": ", x0 + 10 * dp, y + 20 * dp, text);
+                c.drawText(m.who + ": ", x0 + 10 * dp + whenW, y + 20 * dp, text);
                 plain.setTextAlign(Paint.Align.LEFT);
                 plain.setColor(0xFFE6E6E6);
                 for (int k = 0; k < lines.size(); k++) c.drawText(lines.get(k), x0 + 10 * dp + whoW, y + 20 * dp + k * 18 * dp, plain);

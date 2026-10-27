@@ -148,6 +148,8 @@ final class Dispatch {
         final int color;
         final float x, y;
         float age;
+        /** ((12.0) When it was said (game time).) */
+        float time;
 
         Message(String who, String text, int color, float x, float y) {
             this.who = who;
@@ -409,7 +411,9 @@ final class Dispatch {
                 text = text.substring(colon + 2);
             }
         }
-        log.add(new Message(label, text, WHO_COLORS[who], x, y));
+        Message m = new Message(label, text, WHO_COLORS[who], x, y);
+        m.time = w.time;
+        log.add(m);
         if (log.size() > 200) log.remove(0);
         messageCount++;
     }

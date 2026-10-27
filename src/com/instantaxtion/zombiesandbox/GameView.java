@@ -324,6 +324,23 @@ final class GameView extends View implements Menu.Host {
             case KeyEvent.KEYCODE_H:
                 if (ev.getRepeatCount() == 0) hudHidden = !hudHidden;
                 return true;
+            case KeyEvent.KEYCODE_TAB: {
+                // Tab: on to the next of the people you've pinned.
+                if (ev.getRepeatCount() > 0 || world.controlled != null) return true;
+                java.util.ArrayList<Entity> live = new java.util.ArrayList<Entity>();
+                for (Entity p : pinned) if (!p.dead) live.add(p);
+                if (live.isEmpty()) {
+                    world.say("Pin someone first (the star on their card)");
+                    return true;
+                }
+                int at = live.indexOf(follow);
+                follow = live.get((at + 1) % live.size());
+                followV = null;
+                inspectB = null;
+                inspectZ = null;
+                click();
+                return true;
+            }
             case KeyEvent.KEYCODE_M:
             case KeyEvent.KEYCODE_ESCAPE:
                 if (ev.getRepeatCount() > 0) return true;
@@ -444,6 +461,7 @@ final class GameView extends View implements Menu.Host {
         // the ground where those people stood in the last one.)
         pinned.clear();
         inspectB = null;
+        inspectZ = null;
         if (getWidth() > 0) centerCamera();
     }
 
@@ -700,6 +718,7 @@ final class GameView extends View implements Menu.Host {
         pinned.clear();
         selection.clear();
         inspectB = null;
+        inspectZ = null;
         lastAction.clear();
         tool = TOOL_PAN;
         lastMessageCount = world.dispatch.messageCount;
@@ -727,6 +746,7 @@ final class GameView extends View implements Menu.Host {
         // the ground where those people stood in the last one.)
         pinned.clear();
         inspectB = null;
+        inspectZ = null;
         if (getWidth() > 0) centerCamera();
         records.gameStarted();
         autoCollapsed = false;
@@ -1337,6 +1357,16 @@ final class GameView extends View implements Menu.Host {
                 Dispatch.SafeZone z = world.dispatch.zones.get(i);
                 fill.setColor(z.military ? 0x886FBF3F : 0x884F8FE0);
                 c.drawCircle(mx(z.x), my(z.y), Math.max(2.5f * dp, z.r * sx), fill);
+            }
+            // ((12.0) The open 911 calls: a small red mark at each, bigger the more of the dead there.)
+            for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {
+                Dispatch.Incident inc = world.dispatch.incidents.get(i);
+                if (inc.resolved || inc.cordonPost >= 0 || inc.checkpointSpot != null) continue;
+                float ix = mx(inc.x), iy = my(inc.y), ir = (1.8f + Math.min(2.5f, inc.zombiesNear / 6f)) * dp;
+                fill.setColor(0xE0101216);
+                c.drawCircle(ix, iy, ir + 1.2f * dp, fill);
+                fill.setColor(inc.zombiesNear > 0 ? 0xFFFF5A4A : 0xFFFFA64D);
+                c.drawCircle(ix, iy, ir, fill);
             }
             if (world.rangerStation != null) {
                 // The ranger station: a green square.
@@ -6682,6 +6712,9 @@ final class GameView extends View implements Menu.Host {
             drawInspect(c, follow);
         } else if (followV != null && picker < 0) {
             drawVehicleCard(c, followV);
+        } else if (inspectZ != null && tool == TOOL_PAN) {
+            if (inspectZ.removed) inspectZ = null;
+            else drawZoneInspect(c, inspectZ);
         } else if (inspectB != null && tool == TOOL_PAN) {
             drawBuildingInspect(c, inspectB);
         } else if (hintTime > 0 && picker < 0) {
@@ -6750,6 +6783,9 @@ final class GameView extends View implements Menu.Host {
         }
     }
 
+    /** ((12.0) When Clear Everyone was first tapped (nanoTime), waiting for the second tap. */
+    private long clearArmedAt;
+
     /** The Clear menu under the Clear button, and the Undo button above the tool bar. */
     private void drawPopups(Canvas c) {
         if (!lastAction.isEmpty()) {
@@ -6776,7 +6812,8 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(i == 0 ? 0xF0802020 : 0xF0202227);
             c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
             text.setColor(0xFFF2F2F2);
-            c.drawText((i == 0 ? "Clear " : "") + CLEAR_NAMES[i], r.left + 12 * dp, r.centerY() + 4.5f * dp, text);
+            boolean sure = i == 0 && System.nanoTime() - clearArmedAt < 3000000000L;
+            c.drawText(sure ? "Tap again to clear" : (i == 0 ? "Clear " : "") + CLEAR_NAMES[i], r.left + 12 * dp, r.centerY() + 4.5f * dp, text);
         }
     }
 
@@ -6812,7 +6849,13 @@ final class GameView extends View implements Menu.Host {
         if (e.infected) health += "   BITTEN: turns in " + Math.max(0, (int) e.infectTimer) + "s";
         if (e.fresh > 0) health += "   Freshly turned";
         lines.add(health);
-        if (e.canShoot()) lines.add("Ammo " + e.ammo + " + " + e.reserve + (e.grenades > 0 ? "   Grenades " + e.grenades : "")
+        if (!e.canShoot() && e.melee > 0 && !e.isZombie()) lines.add("Carrying " + (e.melee == Entity.M_AXE ? "an axe" : "a " + Entity.MELEE_NAMES[e.melee].toLowerCase()));
+        // ((12.0) What one of the dead was in life.)
+        if (e.isZombie() && e.origin >= 0 && e.origin != Entity.CIVILIAN)
+            lines.add(e.origin == Entity.COP ? "Was a police officer" : e.origin == Entity.SOLDIER ? "Was a soldier" : "Was a " + Entity.NAMES[e.origin].toLowerCase());
+        // ((12.0) The gun by name, and a bat or axe if they carry one.)
+        if (e.canShoot()) lines.add(e.gunName() + " " + e.ammo + " + " + e.reserve + (e.grenades > 0 ? "   Grenades " + e.grenades : "")
+                + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "")
                 + "   Aim +" + Math.round((World.aimBonus(e) + 0.05f * World.rank(e)) * 100) + "%" + (e.kills > 0 ? "   Kills " + e.kills : ""));
         // ((10.59) Their rank, with a star for each.)
         int rk = World.rank(e);
@@ -7889,6 +7932,7 @@ final class GameView extends View implements Menu.Host {
                 click();
                 follow = pinIcons[k];
                 inspectB = null;
+                inspectZ = null;
                 return true;
             }
         if (world.controlled == null && follow != null && !follow.dead && takeRect.contains(x, y)) {
@@ -7946,6 +7990,12 @@ final class GameView extends View implements Menu.Host {
             for (int i = 0; i < clearRects.length; i++)
                 if (clearRects[i].contains(x, y)) {
                     click();
+                    // ((12.0) Clearing everyone takes a second tap, to be sure.)
+                    if (i == 0 && System.nanoTime() - clearArmedAt > 3000000000L) {
+                        clearArmedAt = System.nanoTime();
+                        return true;
+                    }
+                    clearArmedAt = 0;
                     clearMenu = false;
                     switch (i) {
                         case 0: world.clearAll(); follow = null; followV = null; break;
@@ -8087,6 +8137,7 @@ final class GameView extends View implements Menu.Host {
                 follow = null;
                 followV = null;
                 inspectB = null;
+                inspectZ = null;
                 camX -= (x - lastX) / scale;
                 camY -= (y - lastY) / scale;
                 clampCamera();
@@ -8199,6 +8250,51 @@ final class GameView extends View implements Menu.Host {
         }
         // Nobody there: tap a building to see what it is and how it's doing.
         inspectB = pick == null && followV == null ? world.city.buildingAt(wx, wy) : null;
+        // ((12.0) Or a safe zone: its card.)
+        inspectZ = null;
+        if (pick == null && followV == null)
+            for (int i = 0; i < world.dispatch.zones.size(); i++) {
+                Dispatch.SafeZone z = world.dispatch.zones.get(i);
+                if (z.contains(wx, wy, 1)) {
+                    inspectZ = z;
+                    inspectB = null;
+                }
+            }
+    }
+
+    /** ((12.0) The safe zone whose card is showing.) */
+    private Dispatch.SafeZone inspectZ;
+
+    /** (12.0) A safe zone's card: how it's holding, who's inside, its guards, food, ammunition and wall. */
+    private void drawZoneInspect(Canvas c, Dispatch.SafeZone z) {
+        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
+        String title = (z.military ? "Military" : "Police") + " safe zone  -  " + z.place;
+        if (!z.open) lines.add("Walling it in: " + (int) (z.built * 100) + "% done" + (z.onSite == 0 ? " (the guards are on their way)" : ""));
+        else lines.add(z.fallingBack ? "The dead are inside the wall! Falling back on the tents"
+                : z.full ? "Full: the gates are shut to newcomers" : "Open: taking people in at the gates");
+        lines.add("Sheltering " + z.sheltered + " of " + z.capacity + "   Guards " + z.onSite + " here" + (z.guards > z.onSite ? ", " + (z.guards - z.onSite) + " on the way" : ""));
+        int open = 0;
+        for (boolean g : z.gateOpen) if (g) open++;
+        lines.add("Food " + (int) z.food + "/" + (int) z.foodMax + "   Ammunition " + z.ammo + "   Gates " + z.gateOpen.length + (open > 0 ? " (" + open + " open)" : ""));
+        lines.add(z.breaches > 0 ? z.breaches + (z.breaches == 1 ? " breach" : " breaches") + " in the wall" : "The wall is holding");
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(14 * dp);
+        float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
+        float ch = 30 * dp + lines.size() * lh + 8 * dp;
+        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
+        oval.set(left, top, left + cw, top + ch);
+        fill.setColor(0xE8101216);
+        c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
+        fill.setColor(z.military ? 0xFF6FBF3F : 0xFF4F8FE0);
+        c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
+        text.setColor(0xFFFFFFFF);
+        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
+        text.setTextSize(12.5f * dp);
+        for (int i = 0; i < lines.size(); i++) {
+            String l = lines.get(i);
+            text.setColor(l.startsWith("The dead") || l.contains("breach") ? 0xFFFF8A6A : 0xFFB8BDC4);
+            c.drawText(fitText(l, cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
+        }
     }
 
     /** The building whose card is showing. */
@@ -8218,7 +8314,7 @@ final class GameView extends View implements Menu.Host {
         // ((12.0) Not "City Hall - City hall": the kind only when the name doesn't already say it.)
         String title = (b.name != null ? (b.name.equalsIgnoreCase(kind) ? b.name : b.name + "  -  " + kind) : kind) + (d != null ? "  -  " + d.name : "");
         if (b.collapsed) lines.add("Collapsed: just a pile of rubble now");
-        else if (b.infestKnown && b.lurkers > 0) lines.add("INFESTED: there are zombies inside. Keep out!");
+        else if (b.infestKnown && b.lurkers > 0) lines.add("INFESTED: " + (b.lurkers == 1 ? "one of them" : "about " + b.lurkers + " of them") + " inside. Keep out!");
         else if (!b.occupants.isEmpty())
             lines.add(b.occupants.size() + " hiding inside, door barricaded (" + Math.max(0, (int) b.barricade) + "%)");
         if (!b.visitors.isEmpty()) {
@@ -8282,6 +8378,9 @@ final class GameView extends View implements Menu.Host {
             }
         }
         if (role != null) lines.add(role);
+        // ((12.0) Who lives there.)
+        if ((b.kind == City.HOUSE || b.kind == City.APARTMENT) && b.residents > 0 && !b.collapsed)
+            lines.add("Home to " + (b.residents == 1 ? "one person" : b.residents + " people"));
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
