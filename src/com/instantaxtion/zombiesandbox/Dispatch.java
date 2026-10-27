@@ -529,7 +529,7 @@ final class Dispatch {
         Incident inc = newIncident(zombie.x, zombie.y, count);
         if (inc == null) return;
         String line = CALLS[rnd.nextInt(CALLS.length)];
-        String text = line.contains("%d") ? String.format(line, count, inc.place) : String.format(line, inc.place);
+        String text = line.contains("%d") ? String.format(java.util.Locale.US, line, count, inc.place) : String.format(java.util.Locale.US, line, inc.place);
         say(WHO_911, null, "\"" + text + "\"", inc.x, inc.y);
         if (w.counts[Entity.COP] == 0 && w.counts[Entity.SOLDIER] == 0) {
             if (!policeBackup(inc)) say(WHO_POLICE, null, "Dispatch: No units available for " + inc.place + ".", inc.x, inc.y);
@@ -1999,7 +1999,7 @@ final class Dispatch {
         arrivals.add(a);
         w.timeline("Outside police called in: " + a.label);
         say(WHO_POLICE, null, "Dispatch: " + (pressure >= 2 ? "We're losing ground. " : "All our units are committed. ") + "Requesting outside help for " + inc.place + ". "
-                + String.format(sentence, a.count) + ", about half a minute out." + (policeReserve == 0 ? " That's the last of the help from outside." : ""), inc.x, inc.y);
+                + String.format(java.util.Locale.US, sentence, a.count) + ", about half a minute out." + (policeReserve == 0 ? " That's the last of the help from outside." : ""), inc.x, inc.y);
         callout(inc.x, inc.y, "OUTSIDE BACKUP", WHO_COLORS[WHO_POLICE]);
         return true;
     }

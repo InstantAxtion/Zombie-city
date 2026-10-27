@@ -3154,6 +3154,11 @@ final class Fleet {
             // Something stopped for good in the lane (parked, wrecked, or stood there a while and not just
             // queueing): pull out and go round it, slowly, rather than wait behind it for ever.
             boolean stuckThere = o.parked || o.broken || (o.stillT > 5 && !o.held && !o.queued)
+                    // ((12.0) A police car, army truck or ambulance stopped at a scene, loading, or waiting for its
+                    // crew (not a roadblock: that's there to stop them): it isn't going anywhere. Its "queued" was left over from before it stopped, so the
+                    // traffic behind it took it for a queue and sat there with it for good.)
+                    || ((o.type == CRUISER || o.type == TRUCK || o.type == AMBULANCE) && o.player == null && o.stillT > 3
+                        && (o.state == SCENE || o.state == RECALL || o.state == LOAD))
                     || (o.yieldT > 0 && !o.yieldStop && v.lightsOn())
                     // (Lights and sirens go round a queue sitting at a red light, too.)
                     || (v.lightsOn() && o.type == CAR && o.player == null && o.stillT > 1f)
@@ -4013,10 +4018,15 @@ final class Fleet {
                 // oncoming one.)
                 if (city.lanesEachWay(bx, by, ddx, ddy) > 1 && city.junctionIdAt(v.x, v.y) < 0)
                     off = city.laneOffset(bx, by, ddx, ddy, laneOf(v) == 0 ? 2 : 0);
-                // ((12.0) Always to the driver's left, towards the middle of the road. It went by the sign of the
-                // offset, and where the route ran along the outside tile of the road the offset was negative: it
-                // swung out the other way, off the road - into the lake, along a lakeside road.)
-                else off -= City.T * 1.1f;
+                else {
+                    // ((12.0) Over to the other side of the route's tile, as before - unless that's off the road: where
+                    // the route ran along the road's outer tile it swung out over the edge, into the lake along a
+                    // lakeside road. Then it goes round by the other side.)
+                    float sw = off - (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
+                    float cx = (bx + 0.5f) * City.T - ddy * sw, cy = (by + 0.5f) * City.T + ddx * sw;
+                    if (!city.drivable(cx, cy)) sw = off + (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
+                    off = sw;
+                }
             }
         }
         // Into a junction in your own lane (measured on the road you're on): the turn is made inside it,
@@ -5811,7 +5821,9 @@ final class Fleet {
         // Officers spot one of them from the car: pull up and get out (well short of a crowd of them). A
         // moving car looks every moment, so it doesn't drive on into them between looks.
         boolean look = check || (Math.abs(v.speed) > 15 && w.zombieWithin(v.x, v.y, 190));
-        if (look && v.crew.size() > 0 && (hordeAhead(v)
+        // ((12.0) Not in the middle of a junction, though: it drives on out of it first. Stopped there for the scene,
+        // it blocked the junction for everyone until its officers came back.)
+        if (look && v.crew.size() > 0 && (city.junctionIdAt(v.x, v.y) < 0 || Math.abs(v.speed) < 3) && (hordeAhead(v)
                 || (w.countZombiesNear(v.x, v.y, 90) > 0 && w.countZombiesNear(v.x, v.y, 30) < 4))) {
             v.speed = 0;
             v.state = SCENE;
@@ -5854,7 +5866,7 @@ final class Fleet {
             }
             boolean moving = here == null && driveStep(v, dt, v.kind == K_BIKE ? 130 : 115, carAhead(v) ? 0.5f : 1f);
             if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-            if (!moving || World.hypot(inc.x - v.x, inc.y - v.y) < 50 || v.stuckTimer > 6) {
+            if (!moving || ((World.hypot(inc.x - v.x, inc.y - v.y) < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
                 v.speed = 0;
                 v.state = SCENE;
                 v.quiet = 0;

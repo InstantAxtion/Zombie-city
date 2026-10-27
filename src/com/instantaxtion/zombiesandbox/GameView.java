@@ -514,7 +514,7 @@ final class GameView extends View implements Menu.Host {
             // A short description to show in the slot list without loading the whole game.
             int t = (int) world.time;
             String info = world.city.name + " (" + CityConfig.PRESETS[world.city.cfg.v[CityConfig.OPT_PRESET]] + ")\n"
-                    + World.clock(t) + String.format(" played, %d people, %d zombies", world.humans, world.zombies) + "\n"
+                    + World.clock(t) + String.format(java.util.Locale.US, " played, %d people, %d zombies", world.humans, world.zombies) + "\n"
                     + new java.text.SimpleDateFormat("d MMM HH:mm").format(new java.util.Date());
             java.io.FileOutputStream out = new java.io.FileOutputStream(slotFile(slot).getPath() + ".info");
             out.write(info.getBytes("UTF-8"));
@@ -7456,6 +7456,10 @@ final class GameView extends View implements Menu.Host {
     /** What someone is up to, in plain words. */
     private String doing(Entity e) {
         if (e.isZombie()) {
+            // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)
+            if (e.stun > 0) return "Knocked back, dazed";
+            if (e.charge > 0) return "Lunging at someone";
+            if (e.hidden) return "Lying low in cover, waiting";
             if (e.feedTimer > 0) return "Feeding";
             if (e.doorAt != null && e.doorTime > 0) return "Clawing at the door of " + (e.doorAt.name != null ? e.doorAt.name : "a building");
             if (e.memory > 0) return "Chasing someone it saw";

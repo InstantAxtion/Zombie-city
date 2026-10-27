@@ -19,8 +19,12 @@ final class World {
 
     static String clock(int secs) {
         secs = Math.max(0, secs);
-        if (secs >= 3600) return String.format("%d:%02d:%02d", secs / 3600, secs / 60 % 60, secs % 60);
-        return String.format("%d:%02d", secs / 60, secs % 60);
+        // ((12.0) Put together by hand: String.format wrote it in the phone's own digits (Arabic, Persian...) among
+        // English words, and it's asked for every frame.)
+        StringBuilder sb = new StringBuilder(8);
+        if (secs >= 3600) sb.append(secs / 3600).append(':').append(secs / 600 % 6).append(secs / 60 % 10);
+        else sb.append(secs / 60);
+        return sb.append(':').append(secs / 10 % 6).append(secs % 10).toString();
     }
 
     private static final float TAU = (float) (Math.PI * 2);
@@ -4450,6 +4454,17 @@ final class World {
         return true;
     }
 
+    /**
+     * ((12.0) A place in the crowd outside a gate: r out from (x, y) at angle a, or nearer it where that's inside a
+     * wall or a building - where the gate was beside one, some stood pushing against it for good.)
+     */
+    private void queueAt(Entity e, float x, float y, float a, float r, float speed) {
+        float ca = (float) Math.cos(a), sa = (float) Math.sin(a);
+        while (r > 0 && city.solidAt(x + ca * r, y + sa * r)) r -= 3;
+        r = Math.max(0, r);
+        standAt(e, x + ca * r, y + sa * r, speed);
+    }
+
     /** On the way to a safe zone, queueing at its gate, and in. */
     private boolean seekZoneStep(Entity e, float threatDist) {
         if (e.task != Dispatch.T_SEEK || threatDist <= 28) return false;
@@ -4492,7 +4507,10 @@ final class World {
         float ox = out[0] - e.x, oy = out[1] - e.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
         // ((12.0) Near enough to be in the queue: a little further out than the queue reaches, so the crowd's shoving
         // doesn't keep pushing someone out of it and walking back in again, over and over.)
-        boolean atGate = od < 34 || (z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < od);
+        // ((12.0) Already through the gate's opening only when it's right there: from far off on the zone's far side
+        // its inside was nearer than its outside too, and they set off in a straight line for it, into the first
+        // building in the way, for good.)
+        boolean atGate = od < 34 || (z.gateOpen[g] && od < 70 && World.hypot(in[0] - e.x, in[1] - e.y) < od);
         if (!atGate) {
             if (!z.open || !followField(e, dispatch.zoneField, speed)) walkToSpot(e, out[0], out[1], speed);
             return true;
@@ -4500,7 +4518,7 @@ final class World {
         if (!z.open) {
             // A queue outside the gate, waiting for the wall to be finished.
             float a = (e.nameSeed & 0xFF) / 256f * TAU;
-            standAt(e, out[0] + (float) Math.cos(a) * 18, out[1] + (float) Math.sin(a) * 18, 0.5f);
+            queueAt(e, out[0], out[1], a, 18, 0.5f);
             return true;
         }
         // At the gate: checked for bites, then through when it opens.
@@ -4513,7 +4531,7 @@ final class World {
             // shoving for the one spot.)
             float gx = out[0] - in[0], gy = out[1] - in[1], gl = (float) Math.sqrt(gx * gx + gy * gy) + 0.001f;
             float a = (float) Math.atan2(gy, gx) + (((e.nameSeed >> 3) & 63) / 63f - 0.5f) * 2.2f, r = 6 + ((e.nameSeed >> 9) & 15);
-            standAt(e, out[0] + (float) Math.cos(a) * r, out[1] + (float) Math.sin(a) * r, 0.4f);
+            queueAt(e, out[0], out[1], a, r, 0.4f);
         }
         return true;
     }
@@ -7870,12 +7888,11 @@ final class World {
                 }
                 float ang = e.ringA;
                 float px = inc.x + (float) Math.cos(ang) * pr, py = inc.y + (float) Math.sin(ang) * pr;
-                if (d > pr + 80) {
-                    if (!followField(e, inc.field, transit(e, d))) {
-                        // ((10.54) A call without a way worked out (past the budget): find the way there as anyone would.)
-                        if (inc.field == null && d > 60) walkToSpot(e, inc.x, inc.y, transit(e, d));
-                        else steer(e, ddx / d, ddy / d, transit(e, d));
-                    }
+                // ((12.0) Once there, they keep to their place on the ring unless pushed well back: right at the edge,
+                // with the ring growing and shrinking as the count of the dead changed, they went from the call's
+                // route to their spot and back every moment - two ways at once - and stood there for good.)
+                if (d > pr + (e.onScene ? 160 : 80)) {
+                    headFor(e, inc.field, inc.x, inc.y, d, transit(e, d));
                     return;
                 }
                 if (!e.onScene) {
@@ -7894,11 +7911,7 @@ final class World {
             if (soldier && e.onScene && city.fieldAt(city.zombieDist, e.x, e.y) < 30
                     && followField(e, city.zombieDist, e.runSpeed * 0.8f)) return;
             if (d > 40) {
-                if (!followField(e, inc.field, transit(e, d))) {
-                        // ((10.54) A call without a way worked out (past the budget): find the way there as anyone would.)
-                        if (inc.field == null && d > 60) walkToSpot(e, inc.x, inc.y, transit(e, d));
-                        else steer(e, ddx / d, ddy / d, transit(e, d));
-                    }
+                headFor(e, inc.field, inc.x, inc.y, d, transit(e, d));
                 return;
             }
             if (!e.onScene) {
@@ -8659,7 +8672,7 @@ final class World {
     /** A hero's milestone, called out on the radio. */
     private void killStreak(Entity e) {
         highlight(Names.person(e.nameSeed) + ": " + e.kills + " kills", e.x, e.y);
-        String line = String.format(STREAK_LINES[rnd.nextInt(STREAK_LINES.length)], e.kills);
+        String line = String.format(java.util.Locale.US, STREAK_LINES[rnd.nextInt(STREAK_LINES.length)], e.kills);
         if (e.isArmed()) dispatch.say(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, line, e.x, e.y);
         else dispatch.say(Dispatch.WHO_INFO, null, Names.person(e.nameSeed) + ": \"" + line + "\"", e.x, e.y);
     }
@@ -10439,14 +10452,18 @@ final class World {
         boolean hurt = e.hp < e.maxHp * 0.85f && z.medX > 0;
         // (Each on their own clock: a meal now and then, the rest of the time by their tent.)
         int phase = ((int) ((e.jobTimer + (e.nameSeed & 0xFF)) / 30)) % 5;
+        // ((12.0) The places in front of the tents a body's width apart, and more of them: three to five units apart
+        // for people seven across, the crowd at the food tent shoved itself about and the ones at the back never
+        // got anywhere near it.)
         if (hurt) {
-            tx = z.medX + ((e.nameSeed & 7) - 3.5f) * 3;
-            ty = z.medY + 12;
+            int q = e.nameSeed & 15;
+            tx = z.medX + ((q % 8) - 3.5f) * 8;
+            ty = z.medY + 12 + (q / 8) * 8;
         } else if (phase == 1 && z.food > 0 && z.foodX > 0) {
-            // In the line at the food tent: two rows in front of it.
-            int q = (e.nameSeed >> 3) & 15;
-            tx = z.foodX - 18 + (q % 8) * 5;
-            ty = z.foodY + 13 + (q / 8) * 6;
+            // In the line at the food tent: rows in front of it.
+            int q = (e.nameSeed >> 3) & 31;
+            tx = z.foodX + ((q % 8) - 3.5f) * 8;
+            ty = z.foodY + 13 + (q / 8) * 8;
         } else if ((phase == 2 || phase == 4) && strollSpot(e, z, (int) ((e.jobTimer + (e.nameSeed & 0xFF)) / 30))) {
             // (10.24) Out and about inside the wall: somewhere of their own, not all in one huddle.
             tx = e.spotX;
@@ -10680,6 +10697,19 @@ final class World {
             }
         }
         return stepTo(e, tx, ty, bx, by, speed);
+    }
+
+    /**
+     * To (x, y), d away, by the field that leads there; or, failing that, the way there as anyone would find it
+     * ((10.54) a call without a way worked out). ((12.0) A field with no way on from where they stand (a wall or a
+     * barricade put up since it was worked out) is left alone for a few seconds: it used to fail on one tile and
+     * work on the next, and they went back and forth between the two - and straight at the call - and stood there.)
+     */
+    private void headFor(Entity e, char[] field, float x, float y, float d, float speed) {
+        if (time >= e.fieldOffUntil && followField(e, field, speed)) return;
+        if (field != null && time >= e.fieldOffUntil) e.fieldOffUntil = time + 4;
+        if (d > 60) walkToSpot(e, x, y, speed);
+        else steer(e, (x - e.x) / d, (y - e.y) / d, speed);
     }
 
     private boolean followField(Entity e, int[] field, float speed) {

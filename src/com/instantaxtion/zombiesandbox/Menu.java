@@ -780,6 +780,9 @@ final class Menu {
                 {"Cars wrecked, buildings collapsed", world.carsWrecked + ", " + world.collapsedCount},
                 {"911 calls", String.valueOf(world.dispatch.calls)},
                 {"Shots fired", String.valueOf(world.shotsFired)},
+                // ((12.0) How good a shot the city is.)
+                {"Shots per zombie put down", world.killsBy[0] + world.killsBy[1] + world.killsBy[2] > 0
+                        ? String.format(java.util.Locale.US, "%.1f", world.shotsFired / (float) (world.killsBy[0] + world.killsBy[1] + world.killsBy[2])) : "-"},
                 {"Volunteers joined (said no)", world.recruits + " (" + world.refused + ")"},
                 {"City", world.city.name + "  (" + world.city.cfg.code() + ")"},
                 {"Bitten people turned away at checkpoints", String.valueOf(world.turnedAway)},
