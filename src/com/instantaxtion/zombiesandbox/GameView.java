@@ -6795,14 +6795,15 @@ final class GameView extends View implements Menu.Host {
                     + ". Tap where to send them, or tap them again to release.", w / 2f, infoY);
         } else if (world.controlled != null) {
             drawControls(c, world.controlled);
-        } else if (follow != null && picker < 0) {
+        } else if (follow != null && picker < 0 && !clearMenu) {
             drawInspect(c, follow);
-        } else if (followV != null && picker < 0) {
+        } else if (followV != null && picker < 0 && !clearMenu) {
             drawVehicleCard(c, followV);
-        } else if (inspectZ != null && tool == TOOL_PAN) {
+        } else if (inspectZ != null && tool == TOOL_PAN && !clearMenu) {
+            // ((12.0) Cards make way for the Clear menu: they were drawn over it.)
             if (inspectZ.removed) inspectZ = null;
             else drawZoneInspect(c, inspectZ);
-        } else if (inspectB != null && tool == TOOL_PAN) {
+        } else if (inspectB != null && tool == TOOL_PAN && !clearMenu) {
             drawBuildingInspect(c, inspectB);
         } else if (hintTime > 0 && picker < 0 && headlines.isEmpty()) {
             drawBanner(c, "Pick a unit or tool below, then tap the city.  Use Move to drag around, pinch to zoom.",
@@ -6822,7 +6823,8 @@ final class GameView extends View implements Menu.Host {
         text.setTextAlign(Paint.Align.CENTER);
         // ((12.0) Not over the Clear menu while it's open: its lower choices were hidden under the band.)
         // ((12.0) Nor over an open picker, or the buttons while you're controlling someone.)
-        if (!headlines.isEmpty() && !clearMenu && picker < 0 && world.controlled == null) {
+        // ((12.0) Nor, held sideways, across the stats panel while it's open.)
+        if (!headlines.isEmpty() && !clearMenu && picker < 0 && world.controlled == null && (portrait || statsCollapsed)) {
             Object[] hd = headlines.get(0);
             float a = Math.min(1, Math.min(headTime * 4, (HEAD_SECONDS - headTime) / 0.6f));
             String title = (String) hd[0], sub = (String) hd[1];
@@ -6862,7 +6864,7 @@ final class GameView extends View implements Menu.Host {
             top += bandH + 8 * dp;
         }
         // ((12.0) Not over an open picker: it was drawn across the top of it.)
-        if (world.messageTime > 0 && world.message != null && picker < 0) {
+        if (world.messageTime > 0 && world.message != null && picker < 0 && !clearMenu) {
             float a = Math.min(1, world.messageTime);
             text.setTextSize(17 * dp);
             // Fit between whatever else is on screen at that height (stats, meter, minimap, Auto cam).
@@ -6910,7 +6912,9 @@ final class GameView extends View implements Menu.Host {
         } else undoRect.setEmpty();
         if (!clearMenu) return;
         RectF b = topRects[BTN_CLEAR];
-        float mw = Math.max(b.width(), 150 * dp), ih = 40 * dp;
+        // ((12.0) Shorter rows where five at 40 won't fit above the tool bar: on a short screen held sideways the
+        // last of them were under it, out of reach.)
+        float mw = Math.max(b.width(), 150 * dp), ih = Math.max(26 * dp, Math.min(40 * dp, (barTop - b.bottom - 6 * dp) / clearRects.length - 4 * dp));
         float left = Math.min(b.left, getWidth() - mw - 8 * dp);
         text.setTextSize(13 * dp);
         text.setTextAlign(Paint.Align.LEFT);
@@ -7224,6 +7228,10 @@ final class GameView extends View implements Menu.Host {
         int w = getWidth();
         // (Below the radio feed, above the tool bar.)
         float top = topRects[0].bottom + (portrait ? 150 : 115) * dp, bottom = barTop - 60 * dp;
+        // ((12.0) On a short screen held sideways that band was upside down - its top below its bottom - and the
+        // pins went down over the tool bar: never less than a pin's height, under the buttons along the top.)
+        if (bottom - top < 70 * dp) top = Math.max(topRects[0].bottom + 10 * dp, bottom - 70 * dp);
+        if (bottom - top < 44 * dp) bottom = top + 44 * dp;
         for (int i = 0; i < pinned.size(); i++) {
             Entity p = pinned.get(i);
             if (p.dead && world.controlled != p) continue;
@@ -7249,6 +7257,7 @@ final class GameView extends View implements Menu.Host {
                 if (side) iy = iy + 42 * dp > bottom - 22 * dp ? iy - 42 * dp * (tries + 1) : iy + 42 * dp;
                 else ix = ix + 42 * dp > w - 22 * dp ? ix - 42 * dp * (tries + 1) : ix + 42 * dp;
             }
+            iy = Math.max(top + 20 * dp, Math.min(Math.max(top + 20 * dp, barTop - 24 * dp), iy));
             RectF r = pinRects[pinCount];
             r.set(ix - 20 * dp, iy - 20 * dp, ix + 20 * dp, iy + 20 * dp);
             pinIcons[pinCount++] = p;
@@ -7680,6 +7689,12 @@ final class GameView extends View implements Menu.Host {
         while (text.measureText(line) > room && line.length() > 4) line = line.substring(0, line.length() - 4) + "...";
         c.drawText(line, left + 24 * dp + titleW, top + 22 * dp, text);
         int saveVariant = cur;
+        // ((12.0) One size for the names, as far as it can: each was shrunk on its own, so "Sheriff" stood out large
+        // beside a tiny "Highway Patrol".)
+        text.setTextSize(11.5f * dp);
+        float nameSize = 11.5f * dp;
+        for (int k = 0; k < n; k++) nameSize = Math.min(nameSize, 11.5f * dp * Math.min(1, (bw - 8 * dp) / text.measureText(names[k])));
+        nameSize = Math.max(nameSize, 9 * dp);
         for (int k = 0; k < n; k++) {
             if (pickerRects[k] == null) pickerRects[k] = new RectF();
             int col = k % cols, row = k / cols;
@@ -7697,11 +7712,11 @@ final class GameView extends View implements Menu.Host {
             setVariant(picker, k);
             drawToolIcon(c, picker, r.centerX(), r.top + bh * 0.4f, bh * 0.26f);
             text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(11.5f * dp);
+            text.setTextSize(nameSize);
             text.setColor(sel ? 0xFFFFFFFF : 0xFFC8CCD2);
             String name = names[k];
             float fit = text.measureText(name);
-            if (fit > bw - 8 * dp) text.setTextSize(11.5f * dp * (bw - 8 * dp) / fit);
+            if (fit > bw - 8 * dp) text.setTextSize(nameSize * (bw - 8 * dp) / fit);
             c.drawText(name, r.centerX(), r.bottom - 8 * dp, text);
         }
         setVariant(picker, saveVariant);
@@ -8074,7 +8089,7 @@ final class GameView extends View implements Menu.Host {
             releaseControl();
             return true;
         }
-        if (world.controlled == null && follow != null && !follow.dead && pinRect.contains(x, y)) {
+        if (world.controlled == null && follow != null && !follow.dead && picker < 0 && !clearMenu && pinRect.contains(x, y)) {
             click();
             if (!pinned.remove(follow)) {
                 if (pinned.size() >= 6) pinned.remove(0);
@@ -8090,7 +8105,7 @@ final class GameView extends View implements Menu.Host {
                 inspectZ = null;
                 return true;
             }
-        if (world.controlled == null && follow != null && !follow.dead && takeRect.contains(x, y)) {
+        if (world.controlled == null && follow != null && !follow.dead && picker < 0 && !clearMenu && takeRect.contains(x, y)) {
             click();
             takeControl(follow);
             return true;
