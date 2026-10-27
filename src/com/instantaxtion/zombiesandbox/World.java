@@ -1655,8 +1655,14 @@ final class World {
         fleet.clear();
         for (City.Building b : city.buildings) {
             b.occupants.clear();
+            // ((12.0) Everyone means everyone: those inside on errands, the dead shut in buildings, and those who'd
+            // fled the city all used to come back afterwards.)
+            b.visitors.clear();
+            b.lurkers = 0;
+            b.infestKnown = false;
             b.barricade = 100;
         }
+        away.clear();
         Arrays.fill(plife, 0);
         Arrays.fill(tlife, 0);
         dcount = 0;
@@ -2738,7 +2744,8 @@ final class World {
                 smash(b);
                 return;
             }
-            if (b.capacity > 0 && b.occupants.isEmpty() && b.lurkers < 5 && z.type != Entity.BRUTE && rnd.nextFloat() < 0.035f) {
+            // ((12.0) Only an empty one: with people inside on an errand it used to slip in and sit quietly with them.)
+            if (b.capacity > 0 && b.occupants.isEmpty() && b.visitors.isEmpty() && b.lurkers < 5 && z.type != Entity.BRUTE && rnd.nextFloat() < 0.035f) {
                 b.lurkers++;
                 z.dead = true;
                 z.removed = true;
@@ -3737,7 +3744,20 @@ final class World {
             int take = Math.min(40, b.stock);
             b.stock -= take;
             if (e.canShoot() && e.gunKind() == Entity.W_SHOTGUN) e.reserve += take;
-            else setGun(e, Entity.W_SHOTGUN, take);
+            else {
+                // ((12.0) The gun you had is left by the door to pick up again, not lost with every round you had for
+                // it - a soldier searching a gun store used to swap their rifle and all its magazines for the shotgun.)
+                if (e.canShoot() && e.ammo + e.reserve > 0) {
+                    Pickup old = new Pickup();
+                    old.x = b.doorX;
+                    old.y = b.doorY;
+                    old.rounds = e.ammo + e.reserve;
+                    old.weapon = e.gunKind();
+                    old.lockUntil = time + 2;
+                    pickups.add(old);
+                }
+                setGun(e, Entity.W_SHOTGUN, take);
+            }
             say("Found a shotgun and " + take + " shells");
         } else if (b.kind == City.PHARMACY && b.stock > 0) {
             b.stock = Math.max(0, b.stock - 10);
@@ -3777,7 +3797,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o.dead || !o.isZombie()) continue;
                     float ddx = o.x - e.x, ddy = o.y - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
@@ -4066,7 +4086,9 @@ final class World {
         if (threat != null) goalScore[G_FLEE] = 0.3f + 0.65f * near + (armed ? 0 : 0.15f) + 0.1f * (1 - brave);
         else if (e.fleeTimer > 0) goalScore[G_FLEE] = 0.25f + 0.3f * Math.min(1, e.fleeTimer / 7f);
         // Hide indoors: unarmed, a building with room close by, and the dead not already at its door.
-        if (!armed && ((threat != null && e.taskTimer <= 0 && idle) || e.task == Dispatch.T_HIDE) && threatDist > 30 && e.leader == null) {
+        // ((12.0) Someone whose leader has gone indoors without them, or died, hides on their own: they used to wander
+        // about for good, set on hiding and never going.)
+        if (!armed && ((threat != null && e.taskTimer <= 0 && idle) || e.task == Dispatch.T_HIDE) && threatDist > 30 && (e.leader == null || e.leader.dead)) {
             City.Building b = e.task == Dispatch.T_HIDE ? e.building : null;
             if (b == null || b.occupants.size() >= b.capacity || b.barricade <= 0 || b.collapsed) b = hidingPlace(e);
             if (b != null && countZombiesNear(b.doorX, b.doorY, 35) == 0) {
@@ -4081,7 +4103,9 @@ final class World {
         }
         // A safe zone: living in one, on the way to one, or heading for one now it's on the news.
         if (e.task == Dispatch.T_SHELTER && e.zone != null) goalScore[G_SHELTER] = threat != null && threatDist < 28 ? 0.2f : 0.95f;
-        if (room && !e.refused) {
+        // ((12.0) Including one still going up, for those already on their way: they queue at its gate (see
+        // seekZoneStep). They used to keep the plan but stand about where they were until it opened.)
+        if ((room || (e.task == Dispatch.T_SEEK && zoneGoingUp())) && !e.refused) {
             // (Once on the way, the way to the zone is the way out: kept to unless the dead are right there.)
             if (e.task == Dispatch.T_SEEK) goalScore[G_ZONE] = 0.8f;
             else if (idle && (e.fleeTimer > 0 || (broadcasting() && readiness != 2 && e.heardZone))) goalScore[G_ZONE] = 0.42f + 0.2f * careful;
@@ -4337,6 +4361,15 @@ final class World {
     private boolean seekZoneStep(Entity e, float threatDist) {
         if (e.task != Dispatch.T_SEEK || threatDist <= 28) return false;
         e.paused = false;
+        // ((12.0) Already in through a gate before it shut for being full: they're in, not shut inside the wall trying
+        // to walk out through the closed gate to another zone, as they did for good.)
+        for (int i = 0; i < dispatch.zones.size(); i++) {
+            Dispatch.SafeZone q = dispatch.zones.get(i);
+            if (q.open && !q.removed && q.inside(e.x, e.y)) {
+                dispatch.admitInside(e, q);
+                return true;
+            }
+        }
         float speed = e.fleeTimer > 0 ? e.runSpeed : e.speed * 1.7f;
         // The nearest zone taking people (still going up, perhaps).
         Dispatch.SafeZone z = null;
@@ -5662,6 +5695,13 @@ final class World {
             }
         }
         for (int i = corpses.size() - 1; i >= 0; i--) if (corpses.get(i).rise > 0) corpses.get(i).rise = -1;
+        // ((12.0) And the dead shut inside buildings: they stayed, still counted, and came bursting out later.)
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            b.lurkers = 0;
+            b.infestKnown = false;
+        }
+        recountLive();
     }
 
     void clearBodies() {
@@ -6417,7 +6457,10 @@ final class World {
     private void enlistWalk(Entity e, float dt) {
         City.Facility f = e.enlistAt;
         float ddx = f.x - e.x, ddy = f.y - e.y;
-        if (ddx * ddx + ddy * ddy > f.r * f.r * 0.5f) {
+        // ((12.0) Once there and training, a step or two further out doesn't send them back to the start: drifting
+        // about on the edge of the yard, in and out, kept the clock going back to nothing and they never signed up.)
+        boolean training = e.taskTimer < 0;
+        if (ddx * ddx + ddy * ddy > f.r * f.r * (training ? 1.1f : 0.5f)) {
             e.taskTimer = 0;
             if (!followField(e, city.field(f), e.speed * 1.4f)) {
                 float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
@@ -6425,8 +6468,11 @@ final class World {
             }
             return;
         }
-        // Training.
-        wander(e, e.speed * 0.3f);
+        // Training: in a spot of their own in the yard.
+        float a = (e.nameSeed & 0xFF) / 256f * TAU, tr = f.r * (0.2f + ((e.nameSeed >> 8) & 7) * 0.03f);
+        float sx = f.x + (float) Math.cos(a) * tr, sy = f.y + (float) Math.sin(a) * tr;
+        if (!city.solidAt(sx, sy)) standAt(e, sx, sy, 0.4f);
+        else wander(e, e.speed * 0.3f);
         if (e.taskTimer > -6) return;
         int type = f.kind == City.FACILITY_BASE ? Entity.SOLDIER : Entity.COP;
         Entity r = make(type, e.x, e.y, -1, 0);
@@ -6454,7 +6500,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c] + zCount[c] + aCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o == e || o.dead || o.fleeTimer > 0 || (o.type != Entity.CIVILIAN && o.type != Entity.DOG)) continue;
                     if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > 45 * 45) continue;
@@ -7488,8 +7534,10 @@ final class World {
                 float ddx = f.x - e.x, ddy = f.y - e.y;
                 if (ddx * ddx + ddy * ddy < f.r * f.r) {
                     if (draw(f, e)) {
-                        e.ammo = Math.min(e.magSize, e.reserve);
-                        e.reserve -= e.ammo;
+                        // ((12.0) Topped up: the rounds still in the gun stay in it - they used to be thrown away.)
+                        int top = Math.min(e.magSize - e.ammo, e.reserve);
+                        e.ammo += top;
+                        e.reserve -= top;
                     }
                     e.task = Dispatch.T_NONE;
                     e.outOfAmmoSaid = false;
@@ -7860,7 +7908,8 @@ final class World {
                 if (sx * sx + sy * sy > 500 * 500) {
                     if (followField(e, city.field(st), e.speed)) return;
                 } else {
-                    float a = (e.callsign * 2.39996f) % TAU, r = st.r * 0.95f + 10;
+                    // ((12.0) In two or three rings when there are many of them, not all shoulder to shoulder on one.)
+                    float a = (e.callsign * 2.39996f) % TAU, r = st.r * 0.95f + 10 + (e.callsign % 3) * 11;
                     float px = st.x + (float) Math.cos(a) * r, py = st.y + (float) Math.sin(a) * r;
                     if (!city.solidAt(px, py)) {
                         standAt(e, px, py, 0.7f);
@@ -7878,8 +7927,12 @@ final class World {
                 if (bx * bx + by * by > base.r * base.r * 2.2f && followField(e, city.field(base), e.speed * 0.8f)) return;
                 // ((11.1) And once there, fall in: squads in ranks on the parade ground, ready to go.)
                 if (alert >= 1 && bx * bx + by * by < base.r * base.r * 2.2f) {
-                    int rank = e.squad % 4, file = e.member % 8;
-                    float px = base.x + (file - 3.5f) * 9, py = base.y + (rank - 1.5f) * 16;
+                    int rank = e.squad % 4, file = e.member % 8, blk = (e.squad / 4) % 3;
+                    // ((12.0) And every fourth squad in a block of its own beside the others, not on their places.)
+                    float px = base.x + (file - 3.5f) * 9 + (blk == 0 ? 0 : blk == 1 ? -78 : 78), py = base.y + (rank - 1.5f) * 16;
+                    // ((12.0) Their place on a building: the same ranks a little further down or up the base, rather
+                    // than wandering about it.)
+                    for (int k = 1; k <= 4 && city.solidAt(px, py); k++) py += (k % 2 == 1 ? 1 : -1) * k * 48;
                     if (!city.solidAt(px, py)) {
                         standAt(e, px, py, 0.6f);
                         if (e.want < 1) e.angle = turn(e.angle, (float) (Math.PI / 2), dt * 3);
@@ -8264,7 +8317,10 @@ final class World {
         if (duty == 2) {
             // ((11.3) Drill: the squad in ranks on the parade ground, all facing the same way (no more laps round
             // in circles).)
-            float px = base.x + ((e.member % 4) - 1.5f) * 9, py = base.y - 20 + (e.squad % 3) * 26 + (e.member / 4) * 9;
+            // ((12.0) Each squad its own block of ranks: every third squad used to be given the same places, and they
+            // shoved each other round them for as long as the drill went on.)
+            int blk = (e.squad / 3) % 3;
+            float px = base.x + ((e.member % 4) - 1.5f) * 9 + (blk == 0 ? 0 : blk == 1 ? -44 : 44), py = base.y - 20 + (e.squad % 3) * 26 + (e.member / 4) * 9;
             if (city.solidAt(px, py)) {
                 px = base.x + ((e.member % 4) - 1.5f) * 9;
                 py = base.y + (e.member / 4) * 9;
@@ -8273,7 +8329,8 @@ final class World {
             return true;
         }
         // Standing by at the motor pool, by the gate, ready to roll.
-        float gx = base.gateX + ((e.member % 4) - 1.5f) * 10, gy = base.gateY - 24 - (e.member / 4) * 10;
+        // ((12.0) A line of their own for each squad, not every squad on the same few spots.)
+        float gx = base.gateX + ((e.member % 4) - 1.5f) * 10 + ((e.squad / 4) % 2 == 0 ? 0 : 46), gy = base.gateY - 24 - (e.member / 4) * 10 - (e.squad % 4) * 22;
         if (city.solidAt(gx, gy)) {
             gx = base.x + ((e.member % 4) - 1.5f) * 10;
             gy = base.y + 30;
@@ -8761,6 +8818,19 @@ final class World {
                 float[] p = city.findWalkable(b.doorX + (float) Math.cos(a) * 18, b.doorY + (float) Math.sin(a) * 18);
                 o.postX = p != null ? p[0] : b.doorX;
                 o.postY = p != null ? p[1] : b.doorY;
+                // ((12.0) Never two on the same spot (moved off a wall, two of them could be given the same one, and
+                // they shoved each other round it for good).)
+                for (int q = 0; q < k; q++) {
+                    Entity m = group.get(q);
+                    if (Math.abs(m.postX - o.postX) < 5 && Math.abs(m.postY - o.postY) < 5) {
+                        float[] alt = city.findWalkable(o.postX + (float) Math.cos(a) * 9, o.postY + (float) Math.sin(a) * 9);
+                        if (alt != null) {
+                            o.postX = alt[0] + (float) Math.cos(a) * 3;
+                            o.postY = alt[1] + (float) Math.sin(a) * 3;
+                        }
+                        break;
+                    }
+                }
                 o.building = b;
             }
             // Neighbours shelter behind them.
@@ -8796,14 +8866,7 @@ final class World {
             }
             return;
         }
-        if (e.reload > 0) {
-            e.reload -= dt;
-            if (e.reload <= 0) {
-                int take = Math.min(e.magSize - e.ammo, e.reserve);
-                e.ammo += take;
-                e.reserve -= take;
-            }
-        }
+        // ((12.0) Reloading is seen to with everyone else's (see think): done here as well, they reloaded twice as fast.)
         e.fear = 5;
         Entity t = pickTarget(e, e.weapon == Entity.W_HUNTING ? 260 : 150);
         if (t != null) {
@@ -9363,7 +9426,7 @@ final class World {
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
                     Entity o = sorted[k];
                     if (o.dead || !o.isZombie()) continue;
                     float ddx = o.x - e.x, ddy = o.y - e.y, d2 = ddx * ddx + ddy * ddy;
@@ -13588,8 +13651,15 @@ final class World {
             return false;
         }
         if (threat != null && threatDist < 45) return false;
-        float a = (e.nameSeed & 0xFF) / 256f * TAU;
-        standAt(e, e.postX + (float) Math.cos(a) * 9, e.postY + (float) Math.sin(a) * 9, 0.6f);
+        // ((12.0) Each in a place of their own round the spot, near and further out: all on the one small ring, a big
+        // group pushed and shuffled round it the whole time they waited.)
+        float a = (e.nameSeed & 0xFF) / 256f * TAU, r = 8 + ((e.nameSeed >> 9) & 15);
+        float sx = e.postX + (float) Math.cos(a) * r, sy = e.postY + (float) Math.sin(a) * r;
+        if (city.solidAt(sx, sy)) {
+            sx = e.postX + (float) Math.cos(a) * 8;
+            sy = e.postY + (float) Math.sin(a) * 8;
+        }
+        standAt(e, sx, sy, 0.6f);
         return true;
     }
 

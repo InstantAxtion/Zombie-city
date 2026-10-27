@@ -2995,6 +2995,14 @@ final class Dispatch {
         return false;
     }
 
+    /** (12.0) Someone who got in before the gates shut: they're sheltered there, full or not. */
+    void admitInside(Entity e, SafeZone z) {
+        z.sheltered++;
+        sheltered++;
+        e.task = T_SHELTER;
+        e.zone = z;
+    }
+
     /** Lets a civilian into a zone if there is room. */
     boolean admit(Entity e, SafeZone z) {
         if (z.sheltered >= z.capacity) return false;
