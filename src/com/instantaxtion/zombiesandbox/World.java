@@ -1663,6 +1663,7 @@ final class World {
             b.barricade = 100;
         }
         away.clear();
+        recountInsideNow();
         Arrays.fill(plife, 0);
         Arrays.fill(tlife, 0);
         dcount = 0;
@@ -1903,6 +1904,15 @@ final class World {
         fleet.countCrews(counts);
     }
 
+    /** ((12.0) Who's inside the buildings, as last counted, and when it's next counted.) */
+    private float insideAt = -1;
+    private int insideHiding, insideVisiting, insideCivilians, insideLurking, insideBitten;
+
+    /** ((12.0) Counted again at the next recount, not up to half a second later: after clearing or loading.) */
+    void recountInsideNow() {
+        insideAt = -1;
+    }
+
     void recount() {
         Arrays.fill(counts, 0);
         commanders.clear();
@@ -1915,28 +1925,75 @@ final class World {
             if (e.role == Entity.ROLE_COMMANDER && e.type == Entity.SOLDIER) commanders.add(e);
         }
         fleet.countCrews(counts);
-        hiding = 0;
-        visiting = 0;
-        civilians = counts[Entity.CIVILIAN];
-        for (int i = 0, n = city.buildings.size(); i < n; i++) {
-            City.Building b = city.buildings.get(i);
-            hiding += b.occupants.size();
-            visiting += b.visitors.size();
-            for (int k = 0; k < b.occupants.size(); k++) if (b.occupants.get(k).type == Entity.CIVILIAN) civilians++;
-            for (int k = 0; k < b.visitors.size(); k++) if (b.visitors.get(k).type == Entity.CIVILIAN) civilians++;
-        }
-        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
-            ArrayList<Entity> r = fleet.vehicles.get(i).riders;
-            for (int k = 0; k < r.size(); k++) if (r.get(k).type == Entity.CIVILIAN) civilians++;
-        }
+        // ((12.0) Who's inside the buildings is counted a few times a second, not every step: on the big maps that's
+        // tens of thousands of buildings, and it was one of the biggest costs of a quiet moment.)
+        boolean fresh = time >= insideAt || time < insideAt - 1;
+        if (fresh) scanInside();
+        hiding = insideHiding;
+        visiting = insideVisiting;
+        int inCars = fleetCivilians();
+        civilians = counts[Entity.CIVILIAN] + insideCivilians + inCars;
         riding = fleet.riderCount();
         int h = humanCount() + hiding + riding + visiting;
+        // (Before deciding the city has fallen on a count that's a moment old - everyone who's just gone indoors
+        // missing from it - it's counted again properly.)
+        if (!fresh && outbreak && (h == 0 || h <= startHumans * FALLEN)) {
+            scanInside();
+            civilians = counts[Entity.CIVILIAN] + insideCivilians + inCars;
+            hiding = insideHiding;
+            visiting = insideVisiting;
+            h = humanCount() + hiding + riding + visiting;
+        }
+        recountRest(h);
+    }
+
+    /** ((12.0) Civilians riding in cars.) */
+    private int fleetCivilians() {
+        int c = 0;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            ArrayList<Entity> r = fleet.vehicles.get(i).riders;
+            for (int k = 0; k < r.size(); k++) if (r.get(k).type == Entity.CIVILIAN) c++;
+        }
+        return c;
+    }
+
+    /** ((12.0) Counts who's inside the buildings: hiding, on errands, the dead shut in, the bitten.) */
+    private void scanInside() {
+        {
+            insideAt = time + 0.4f;
+            int hid = 0, vis = 0, civ = 0, lurk = 0, bit = 0;
+            for (int i = 0, n = city.buildings.size(); i < n; i++) {
+                City.Building b = city.buildings.get(i);
+                lurk += b.lurkers;
+                int no = b.occupants.size(), nv = b.visitors.size();
+                if (no == 0 && nv == 0) continue;
+                hid += no;
+                vis += nv;
+                for (int k = 0; k < no; k++) {
+                    Entity o = b.occupants.get(k);
+                    if (o.type == Entity.CIVILIAN) civ++;
+                    if (o.infected) bit++;
+                }
+                for (int k = 0; k < nv; k++) {
+                    Entity o = b.visitors.get(k);
+                    if (o.type == Entity.CIVILIAN) civ++;
+                    if (o.infected) bit++;
+                }
+            }
+            insideHiding = hid;
+            insideVisiting = vis;
+            insideCivilians = civ;
+            insideLurking = lurk;
+            insideBitten = bit;
+        }
+    }
+
+    private void recountRest(int h) {
         int z = zombieCount();
         peakZombies = Math.max(peakZombies, z);
         int rising = 0;
         for (int i = 0, n = corpses.size(); i < n; i++) if (corpses.get(i).rise > 0) rising++;
-        lurking = 0;
-        for (int i = 0, n = city.buildings.size(); i < n; i++) lurking += city.buildings.get(i).lurkers;
+        lurking = insideLurking;
         if ((z > 0 || lurking > 0) && h > 0 && !outbreak && aftermath != AFTER_FALLEN) {
             if (aftermath == AFTER_RECOVERY) {
                 // The dead are back while the city was getting on its feet again.
@@ -1954,11 +2011,7 @@ final class World {
             int bitten = 0, armed = counts[Entity.COP] + counts[Entity.SOLDIER];
             for (int i = 0, n = entities.size(); i < n; i++) if (entities.get(i).infected) bitten++;
             // (Including the bitten hiding indoors.)
-            for (int i = 0, n = city.buildings.size(); i < n; i++) {
-                City.Building b = city.buildings.get(i);
-                for (int k = 0; k < b.occupants.size(); k++) if (b.occupants.get(k).infected) bitten++;
-                for (int k = 0; k < b.visitors.size(); k++) if (b.visitors.get(k).infected) bitten++;
-            }
+            bitten += insideBitten;
             // Over only once it's stayed over for a few seconds.
             boolean clear = z == 0 && rising == 0 && lurking == 0 && bitten == 0 && h > 0;
             if (!clear) clearSince = -1;
@@ -1994,13 +2047,21 @@ final class World {
     /** ((11.5) Each one's cell, from the first pass over everyone to the second.) */
     private int[] hashCell = new int[64];
     private int hashSize = -1;
+    /** ((12.0) The cells with anyone in them, as of the last grid.) */
+    private int[] usedCells = new int[256];
+    private int usedN;
 
     private void buildHash() {
         int n = entities.size();
         if (sorted.length < n) sorted = new Entity[n * 2];
-        Arrays.fill(cellCount, 0);
-        Arrays.fill(zCount, 0);
-        Arrays.fill(aCount, 0);
+        // ((12.0) Only the cells someone was in last time are emptied, and only those with someone in now are laid
+        // out: an empty cell's count is nought, so where it starts never matters. Clearing and going through every
+        // cell of the map each frame was most of the work on the big maps.)
+        for (int k = 0; k < usedN; k++) {
+            int c = usedCells[k];
+            cellCount[c] = zCount[c] = aCount[c] = 0;
+        }
+        usedN = 0;
         hashFrame++;
         hashSize = n;
         if (hashCell.length < n) hashCell = new int[n * 2];
@@ -2009,7 +2070,10 @@ final class World {
             if (e.leader != null && !e.dead) e.leader.followerFrame = hashFrame;
             int c = cellOf(e);
             hashCell[i] = c;
-            cellCount[c]++;
+            if (cellCount[c]++ == 0) {
+                if (usedN == usedCells.length) usedCells = Arrays.copyOf(usedCells, usedN * 2);
+                usedCells[usedN++] = c;
+            }
             if (e.isZombie()) zCount[c]++;
             else if (e.isArmed()) aCount[c]++;
         }
@@ -2017,7 +2081,8 @@ final class World {
         // what it wants (a crowd of thousands doesn't slow down looking for the one zombie among them).
         // ((11.5) And among everyone else, the police and soldiers first: a search for them skips the crowd too.)
         int acc = 0;
-        for (int c = 0; c < cellCount.length; c++) {
+        for (int k = 0; k < usedN; k++) {
+            int c = usedCells[k];
             cellStart[c] = acc;
             zFill[c] = acc;
             aFill[c] = acc + zCount[c];
@@ -5695,6 +5760,7 @@ final class World {
             }
         }
         for (int i = corpses.size() - 1; i >= 0; i--) if (corpses.get(i).rise > 0) corpses.get(i).rise = -1;
+        recountInsideNow();
         // ((12.0) And the dead shut inside buildings: they stayed, still counted, and came bursting out later.)
         for (int i = 0, n = city.buildings.size(); i < n; i++) {
             City.Building b = city.buildings.get(i);
@@ -10264,7 +10330,9 @@ final class World {
             // In through the nearest gate.
             int g = z.gateNear(e.x, e.y);
             float[] out = z.gateOut[g], in = z.gateIn[g];
-            if (World.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < 30)) {
+            // ((12.0) Within reach of the inside once nearer it than the gate is long: there was a stretch in the
+            // gateway out of reach of both, and a guard there walked out, then in, then out again, for good.)
+            if (World.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < 40)) {
                 walkToSpot(e, out[0], out[1], run);
                 return;
             }
@@ -10322,7 +10390,7 @@ final class World {
             int g = z.gateNear(e.x, e.y);
             if (g < 0) return;
             float[] out = z.gateOut[g], in = z.gateIn[g];
-            if (World.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < 30))
+            if (World.hypot(out[0] - e.x, out[1] - e.y) > 20 && !(z.gateOpen[g] && World.hypot(in[0] - e.x, in[1] - e.y) < 40))
                 walkToSpot(e, out[0], out[1], e.speed * 1.3f);
             else if (z.gateOpen[g]) walkToSpot(e, in[0], in[1], e.speed);
             else standAt(e, out[0], out[1], 0.4f);

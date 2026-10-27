@@ -79,6 +79,9 @@ final class Fleet {
         Route pathField;
         /** At junctions: the one it has been let through, the one it is waiting at and for how long. */
         int clearedJ = -1, waitJ = -1;
+        /** ((12.0) Where it leaves junction exitJ (a tile, -1 none), as worked out from tile exitFrom of route exitRoute.) */
+        int exitJ = -1, exitFrom = -1, exitTile = -1;
+        Route exitRoute;
         float waitT;
         boolean held;
         /** The way along the road it was last heading (one step of its route). */
@@ -2991,11 +2994,30 @@ final class Fleet {
     /** The way out of junction id along a vehicle's route has a car stopped in it. */
     private boolean exitBlocked(Vehicle v, int id) {
         int W = city.w, t = v.pathT;
-        boolean through = false;
-        for (int k = 0; k < 14; k++) {
-            boolean inJ = city.junctionIdAt((t % W + 0.5f) * City.T, (t / W + 0.5f) * City.T) == id;
-            if (inJ) through = true;
-            else if (through) {
+        // ((12.0) Where it comes out of this junction is worked out once from where it is on its route, not again
+        // every moment it waits: fourteen steps down its route, for every car at every junction, every frame.)
+        if (v.exitJ != id || v.exitFrom != t || v.exitRoute != v.field) {
+            v.exitJ = id;
+            v.exitFrom = t;
+            v.exitRoute = v.field;
+            v.exitTile = -1;
+            boolean through = false;
+            for (int k = 0; k < 14; k++) {
+                boolean inJ = city.junctionIdAt((t % W + 0.5f) * City.T, (t / W + 0.5f) * City.T) == id;
+                if (inJ) through = true;
+                else if (through) {
+                    v.exitTile = t;
+                    break;
+                }
+                int n = downhill(v.field, t);
+                if (n == t) break;
+                t = n;
+            }
+        }
+        if (v.exitTile < 0) return false;
+        t = v.exitTile;
+        {
+            {
                 float ex = (t % W + 0.5f) * City.T, ey = (t / W + 0.5f) * City.T;
                 // ((11.5) Only those in the grid squares round the spot, not every vehicle on the map.)
                 int c0x = Math.max(0, (int) ((ex - City.T) / GC)), c1x = Math.min(gridW - 1, (int) ((ex + City.T) / GC));
@@ -3010,11 +3032,7 @@ final class Fleet {
                         }
                 return false;
             }
-            int n = downhill(v.field, t);
-            if (n == t) return false;
-            t = n;
         }
-        return false;
     }
 
     /** Nobody else driving in the junction. */
@@ -3088,6 +3106,10 @@ final class Fleet {
             // the junction too), not just somewhere in front of its bonnet: a car beside it in a junction,
             // turning across behind it or waiting in the next lane isn't in its way. (Right up against the front
             // of it, anything is.)
+            // ((12.0) Stopped and waiting on one stopped behind it: it's the front of the queue, and nothing is in its
+            // way. (A route turning back on itself ran its line back through the queue, and the front car waited on
+            // the cars waiting on it.))
+            if (ahead < -2 && v.stillT > 3 && o.stillT > 1 && v.player == null) continue;
             if (v.corN >= 3 && v.player == null) {
                 float along = alongCorridor(v, o, 9 + o.length() * 0.15f);
                 boolean nose = ahead > 0 && ahead < (v.length() + o.length()) * 0.5f + 8 && side < 8;
