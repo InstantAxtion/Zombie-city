@@ -285,6 +285,10 @@ final class Entity {
     transient boolean wasInside;
     /** ((12.1) Balance) A zombie last brought down by shots to the body, not the head: it may get up again. */
     transient boolean bodyShot;
+    /** (12.3) Not to be offered another lift before this time (World.rideCheck). */
+    transient float rideCd;
+    /** (12.3) The lift they're on, or waiting for: what they were doing before it, to go back to if it falls through. */
+    transient Dispatch.Incident rideFrom;
     /** (10.37) What the brain has them doing (World.G_*), until it thinks again, and the building it had in mind. */
     int goal;
     transient float goalCd, goalTime;

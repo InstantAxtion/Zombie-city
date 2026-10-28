@@ -55,6 +55,8 @@ final class City {
         boolean satellite;
         /** (10.32) An army base the dead have overrun: command moves elsewhere. And how long it's been going. */
         boolean fallen;
+        /** (12.3) An army base's trucks in its garages, besides those parked out in the yard (Fleet.stockBases). */
+        int spareTrucks;
         float fallingFor;
 
         Facility(int kind, float x, float y, float r, float gateX, float gateY, String name) {
@@ -4931,6 +4933,21 @@ final class City {
             out.add(best);
         }
         return out;
+    }
+
+    /** (12.3) How many army trucks are parked within radius of (x, y). */
+    int parkedTrucks(float x, float y, float radius) {
+        int tx0 = Math.max(0, (int) ((x - radius) / T)), tx1 = Math.min(w - 1, (int) ((x + radius) / T));
+        int ty0 = Math.max(0, (int) ((y - radius) / T)), ty1 = Math.min(h - 1, (int) ((y + radius) / T));
+        int n = 0;
+        for (int ty = ty0; ty <= ty1; ty++)
+            for (int tx = tx0; tx <= tx1; tx++) {
+                int i = ty * w + tx;
+                if (tiles[i] != CAR || carKind[i] != 2) continue;
+                float dx = (tx + 0.5f) * T - x, dy = (ty + 0.5f) * T - y;
+                if (dx * dx + dy * dy < radius * radius) n++;
+            }
+        return n;
     }
 
     /** An army truck parks in an empty bay on a base (the spot one drove off from). */

@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.2";
-    static final int VERSION_CODE = 112;
+    static final String VERSION = "12.3";
+    static final int VERSION_CODE = 113;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.3  -  Soldiers drive everywhere, zombies less tough",
+                    "Zombies have less health: 90, down from 130 (95 before 12.1).",
+                    "Soldiers drive anywhere more than a few blocks off, their own and reinforcements alike: out to guard a safe zone, to a checkpoint or the cordon, to a call, to the worst of the fighting when they're hunting the dead, or home to base. A squad on foot with a long way to go takes a truck from the base, an empty one near them, or one sent out to fetch them, and goes back to its job when it's dropped off. In test games, soldiers covering long distances on foot fell by about two thirds, and reinforcements on foot all but stopped.",
+                    "Each army base has a motor pool sized to its garrison: a truck for every four soldiers (four to 40), parked in the yard or in its garages.",
+                    "Army trucks no longer vanish: one whose squad never climbed in, whose call ended before it set off, or whose bay was taken when it got home goes back to the base's motor pool or stays parked where it is. A base used to run out of trucks within the first minute.",
+                    "A truck that's standing by in town after dropping a squad off drives over to fetch soldiers who need a lift.",
+                    "If a lift falls through, the soldiers go back to the job they had (guarding, a post, the cordon) rather than being left with nothing to do.",
+                    "Guards on their way to a safe zone by truck still count as its guards, so a new zone isn't given up for having nobody there.",
+                    "Balance with these changes, in test games on a medium city: 20 or 50 zombies took the city in 1 game of 12 (3 to 4 in 12.2).",
+            },
             {
                     "12.2  -  More police and soldiers",
                     "More police and soldiers than ever: about one officer for every 16 people plus eight for each station (one in 48 and three in 12.1, one in 24 and six before that), up to 480; base garrisons of one soldier for every 40 people plus twelve, up to 160. On a medium city that's some 120 officers and 166 soldiers, against 77 and 106 in 12.1 and 90 and 126 in 12.0.",

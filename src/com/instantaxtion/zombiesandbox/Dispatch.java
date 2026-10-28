@@ -42,6 +42,14 @@ final class Dispatch {
         int cordonPost = -1;
         /** (10.46) A guard spot at an army checkpoint on the road into an infection zone, or null. */
         float[] checkpointSpot;
+        /**
+         * (12.3) Not a call: a lift for soldiers with a long way to go (World.rideCheck), and what they go back to
+         * doing when they're dropped off: their task, the safe zone they guard, the post they hold.
+         */
+        boolean ride;
+        int rideTask;
+        SafeZone rideZone;
+        float rideX, rideY;
     }
 
     /**
@@ -839,6 +847,13 @@ final class Dispatch {
             zones.get(i).onSite = 0;
         }
         for (int i = 0; i < incidents.size(); i++) incidents.get(i).cops = incidents.get(i).soldiers = 0;
+        // ((12.3) Guards being driven out to their zone still count as its guards: or more were sent after them.)
+        for (int i = 0, n = w.fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = w.fleet.vehicles.get(i);
+            Incident r = v.incident != null ? v.incident : v.pickupFor;
+            if (r != null && r.ride && r.rideZone != null && (v.state == Fleet.MUSTER || v.state == Fleet.DRIVE || v.state == Fleet.PICKUP))
+                r.rideZone.guards += Math.max(v.crew.size(), Math.max(v.crewWanted, v.squad.size()));
+        }
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);
             if (e.dead || e.isZombie()) continue;

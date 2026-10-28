@@ -824,6 +824,8 @@ final class World {
             float[] p = base != null ? new float[]{base.x, base.y} : city.randomWalkable(rnd);
             spawnSoldier(Entity.ROLE_COMMANDER, p[0], p[1]);
         }
+        // ((12.3) Trucks enough at each base for the soldiers there.)
+        fleet.stockBases();
         // Guards on the base gates. ((11.3) Not the precinct doors: every officer is out on the beat.)
         for (City.Facility f : city.facilities) {
             int type = f.kind == City.FACILITY_BASE ? Entity.SOLDIER : -1;
@@ -1302,8 +1304,9 @@ final class World {
                 break;
             case Entity.ZOMBIE:
                 // (Tougher since 10.28: it takes a few hits, or one to the head.)
-                // ((12.1) Tougher and a little quicker again: 95 health and a 29 to 35 run before.)
-                e.hp = 130;
+                // ((12.1) A little quicker: a 29 to 35 run before. (12.3) Less health again: 90, from 130 in 12.1
+                // and 95 before that.)
+                e.hp = 90;
                 e.radius = 3.8f;
                 e.speed = 16 + rnd.nextFloat() * 6;
                 e.runSpeed = 32 + rnd.nextFloat() * 6;
@@ -1618,6 +1621,7 @@ final class World {
         fleet.trafficTarget = Fleet.trafficFor(city);
         fleet.stationHelis();
         fleet.stockStations();
+        fleet.stockBases();
         int cops = 0;
         for (Entity e : entities) if (!e.dead && e.type == Entity.COP) cops++;
         // ((11.4) Counting those aboard the patrol cars too.)
@@ -1858,6 +1862,7 @@ final class World {
         }
         updateTowers(dt);
         updateCordon(dt);
+        rideCheck(dt);
         updateDrones(dt);
         updateDanger(dt);
         updateGrenades(dt);
@@ -2298,6 +2303,12 @@ final class World {
         if (e.rig != null && e.rig.removedFromFleet) {
             e.rig = null;
             if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
+        }
+        // ((12.3) A lift that fell through - the truck gave up waiting, or went - and they're left with nothing to
+        // do: back to the job they had. Taken somewhere else on the way, they get on with that.)
+        if (e.rideFrom != null && e.task != Dispatch.T_BOARD && !(e.task == Dispatch.T_RESPOND && e.incident == e.rideFrom)) {
+            if (e.task == Dispatch.T_NONE) afterRide(e, e.rideFrom);
+            e.rideFrom = null;
         }
         if (e.task == Dispatch.T_BOARD) {
             // (10.37) Police and soldiers on their way to a vehicle stop to deal with one of the dead that gets
@@ -7888,6 +7899,11 @@ final class World {
             holdPost(e, e.zone, 1f);
             return;
         }
+        if (e.task == Dispatch.T_RESPOND && e.incident != null && e.incident.ride) {
+            // ((12.3) Dropped off by the truck that drove them out: back to what they were sent to do.)
+            afterRide(e, e.incident);
+            return;
+        }
         if (e.task == Dispatch.T_RESPOND && e.incident != null && e.incident.cordonPost >= 0) {
             // Dropped off on the cordon: take the post.
             Dispatch.Incident inc = e.incident;
@@ -8507,6 +8523,125 @@ final class World {
      * about, flat out - a sprint, for as long as their breath lasts (then a jog until they have it back); nearer,
      * or with the dead close, at a steady run.
      */
+    /** (12.3) Back to what they were doing before the lift (there, or it fell through): their task, zone or post. */
+    private void afterRide(Entity e, Dispatch.Incident inc) {
+        e.rideFrom = null;
+        e.incident = null;
+        e.onScene = false;
+        e.task = inc.rideTask;
+        e.zone = inc.rideZone;
+        if (e.task == Dispatch.T_POST || e.task == Dispatch.T_CORDON) {
+            e.postX = inc.rideX;
+            e.postY = inc.rideY;
+        }
+        if (e.task == Dispatch.T_GUARD && (e.zone == null || e.zone.removed)) {
+            e.task = Dispatch.T_NONE;
+            e.zone = null;
+        }
+        e.rideCd = time + 20;
+    }
+
+    private float rideTimer;
+    private final java.util.HashMap<Integer, ArrayList<Entity>> rideGroups = new java.util.HashMap<Integer, ArrayList<Entity>>();
+    private float squadRideSaidAt;
+
+    /**
+     * (12.3) Where a soldier on foot is headed, for rideCheck: the safe zone they guard, their post or place on the
+     * cordon, the call they're answering, where the dead were last seen, or (with nothing to fight) back to base.
+     * Null if they're not going anywhere in particular.
+     */
+    private float[] rideTarget(Entity e) {
+        switch (e.task) {
+            case Dispatch.T_GUARD:
+                return e.zone != null && !e.zone.removed ? new float[]{e.zone.x, e.zone.y} : null;
+            case Dispatch.T_POST:
+            case Dispatch.T_CORDON:
+                return e.postX > 0 ? new float[]{e.postX, e.postY} : null;
+            case Dispatch.T_RESPOND:
+                return e.incident != null && !e.incident.resolved && !e.incident.ride ? new float[]{e.incident.x, e.incident.y} : null;
+            case Dispatch.T_NONE:
+                if (e.role == Entity.ROLE_GUARD || onDuty(e)) return null;
+                if (e.fear > 0) return new float[]{e.threatX, e.threatY};
+                int zd = city.fieldAt(city.zombieDist, e.x, e.y);
+                if (zd < 200) {
+                    // Hunting the dead a long way off: the worst of the fighting nearest them.
+                    if (zd < 40) return null;
+                    Dispatch.Incident n = dispatch.neediest(e.x, e.y, null);
+                    return n != null ? new float[]{n.x, n.y} : null;
+                }
+                City.Facility base = city.nearestFacility(City.FACILITY_BASE, e.x, e.y);
+                return base != null && !base.fallen ? new float[]{base.x, base.y} : null;
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * (12.3) Soldiers drive anywhere more than a few blocks off: every couple of seconds, each squad (their own or
+     * reinforcements) on foot with a long way to go - out to guard a safe zone, to a checkpoint or the cordon, to a
+     * call, after the dead, or home to base - takes a truck: one from the base when they're on it, an empty one
+     * near them, or one sent out to fetch them. Only with none of those to be had do they walk it.
+     */
+    private void rideCheck(float dt) {
+        rideTimer -= dt;
+        if (rideTimer > 0) return;
+        rideTimer = 2;
+        rideGroups.clear();
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.SOLDIER || e.rig != null || e == controlled || e.hidden || e.aloft || e.rideCd > time) continue;
+            if (e.role == Entity.ROLE_PILOT || e.task >= 32) continue;
+            float[] to = rideTarget(e);
+            if (to == null || World.hypot(to[0] - e.x, to[1] - e.y) < 500 || countZombiesNear(e.x, e.y, 120) > 0) continue;
+            // (Grouped by what they're doing and where it is, not by squad: a squad gets split up, and a truck for
+            // each one on their own soon used up every truck there was.)
+            int key = (e.task * 64 + (int) (to[0] / 400)) * 64 + (int) (to[1] / 400);
+            ArrayList<Entity> g = rideGroups.get(key);
+            if (g == null) rideGroups.put(key, g = new ArrayList<Entity>());
+            g.add(e);
+        }
+        for (ArrayList<Entity> g : rideGroups.values()) {
+            Entity a = g.get(0);
+            float[] to = rideTarget(a);
+            ArrayList<Entity> group = new ArrayList<Entity>();
+            for (Entity e : g) {
+                float[] t = e == a ? to : rideTarget(e);
+                if (group.size() < 10 && World.hypot(e.x - a.x, e.y - a.y) < 250 && World.hypot(t[0] - to[0], t[1] - to[1]) < 300
+                        && e.zone == a.zone && e.incident == a.incident) group.add(e);
+            }
+            Dispatch.Incident inc, hunt = null;
+            if (a.task == Dispatch.T_NONE && a.fear <= 0 && city.fieldAt(city.zombieDist, a.x, a.y) < 200) {
+                hunt = dispatch.neediest(a.x, a.y, null);
+                if (hunt != null && World.hypot(hunt.x - to[0], hunt.y - to[1]) > 1) hunt = null;
+            }
+            if (a.task == Dispatch.T_RESPOND) inc = a.incident;
+            else if (hunt != null) inc = hunt;
+            else {
+                inc = new Dispatch.Incident();
+                inc.x = to[0];
+                inc.y = to[1];
+                inc.place = a.task == Dispatch.T_GUARD ? a.zone.place : city.placeName(to[0], to[1]);
+                inc.ride = true;
+                inc.rideTask = a.task;
+                inc.rideZone = a.zone;
+                inc.rideX = a.postX;
+                inc.rideY = a.postY;
+            }
+            City.Facility base = city.nearestFacility(City.FACILITY_BASE, a.x, a.y);
+            boolean atBase = base != null && World.hypot(base.x - a.x, base.y - a.y) < Math.max(200, base.r * 2.5f);
+            boolean ok = (atBase && fleet.troopTruck(group, base, inc)) || fleet.mountUp(group, inc) || fleet.driveTo(group, inc);
+            for (Entity e : group) {
+                e.rideCd = time + (ok ? 25 : 8);
+                if (ok && inc.ride) e.rideFrom = inc;
+            }
+            if (ok && time > squadRideSaidAt && inc.ride) {
+                squadRideSaidAt = time + 25;
+                dispatch.say(Dispatch.WHO_MILITARY, a, Dispatch.SQUADS[Math.max(0, a.squad) % Dispatch.SQUADS.length] + " squad, mounting up for "
+                        + inc.place + ".", a.x, a.y);
+            }
+        }
+    }
+
     private float transit(Entity e, float d) {
         if (d > 260 && e.stamina > 0.2f && countZombiesNear(e.x, e.y, 70) == 0) return e.runSpeed * 1.25f;
         return e.runSpeed * 0.95f;
