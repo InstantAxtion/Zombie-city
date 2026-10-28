@@ -313,16 +313,20 @@ final class World {
     /** How fast sprinting uses up stamina (per second, out of 1). */
     static float STAMINA_DRAIN = 0.1f;
     /** Balance: how much of a gun's damage counts against zombies, and how likely a bite is to infect. */
-    static float GUN_DAMAGE = 0.3f, BITE_INFECT = 1.35f;
+    static float GUN_DAMAGE = 0.2f, BITE_INFECT = 2.2f;
     /** Chance any hit on a zombie is a headshot that drops it on the spot. */
     static float HEADSHOT = 0.04f;
+    /** ((12.1) Balance) How much of the time police and soldiers land the stopping shot they're trained for. */
+    static float TRAINED_HEADSHOT = 0.1f;
+    /** ((12.1) Balance) Chance a zombie brought down by body shots alone gets back up a few seconds later. */
+    static float GET_UP = 0.6f;
     /** How far (in tiles of walking) idle zombies can smell the living. */
     /** How far (in tiles, by the way round) the dead can smell the living: the street, not across town. */
     static int SCENT = 40;
     /** Balance: how much health police and soldiers have compared to their base. */
     static float ARMED_HP = 0.6f;
     /** The city has fallen once fewer than this share of its people are left alive (and the dead outnumber them). */
-    static float FALLEN = 0.15f;
+    static float FALLEN = 0.25f;
 
     /** An outbreak is under way (zombies and people both on the map). */
     boolean outbreak;
@@ -1298,10 +1302,11 @@ final class World {
                 break;
             case Entity.ZOMBIE:
                 // (Tougher since 10.28: it takes a few hits, or one to the head.)
-                e.hp = 95;
+                // ((12.1) Tougher and a little quicker again: 95 health and a 29 to 35 run before.)
+                e.hp = 130;
                 e.radius = 3.8f;
                 e.speed = 16 + rnd.nextFloat() * 6;
-                e.runSpeed = 29 + rnd.nextFloat() * 6;
+                e.runSpeed = 32 + rnd.nextFloat() * 6;
                 e.skin = rnd.nextBoolean() ? 0xFF7C9A5E : 0xFF8FA173;
                 break;
             case Entity.RUNNER:
@@ -1605,7 +1610,7 @@ final class World {
         findWilds();
         buildRoster();
         // ((11.7) A saved game well into it already knows.)
-        headsKnown = alert >= 2 || zombiesKilled >= 25;
+        headsKnown = zombiesKilled >= 80 || (alert >= 2 && outbreakTime > 180);
         biteKnown = alert >= 1 && bites >= 8;
         launchBoats();
         spawnBirds();
@@ -2532,7 +2537,8 @@ final class World {
         if (rnd.nextFloat() < dt * 0.03f) emit(z.type == Entity.BRUTE ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
         // Senses: they see a long way in front, but only hear or smell what is close behind them. Once they
         // have spotted someone they keep track of them.
-        float sight = trait[TR_KEEN] ? 180 : trait[TR_DULL] ? 100 : 140, near = trait[TR_KEEN] ? 75 : trait[TR_DULL] ? 35 : 55;
+        // ((12.1) Balance: a little keener all round, 140 and 55 before.)
+        float sight = trait[TR_KEEN] ? 210 : trait[TR_DULL] ? 120 : 165, near = trait[TR_KEEN] ? 85 : trait[TR_DULL] ? 45 : 65;
         Entity t = nearest(z, sight, false, true);
         if (t != null && z.memory <= 0) {
             float ddx = t.x - z.x, ddy = t.y - z.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
@@ -2557,7 +2563,8 @@ final class World {
             z.lastY = t.y + t.vy * 0.8f;
             z.trackX = t.vx;
             z.trackY = t.vy;
-            z.memory = 7;
+            // ((12.1) They don't give up as soon: ten seconds, seven before.)
+            z.memory = 10;
             z.searchTimer = 0;
             // The moan: other zombies nearby hear it and come to join the hunt.
             if (z.moanCd <= 0) {
@@ -2584,7 +2591,7 @@ final class World {
             if (d > 16 && !city.passLine(z.x, z.y, t.x, t.y)) {
                 // Right up against a safe zone's wall with them on the other side: tear at it.
                 if (dispatch.wallOwner != null && clawWall(z, dt)) return;
-                if (followField(z, city.humanDist, d < 45 ? z.runSpeed : z.speed)) return;
+                if (followField(z, city.humanDist, d < 110 ? z.runSpeed : z.speed * 1.3f)) return;
             }
             if (t.aloft && d < 22) {
                 // Up a fire tower: the stairs are steep and narrow, but they climb (runners quickest).
@@ -2595,7 +2602,9 @@ final class World {
                 return;
             }
             z.climb = 0;
-            steer(z, ax, ay, d < 45 ? z.runSpeed : z.speed);
+            // ((12.1) They run down anyone they've spotted from well off, not just the last few steps: at a walk
+            // they never caught anyone.)
+            steer(z, ax, ay, d < 110 ? z.runSpeed : z.speed * 1.3f);
             if (d < z.radius + t.radius + 2.5f && z.biteCd <= 0) bite(z, t, ddx / d, ddy / d);
             return;
         }
@@ -3385,7 +3394,7 @@ final class World {
         float chance = (trait[TR_VIRULENT] ? 0.65f : trait[TR_WEAK_BITE] ? 0.22f : 0.4f) * BITE_INFECT;
         if (!t.infected && t.type != Entity.DOG && rnd.nextFloat() < chance) {
             t.infected = true;
-            t.infectTimer = turnTime(12 + rnd.nextFloat() * 14);
+            t.infectTimer = turnTime(8 + rnd.nextFloat() * 10);
         }
         if (z.type == Entity.BRUTE) tryMove(t, nx * 4, ny * 4);
     }
@@ -3552,7 +3561,10 @@ final class World {
                     if ((o.x - t.x) * (o.x - t.x) + (o.y - t.y) * (o.y - t.y) > 16 * 16) continue;
                     o.hp -= dmg * 0.4f * GUN_DAMAGE;
                     o.hurt = 1;
-                    if (o.hp <= 0) killMade(e);
+                    if (o.hp <= 0) {
+                        o.bodyShot = true;
+                        killMade(e);
+                    }
                 }
             }
     }
@@ -4594,7 +4606,8 @@ final class World {
             dispatch.say(Dispatch.WHO_INFO, null, "News: Health officials say the illness spreads through bites. Anyone bitten should be kept apart and watched. Hospitals are asking people not to come in.",
                     city.worldW() / 2, city.worldH() / 2);
         }
-        if (!headsKnown && (alert >= 2 || zombiesKilled >= 25)) {
+        // ((12.1) Not just because the broadcast has gone out: it takes a good few put down, or a while, to learn.)
+        if (!headsKnown && (zombiesKilled >= 80 || (alert >= 2 && outbreakTime > 180))) {
             headsKnown = true;
             dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Body shots don't put them down. All units: aim for the head.",
                     city.worldW() / 2, city.worldH() / 2);
@@ -7505,6 +7518,14 @@ final class World {
         else guardCalled = false;
     }
 
+    /**
+     * ((12.1) Balance) How fast someone falls back while still shooting: a steady step back, not a sprint (at most of
+     * a run before, as quick as the dead could run, so they could never close); outnumbered, a little quicker.
+     */
+    private static float backOff(Entity e, boolean swarmed) {
+        return Math.min(e.runSpeed * 0.8f, e.speed * (swarmed ? 1.3f : 1.1f));
+    }
+
     private void thinkArmed(Entity e, float dt) {
         boolean soldier = e.type == Entity.SOLDIER;
         float range = soldier ? (e.role == Entity.ROLE_SNIPER ? 380 : e.role == Entity.ROLE_COMMANDER ? 180
@@ -7814,12 +7835,12 @@ final class World {
                 // (a fair way, not across town), shooting, and take the post again once it's clear.)
                 float pd = (float) World.hypot(e.x - e.postX, e.y - e.postY);
                 if ((d < keep * 0.8f || swarmed || (e.reload > 0 && d < 45)) && pd < 120)
-                    flee(e, -ddx / d, -ddy / d, e.runSpeed * (swarmed ? 0.95f : 0.8f));
+                    flee(e, -ddx / d, -ddy / d, backOff(e, swarmed));
                 else if (d > keep * 1.4f && !swarmed) standAt(e, e.postX, e.postY, 0.5f);
                 else steer(e, 0, 0, 0);
             } else if (pressed && (guarding == null || inside(e, guarding, 1f)))
                 // Too close, reloading or outnumbered: fall back while shooting.
-                flee(e, -ddx / d, -ddy / d, e.runSpeed * (swarmed ? 0.95f : 0.8f));
+                flee(e, -ddx / d, -ddy / d, backOff(e, swarmed));
             else if (pressed && guarding != null)
                 // ((11.5) On the gate outside the walls and the dead are on them: back inside, not stood there.)
                 walkToSpot(e, guarding.x, guarding.y, e.runSpeed * 0.9f);
@@ -9604,9 +9625,9 @@ final class World {
      */
     private float headshotChance(Entity e, Entity t, float d, float range) {
         float base;
-        if (e.role == Entity.ROLE_SNIPER) return 0.45f;
-        if (e.role == Entity.ROLE_MARKSMAN) return 0.5f;
-        if (e.weapon == Entity.W_SHOTGUN && d < 45) return 0.3f;
+        if (e.role == Entity.ROLE_SNIPER) return 0.45f * TRAINED_HEADSHOT;
+        if (e.role == Entity.ROLE_MARKSMAN) return 0.5f * TRAINED_HEADSHOT;
+        if (e.weapon == Entity.W_SHOTGUN && d < 45) return 0.3f * TRAINED_HEADSHOT;
         if (e.type == Entity.COP) base = e.role == Entity.ROLE_SWAT ? 0.42f : 0.3f;
         else if (e.type == Entity.SOLDIER)
             base = e.role == Entity.ROLE_GUNNER ? 0.1f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
@@ -9618,7 +9639,7 @@ final class World {
         if (t.type == Entity.RUNNER) f *= 0.6f;
         // A clearer shot from the high ground.
         if (city.elev != null && city.elevation(e.x, e.y) > city.elevation(t.x, t.y) + 3) f *= 1.2f;
-        return base * f;
+        return base * f * TRAINED_HEADSHOT;
     }
 
     /**
@@ -9828,6 +9849,7 @@ final class World {
             } else {
                 // ((10.32) Body armour on one of the dead takes most of a body shot.)
                 t.hp -= t.isZombie() ? dmg * GUN_DAMAGE * (t.armored ? 0.5f : 1) : dmg;
+                if (wasUp && t.hp <= 0) t.bodyShot = true;
             }
             t.hurt = 1;
             if (wasUp && t.hp <= 0 && t.isZombie()) {
@@ -10097,13 +10119,16 @@ final class World {
      * and get out of the back if they can. The bitten turn and join the dead. It ends when one side is gone:
      * the survivors shore the door back up, or the building belongs to the dead.
      */
+    /** ((12.1) Balance) How much fighting it takes to put down one of the dead inside a building: 45 before. */
+    static final float INTRUDER_HP = 80;
+
     private void fightInside(City.Building b, float dt) {
         // (Gunfire inside takes the windows out.)
         b.shotUp = Math.min(1, b.shotUp + dt * 0.08f);
         if (!b.fighting) {
             b.fighting = true;
             b.fightTime = 0;
-            b.intruderHp = 45;
+            b.intruderHp = INTRUDER_HP;
         }
         b.fightTime += dt;
         b.calmTimer = 0;
@@ -10114,8 +10139,10 @@ final class World {
             else if (o.canShoot() && o.ammo + o.reserve > 0) shooters++;
             else others++;
         }
-        // The defenders: guns do the work, everyone else lays into them with whatever is to hand.
-        float dps = shooters * 12 + others * (b.occupants.size() > 3 ? 2.5f : 1.2f);
+        // The defenders: guns do the work, everyone else lays into them with whatever is to hand. ((12.1) Less
+        // quickly than before, 12 a gun and 2.5 or 1.2 a pair of hands against 45: a houseful of people with nothing
+        // but their hands no longer sees one off in a few seconds.)
+        float dps = shooters * 9 + others * (b.occupants.size() > 3 ? 1.5f : 0.8f);
         b.intruderHp -= dps * dt;
         if (shooters > 0 && rnd.nextFloat() < dt * Math.min(6, shooters * 2)) {
             b.flash = 0.08f;
@@ -10133,7 +10160,7 @@ final class World {
         if (b.intruderHp <= 0) {
             b.lurkers--;
             zombiesKilled++;
-            b.intruderHp = 45;
+            b.intruderHp = INTRUDER_HP;
             Entity hero = null;
             for (int k = 0; k < b.occupants.size(); k++) {
                 Entity o = b.occupants.get(k);
@@ -10143,7 +10170,7 @@ final class World {
             if (gore) bloodBurst(b.doorX, b.doorY, 3, 0, 0);
         }
         // The dead: each one inside catches someone now and then (the unarmed first).
-        if (b.lurkers > 0 && !b.occupants.isEmpty() && rnd.nextFloat() < dt * b.lurkers * 0.15f) {
+        if (b.lurkers > 0 && !b.occupants.isEmpty() && rnd.nextFloat() < dt * b.lurkers * 0.22f) {
             Entity victim = null;
             for (int k = 0; k < b.occupants.size() && victim == null; k++) {
                 Entity o = b.occupants.get(k);
@@ -10252,7 +10279,10 @@ final class World {
             emit(Sfx.PISTOL, b.doorX, b.doorY);
             noise(b.doorX, b.doorY, 140);
             if (rnd.nextFloat() < 0.5f) {
-                z.hp -= rnd.nextFloat() < 0.2f ? z.hp : 20 * GUN_DAMAGE * (z.armored ? 0.5f : 1);
+                // ((12.1) One in ten a shot to the head from a window, not one in five.)
+                boolean head = rnd.nextFloat() < 0.1f;
+                z.hp -= head ? z.hp : 20 * GUN_DAMAGE * (z.armored ? 0.5f : 1);
+                if (!head && z.hp <= 0) z.bodyShot = true;
                 z.hurt = 1;
                 if (z.hp <= 0) killMade(o);
                 bloodBurst(z.x, z.y, 3, 0, 0);
@@ -11131,7 +11161,8 @@ final class World {
         c.body = e.body;
         c.head = e.head;
         c.zombie = e.isZombie();
-        c.origin = e.type;
+        // (For one of the dead, who they were: kept in case it gets up again.)
+        c.origin = e.isZombie() ? e.origin : e.type;
         c.nameSeed = e.nameSeed;
         c.vx = e.knockX;
         c.vy = e.knockY;
@@ -11144,6 +11175,11 @@ final class World {
         }
         c.rise = turns ? 2.5f + rnd.nextFloat() * 3f : -1;
         c.riseType = e.type == Entity.DOG ? Entity.ZOMBIE_DOG : turnType(e.type);
+        // ((12.1) Only the head stops them for good: one dropped by body shots alone may well get up again.)
+        if (e.isZombie() && e.bodyShot && !e.gibbed && rnd.nextFloat() < GET_UP) {
+            c.rise = 7 + rnd.nextFloat() * 8;
+            c.riseType = e.type;
+        }
         if (e.gibbed) {
             bloodBurst(e.x, e.y, 14, 0, 0);
             if (rnd.nextBoolean()) return;
@@ -11204,6 +11240,21 @@ final class World {
                 if (c.rise <= 0) {
                     corpses.remove(i);
                     if (entities.size() >= maxEntities) continue;
+                    if (c.zombie) {
+                        // ((12.1) One of the dead that was only shot in the body, getting back up: not one more of
+                        // them, and not fresh, just not finished, and still hurt.)
+                        Entity z = make(c.riseType, c.x, c.y, c.origin, 0);
+                        z.body = c.body;
+                        z.head = c.head;
+                        z.armored = (c.origin == Entity.COP || c.origin == Entity.SOLDIER) && rnd.nextFloat() < 0.75f;
+                        z.angle = c.angle;
+                        z.nameSeed = c.nameSeed;
+                        z.hp = z.maxHp * 0.6f;
+                        entities.add(z);
+                        zombiesKilled = Math.max(0, zombiesKilled - 1);
+                        emit(Sfx.GROAN, c.x, c.y);
+                        continue;
+                    }
                     Entity z = make(c.riseType, c.x, c.y, c.origin, c.body);
                     z.angle = c.angle;
                     // (10.32) A police officer or soldier comes back still in their body armour (and helmet).
@@ -11249,6 +11300,8 @@ final class World {
                     tryMove(o, -fy * side * 6 + fx * 3, fx * side * 6 + fy * 3);
                     if (!o.isZombie() || o.stun > 0) continue;
                     o.hp -= speed * (o.type == Entity.BRUTE ? 0.3f : 0.9f);
+                    // ((12.1) Knocked flat, not finished: one hit by a car may get up again too.)
+                    if (o.hp <= 0) o.bodyShot = true;
                     o.hurt = 1;
                     o.stun = 1f;
                     o.knockX = fx * speed * 0.9f / o.mass;

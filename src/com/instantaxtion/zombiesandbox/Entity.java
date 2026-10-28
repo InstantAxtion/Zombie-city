@@ -283,6 +283,8 @@ final class Entity {
     transient float fieldOffUntil = -99;
     /** ((12.0) Inside the wall of the zone they guard, as of the last look.) */
     transient boolean wasInside;
+    /** ((12.1) Balance) A zombie last brought down by shots to the body, not the head: it may get up again. */
+    transient boolean bodyShot;
     /** (10.37) What the brain has them doing (World.G_*), until it thinks again, and the building it had in mind. */
     int goal;
     transient float goalCd, goalTime;

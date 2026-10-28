@@ -2,11 +2,25 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.0";
-    static final int VERSION_CODE = 110;
+    static final String VERSION = "12.1";
+    static final int VERSION_CODE = 111;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.1  -  The balance tips towards the dead",
+                    "Balance: the game leans towards the dead now. In test games on a medium city, 50 zombies dropped in together took the city in about half the games (none before, every one of them put down within four minutes) and 20 in about a third; a handful is usually still put down, but it can get away.",
+                    "The dead run down anyone they've spotted from well off, not just over the last few steps: before, they followed at a walk and hardly ever caught anyone.",
+                    "Police and soldiers falling back while they shoot do it at a steady step, not most of a run, so the dead can close on them; outnumbered, they go a little quicker.",
+                    "A moving target's head is hard to hit: police and soldiers land the stopping shot far less often, and body shots do less, so a walker can take most of a magazine.",
+                    "Only the head stops them for good: one of the dead brought down by body shots alone, or knocked flat by a car, often gets back up a few seconds later, still hurt. Those that get up aren't counted as destroyed.",
+                    "Word that only head shots work gets round later: after some 80 put down, or three minutes after the emergency broadcast (40, or straight away with the broadcast, before).",
+                    "Zombies are tougher (130 health, 95 before) and run a little quicker; they see further, notice what's behind them from further off, and keep after someone they've lost sight of for longer.",
+                    "A bite is more likely to infect, and the bitten turn sooner (8 to 18 seconds, 12 to 26 before).",
+                    "Fighting the dead inside a building is harder: it takes more to put one down, guns and bare hands do less, and the dead catch people more often. Shots from windows are head shots less often.",
+                    "Fewer police and soldiers in the city at the start (about one officer for every 48 people, one in 24 before; garrisons a little smaller).",
+                    "The city falls once three quarters of its people are gone and the dead outnumber the rest (85% before).",
+            },
             {
                     "12.0  -  200 fixes and improvements: people who get where they're going, clearer cards and menus, a lighter game",
                     "Towing took away police cars parked at their station and army trucks parked on base (now only abandoned and wrecked ones, and anything left in a junction).",

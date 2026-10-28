@@ -148,8 +148,8 @@ on the phone, so the APK contains no audio files.
   police park cruisers across the roads around their safe zones.
 - **Riot police** block bites with their shields; **K9 units** bring a police dog.
 - **Ammunition**: officers carry 60 rounds and soldiers a standard load of 210 (seven magazines). They
-  aim for the head, and up close they usually get it, so a walker takes a handful of rounds, not a
-  magazine; they hold fire at long range unless the zombie is going for someone, and riflemen fire
+  aim for the head, but a moving target's head is hard to hit, so a walker can take most of a
+  magazine, and one dropped by body shots alone may get back up; they hold fire at long range unless the zombie is going for someone, and riflemen fire
   aimed single shots at range and bursts only up close. Frightened civilians with a gun are far worse
   shots.
 - **SWAT**: every city with a police station has a SWAT team (two on Large and Massive maps), called
@@ -169,13 +169,16 @@ slow-acting, virulent or weak bites, tough or frail zombies, swift ones, keen or
 rising without a bite) and a hidden **city readiness** (unprepared, panicking, a gun town or well
 prepared). Both are revealed on the radio as the war goes on, and the Stats screen lists what's known.
 
-People tire when they sprint and the dead never do; body shots only wear a zombie down while headshots
-drop it; police and soldiers can be overwhelmed. Both sides have the same senses: they see a long way
+People tire when they sprint and the dead never do, and the dead run down anyone they spot; body shots
+only wear a zombie down (one brought down without a headshot, or by a car, often gets back up) while
+headshots drop it for good; police and soldiers back off only at a walk while shooting, and can be overwhelmed. Both sides have the same senses: they see a long way
 in front of them, notice only what's close behind, and hear gunfire; the dead can smell the living a few
 streets away, not across town. A
 tug-of-war bar under the stats shows who is ahead, banners mark the turning points, and the war ends with
-"The city survives" or "The city has fallen" (once 85% of its people are gone). In simulated games with
-default settings, with no cure the dead win more often than they used to; a big outbreak usually takes the city.
+"The city survives" or "The city has fallen" (once three quarters of its people are gone and the dead
+outnumber the rest). In simulated games with
+default settings on a medium city (12.1), 50 zombies dropped in together took the city in about half the games and 20
+in about a third; a handful usually gets put down, but not always.
 
 **Reading the map**: zoomed out, everyone is a dot in the colour of their side (the same colours as the
 counts), and wherever the dead gather the ground glows red. Labels go most important first (safe zones,
@@ -413,6 +416,13 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**The balance tips towards the dead (12.1):** zombies run down anyone they spot instead of following at a walk,
+police and soldiers back off at a walk while shooting, headshots are much harder to land and a zombie dropped by body
+shots or a car often gets back up. Zombies are tougher and keener, bites infect more and turn people sooner, indoor
+fights are harder on the people, word that only headshots work spreads later, and there are fewer police and soldiers
+to start with. The city falls once three quarters of its people are gone. In test games on a medium city, 50 zombies
+took the city about half the time (never before) and 20 about a third.
 
 **200 fixes and improvements (12.0):** a large clean-up release of 80 bug fixes, 38 new features, 64 interface
 improvements, 17 performance improvements and one other fix. People heading for a safe zone, a hiding place or a call now
