@@ -453,21 +453,21 @@ final class CityConfig implements OptionSet {
         return Math.round(residents * RESIDENT_SHARE[v[OPT_CIVILIANS]]);
     }
     /**
-     * Police on duty when the game starts: about one officer for every eighty residents (more than a real city
-     * has on shift, so the war is a fair fight), a couple per station, at least four.
+     * Police on duty when the game starts: about one officer for every sixteen residents (far more than a real city
+     * has on shift), eight more per station, at least twelve.
      */
     int cops(int residents) {
-        // About one officer for every 48 residents the game simulates, plus a few for each station ((12.1) fewer than
-        // the one in 24 and six a station before: the dead stood no chance against so many).
-        return Math.max(10, Math.min(300, Math.round(residents / 48f) + policeStations() * 3));
+        // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
+        // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
+        return Math.max(12, Math.min(480, Math.round(residents / 16f) + policeStations() * 8));
     }
 
     /** Soldiers at the base (if the map has one): a garrison that grows with the city. */
     int soldiers(int residents) {
         if (!militaryBase() && !outskirtsBase()) return 0;
         // (10.33: bigger garrisons.)
-        // ((12.1) A little smaller: one in 70, not one in 50.)
-        return Math.max(16, Math.min(100, Math.round(residents / 70f) + 8));
+        // ((12.2) Bigger again: one in 40 and twelve more, up to 160 (one in 50 up to 120 to 12.0, one in 70 in 12.1).)
+        return Math.max(20, Math.min(160, Math.round(residents / 40f) + 12));
     }
 
 

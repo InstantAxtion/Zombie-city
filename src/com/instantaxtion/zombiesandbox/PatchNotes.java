@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.1";
-    static final int VERSION_CODE = 111;
+    static final String VERSION = "12.2";
+    static final int VERSION_CODE = 112;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.2  -  More police and soldiers",
+                    "More police and soldiers than ever: about one officer for every 16 people plus eight for each station (one in 48 and three in 12.1, one in 24 and six before that), up to 480; base garrisons of one soldier for every 40 people plus twelve, up to 160. On a medium city that's some 120 officers and 166 soldiers, against 77 and 106 in 12.1 and 90 and 126 in 12.0.",
+                    "The rest of 12.1's changes stay, so the dead still have a real chance: in test games on a medium city, 50 zombies took the city in 4 games of 12 and 20 zombies in 3 of 12 (6 and 3 to 4 in 12.1, none in 12.0).",
+            },
             {
                     "12.1  -  The balance tips towards the dead",
                     "Balance: the game leans towards the dead now. In test games on a medium city, 50 zombies dropped in together took the city in about half the games (none before, every one of them put down within four minutes) and 20 in about a third; a handful is usually still put down, but it can get away.",

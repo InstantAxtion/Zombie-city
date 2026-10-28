@@ -177,8 +177,8 @@ streets away, not across town. A
 tug-of-war bar under the stats shows who is ahead, banners mark the turning points, and the war ends with
 "The city survives" or "The city has fallen" (once three quarters of its people are gone and the dead
 outnumber the rest). In simulated games with
-default settings on a medium city (12.1), 50 zombies dropped in together took the city in about half the games and 20
-in about a third; a handful usually gets put down, but not always.
+default settings on a medium city (12.2), 50 zombies dropped in together took the city in a third of the games and 20
+in a quarter; a handful usually gets put down, but not always.
 
 **Reading the map**: zoomed out, everyone is a dot in the colour of their side (the same colours as the
 counts), and wherever the dead gather the ground glows red. Labels go most important first (safe zones,
@@ -416,6 +416,10 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**More police and soldiers (12.2):** about one officer for every 16 people plus eight a station (up to 480) and base
+garrisons of one soldier for every 40 people plus twelve (up to 160): on a medium city some 120 officers and 166 soldiers.
+The rest of 12.1's balance stays; in test games 50 zombies took the city a third of the time and 20 a quarter.
 
 **The balance tips towards the dead (12.1):** zombies run down anyone they spot instead of following at a walk,
 police and soldiers back off at a walk while shooting, headshots are much harder to land and a zombie dropped by body
