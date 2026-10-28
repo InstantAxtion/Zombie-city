@@ -17,7 +17,7 @@ final class PatchNotes {
                     "If a lift falls through, the soldiers go back to the job they had (guarding, a post, the cordon) rather than being left with nothing to do.",
                     "Guards on their way to a safe zone by truck still count as its guards, so a new zone isn't given up for having nobody there.",
                     "With a low population limit, a city now leaves room under it for its police and soldiers and for the dead: since 12.2's bigger forces, a city could start right at its limit, and then no zombie could be put down and nobody bitten could get back up.",
-                    "Balance with these changes, in test games on a medium city: 20 or 50 zombies took the city in 1 game of 12 (3 to 4 in 12.2).",
+                    "Balance with these changes, in test games on a medium city with the population limit on Auto: 20 zombies took the city in 6 games of 12 and 50 in 8 of 12. (The figures given for 12.1 and 12.2 were measured with a low limit that held the outbreak back, and understate how well the dead do.)",
             },
             {
                     "12.2  -  More police and soldiers",

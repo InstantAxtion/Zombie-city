@@ -177,8 +177,8 @@ streets away, not across town. A
 tug-of-war bar under the stats shows who is ahead, banners mark the turning points, and the war ends with
 "The city survives" or "The city has fallen" (once three quarters of its people are gone and the dead
 outnumber the rest). In simulated games with
-default settings on a medium city (12.3), 20 or 50 zombies dropped in together took the city in about one game in twelve;
-a handful usually gets put down.
+default settings on a medium city (12.3, population limit on Auto), 20 zombies dropped in together took the city in half
+the games and 50 in two thirds; a handful usually gets put down.
 
 **Reading the map**: zoomed out, everyone is a dot in the colour of their side (the same colours as the
 counts), and wherever the dead gather the ground glows red. Labels go most important first (safe zones,
@@ -421,8 +421,8 @@ mounting up, and lighter running with big populations.
 own and reinforcements, drive anywhere more than a few blocks off - to guard a safe zone, a checkpoint, the cordon, a
 call, the worst of the fighting, or home - in a truck from the base, an empty one near them, or one sent to fetch them,
 and go back to their job when dropped off. Each base has a motor pool of a truck for every four soldiers, and trucks no
-longer vanish when a squad doesn't climb in or their bay is taken. In test games, 20 or 50 zombies took the city about
-one time in twelve.
+longer vanish when a squad doesn't climb in or their bay is taken. A city leaves room under a low population limit for its
+police, soldiers and the dead. In test games (limit on Auto), 20 zombies took the city half the time and 50 two thirds.
 
 **More police and soldiers (12.2):** about one officer for every 16 people plus eight a station (up to 480) and base
 garrisons of one soldier for every 40 people plus twelve (up to 160): on a medium city some 120 officers and 166 soldiers.
