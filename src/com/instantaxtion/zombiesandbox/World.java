@@ -668,7 +668,7 @@ final class World {
     static int[] forecast(CityConfig cfg, City city, int maxPopulation) {
         int[] f = forces(cfg, city);
         int cap = maxPopulation > 0 ? maxPopulation : Math.max(2500, city.totalResidents * 2 + 1000);
-        int people = Math.min(cfg.civilians(city.totalResidents), cap * 4 / 5);
+        int people = Math.min(cfg.civilians(city.totalResidents), Math.max(cap / 2, cap * 4 / 5 - f[0] - f[1]));
         if (cfg.wilds()) people += city.fireTowers.size();
         int stations = 0, satBases = 0;
         City.Facility base = city.mainBase();
@@ -710,7 +710,10 @@ final class World {
         launchBoats();
         if (courtArmoury != null) courtArmoury.ammo = 1200;
         inmates = 0;
-        int people = Math.min(cfg.civilians(city.totalResidents), maxEntities * 4 / 5);
+        // ((12.3) Room left for the police and soldiers, and for the dead: with the bigger forces of 12.2 a city
+        // could start at its limit, and then no zombie could be put down or get up.)
+        int[] force0 = forces(cfg, city);
+        int people = Math.min(cfg.civilians(city.totalResidents), Math.max(maxEntities / 2, maxEntities * 4 / 5 - force0[0] - force0[1]));
         residents(people);
         // A few strays.
         spawnRandom(Entity.DOG, people / 60);

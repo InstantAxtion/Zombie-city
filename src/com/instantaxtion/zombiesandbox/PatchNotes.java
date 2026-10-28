@@ -16,6 +16,7 @@ final class PatchNotes {
                     "A truck that's standing by in town after dropping a squad off drives over to fetch soldiers who need a lift.",
                     "If a lift falls through, the soldiers go back to the job they had (guarding, a post, the cordon) rather than being left with nothing to do.",
                     "Guards on their way to a safe zone by truck still count as its guards, so a new zone isn't given up for having nobody there.",
+                    "With a low population limit, a city now leaves room under it for its police and soldiers and for the dead: since 12.2's bigger forces, a city could start right at its limit, and then no zombie could be put down and nobody bitten could get back up.",
                     "Balance with these changes, in test games on a medium city: 20 or 50 zombies took the city in 1 game of 12 (3 to 4 in 12.2).",
             },
             {

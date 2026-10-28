@@ -1676,10 +1676,16 @@ public final class GameTests {
                     if (!arm && tried >= 6) continue;
                     // (Some people already own a gun, and may well stand and use it: not who this is about.)
                     if (!arm && e.hasGun) continue;
-                    float zx = e.x + 60, zy = e.y;
+                    // ((12.3) In front of them, where they'd see it coming: from behind, a stunned one standing still
+                    // isn't noticed at this distance, by design.)
+                    float zx = e.x + (float) Math.cos(e.angle) * 60, zy = e.y + (float) Math.sin(e.angle) * 60;
                     if (w.city.solidAt(zx, zy) || !w.city.los(e.x, e.y, zx, zy)) {
-                        zx = e.x - 60;
-                        if (w.city.solidAt(zx, zy) || !w.city.los(e.x, e.y, zx, zy)) continue;
+                        zx = e.x + 60;
+                        zy = e.y;
+                        if (w.city.solidAt(zx, zy) || !w.city.los(e.x, e.y, zx, zy)) {
+                            zx = e.x - 60;
+                            if (w.city.solidAt(zx, zy) || !w.city.los(e.x, e.y, zx, zy)) continue;
+                        }
                     }
                     w.clearZombies();
                     if (arm) w.armCivilian(e, 30);
