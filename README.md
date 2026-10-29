@@ -419,8 +419,9 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
-**Performance (13.1):** about twice as fast in the big cities (a Colossal city with 300 of the dead loose went from
-about 78 ms to 37 ms a step on the test machine). Off screen, people with nothing near think and move less often, those
+**Performance (13.1, fixed in 13.2):** about 43% less time a step in the big cities (a Colossal city with 300 of the
+dead loose went from about 78 ms to 44 ms on the test machine). 13.1 itself left the grid of who's where unbuilt, so
+nobody noticed or attacked anyone; 13.2 fixes that. Off screen, people with nothing near think and move less often, those
 with nothing to do this step are skipped without being looked at, everyone moves straight after thinking in a single
 pass, crowds off screen are kept apart less often, buildings are updated a quarter at a time, and the bitten are counted
 in the same pass as everyone else.

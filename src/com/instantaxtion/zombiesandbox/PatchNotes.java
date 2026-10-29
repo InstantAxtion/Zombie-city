@@ -2,14 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.1";
-    static final int VERSION_CODE = 121;
+    static final String VERSION = "13.2";
+    static final int VERSION_CODE = 122;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
             {
+                    "13.2  -  Fix: nobody reacting to anyone",
+                    "Fixed 13.1 leaving the grid of who's where unbuilt after the start: people, police, soldiers and the dead didn't notice, attack or run from each other.",
+                    "Corrected 13.1's speed figures: about 43% less time a step in the big cities (78 to 44 ms on a Colossal city), not half; the fix put back work 13.1 had wrongly left out.",
+            },
+            {
                     "13.1  -  Performance",
-                    "The simulation runs about twice as fast in the big cities: a Colossal city with 300 of the dead loose went from about 78 ms a step to about 37 ms on the test machine, and a Default city from about 36 ms to 16 ms.",
+                    "The simulation runs faster in the big cities: a Colossal city with 300 of the dead loose went from about 78 ms a step to about 44 ms on the test machine, and a Default city from about 36 ms to 20 ms.",
                     "People off screen with nothing near them think and move less often in the biggest cities, and those with nothing to do this step are passed over without being looked at.",
                     "Each person moves straight after they think, in one pass through the city instead of two.",
                     "Off screen, people get out of each other's way every other or every third step in big cities.",

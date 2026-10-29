@@ -1870,6 +1870,7 @@ final class World {
         if (warBannerTime > 0) warBannerTime -= dt;
         // ((11.5) In a crowd of thousands, the grid of who's where every other step: nobody moves more than a step or
         // two in between, and everything that asks it allows for that.)
+        if (entities.size() < 3000 || (lodFrame & 1) == 0 || hashSize < 0) buildHash();
         fieldTimer -= dt;
         occTimer -= dt;
         if (fieldTimer <= 0) {
