@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.8";
-    static final int VERSION_CODE = 118;
+    static final String VERSION = "12.9";
+    static final int VERSION_CODE = 119;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.9  -  Special units on the map, no running into the dead with an empty gun",
+                    "The special units are on the map from the start: every SWAT team and BearCat crew (six each, a marksman with the SWAT team), every riot squad and the army's recon scouts stand by on posts at their police station or base. When one is called, those same officers or soldiers climb into their van, BearCat or Humvee at the gate and drive out; before, they were made up on the spot when the vehicle got there. A game saved before this gets them at their stations when it loads.",
+                    "With an empty gun and nothing else to fight with, police, soldiers and armed civilians get away from the dead first, then carry on to their ride, the armoury or a partner with a spare magazine. They used to walk straight past, or into, them on the way. In test outbreaks, those moving towards one of the dead close by fell from one in five to one in twenty.",
+                    "Fix: the saved-game test now counts helicopter crews and the teams they lower.",
+            },
             {
                     "12.8  -  Firing at the real rate",
                     "Guns fire at their real rate. The time left over after each shot used to be thrown away every step, so a quick-firing gun lost about a quarter of its rate at 30 frames a second and most of it at the faster game speeds; now as many shots go off as the gun fires in the time that has passed. In a test outbreak, police and soldiers put out about 70% more rounds for each second they had a target.",
@@ -14,6 +20,7 @@ final class PatchNotes {
                     "Machine gunners fire in bursts of six with a breath between, not one long stream.",
                     "Nobody fires until the gun is actually on the target: a moment to bring it round, not a shot off to the side.",
                     "Fix: someone could keep meaning to pick up a gun that somebody else had already taken.",
+                    "Balance after this, in test games on a medium city: 20 zombies took the city in none of 12 games and 50 in 1 of 12, as in 12.6.",
             },
             {
                     "12.7  -  Runners slowed, the real cities gone",

@@ -1150,30 +1150,24 @@ final class Fleet {
     /** Trucks sent out take one of the army trucks parked nearby (not the SWAT van, which has its own). */
     private boolean fromParked = true;
 
-    /** The SWAT van: one armoured truck carrying six officers to an incident. */
-    boolean sendSwat(float fromX, float fromY, Dispatch.Incident inc) {
-        int before = vehicles.size();
-        fromParked = false;
-        boolean sent = send(Entity.SOLDIER, 6, fromX, fromY, inc.x, inc.y, inc, null, inc.place);
-        fromParked = true;
-        if (!sent || vehicles.size() == before) return false;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
+    /**
+     * The SWAT van: one armoured truck carrying the team to an incident. ((12.9) The team standing by at the station,
+     * who climb in at the gate: before, six officers appeared out of the van when it got there.)
+     */
+    boolean sendSwat(City.Facility station, Dispatch.Incident inc) {
+        java.util.List<Entity> team = standby(station, Entity.COP, Entity.ROLE_SWAT, 6);
+        if (team.size() < 2 || !canDrive(station.gateX, station.gateY, inc.x, inc.y)) return false;
+        Vehicle v = musterUnit(team, station, inc, 0, Entity.COP);
+        if (v == null) return false;
         v.swat = true;
-        v.passengerType = Entity.COP;
         return true;
     }
 
-    /** (11.0) A BearCat: an armoured police truck with six tactical officers, for the worst of it; it drives on through. */
-    boolean sendBearCat(float fromX, float fromY, Dispatch.Incident inc) {
-        int before = vehicles.size();
-        fromParked = false;
-        boolean sent = send(Entity.SOLDIER, 6, fromX, fromY, inc.x, inc.y, inc, null, inc.place);
-        fromParked = true;
-        if (!sent || vehicles.size() == before) return false;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
-        setKind(v, K_BEARCAT);
-        v.passengerType = Entity.COP;
-        return true;
+    /** (11.0) A BearCat: an armoured police truck with its tactical officers, for the worst of it; it drives on through. */
+    boolean sendBearCat(City.Facility station, Dispatch.Incident inc) {
+        java.util.List<Entity> team = standby(station, Entity.COP, Entity.ROLE_SWAT, 6);
+        if (team.size() < 2 || !canDrive(station.gateX, station.gateY, inc.x, inc.y)) return false;
+        return musterUnit(team, station, inc, K_BEARCAT, Entity.COP) != null;
     }
 
     /**
@@ -1182,11 +1176,20 @@ final class Fleet {
      * dead off it).
      */
     boolean startRecon(City.Facility base) {
-        return startReconAt(base.gateX > 0 ? base.gateX : base.x, base.gateY > 0 ? base.gateY : base.y) != null;
+        // ((12.9) The base's own scouts, standing by there, get in: none are made up for it.)
+        java.util.List<Entity> scouts = standby(base, Entity.SOLDIER, Entity.ROLE_RECON, 2);
+        if (scouts.isEmpty()) return false;
+        Vehicle v = startReconAt(base.gateX > 0 ? base.gateX : base.x, base.gateY > 0 ? base.gateY : base.y, scouts);
+        return v != null;
     }
 
     /** (11.1) A recon Humvee starting from the nearest road to (x, y) (placed with the Place tool too). */
     Vehicle startReconAt(float x, float y) {
+        return startReconAt(x, y, null);
+    }
+
+    /** ...with these scouts aboard (two new ones when null: the Place tool's). */
+    private Vehicle startReconAt(float x, float y, java.util.List<Entity> scouts) {
         float[] g = city.nearestDrivable(x, y);
         if (g == null) return null;
         Vehicle v = make(TRUCK);
@@ -1197,7 +1200,15 @@ final class Fleet {
         v.number = ++reconNumber;
         v.state = DRIVE;
         if (!reconDestination(v)) return null;
-        for (int k = 0; k < 2; k++) {
+        if (scouts != null) {
+            for (Entity e : scouts) {
+                e.task = Dispatch.T_NONE;
+                e.dead = true;
+                e.removed = true;
+                e.rig = v;
+                v.crew.add(e);
+            }
+        } else for (int k = 0; k < 2; k++) {
             Entity e = w.create(Entity.SOLDIER, v.x, v.y);
             w.applyRole(e, Entity.ROLE_RECON);
             e.rig = v;
@@ -1413,16 +1424,11 @@ final class Fleet {
     }
 
     /** The riot van: six riot officers with shields, from the precinct to a big crowd of the dead. */
-    boolean sendRiotVan(float fromX, float fromY, Dispatch.Incident inc) {
-        int before = vehicles.size();
-        fromParked = false;
-        boolean sent = send(Entity.SOLDIER, 6, fromX, fromY, inc.x, inc.y, inc, null, inc.place);
-        fromParked = true;
-        if (!sent || vehicles.size() == before) return false;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
-        setKind(v, K_RIOT_VAN);
-        v.passengerType = Entity.COP;
-        return true;
+    boolean sendRiotVan(City.Facility station, Dispatch.Incident inc) {
+        // ((12.9) The riot squad standing by at the station, not six who appeared when the van got there.)
+        java.util.List<Entity> squad = standby(station, Entity.COP, Entity.ROLE_RIOT, 6);
+        if (squad.size() < 2 || !canDrive(station.gateX, station.gateY, inc.x, inc.y)) return false;
+        return musterUnit(squad, station, inc, K_RIOT_VAN, Entity.COP) != null;
     }
 
     private int rescueNumber;
@@ -3359,7 +3365,7 @@ final class Fleet {
                     dropCrew(v);
                     // ((12.3) An army truck nobody came for goes back in its bay, or stays parked where it is: it
                     // vanished before, and a base soon had none left to send anyone anywhere.)
-                    if (v.type == TRUCK && !v.leaving && !v.reinforcement && !v.broken && v.crew.isEmpty()) return backInPool(v);
+                    if (v.type == TRUCK && v.passengerType == Entity.SOLDIER && !v.leaving && !v.reinforcement && !v.broken && v.crew.isEmpty()) return backInPool(v);
                     return true;
                 }
                 return false;
@@ -3395,7 +3401,7 @@ final class Fleet {
                 for (Entity e : new ArrayList<Entity>(v.crew)) e.rig = null;
                 crewOut(v, true);
                 // ((12.3) The call over before they set off: the truck stays, back in the pool.)
-                if (v.type == TRUCK && !v.reinforcement && !v.broken) return backInPool(v);
+                if (v.type == TRUCK && v.passengerType == Entity.SOLDIER && !v.reinforcement && !v.broken) return backInPool(v);
                 return true;
             }
             v.state = DRIVE;
@@ -5486,7 +5492,7 @@ final class Fleet {
     }
 
     /** A truck at p waiting for this squad to climb in, then off to the call. */
-    private void musterTruck(java.util.List<Entity> squad, float[] p, Dispatch.Incident inc, int kind) {
+    private Vehicle musterTruck(java.util.List<Entity> squad, float[] p, Dispatch.Incident inc, int kind) {
         p = bay(p, yardOf(p[0], p[1]));
         Vehicle v = make(TRUCK);
         v.x = p[0];
@@ -5507,6 +5513,32 @@ final class Fleet {
             e.task = Dispatch.T_BOARD;
         }
         vehicles.add(v);
+        return v;
+    }
+
+    /**
+     * (12.9) A special unit standing by at its station or base (see World.stationUnits): those of this kind and role
+     * on their posts there (the SWAT team's marksman with it), up to max.
+     */
+    java.util.List<Entity> standby(City.Facility f, int type, int role, int max) {
+        java.util.List<Entity> out = new ArrayList<Entity>();
+        for (int i = 0, n = w.entities.size(); i < n && out.size() < max; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.type != type || e.task != Dispatch.T_POST || e == w.controlled) continue;
+            if (e.role != role && !(role == Entity.ROLE_SWAT && e.role == Entity.ROLE_MARKSMAN)) continue;
+            if (World.hypot(e.x - f.x, e.y - f.y) > f.r + 140) continue;
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** (12.9) The unit's own officers climb into their vehicle at the gate and it drives them out. */
+    private Vehicle musterUnit(java.util.List<Entity> squad, City.Facility f, Dispatch.Incident inc, int kind, int type) {
+        float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
+        if (g == null || squad.isEmpty()) return null;
+        Vehicle v = musterTruck(squad, g, inc, kind);
+        v.passengerType = type;
+        return v;
     }
 
     /**

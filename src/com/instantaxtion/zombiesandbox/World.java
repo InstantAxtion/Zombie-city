@@ -318,6 +318,8 @@ final class World {
     static float HEADSHOT = 0.04f;
     /** ((12.1) Balance) How much of the time police and soldiers land the stopping shot they're trained for. */
     static float TRAINED_HEADSHOT = 0.1f;
+    /** (12.9) How close one of the dead can come before someone with an empty gun gets away from it. */
+    static final float DRY_KEEP = 60;
     /** ((12.1) Balance) Chance a zombie brought down by body shots alone gets back up a few seconds later. */
     static float GET_UP = 0.6f;
     /** How far (in tiles of walking) idle zombies can smell the living. */
@@ -816,6 +818,7 @@ final class World {
         dispatch.riotVans = cfg.nature() ? Math.min(3, stations) : 0;
         dispatch.bearcats = cfg.nature() ? Math.min(3, stations) : 0;
         dispatch.policeAir = cfg.nature() && stations > 0 ? 2 : 0;
+        stationUnits();
         populateWilds(cops > 0);
         fleet.stationHelis();
         fleet.stockStations();
@@ -1454,6 +1457,54 @@ final class World {
     }
 
     /** Spawns a soldier with a particular job. */
+    /**
+     * (12.9) The special units, there from the start: each SWAT team and BearCat crew (six, the team's marksman among
+     * them), each riot squad (six with shields) standing by at a police station, and two pairs of scouts at each army
+     * base. They stay on their posts there until they're sent, and go out in their own vehicles - nobody appears from
+     * nowhere when one is called. (Also tops up a game saved before this, which had none.)
+     */
+    void stationUnits() {
+        ArrayList<City.Facility> pol = new ArrayList<City.Facility>(), bases = new ArrayList<City.Facility>();
+        for (City.Facility f : city.facilities) {
+            if (f.fallen) continue;
+            if (f.kind == City.FACILITY_POLICE) pol.add(f);
+            else if (f.kind == City.FACILITY_BASE) bases.add(f);
+        }
+        if (!pol.isEmpty()) {
+            int have = 0, riot = 0;
+            for (City.Facility f : pol) {
+                have += fleet.standby(f, Entity.COP, Entity.ROLE_SWAT, 999).size();
+                riot += fleet.standby(f, Entity.COP, Entity.ROLE_RIOT, 999).size();
+            }
+            int tactical = (dispatch.swatTeams + dispatch.bearcats) * 6;
+            for (int k = have; k < tactical; k++) {
+                City.Facility f = pol.get(k / 6 % pol.size());
+                standBy(spawnCop(k % 6 == 5 && city.cfg.nature() ? Entity.ROLE_MARKSMAN : Entity.ROLE_SWAT, f.x, f.y), f, k);
+            }
+            for (int k = riot; k < dispatch.riotVans * 6; k++) {
+                City.Facility f = pol.get((k / 6 + 1) % pol.size());
+                standBy(spawnCop(Entity.ROLE_RIOT, f.x, f.y), f, k + 3);
+            }
+        }
+        if (city.cfg.nature())
+            for (City.Facility b : bases)
+                for (int k = fleet.standby(b, Entity.SOLDIER, Entity.ROLE_RECON, 4).size(); k < 4; k++)
+                    standBy(spawnSoldier(Entity.ROLE_RECON, b.x, b.y), b, k);
+    }
+
+    /** (12.9) On a post of their own in the station's or base's yard, waiting to be sent. */
+    private void standBy(Entity e, City.Facility f, int k) {
+        if (e == null) return;
+        float a = k * 2.39996f, r = Math.min(f.r * 0.6f, 14 + (k % 6) * 4);
+        float[] p = city.findWalkable(f.x + (float) Math.cos(a) * r, f.y + (float) Math.sin(a) * r);
+        if (p == null || World.hypot(p[0] - f.x, p[1] - f.y) > f.r + 100) p = new float[]{e.x, e.y};
+        e.x = p[0];
+        e.y = p[1];
+        e.task = Dispatch.T_POST;
+        e.postX = p[0];
+        e.postY = p[1];
+    }
+
     Entity spawnSoldier(int role, float x, float y) {
         Entity e = spawn(Entity.SOLDIER, x, y);
         if (e == null) return null;
@@ -1677,6 +1728,8 @@ final class World {
         fleet.stationHelis();
         fleet.stockStations();
         fleet.stockBases();
+        // ((12.9) A game saved before the special units stood by at their stations: they're there now.)
+        stationUnits();
         int cops = 0;
         for (Entity e : entities) if (!e.dead && e.type == Entity.COP) cops++;
         // ((11.4) Counting those aboard the patrol cars too.)
@@ -2370,6 +2423,26 @@ final class World {
         if (e.rig != null && e.rig.removedFromFleet) {
             e.rig = null;
             if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
+        }
+        // ((12.9) Out of rounds, with nothing else to fight with, and one of the dead close: away from it first, then on
+        // with whatever they were doing. They used to walk straight past (or into) it on the way to a ride, a partner
+        // with a spare magazine or the armoury.)
+        if (e != controlled && !e.isZombie() && (e.isArmed() || e.hasGun) && e.melee <= 0 && e.ammo <= 0 && e.reserve <= 0
+                && e.reload <= 0) {
+            Entity z = nearest(e, DRY_KEEP, true, false);
+            boolean jumpIn = z != null && e.task == Dispatch.T_BOARD && e.rig != null
+                    && World.hypot(e.rig.x - e.x, e.rig.y - e.y) < 16 && World.hypot(z.x - e.x, z.y - e.y) > 10;
+            if (z != null && !jumpIn) {
+                float ax = e.x - z.x, ay = e.y - z.y, ad = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
+                e.aiming = false;
+                e.threatX = z.x;
+                e.threatY = z.y;
+                // (Straight away from it: the map of where the dead are is a moment old, and with one this close it
+                // could send them the wrong way. Round a wall only when one is in the way.)
+                if (e.blocked) flee(e, ax / ad, ay / ad, e.runSpeed);
+                else steer(e, ax / ad, ay / ad, e.runSpeed);
+                return;
+            }
         }
         // ((12.3) A lift that fell through - the truck gave up waiting, or went - and they're left with nothing to
         // do: back to the job they had. Taken somewhere else on the way, they get on with that.)

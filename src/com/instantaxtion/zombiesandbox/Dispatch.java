@@ -1141,21 +1141,23 @@ final class Dispatch {
             // A crowd of the dead: the riot van brings six officers with shields to hold a line.
             if (!inc.riotRequested && riotVans > 0 && inc.zombiesNear >= 10) {
                 inc.riotRequested = true;
-                City.Facility station = city.nearestFacility(City.FACILITY_POLICE, inc.x, inc.y);
-                if (station != null && w.fleet.sendRiotVan(station.gateX, station.gateY, inc)) {
+                City.Facility station = unitStation(City.FACILITY_POLICE, Entity.COP, Entity.ROLE_RIOT, inc.x, inc.y);
+                if (station == null) riotVans = 0;
+                else if (w.fleet.sendRiotVan(station, inc)) {
                     riotVans--;
-                    say(WHO_POLICE, null, "Dispatch: Riot van leaving " + station.name + " for " + inc.place
-                            + ". Six officers with shields.", station.gateX, station.gateY);
+                    say(WHO_POLICE, null, "Dispatch: The riot squad at " + station.name + " is mounting up for " + inc.place
+                            + ". Officers with shields.", station.gateX, station.gateY);
                 }
             }
             // ((11.0) The worst of them, or officers going down: a BearCat, six tactical officers in armour.)
             if (!inc.bearcatRequested && bearcats > 0 && (inc.zombiesNear >= 12 || inc.officersDown >= 2)) {
                 inc.bearcatRequested = true;
-                City.Facility station = city.nearestFacility(City.FACILITY_POLICE, inc.x, inc.y);
-                if (station != null && w.fleet.sendBearCat(station.gateX, station.gateY, inc)) {
+                City.Facility station = unitStation(City.FACILITY_POLICE, Entity.COP, Entity.ROLE_SWAT, inc.x, inc.y);
+                if (station == null) bearcats = 0;
+                else if (w.fleet.sendBearCat(station, inc)) {
                     bearcats--;
-                    say(WHO_POLICE, null, "Dispatch: BearCat rolling from " + station.name + " for " + inc.place
-                            + ". Six tactical officers.", station.gateX, station.gateY);
+                    say(WHO_POLICE, null, "Dispatch: BearCat crew at " + station.name + " mounting up for " + inc.place
+                            + ". Tactical officers in armour.", station.gateX, station.gateY);
                 }
             }
             // The police helicopter goes up over the bigger ones.
@@ -2077,14 +2079,33 @@ final class Dispatch {
     }
 
     /** The SWAT team rolls out from the nearest precinct in its armoured van (or on foot, if it can't drive). */
+    /** (12.9) The nearest police station (or base) with this unit standing by there, or null. */
+    private City.Facility unitStation(int kind, int type, int role, float x, float y) {
+        City.Facility best = null;
+        float bd = Float.MAX_VALUE;
+        for (City.Facility f : city.facilities) {
+            if (f.kind != kind || f.fallen) continue;
+            float d = (float) World.hypot(f.x - x, f.y - y);
+            if (d < bd && w.fleet.standby(f, type, role, 2).size() >= 2) {
+                bd = d;
+                best = f;
+            }
+        }
+        return best;
+    }
+
     private void sendSwat(Incident inc) {
-        City.Facility station = city.nearestFacility(City.FACILITY_POLICE, inc.x, inc.y);
-        if (station == null) return;
+        City.Facility station = unitStation(City.FACILITY_POLICE, Entity.COP, Entity.ROLE_SWAT, inc.x, inc.y);
+        if (station == null) {
+            // ((12.9) Nobody left standing by to send.)
+            swatTeams = 0;
+            return;
+        }
         swatTeams--;
         String unit = Country.swat()[0];
-        if (w.fleet.sendSwat(station.gateX, station.gateY, inc)) {
+        if (w.fleet.sendSwat(station, inc)) {
             say(WHO_POLICE, null, "Dispatch: " + unit + " is rolling out of " + station.name + " to " + inc.place
-                    + ". Six officers, heavy weapons." + (swatTeams == 0 ? " That's our last team." : ""), station.gateX, station.gateY);
+                    + ". The team is mounting up, heavy weapons." + (swatTeams == 0 ? " That's our last team." : ""), station.gateX, station.gateY);
             return;
         }
         // (No road out to it right now: the team waits for its van rather than going on foot; asked again later.)

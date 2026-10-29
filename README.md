@@ -419,6 +419,11 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Special units on the map, no running into the dead with an empty gun (12.9):** SWAT teams, BearCat crews, riot
+squads and recon scouts stand by at their stations and bases from the start and drive out in their own vehicles when
+called, instead of appearing when their vehicle arrives. Anyone with an empty gun and nothing else to fight with gets
+away from the dead before carrying on to a ride, the armoury or a partner with a spare magazine.
+
 **Firing at the real rate (12.8):** guns no longer lose the time left over after each shot, so quick-firing guns
 fire at their real rate at any frame rate or game speed; rates are quicker and closer to real (pistols 0.4 s, rifles
 0.3 s aimed and real three-round bursts, pump shotguns 0.7 s, scoped rifles 1.0 to 1.4 s); machine guns fire in

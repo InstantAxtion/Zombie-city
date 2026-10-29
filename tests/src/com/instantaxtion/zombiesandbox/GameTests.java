@@ -71,10 +71,12 @@ public final class GameTests {
                 for (Entity e : w.entities) if (e.dead) dead++;
                 int carried = 0;
                 // (Crews aboard patrol cars, engines and patrols are saved as people too.)
-                for (Fleet.Vehicle v : w.fleet.vehicles) carried += Math.max(0, v.passengers) + v.crew.size();
+                // ((12.9) And a helicopter's flight and the team it lowers.)
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    carried += Math.max(0, v.passengers) + v.crew.size() + (v.team != null ? v.team.size() : 0) + (v.flight != null ? v.flight.size() : 0);
                 check(Math.abs(l.entities.size() - (w.entities.size() - dead - posted + visiting)) <= w.fleet.riderCount() + carried + 8,
                         "same people (" + l.entities.size() + " vs " + w.entities.size() + " - " + dead + " dead - " + posted + " posted + " + visiting
-                                + " visiting, riders " + w.fleet.riderCount() + ")");
+                                + " visiting, riders " + w.fleet.riderCount() + ", aboard " + carried + ")");
                 check(l.zombiesKilled == w.zombiesKilled, "same stats");
                 check(l.histCount == w.histCount && (w.histCount == 0 || l.histArmed[w.histCount - 1] == w.histArmed[w.histCount - 1]),
                         "same police and army history");
