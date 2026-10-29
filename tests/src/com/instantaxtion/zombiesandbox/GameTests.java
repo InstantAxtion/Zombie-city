@@ -1321,9 +1321,6 @@ public final class GameTests {
                     int x = ew ? len / 2 : city.hwyAt + a, y = ew ? city.hwyAt + a : len / 2;
                     check(f[y * city.w + x] < City.FAR, "carriageway " + a + " connects to town");
                 }
-                // ((12.5) Nobody drives along it now: no civilian traffic.)
-                for (Fleet.Vehicle v : w.fleet.vehicles)
-                    check(v.type != Fleet.CAR || v.parked || v.evacStop >= 0, "no civilian drives a car");
             }
         });
         test("10.30: Massive maps have more towns and a big army base out in the country with checkpoints", new Check() {

@@ -9,7 +9,7 @@ final class PatchNotes {
     static final String[][] NOTES = {
             {
                     "12.9  -  Special units on the map, no running into the dead with an empty gun",
-                    "The special units are on the map from the start: every SWAT team and BearCat crew (six each, a marksman with the SWAT team), every riot squad and the army's recon scouts stand by on posts at their police station or base. When one is called, those same officers or soldiers climb into their van, BearCat or Humvee at the gate and drive out; before, they were made up on the spot when the vehicle got there. A game saved before this gets them at their stations when it loads.",
+                    "The special units are on the map from the start: every SWAT team and BearCat crew (six each, a marksman with the SWAT team), every riot squad and the army's recon scouts stand by on posts at their police station or base. When one is called, those same officers or soldiers climb into their van, BearCat or Humvee at the gate and drive out; before, they were made up on the spot when the vehicle got there.",
                     "With an empty gun and nothing else to fight with, police, soldiers and armed civilians get away from the dead first, then carry on to their ride, the armoury or a partner with a spare magazine. They used to walk straight past, or into, them on the way. In test outbreaks, those moving towards one of the dead close by fell from one in five to one in twenty.",
                     "Fix: the saved-game test now counts helicopter crews and the teams they lower.",
             },

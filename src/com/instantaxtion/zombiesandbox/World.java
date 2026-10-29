@@ -1461,7 +1461,7 @@ final class World {
      * (12.9) The special units, there from the start: each SWAT team and BearCat crew (six, the team's marksman among
      * them), each riot squad (six with shields) standing by at a police station, and two pairs of scouts at each army
      * base. They stay on their posts there until they're sent, and go out in their own vehicles - nobody appears from
-     * nowhere when one is called. (Also tops up a game saved before this, which had none.)
+     * nowhere when one is called.
      */
     void stationUnits() {
         ArrayList<City.Facility> pol = new ArrayList<City.Facility>(), bases = new ArrayList<City.Facility>();
@@ -1728,8 +1728,6 @@ final class World {
         fleet.stationHelis();
         fleet.stockStations();
         fleet.stockBases();
-        // ((12.9) A game saved before the special units stood by at their stations: they're there now.)
-        stationUnits();
         int cops = 0;
         for (Entity e : entities) if (!e.dead && e.type == Entity.COP) cops++;
         // ((11.4) Counting those aboard the patrol cars too.)
