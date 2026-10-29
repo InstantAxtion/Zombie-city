@@ -57,7 +57,7 @@ final class CityConfig implements OptionSet {
     private static final String[][] VALUES = {
             PRESETS,
             // (Since 10.18 the three sizes offered are called Default, Large and Massive.)
-            {"Tiny", "Small", "Medium", "Default", "Large", "Massive", "Gigantic"},
+            {"Tiny", "Small", "Medium", "Default", "Large", "Massive", "Gigantic", "Colossal"},
             {"None", "Few", "Some", "Most", "All"},
             {"0", "5", "10", "20", "40", "60"},
             {"0", "5", "10", "20", "40"},
@@ -67,10 +67,12 @@ final class CityConfig implements OptionSet {
             Country.NAMES,
     };
     /** Tiles across for each size; cities built before 10.10 (no Tiny or Huge then) were a quarter smaller. */
-    private static final int[] SIZES = {160, 240, 320, 400, 560, 704, 1024};
-    private static final int[] OLD_SIZES = {192, 192, 256, 320, 448, 448, 448};
+    private static final int[] SIZES = {160, 240, 320, 400, 560, 704, 1024, 1280};
+    private static final int[] OLD_SIZES = {192, 192, 256, 320, 448, 448, 448, 448};
     /** The size settings, by name. */
     static final int TINY = 0, SMALL = 1, MEDIUM = 2, LARGE = 3, MASSIVE = 4, HUGE = 5, GIGANTIC = 6;
+    /** (13.0) The biggest map yet: 1280 tiles across, a quarter wider again than Gigantic. */
+    static final int COLOSSAL = 7;
     /** Share of the city's residents out and about when the game starts. */
     private static final float[] RESIDENT_SHARE = {0, 0.2f, 0.45f, 0.7f, 1f};
     private static final int[] ZOMBIES = {0, 1, 5, 20, 50, 100, 200};
@@ -186,7 +188,8 @@ final class CityConfig implements OptionSet {
                 || value == 9 || value == 12 || value == 13 || removed(value);
         // (The number of zombies at the start isn't a choice any more: the game starts quiet.)
         if (option == OPT_ZOMBIES) return value != 0;
-        if (option == OPT_SIZE) return value < LARGE;
+        // ((13.0) Large and Massive are gone too: Default, Gigantic and the new Colossal.)
+        if (option == OPT_SIZE) return value < LARGE || value == MASSIVE || value == HUGE;
         if (option == OPT_COUNTRY) return value != Country.USA;
         if (option == OPT_RESERVES) return value == 1 || value == 2;
         return false;
@@ -243,9 +246,9 @@ final class CityConfig implements OptionSet {
     /** Water on the map: none, the sea along one side (a beach or a port), a river, or a lake. */
     static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5;
     /** The Islands map, and its one size (tiles across: a bit bigger than Massive). */
-    static final int ISLANDS = 14, ISLANDS_TILES = 640;
+    static final int ISLANDS = 14, ISLANDS_TILES = 1280;
     /** (10.60) The Archipelago (always one size, like Islands). */
-    static final int ARCHIPELAGO = 23, ARCHIPELAGO_TILES = 720;
+    static final int ARCHIPELAGO = 23, ARCHIPELAGO_TILES = 1280;
 
     /**
      * (11.3) Maps taken out of the game altogether, code and all: Sydney, Tokyo and Paris (their countries are
@@ -262,7 +265,8 @@ final class CityConfig implements OptionSet {
 
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
-        if (v[OPT_PRESET] == ISLANDS || v[OPT_PRESET] == ARCHIPELAGO) v[OPT_SIZE] = MASSIVE;
+        // ((13.0) The island maps come at the biggest size: Colossal, 1280 tiles across (640 and 720 before).)
+        if (v[OPT_PRESET] == ISLANDS || v[OPT_PRESET] == ARCHIPELAGO) v[OPT_SIZE] = COLOSSAL;
         if (removed(v[OPT_PRESET])) v[OPT_PRESET] = METROPOLIS;
         v[OPT_COUNTRY] = Country.USA;
     }
@@ -426,7 +430,7 @@ final class CityConfig implements OptionSet {
         }
         if (p == 9) return v[OPT_SIZE] <= SMALL ? 0.6f : 0.5f;
         if (p == 9) return v[OPT_SIZE] <= SMALL ? 0.6f : 0.5f;
-        float town = new float[]{1f, 0.86f, 0.8f, 0.76f, 0.74f, 0.66f, 0.66f}[v[OPT_SIZE]];
+        float town = new float[]{1f, 0.86f, 0.8f, 0.76f, 0.74f, 0.66f, 0.66f, 0.66f}[v[OPT_SIZE]];
         // (Since 10.30 the Massive and Huge maps have more country round the town, for its towns and the base.)
         if (civic >= 14 && massive()) town = v[OPT_SIZE] >= GIGANTIC ? 0.7f : v[OPT_SIZE] >= HUGE ? 0.6f : 0.66f;
         // (10.33) Less empty country: the town reaches further out (the country beyond fills with towns too).
@@ -445,7 +449,8 @@ final class CityConfig implements OptionSet {
     int cops(int residents) {
         // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
         // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
-        return Math.max(12, Math.min(480, Math.round(residents / 16f) + policeStations() * 8));
+        // ((13.0) Up to 800 now, for the bigger cities: 480 before.)
+        return Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8));
     }
 
     /** Soldiers at the base (if the map has one): a garrison that grows with the city. */
@@ -453,17 +458,19 @@ final class CityConfig implements OptionSet {
         if (!militaryBase() && !outskirtsBase()) return 0;
         // (10.33: bigger garrisons.)
         // ((12.2) Bigger again: one in 40 and twelve more, up to 160 (one in 50 up to 120 to 12.0, one in 70 in 12.1).)
-        return Math.max(20, Math.min(160, Math.round(residents / 40f) + 12));
+        // ((13.0) Up to 300 with the more bases: 160 before.)
+        return Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
     }
 
 
     /**
      * (10.63) How many should live in the city (cities built since map version 25): enough that with most of them
-     * about (the usual setting) there are some 15,000 people on the Default size, rising to 20,000 on the Gigantic.
+     * about (the usual setting) there are some 20,000 people on the Default size, rising to 30,000 on the Colossal
+     * ((13.0) from 15,000 to 20,000 before).
      */
     int residentsTarget() {
         int s = v[OPT_SIZE];
-        float people = s <= LARGE ? 15000 : s == MASSIVE ? 16500 : s == HUGE ? 18000 : 20000;
+        float people = s <= LARGE ? 20000 : s == MASSIVE ? 22500 : s == HUGE ? 25000 : s == GIGANTIC ? 27500 : 30000;
         return Math.round(people / RESIDENT_SHARE[PEOPLE_ABOUT]);
     }
 
@@ -493,9 +500,11 @@ final class CityConfig implements OptionSet {
     int policeStations() {
         int n = map(6);
         int s = v[OPT_SIZE];
-        return n == 0 ? 0 : Math.max(1, n - (s == TINY ? 1 : 0)) + (s >= LARGE ? 1 : 0) + (s >= MASSIVE ? 1 : 0) + (s >= HUGE ? 1 : 0) + (s >= GIGANTIC ? 2 : 0)
+        int was = n == 0 ? 0 : Math.max(1, n - (s == TINY ? 1 : 0)) + (s >= LARGE ? 1 : 0) + (s >= MASSIVE ? 1 : 0) + (s >= HUGE ? 1 : 0) + (s >= GIGANTIC ? 2 : 0)
                 // ((10.52) One more on every map from the Default size up.)
                 + (civic >= 21 && s >= LARGE ? 1 : 0);
+        // ((13.0) Twice as many, and two more again on the Colossal map.)
+        return was * 2 + (s >= COLOSSAL ? 2 : 0);
     }
 
     /** Medics: the hospital's, and the paramedics at the fire stations, growing with the city. */
@@ -503,6 +512,13 @@ final class CityConfig implements OptionSet {
         return Math.max(4, Math.min(36, Math.round(residents / 110f)));
     }
     boolean militaryBase() { return map(7) == 1; }
+
+    /** (13.0) Army bases in town besides the main one: one on the Default and Large maps, up to four on the Colossal. */
+    int extraBases() {
+        if (!militaryBase()) return 0;
+        int s = v[OPT_SIZE];
+        return s < LARGE ? 0 : s <= MASSIVE ? 1 : s == HUGE ? 2 : s == GIGANTIC ? 3 : 4;
+    }
 
     /** How many of a landmark (0 church, 1 school, 2 fire station, 3 supermarket, 4 gas station, 5 cemetery). */
     int landmarks(int kind) {

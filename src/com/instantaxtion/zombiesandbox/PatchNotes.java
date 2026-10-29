@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.9";
-    static final int VERSION_CODE = 119;
+    static final String VERSION = "13.0";
+    static final int VERSION_CODE = 120;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.0  -  Bigger cities, more stations and bases",
+                    "A new map size, Colossal: 1280 tiles across, a quarter wider again than Gigantic, with about 30,000 people. It takes a while to build and needs a recent phone with plenty of memory.",
+                    "The Large and Massive map sizes are gone: Default, Gigantic and Colossal are left.",
+                    "Islands and Archipelago are built at the Colossal size: 1280 tiles across (640 and 720 before), with about 30,000 people and the extra stations and bases.",
+                    "Fuller cities: about 20,000 people on Default (15,000 before), 27,500 on Gigantic (20,000 before) and 30,000 on Colossal.",
+                    "Twice as many police stations on every map, and two more again on Colossal.",
+                    "More army bases: besides the main base, one more in town on Default, three more on Gigantic and four more on Colossal, each well away from the others with its own garrison, motor pool and recon scouts.",
+                    "Bigger forces to go with them: up to 800 police officers (480 before) and up to 300 soldiers at the main base (160 before).",
+            },
             {
                     "12.9  -  Special units on the map, no running into the dead with an empty gun",
                     "The special units are on the map from the start: every SWAT team and BearCat crew (six each, a marksman with the SWAT team), every riot squad and the army's recon scouts stand by on posts at their police station or base. When one is called, those same officers or soldiers climb into their van, BearCat or Humvee at the gate and drive out; before, they were made up on the spot when the vehicle got there.",

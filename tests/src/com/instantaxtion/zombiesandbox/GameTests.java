@@ -250,7 +250,7 @@ public final class GameTests {
                 City city = new City(c);
                 long h = 17;
                 for (City.Building b : city.buildings) h = h * 31 + (long) (b.x0 * 7 + b.y0 * 13 + b.x1 * 17 + b.y1 * 19 + b.kind);
-                check(city.buildings.size() == 377 && h == 0xd953e0baab71cfb8L, "same layout as before (" + city.buildings.size() + ", " + Long.toHexString(h) + ")");
+                check(city.buildings.size() == 396 && h == 0x66f79941134006cfL, "same layout as before (" + city.buildings.size() + ", " + Long.toHexString(h) + ")");
             }
         });
         test("water maps: a lake and a port; nobody ends up in the water", new Check() {
@@ -379,7 +379,7 @@ public final class GameTests {
                 c.seed = 9;
                 c.set(CityConfig.OPT_PRESET, CityConfig.ISLANDS);
                 c.set(CityConfig.OPT_SIZE, CityConfig.SMALL);
-                check(c.tiles() == CityConfig.ISLANDS_TILES && c.v[CityConfig.OPT_SIZE] == CityConfig.MASSIVE, "Islands is always " + CityConfig.ISLANDS_TILES + " tiles");
+                check(c.tiles() == CityConfig.ISLANDS_TILES && c.v[CityConfig.OPT_SIZE] == CityConfig.COLOSSAL, "Islands is always " + CityConfig.ISLANDS_TILES + " tiles");
                 CityConfig back = new CityConfig();
                 check(back.applyCode(c.code()) && back.tiles() == CityConfig.ISLANDS_TILES, "its city code (" + c.code() + ") builds the Islands again");
                 City city = new City(c);

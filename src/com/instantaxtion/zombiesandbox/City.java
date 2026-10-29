@@ -2577,6 +2577,28 @@ final class City {
                 fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
                 militaryBase(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
             }
+            // ((13.0) More bases on the bigger maps, each on a big block well away from the others, with its own
+            // garrison.)
+            for (int extra = 0; extra < cfg.extraBases(); extra++) {
+                int pick = -1, pickArea = 0;
+                for (int k = 0; k < blocks.size(); k++) {
+                    int[] b = blocks.get(k);
+                    int bw = b[2] - b[0] - 2, bh = b[3] - b[1] - 2;
+                    if (used[k] || bw < 9 || bh < 9 || bw * bh <= pickArea) continue;
+                    float cx = (b[0] + b[2]) / 2f * T, cy = (b[1] + b[3]) / 2f * T;
+                    boolean apart = true;
+                    for (Facility f : facilities)
+                        if (f.kind == FACILITY_BASE && World.hypot(f.x - cx, f.y - cy) < w * T * 0.22f) apart = false;
+                    if (!apart) continue;
+                    pickArea = bw * bh;
+                    pick = k;
+                }
+                if (pick < 0) break;
+                used[pick] = true;
+                int[] b = blocks.get(pick);
+                fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+                militaryBase(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2, 41 + extra).satellite = true;
+            }
         }
         for (int n = 0; n < cfg.policeStations(); n++) {
             List<Integer> options = new ArrayList<Integer>();

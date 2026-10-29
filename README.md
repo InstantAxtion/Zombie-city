@@ -10,8 +10,8 @@ away from the middle of the screen as you pan, and the game plays in both portra
 ## Main menu
 
 - **New Game** opens the city setup, with a live preview of the city and these options: the map (Suburbs,
-  Metropolis, Islands or Archipelago), map size (Default, Large or
-  Massive) and how many reinforcements can
+  Metropolis, Islands or Archipelago), map size (Default, Gigantic or Colossal: about 20,000, 27,500 and
+  30,000 people) and how many reinforcements can
   be called in (Off, Low, Medium or High, each spelled out: waves of police backup, army squads, tanks
   and helicopter sorties). Police and soldiers on duty are set by the size of the city (about one officer
   per 80 residents plus two per station; a garrison at the base if the map has one). Each map decides its
@@ -121,8 +121,8 @@ on the phone, so the APK contains no audio files.
   lanes each way, a concrete barrier, route shields and green signs; roads from town join it at lights.
   Highway patrol drives it, and in the USA sheriff's deputies patrol the country roads. Where the railway
   meets the highway it crosses on a bridge, with the traffic running underneath.
-- **Emergency services grow with the city**: more officers for every resident and more police stations on
-  Large and Massive maps.
+- **Emergency services grow with the city**: more officers for every resident, and more police stations and army
+  bases on the bigger maps (up to five bases on Colossal).
 - **A sharp map up close**: zoomed in, the area on screen is drawn again in fine detail in the background
   and laid over the map picture.
 - **Loading**: cities are built (and saved games loaded) in the background behind a "Building the city"
@@ -418,6 +418,13 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Bigger cities, more stations and bases (13.0):** a new Colossal map size (1280 tiles across, a quarter wider than
+Gigantic), and Islands and Archipelago are built at it; the Large and Massive sizes are gone, leaving Default, Gigantic
+and Colossal. Cities are fuller: about
+20,000 people on Default, 27,500 on Gigantic and 30,000 on Colossal. Twice as many police stations, and extra army bases
+in town on the bigger maps (two on Default, four on Gigantic, five on Colossal), each with its own garrison, motor pool
+and scouts; up to 800 officers and 300 soldiers in a garrison.
 
 **Special units on the map, no running into the dead with an empty gun (12.9):** SWAT teams, BearCat crews, riot
 squads and recon scouts stand by at their stations and bases from the start and drive out in their own vehicles when

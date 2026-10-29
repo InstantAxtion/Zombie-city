@@ -1369,8 +1369,8 @@ final class Menu {
             plain.setTextAlign(Paint.Align.LEFT);
             plain.setTextSize(13 * dp);
             plain.setColor(0xFFB8BDC4);
-            String note = preset == CityConfig.ARCHIPELAGO ? "Map size: Archipelago is always one size, " + CityConfig.ARCHIPELAGO_TILES + " tiles across (just over Massive)."
-                    : "Map size: Islands is always one size, " + CityConfig.ISLANDS_TILES + " tiles across (between Large and Massive).";
+            String note = "Map size: " + (preset == CityConfig.ARCHIPELAGO ? "Archipelago" : "Islands") + " is always Colossal, "
+                    + CityConfig.ISLANDS_TILES + " tiles across.";
             for (String line : wrap(note, lw - 4 * dp, plain)) {
                 c.drawText(line, lx + 2 * dp, y + 14 * dp, plain);
                 y += 17 * dp;
@@ -1381,12 +1381,12 @@ final class Menu {
             // (10.32) The biggest maps: how long they take to build, and whether this phone has the memory.
             int size = config.v[CityConfig.OPT_SIZE];
             if (size >= 5) {
-                int needMb = size >= 6 ? 480 : 256;
+                int needMb = size >= 7 ? 640 : size >= 6 ? 480 : 256;
                 long haveMb = Runtime.getRuntime().maxMemory() / 1048576;
                 boolean low = haveMb < needMb;
-                String note = low ? "Warning: this phone gives the game " + haveMb + " MB and a " + (size >= 6 ? "Gigantic" : "Massive")
+                String note = low ? "Warning: this phone gives the game " + haveMb + " MB and a " + (size >= 7 ? "Colossal" : size >= 6 ? "Gigantic" : "Massive")
                         + " city needs about " + needMb + " MB. It may run out of memory - try a smaller size."
-                        : (size >= 6 ? "Gigantic" : "Massive") + " maps take a while to build (up to a minute on a slower phone) and need a recent phone to run smoothly.";
+                        : (size >= 7 ? "Colossal" : size >= 6 ? "Gigantic" : "Massive") + " maps take a while to build (up to a minute on a slower phone) and need a recent phone to run smoothly.";
                 plain.setTextAlign(Paint.Align.LEFT);
                 plain.setTextSize(12.5f * dp);
                 plain.setColor(low ? 0xFFFF9A7A : 0xFF9AA0A8);
