@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.3";
-    static final int VERSION_CODE = 113;
+    static final String VERSION = "12.4";
+    static final int VERSION_CODE = 114;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.4  -  Out of hiding, headshots by rank, more varied outbreaks",
+                    "No more hiding indoors: once the dead are loose (or have taken the city), nobody shelters in a building. Everyone inside comes out, a few at a time from each door, and runs or makes for a safe zone; survivor groups holed up in buildings break up and come out too. Errands indoors stop, the sirens send people to safe zones, and the broadcasts say to get away from the infected rather than get indoors.",
+                    "Headshots come with experience, not news: the \"aim for the head\" order, and the body shots before it, are gone. Everyone's chance of a shot to the head is as it was before that, and goes up with their rank: a third as likely again for each rank, more than twice as likely for the elite.",
+                    "Every outbreak is more its own: seven new hidden traits a strain can have (pack hunters or loners, quick or slow to get back up, many runners, many brutes, relentless), found out on the radio as before and listed on the Stats screen. Each strain also has its own look, a tint to the dead's skin.",
+                    "Sand and grass in the middle of the roads here and there: drifts of sand and weeds grown up through the tarmac. How many, and how much is sand or grass, differs from city to city.",
+                    "Balance: with everyone out in the streets the dead have more to bite. In test games on a medium city (population limit on Auto), 20 zombies took the city in 6 games of 12 (as in 12.3) and 50 in all 12 (8 in 12.3).",
+            },
             {
                     "12.3  -  Soldiers drive everywhere, zombies less tough",
                     "Zombies have less health: 90, down from 130 (95 before 12.1).",

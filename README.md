@@ -89,7 +89,7 @@ on the phone, so the APK contains no audio files.
 - **Buildings** include apartment blocks, parking garages and pharmacies (which patch people up).
 - **Destructible buildings**: blasts crack, scorch and eventually collapse buildings. Walls collect
   bullet holes and scorch marks.
-- **Families and dogs**: families stay and hide together; dogs follow their owners and fight zombies.
+- **Families and dogs**: families stay and run together; dogs follow their owners and fight zombies.
 - **Hordes**: idle zombies gather behind a leader and roam the city. Zombies surround their prey and
   feed on the dead.
 - **Smarter units**: police and soldiers pick the most dangerous target, don't shoot through people or
@@ -109,8 +109,8 @@ on the phone, so the APK contains no audio files.
   city is calm.
 - **When the dead walk, people know it**: word spreads (first reports, then an emergency broadcast once
   it's serious), and anyone who sees one or hears gunfire knows at once. Then nobody carries on with
-  their day: they hurry home, to a safe zone, into the nearest building with room or to the police
-  station; people indoors stay in; drivers head for the nearest road out of town and new traffic stops.
+  their day: they run from the dead, make for a safe zone or go to the police station; everyone indoors
+  comes out (since 12.4 nobody hides in a building while the dead are loose); drivers head for the nearest road out of town and new traffic stops.
   The all-clear comes once the last of them has been gone a while.
 - **Police on patrol**: most officers drive a beat in patrol cars, two to a car, keeping to the rules of
   the road with the lights off. The nearest car takes each 911 call with lights and siren; officers who
@@ -139,7 +139,7 @@ on the phone, so the APK contains no audio files.
 - **Roads that go somewhere**: out in the country no street stops dead in a field. Stubs past the edge of
   town are dug up, streets with nothing past a level crossing stop at the tracks, and hamlet streets and
   other loose ends carry on as dirt lanes to the nearest road or off the map.
-- **Sieges**: the dead outside a building with people hiding find their way round to the door and batter
+- **Sieges** (since 12.4 only for someone you take inside): the dead outside a building with people hiding find their way round to the door and batter
   it together. They leave empty and abandoned vehicles alone.
 - **Squad tactics**: units radio sightings to each other, soldiers move in a wedge, advance by bounding
   overwatch and send flankers round the side, the wounded pull back, and police form a cordon
@@ -149,7 +149,8 @@ on the phone, so the APK contains no audio files.
 - **Riot police** block bites with their shields; **K9 units** bring a police dog.
 - **Ammunition**: officers carry 60 rounds and soldiers a standard load of 210 (seven magazines). They
   aim for the head, but a moving target's head is hard to hit, so a walker can take most of a
-  magazine, and one dropped by body shots alone may get back up; they hold fire at long range unless the zombie is going for someone, and riflemen fire
+  magazine, and one dropped by body shots alone may get back up; the more kills someone has (their
+  rank), the likelier their shots find the head; they hold fire at long range unless the zombie is going for someone, and riflemen fire
   aimed single shots at range and bursts only up close. Frightened civilians with a gun are far worse
   shots.
 - **SWAT**: every city with a police station has a SWAT team (two on Large and Massive maps), called
@@ -177,8 +178,8 @@ streets away, not across town. A
 tug-of-war bar under the stats shows who is ahead, banners mark the turning points, and the war ends with
 "The city survives" or "The city has fallen" (once three quarters of its people are gone and the dead
 outnumber the rest). In simulated games with
-default settings on a medium city (12.3, population limit on Auto), 20 zombies dropped in together took the city in half
-the games and 50 in two thirds; a handful usually gets put down.
+default settings on a medium city (12.4, population limit on Auto), 20 zombies dropped in together took the city in half
+the games and 50 in every one; a handful usually gets put down.
 
 **Reading the map**: zoomed out, everyone is a dot in the colour of their side (the same colours as the
 counts), and wherever the dead gather the ground glows red. Labels go most important first (safe zones,
@@ -193,7 +194,7 @@ counts), and wherever the dead gather the ground glows red. Labels go most impor
 - **The whole city**: patrols report every pack of the dead they find, so the police keep a call open for
   each part of the city under attack; officers with nothing to do guard their station. Once it's serious
   the army mounts up in trucks and drives out to support the police at the worst calls.
-- **Fights indoors**: the dead that break a door down come in and fight whoever is inside; the armed
+- **Fights indoors** (likewise): the dead that break a door down come in and fight whoever is inside; the armed
   stand, the rest fall back and flee, and the bitten turn. Survivors win and board up, or the building falls.
 - **Survivor groups**: people who hold a building become a named group that fortifies it (boards,
   sandbags, a wall), takes in passers-by, guards the door, and sends out supply runs.
@@ -416,6 +417,12 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Out of hiding, headshots by rank, more varied outbreaks (12.4):** in an outbreak nobody hides indoors: everyone in
+a building comes out and runs or heads for a safe zone, and survivor groups break up. The learned "aim for the head" is
+gone; instead the higher someone's rank, the likelier their shots find the head. Strains can have seven new hidden
+traits (pack hunters, loners, quick or slow to rise, many runners, many brutes, relentless) and each has its own skin
+tint. Patches of sand and grass lie in the middle of roads, more or fewer from city to city.
 
 **Soldiers drive everywhere, zombies less tough (12.3):** zombies have 90 health (130 in 12.1 and 12.2). Soldiers, their
 own and reinforcements, drive anywhere more than a few blocks off - to guard a safe zone, a checkpoint, the cordon, a

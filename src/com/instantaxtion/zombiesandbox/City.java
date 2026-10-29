@@ -92,6 +92,8 @@ final class City {
         final int roof, wall, seed, kind;
         /** Civilians can hide inside homes, offices and warehouses: the door, room and barricade. */
         float doorX, doorY, barricade = 100, calmTimer, releaseTimer;
+        /** (12.4) Until the next one inside comes out, during an outbreak (World.emptyBuilding). */
+        float exitCd;
         int capacity;
         /** How many people live here: families in houses, flats in apartment blocks, a flat over some shops. */
         int residents;
@@ -8870,6 +8872,7 @@ final class City {
         drawLanes(c, p, X0, Y0, X1, Y1);
         drawCurves(c, p);
         drawRoadMarkings(c, p);
+        drawRoadPatches(c, p);
         drawHighway(c, p);
         drawCheckpoints(c, p);
         drawRail(c, p);
@@ -11240,6 +11243,75 @@ final class City {
     private boolean hwySlip(int k, int a) {
         int x = hwyAxis == 0 ? k : hwyAt + a, y = hwyAxis == 0 ? hwyAt + a : k;
         return cfg.civic >= 13 && curveTile != null && x >= 0 && y >= 0 && x < w && y < h && curveTile[y * w + x];
+    }
+
+    /** (12.4) A well-mixed number from a few others: the same every time for the same ones. */
+    private static int scramble(int a, int b, int c) {
+        int h = a * 0x9E3779B1 ^ b * 0x85EBCA6B ^ c * 0xC2B2AE35;
+        h ^= h >>> 15;
+        h *= 0x2C1B3C6D;
+        h ^= h >>> 12;
+        h *= 0x297A2D39;
+        return h ^ (h >>> 15);
+    }
+
+    /**
+     * (12.4) Here and there out in the middle of a street: a drift of sand blown across it, or grass and weeds come up
+     * through the cracks. Just for looks (cars and people go over them). How many, and how much sand to grass,
+     * differs from one city to the next; where they are is the same every time for the same city.
+     */
+    private void drawRoadPatches(Canvas c, Paint p) {
+        int seed = (int) cfg.seed;
+        float rate = 0.008f + ((scramble(seed, 11, 3) >>> 8) & 1023) / 1023f * 0.022f;
+        float sandShare = ((scramble(seed, 5, 17) >>> 8) & 1023) / 1023f;
+        for (Street st : streets) {
+            if (offRegion((st.x0 - 2) * T, (st.y0 - 2) * T, (st.x1 + st.width + 2) * T, (st.y1 + st.width + 2) * T)) continue;
+            int n = st.vertical ? st.y1 - st.y0 : st.x1 - st.x0;
+            int dir = st.vertical ? 1 : 2;
+            for (int k = 0; k < n; k++) {
+                int x = st.vertical ? st.x0 : st.x0 + k, y = st.vertical ? st.y0 + k : st.y0;
+                int hsh = scramble(seed, x * 7919 + 13, y * 104729 + 7);
+                if (((hsh >>> 4) & 0xFFFF) / 65535f >= rate) continue;
+                int mx = st.vertical ? st.x0 + st.width / 2 : x, my = st.vertical ? y : st.y0 + st.width / 2;
+                if (mx < 0 || my < 0 || mx >= w || my >= h || roadDir[my * w + mx] != dir || !paved(mx, my)) continue;
+                boolean whole = true;
+                for (int q = 0; q < st.width && whole; q++) {
+                    int qx = st.vertical ? st.x0 + q : x, qy = st.vertical ? y : st.y0 + q;
+                    if (qx < 0 || qy < 0 || qx >= w || qy >= h || tiles[qy * w + qx] != ROAD) whole = false;
+                }
+                if (!whole) continue;
+                float span = st.width * T;
+                // Near the middle of the road: the crown, where the wheels don't wear it away.
+                float across = (st.vertical ? st.x0 : st.y0) * T + span * (0.5f + (((hsh >>> 20) & 255) / 255f - 0.5f) * 0.3f);
+                float along = (st.vertical ? y : x) * T + T * (((hsh >>> 12) & 255) / 255f);
+                float cx = st.vertical ? across : along, cy = st.vertical ? along : across;
+                boolean sand = ((hsh >>> 28) & 15) / 15f < sandShare;
+                int blobs = 3 + ((hsh >>> 2) & 3);
+                float size = 3 + ((hsh >>> 24) & 7) * 0.7f;
+                for (int b = 0; b < blobs; b++) {
+                    int hb = scramble(hsh, b, 31);
+                    float ox = ((hb & 255) / 255f - 0.5f) * size * 2.2f, oy = (((hb >>> 8) & 255) / 255f - 0.5f) * size * 1.4f;
+                    if (st.vertical) {
+                        float t = ox;
+                        ox = oy;
+                        oy = t;
+                    }
+                    float rx = size * (0.5f + ((hb >>> 16) & 255) / 255f * 0.6f), ry = rx * (0.55f + ((hb >>> 24) & 127) / 127f * 0.35f);
+                    if (sand) p.setColor(b == 0 ? 0x90C9B387 : 0x70D8C49A);
+                    else p.setColor(b % 2 == 0 ? 0xA0607A3A : 0x907A9446);
+                    c.drawOval(new android.graphics.RectF(cx + ox - rx, cy + oy - ry, cx + ox + rx, cy + oy + ry), p);
+                }
+                if (!sand) {
+                    // Tufts sticking up out of it.
+                    p.setColor(0xC04E6A2C);
+                    for (int t = 0; t < 4; t++) {
+                        int ht = scramble(hsh, t, 97);
+                        float tx = cx + ((ht & 255) / 255f - 0.5f) * size * 1.8f, ty = cy + (((ht >>> 8) & 255) / 255f - 0.5f) * size * 1.4f;
+                        c.drawRect(tx - 0.5f, ty - 1.4f, tx + 0.5f, ty + 1.4f, p);
+                    }
+                }
+            }
+        }
     }
 
     private void drawRoadMarkings(Canvas c, Paint p) {

@@ -66,7 +66,7 @@ final class GameView extends View implements Menu.Host {
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde"};
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
-            "A jet bombs the spot", "Sirens send everyone indoors", "Someone here is bitten"};
+            "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten"};
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5;
     private static final int TOP_BUTTONS = 6;
     private static final int[] SPEEDS = {1, 2, 4, 8};

@@ -1834,6 +1834,8 @@ public final class GameTests {
                 check(boarder.ammo + boarder.reserve < ammo, "shoots the one in the way before going on to the vehicle");
                 // No crawlers any more, and far fewer of the bitten come back as anything but an ordinary zombie.
                 int special = 0;
+                // ((12.4) The usual rates: not a strain with many runners or brutes.)
+                w.trait[World.TR_RUNNERS] = w.trait[World.TR_BRUTES] = false;
                 for (int k = 0; k < 10000; k++) {
                     int t = w.turnType(k % 2 == 0 ? Entity.CIVILIAN : Entity.COP);
                     check(t != Entity.CRAWLER, "nobody comes back a crawler");

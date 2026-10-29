@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 50;
+    private static final int VERSION = 51;
 
     private SaveGame() {
     }
@@ -210,7 +210,7 @@ final class SaveGame {
                 out.writeByte(b.lurkers);
                 out.writeByte((b.infestKnown ? 1 : 0) | (b.smashed ? 2 : 0) | (b.looted ? 4 : 0) | (b.outOfFood ? 8 : 0));
             }
-            for (int t = 0; t < World.TR_COUNT; t++) out.writeByte((w.trait[t] ? 1 : 0) | (w.traitKnown[t] ? 2 : 0));
+            for (int t = 0; t < World.TR_OLD; t++) out.writeByte((w.trait[t] ? 1 : 0) | (w.traitKnown[t] ? 2 : 0));
             out.writeUTF(w.strainName);
             out.writeInt(w.bites);
             out.writeInt(w.warResult);
@@ -338,6 +338,9 @@ final class SaveGame {
                 out.writeFloat(m.y);
                 out.writeFloat(m.time);
             }
+            // ((12.4) Version 51: the strain's traits added in 12.4.)
+            out.writeInt(World.TR_COUNT - World.TR_OLD);
+            for (int t = World.TR_OLD; t < World.TR_COUNT; t++) out.writeByte((w.trait[t] ? 1 : 0) | (w.traitKnown[t] ? 2 : 0));
         } finally {
             moved = null;
             homeIndex = null;
@@ -584,7 +587,7 @@ final class SaveGame {
                 b.looted = (flags & 4) != 0;
                 b.outOfFood = (flags & 8) != 0;
             }
-            for (int t = 0; t < World.TR_COUNT; t++) {
+            for (int t = 0; t < World.TR_OLD; t++) {
                 int f = in.readByte();
                 w.trait[t] = (f & 1) != 0;
                 w.traitKnown[t] = (f & 2) != 0;
@@ -749,6 +752,18 @@ final class SaveGame {
                     m.age = 999;
                     d.log.add(Math.min(i, d.log.size()), m);
                 }
+            }
+            if (version >= 51) {
+                int nt = in.readInt();
+                for (int i = 0; i < nt; i++) {
+                    int f = in.readByte(), t = World.TR_OLD + i;
+                    if (t >= World.TR_COUNT) continue;
+                    w.trait[t] = (f & 1) != 0;
+                    w.traitKnown[t] = (f & 2) != 0;
+                }
+            } else {
+                // (A game saved before 12.4: none of the newer traits, not whatever this run happened to roll.)
+                for (int t = World.TR_OLD; t < World.TR_COUNT; t++) w.trait[t] = w.traitKnown[t] = false;
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
