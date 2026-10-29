@@ -4330,7 +4330,8 @@ final class World {
         // ((10.60) Not only when it's quiet: when the nearest of the dead is still a way off, too.)
         if (idle && e.hasGun && threatDist > 70 && e.ammo + e.reserve <= 2) goalScore[G_RESTOCK] = 0.45f;
         // ... or one lying in the street.
-        if (e.task == Dispatch.T_PICKUP) goalScore[G_PICKUP] = threatDist < 40 ? -1 : 0.55f;
+        // ((12.8) Not one somebody else has already picked up.)
+        if (e.task == Dispatch.T_PICKUP) goalScore[G_PICKUP] = threatDist < 40 || e.pickup == null || !pickups.contains(e.pickup) ? -1 : 0.55f;
         // ((12.0) Or with their gun run dry: rounds lying there are as good as a walk to the shop.)
         else if (idle && (!e.hasGun || e.ammo + e.reserve <= 2) && threat == null) {
             Pickup p = nearestPickup(e.x, e.y, 110);
@@ -4403,6 +4404,9 @@ final class World {
                         if (p.uses == 0) p.claimed = true;
                         e.pickup = p;
                         e.task = Dispatch.T_PICKUP;
+                    } else {
+                        // ((12.8) Gone before they set off - someone else took it: not left meaning to fetch nothing.)
+                        e.goal = G_ROUTINE;
                     }
                 }
                 break;
@@ -9785,7 +9789,13 @@ final class World {
             if (e.reload <= 0 && e.reserve > 0) e.reload = e.type == Entity.SOLDIER ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
             return true;
         }
-        if (e.reload <= 0 && e.cooldown <= 0) {
+        // ((12.8) Only once the gun is on it: a moment to bring it round, not a shot off to the side.)
+        float off = Math.abs(angleDiff(e.angle, (float) Math.atan2(t.y - e.y, t.x - e.x)));
+        if (off > 0.45f) return true;
+        // ((12.8) As many shots as the gun fires in the time that's gone by, with what's left over carried to the
+        // next: before, the time after each shot started again from nothing every step, so a quick-firing gun lost a
+        // quarter of its rate at 30 frames a second, and at the faster game speeds most of it.)
+        for (int shots = 0; e.reload <= 0 && e.cooldown <= 0 && e.ammo > 0 && shots < 6 && t.hp > 0; shots++) {
             if (friendInLine(e, t, d)) {
                 e.cooldown = 0.15f;
                 return false;
@@ -9794,7 +9804,9 @@ final class World {
                 e.cooldown = 0.25f;
                 return true;
             }
+            float carry = Math.max(e.cooldown, -dt);
             fire(e, t, d, range);
+            e.cooldown += carry;
         }
         return true;
     }
@@ -9968,33 +9980,42 @@ final class World {
         shotsFired++;
         float dmg, accuracy = e.hasGun ? 0.5f : 0.7f;
         if ((soldier && e.role == Entity.ROLE_SNIPER) || e.role == Entity.ROLE_MARKSMAN) {
-            e.cooldown = e.role == Entity.ROLE_MARKSMAN ? 1.4f : 1.6f;
+            // ((12.8) A scoped rifle worked quickly by someone trained on it: 1.0 and 1.4 s, from 1.4 and 1.6.)
+            e.cooldown = e.role == Entity.ROLE_MARKSMAN ? 1.0f : 1.4f;
             dmg = e.role == Entity.ROLE_MARKSMAN ? 60 : 75;
             accuracy = e.role == Entity.ROLE_MARKSMAN ? 0.95f : 0.97f;
         } else if (soldier && e.role == Entity.ROLE_GUNNER) {
-            e.cooldown = 0.075f;
+            // ((12.8) In bursts of six or so with a breath between, the way a machine gun is fired, not one long
+            // stream.)
+            e.burst++;
+            e.cooldown = e.burst % 6 == 0 ? 0.35f : 0.075f;
             dmg = 10;
             accuracy = 0.55f;
         } else if (soldier && e.role == Entity.ROLE_COMMANDER) {
-            e.cooldown = 0.5f;
+            e.cooldown = 0.35f;
             dmg = 12;
         } else if (soldier) {
             // Aimed single shots at range; short bursts only when they're close.
+            // ((12.8) Quicker aimed shots (0.3 s, from 0.38) and three-round bursts at the rifle's real rate (0.07 s
+            // apart, 0.35 s between bursts, from 0.1 and 0.45).)
             if (d > 70) {
                 e.burst = 0;
-                e.cooldown = 0.38f;
+                e.cooldown = 0.3f;
             } else {
                 e.burst++;
-                e.cooldown = e.burst % 3 == 0 ? 0.45f : 0.1f;
+                e.cooldown = e.burst % 3 == 0 ? 0.35f : 0.07f;
             }
             dmg = 16;
         } else {
-            e.cooldown = e.hasGun ? 0.8f : 0.55f;
+            // ((12.8) A service pistol in steady aimed fire, about two and a half a second (0.4 s, from 0.55); a
+            // frightened civilian with one, 0.6 (from 0.8).)
+            e.cooldown = e.hasGun ? 0.6f : 0.4f;
             dmg = 10;
         }
         // Picked-up guns.
         if (e.weapon == Entity.W_SHOTGUN) {
-            e.cooldown = 0.9f;
+            // ((12.8) As fast as the pump can be worked: 0.7 s, from 0.9.)
+            e.cooldown = 0.7f;
             dmg = d < 45 ? 34 : d < 80 ? 20 : 9;
             accuracy = 0.92f;
         } else if (e.weapon == Entity.W_RIFLE && !soldier) {
@@ -10003,16 +10024,16 @@ final class World {
             dmg = 16;
             accuracy = 0.55f;
         } else if (e.weapon == Entity.W_PISTOL) {
-            e.cooldown = 0.55f;
+            e.cooldown = 0.4f;
             dmg = 10;
             accuracy = 0.7f;
         } else if (e.weapon == Entity.W_HUNTING) {
             // A bolt-action deer rifle: slow, but it hits hard and true a long way off.
-            e.cooldown = 1.5f;
+            e.cooldown = 1.3f;
             dmg = 55;
             accuracy = 0.85f;
         } else if (e.weapon == Entity.W_REVOLVER) {
-            e.cooldown = 0.7f;
+            e.cooldown = 0.55f;
             dmg = 18;
             accuracy = 0.68f;
         } else if (e.weapon == Entity.W_SMG) {
@@ -10023,12 +10044,12 @@ final class World {
             accuracy = d < 90 ? 0.66f : 0.5f;
         } else if (e.weapon == Entity.W_CARBINE) {
             // ((11.4) A carbine: steady aimed shots, further and harder than a pistol.)
-            e.cooldown = 0.3f;
+            e.cooldown = 0.25f;
             dmg = 15;
             accuracy = 0.72f;
         } else if (e.weapon == Entity.W_DMR) {
             // ((11.4) A marksman rifle: a scoped semi-automatic, between a rifle and a sniper's.)
-            e.cooldown = 0.9f;
+            e.cooldown = 0.6f;
             dmg = 40;
             accuracy = 0.9f;
         }
@@ -11133,6 +11154,14 @@ final class World {
         float l = (float) Math.sqrt(e.mx * e.mx + e.my * e.my) + 0.001f;
         e.mx /= l;
         e.my /= l;
+    }
+
+    /** (12.8) How far round (radians, -pi to pi) from one heading to another. */
+    static float angleDiff(float from, float to) {
+        float diff = to - from;
+        while (diff > Math.PI) diff -= TAU;
+        while (diff < -Math.PI) diff += TAU;
+        return diff;
     }
 
     private static float turn(float from, float to, float amount) {

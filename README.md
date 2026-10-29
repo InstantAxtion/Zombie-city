@@ -419,6 +419,11 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Firing at the real rate (12.8):** guns no longer lose the time left over after each shot, so quick-firing guns
+fire at their real rate at any frame rate or game speed; rates are quicker and closer to real (pistols 0.4 s, rifles
+0.3 s aimed and real three-round bursts, pump shotguns 0.7 s, scoped rifles 1.0 to 1.4 s); machine guns fire in
+bursts; and nobody fires before the gun is on the target.
+
 **Runners slowed, the real cities gone (12.7):** runners are exactly half as fast again as an ordinary zombie
 (walking 18 to 24, running 36 to 43, from 33 to 39 and 56 to 62) and chase the same way. The last of the real cities -
 Los Angeles, Portland, Seattle and New York - are out of the game, code and all; saves and city codes on them no longer

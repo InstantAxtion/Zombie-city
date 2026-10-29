@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.7";
-    static final int VERSION_CODE = 117;
+    static final String VERSION = "12.8";
+    static final int VERSION_CODE = 118;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.8  -  Firing at the real rate",
+                    "Guns fire at their real rate. The time left over after each shot used to be thrown away every step, so a quick-firing gun lost about a quarter of its rate at 30 frames a second and most of it at the faster game speeds; now as many shots go off as the gun fires in the time that has passed. In a test outbreak, police and soldiers put out about 70% more rounds for each second they had a target.",
+                    "Quicker, more realistic rates: a police pistol in steady aimed fire 0.4 s a shot (from 0.55), rifles 0.3 s aimed and three-round bursts at the rifle's real rate (0.07 s apart), carbines 0.25 s, shotguns as fast as the pump can be worked (0.7 s), marksman and sniper rifles 1.0 and 1.4 s, the commander 0.35 s, a hunting rifle 1.3 s, a revolver 0.55 s, a picked-up pistol 0.4 s, and a frightened civilian with a gun 0.6 s (from 0.8).",
+                    "Machine gunners fire in bursts of six with a breath between, not one long stream.",
+                    "Nobody fires until the gun is actually on the target: a moment to bring it round, not a shot off to the side.",
+                    "Fix: someone could keep meaning to pick up a gun that somebody else had already taken.",
+            },
             {
                     "12.7  -  Runners slowed, the real cities gone",
                     "Runners are slower: exactly half as fast again as an ordinary zombie, at a walk (18 to 24) and at a run (36 to 43), where they were nearly twice as fast (33 to 39 and 56 to 62). They chase the way ordinary zombies do and get the same small burst of speed when freshly turned, so they stay half as fast again at every step.",
