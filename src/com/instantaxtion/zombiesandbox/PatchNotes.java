@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.5";
-    static final int VERSION_CODE = 115;
+    static final String VERSION = "12.6";
+    static final int VERSION_CODE = 116;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.6  -  Slower zombies",
+                    "Ordinary zombies are slower: a 12 to 16 shamble and a 24 to 29 run (16 to 22 and 32 to 38 before), so anyone running can get away from one, until they tire.",
+                    "They only break into a run in the last few steps before they reach someone (50, not 110), and before that come on only a little quicker than their shamble.",
+                    "The freshly turned get much less of a burst of speed for their first 45 seconds (8% walking and 12% running, not 20% and 30%). Runners and brutes are as they were.",
+            },
             {
                     "12.5  -  No civilian drivers, a steady head count",
                     "Civilians no longer drive: no everyday traffic in town, no cars on the highway, none fleeing down it when the broadcast goes out, and nobody running from the dead jumps into an abandoned car. Police cars, army trucks, buses and trains still run, and you can still take the wheel of anything yourself. A game saved with civilians driving puts them on the pavement when it loads.",

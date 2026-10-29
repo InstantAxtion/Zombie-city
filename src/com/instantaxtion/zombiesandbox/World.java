@@ -1347,12 +1347,12 @@ final class World {
                 break;
             case Entity.ZOMBIE:
                 // (Tougher since 10.28: it takes a few hits, or one to the head.)
-                // ((12.1) A little quicker: a 29 to 35 run before. (12.3) Less health again: 90, from 130 in 12.1
-                // and 95 before that.)
+                // ((12.3) Less health again: 90, from 130 in 12.1 and 95 before that. (12.6) Slower: a 12 to 16
+                // shamble and a 24 to 29 run, slower than anyone running from them (16 to 22 and 32 to 38 before).)
                 e.hp = 90;
                 e.radius = 3.8f;
-                e.speed = 16 + rnd.nextFloat() * 6;
-                e.runSpeed = 32 + rnd.nextFloat() * 6;
+                e.speed = 12 + rnd.nextFloat() * 4;
+                e.runSpeed = 24 + rnd.nextFloat() * 5;
                 e.skin = rnd.nextBoolean() ? 0xFF7C9A5E : 0xFF8FA173;
                 break;
             case Entity.RUNNER:
@@ -2327,8 +2327,8 @@ final class World {
         if (e.fresh > 0) {
             e.fresh -= dt;
             if (e.fresh <= 0) {
-                e.speed /= 1.2f;
-                e.runSpeed /= 1.3f;
+                e.speed /= freshWalk(e);
+                e.runSpeed /= freshRun(e);
             }
         }
         if (e.stun > 0) {
@@ -2596,6 +2596,25 @@ final class World {
             }
     }
 
+    /**
+     * (12.1) How fast one of the dead goes after someone it has spotted: at a run once it's close, quicker than its
+     * walk before that. ((12.6) An ordinary zombie only breaks into its run in the last few steps (50, not 110) and
+     * only a little quicker than its shamble before: they were too fast. Runners and brutes as before.)
+     */
+    private static float chaseSpeed(Entity z, float d) {
+        boolean shambler = z.type == Entity.ZOMBIE;
+        return d < (shambler ? 50 : 110) ? z.runSpeed : z.speed * (shambler ? 1.1f : 1.3f);
+    }
+
+    /** How much quicker the freshly turned are for a while: ((12.6) a shambler only a little). */
+    private static float freshWalk(Entity z) {
+        return z.type == Entity.ZOMBIE ? 1.08f : 1.2f;
+    }
+
+    private static float freshRun(Entity z) {
+        return z.type == Entity.ZOMBIE ? 1.12f : 1.3f;
+    }
+
     private void thinkZombie(Entity z, float dt) {
         if (z.blocked && !barriers.isEmpty()) bashBarrier(z, dt);
         z.chargeCd -= dt;
@@ -2668,7 +2687,7 @@ final class World {
             if (d > 16 && !city.passLine(z.x, z.y, t.x, t.y)) {
                 // Right up against a safe zone's wall with them on the other side: tear at it.
                 if (dispatch.wallOwner != null && clawWall(z, dt)) return;
-                if (followField(z, city.humanDist, d < 110 ? z.runSpeed : z.speed * 1.3f)) return;
+                if (followField(z, city.humanDist, chaseSpeed(z, d))) return;
             }
             if (t.aloft && d < 22) {
                 // Up a fire tower: the stairs are steep and narrow, but they climb (runners quickest).
@@ -2681,7 +2700,7 @@ final class World {
             z.climb = 0;
             // ((12.1) They run down anyone they've spotted from well off, not just the last few steps: at a walk
             // they never caught anyone.)
-            steer(z, ax, ay, d < 110 ? z.runSpeed : z.speed * 1.3f);
+            steer(z, ax, ay, chaseSpeed(z, d));
             if (d < z.radius + t.radius + 2.5f && z.biteCd <= 0) bite(z, t, ddx / d, ddy / d);
             return;
         }
@@ -11510,8 +11529,8 @@ final class World {
                     if (by != null) victims.put(by, victims.containsKey(by) ? victims.get(by) + 1 : 1);
                     // Freshly turned: fast and hungry for a while.
                     z.fresh = 45;
-                    z.speed *= 1.2f;
-                    z.runSpeed *= 1.3f;
+                    z.speed *= freshWalk(z);
+                    z.runSpeed *= freshRun(z);
                     entities.add(z);
                     turned++;
                     noteTurn(c.x, c.y);
