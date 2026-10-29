@@ -2113,7 +2113,8 @@ final class Fleet {
         // (10.32) The emergency broadcast: everyone with a car and somewhere to go makes for the highway at once.
         if (w.alert >= 2 && !evacStarted) {
             evacStarted = true;
-            evacLeft = city.hwyAxis >= 0 ? Math.max(10, trafficTarget / 2) : 0;
+            // ((12.5) Only when civilians drive at all: none do now.)
+            evacLeft = city.hwyAxis >= 0 && trafficTarget > 0 ? Math.max(10, trafficTarget / 2) : 0;
             if (evacLeft > 0) w.timeline("People fleeing the city: the roads out are jammed");
         }
         if (evacLeft > 0) {
@@ -2130,7 +2131,7 @@ final class Fleet {
         hwyTimer -= dt;
         if (hwyTimer <= 0) {
             hwyTimer = 2;
-            if (city.hwyAxis >= 0 && w.alert < 2 && throughTraffic() < throughTarget()) spawnThrough(false);
+            if (city.hwyAxis >= 0 && w.alert < 2 && trafficTarget > 0 && throughTraffic() < throughTarget()) spawnThrough(false);
         }
         if (trafficTimer <= 0) {
             trafficTimer = 6;

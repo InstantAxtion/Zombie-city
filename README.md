@@ -45,7 +45,8 @@ on the phone, so the APK contains no audio files.
 - **Vehicles**: cruisers bring backup officers, army trucks bring reserve squads, and a helicopter
   gives limited air support. Vehicles drive on the roads and run over zombies. Cars take damage from
   zombies, crashes, gunfire and blasts, smoke when damaged and break down at zero.
-- **Traffic**: people fleeing wave down passing cars and get driven to a safe zone. Zombies chase cars.
+- **No civilian drivers** (since 12.5): the roads carry the police, the army, buses and trains; civilians walk.
+  Zombies chase vehicles.
 - **Tanks** roll out for big hordes.
 - **Air support takes time**: once approved, the crew is briefed and the aircraft readied (about a
   minute from a helipad in town, nearly two from outside the city). The helicopter spins up for
@@ -68,12 +69,12 @@ on the phone, so the APK contains no audio files.
   inside stay in and shelter. Zoom in to see them inside.
 - **Trains** slow down and stop at the station for a few seconds. The barriers at the level crossings
   come down and the lights flash while a train is near.
-- **Traffic follows the rules**: traffic lights at the big junctions (green, amber, red each way, shown
+- **Vehicles follow the rules**: traffic lights at the big junctions (green, amber, red each way, shown
   on the corners), stop junctions with STOP (ALTO in Mexico) painted on the road, and give-way at
   roundabouts. Cars keep to the middle of their lane on the correct side right up to the junction and
   make their turns inside it, slow down for corners, stay on the roads, don't spin round mid-street,
   and never vanish in view: a car with nowhere to go parks, and towing away or new traffic only
-  happens off screen. Bigger maps have more traffic.
+  happens off screen.
 - **Pedestrians keep to the rules**: people out on errands walk on the pavement, cross at the zebra
   crossings by the junctions and wait at the kerb while a car goes by. Anyone running from zombies
   crosses wherever they like. Walking routes are planned (A*) along pavements and crossings. Police
@@ -110,7 +111,7 @@ on the phone, so the APK contains no audio files.
 - **When the dead walk, people know it**: word spreads (first reports, then an emergency broadcast once
   it's serious), and anyone who sees one or hears gunfire knows at once. Then nobody carries on with
   their day: they run from the dead, make for a safe zone or go to the police station; everyone indoors
-  comes out (since 12.4 nobody hides in a building while the dead are loose); drivers head for the nearest road out of town and new traffic stops.
+  comes out (since 12.4 nobody hides in a building while the dead are loose).
   The all-clear comes once the last of them has been gone a while.
 - **Police on patrol**: most officers drive a beat in patrol cars, two to a car, keeping to the rules of
   the road with the lights off. The nearest car takes each 911 call with lights and siren; officers who
@@ -417,6 +418,11 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**No civilian drivers, a steady head count (12.5):** civilians no longer drive: no everyday traffic, no cars on the
+highway or fleeing down it, and nobody jumps into an abandoned car. The police, army, buses and trains still run. The
+number of people no longer goes up and down by itself: it changes when people die or turn, or when help arrives from
+outside.
 
 **Out of hiding, headshots by rank, more varied outbreaks (12.4):** in an outbreak nobody hides indoors: everyone in
 a building comes out and runs or heads for a safe zone, and survivor groups break up. The learned "aim for the head" is

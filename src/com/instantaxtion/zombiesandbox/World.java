@@ -907,8 +907,8 @@ final class World {
         buildRoster();
         spawnBirds();
         spawnWildlife();
-        fleet.trafficTarget = Fleet.trafficFor(city);
-        fleet.spawnTraffic(fleet.trafficTarget);
+        // ((12.5) No civilians at the wheel: the streets carry only the police, the army and the buses and trains.)
+        fleet.trafficTarget = 0;
         // Zombies start in a few small outbreaks rather than spread evenly.
         int left = cfg.zombies();
         while (left > 0) {
@@ -1663,7 +1663,16 @@ final class World {
         launchBoats();
         spawnBirds();
         spawnWildlife();
-        fleet.trafficTarget = Fleet.trafficFor(city);
+        fleet.trafficTarget = 0;
+        // ((12.5) A game saved with civilians driving about: they're out of their cars and on foot.)
+        for (int i = fleet.vehicles.size() - 1; i >= 0; i--) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.type != Fleet.CAR || v.evacStop >= 0 || v.player != null || v.parked) continue;
+            for (Entity r : v.riders) release(r, v.x, v.y);
+            v.riders.clear();
+            v.removedFromFleet = true;
+            fleet.vehicles.remove(i);
+        }
         fleet.stationHelis();
         fleet.stockStations();
         fleet.stockBases();
@@ -1672,7 +1681,6 @@ final class World {
         // ((11.4) Counting those aboard the patrol cars too.)
         for (Fleet.Vehicle v : fleet.vehicles) if (v.patrol && v.agency == 0) cops += v.crew.size();
         fleet.patrolTarget = Math.max(1, (int) (cops * PATROL_SHARE / 2));
-        fleet.spawnTraffic(fleet.trafficTarget);
         buildHash();
         city.computeFields(entities);
         recount();
@@ -1984,10 +1992,13 @@ final class World {
     /** ((12.0) Who's inside the buildings, as last counted, and when it's next counted.) */
     private float insideAt = -1;
     private int insideHiding, insideVisiting, insideCivilians, insideLurking, insideBitten;
+    /** ((12.5) The people counted as of the last look indoors, shown until the next.) */
+    private int heldHumans = -1, heldCivilians;
 
     /** ((12.0) Counted again at the next recount, not up to half a second later: after clearing or loading.) */
     void recountInsideNow() {
         insideAt = -1;
+        heldHumans = -1;
     }
 
     void recount() {
@@ -2020,6 +2031,16 @@ final class World {
             hiding = insideHiding;
             visiting = insideVisiting;
             h = humanCount() + hiding + riding + visiting;
+            fresh = true;
+        }
+        // ((12.5) Only the counts taken together with who's indoors: in between, everyone who'd gone in or come out
+        // since was counted twice or not at all, and the number of people went up and down by a few every moment.)
+        if (fresh || heldHumans < 0) {
+            heldHumans = h;
+            heldCivilians = civilians;
+        } else {
+            h = heldHumans;
+            civilians = heldCivilians;
         }
         recountRest(h);
     }
@@ -4423,16 +4444,7 @@ final class World {
         }
         float ax = e.x - e.threatX, ay = e.y - e.threatY;
         float d = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
-        // Running for their life past an abandoned car with the keys still in it.
-        if (e.ride == null && rnd.nextFloat() < dt * 2) {
-            Fleet.Vehicle car = abandonedCarNear(e.x, e.y, 40);
-            if (car != null) {
-                e.dead = true;
-                e.removed = true;
-                fleet.takeCar(car, e);
-                return;
-            }
-        }
+        // ((12.5) No jumping into an abandoned car and driving off: civilians don't drive.)
         // Run towards a cop or soldier if one is nearby and not back where the zombies are.
         // ((10.34) Looked for every half second or so, not every frame, by everyone running.)
         e.protectorCd -= dt;

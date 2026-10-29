@@ -1370,6 +1370,7 @@ public final class GameTests {
                 c.seed = 7;
                 World w = new World(c);
                 w.populate(c);
+                civilianTraffic(w);
                 City city = w.city;
                 check(city.hwyAxis >= 0 && !city.hwyExits.isEmpty(), "a highway with ways on and off");
                 boolean ew = city.hwyAxis == 0;
@@ -1492,6 +1493,7 @@ public final class GameTests {
                 m.seed = 5;
                 World w = new World(m);
                 w.populate(m);
+                civilianTraffic(w);
                 check(!w.city.checkpoints.isEmpty(), "the country base has its checkpoints");
                 int bases = 0;
                 for (City.Facility fa : w.city.facilities) if (fa.kind == City.FACILITY_BASE) bases++;
@@ -2102,6 +2104,7 @@ public final class GameTests {
                 World w = new World(c);
                 w.rnd.setSeed(4);
                 w.populate(c);
+                civilianTraffic(w);
                 long samples = 0, careful = 0, stuck = 0, overlaps = 0, laneN = 0, planned = 0, cornerCut = 0;
                 double laneErr = 0;
                 for (int f = 0; f < 30 * 60; f++) {
@@ -2759,6 +2762,17 @@ public final class GameTests {
             System.out.println("FAIL  " + name + ": " + e);
             e.printStackTrace(System.out);
         }
+    }
+
+    /**
+     * ((12.5) Civilians don't drive any more, so a game has no traffic of its own: the tests of how cars drive put
+     * it on the roads themselves, as it was before.)
+     */
+    private static void civilianTraffic(World w) {
+        for (Fleet.Vehicle v : w.fleet.vehicles)
+            check(v.type != Fleet.CAR || v.parked || v.evacStop >= 0, "no civilian drives a car");
+        w.fleet.trafficTarget = Fleet.trafficFor(w.city);
+        w.fleet.spawnTraffic(w.fleet.trafficTarget);
     }
 
     private static void check(boolean ok, String what) {

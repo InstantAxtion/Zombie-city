@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.4";
-    static final int VERSION_CODE = 114;
+    static final String VERSION = "12.5";
+    static final int VERSION_CODE = 115;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.5  -  No civilian drivers, a steady head count",
+                    "Civilians no longer drive: no everyday traffic in town, no cars on the highway, none fleeing down it when the broadcast goes out, and nobody running from the dead jumps into an abandoned car. Police cars, army trucks, buses and trains still run, and you can still take the wheel of anything yourself. A game saved with civilians driving puts them on the pavement when it loads.",
+                    "The number of people no longer goes up and down by itself. It was counted from those out on the street every moment but those indoors only a few times a second, so everyone going in or out of a door was counted twice or not at all for a moment; both are counted together now. It changes when someone dies or turns, or when help arrives from outside.",
+                    "With no traffic, nobody is knocked down by a passing car: in a quiet test city a few people used to be killed that way within the first minute.",
+            },
             {
                     "12.4  -  Out of hiding, headshots by rank, more varied outbreaks",
                     "No more hiding indoors: once the dead are loose (or have taken the city), nobody shelters in a building. Everyone inside comes out, a few at a time from each door, and runs or makes for a safe zone; survivor groups holed up in buildings break up and come out too. Errands indoors stop, the sirens send people to safe zones, and the broadcasts say to get away from the infected rather than get indoors.",
