@@ -179,8 +179,8 @@ streets away, not across town. A
 tug-of-war bar under the stats shows who is ahead, banners mark the turning points, and the war ends with
 "The city survives" or "The city has fallen" (once three quarters of its people are gone and the dead
 outnumber the rest). In simulated games with
-default settings on a medium city (12.4, population limit on Auto), 20 zombies dropped in together took the city in half
-the games and 50 in every one; a handful usually gets put down.
+default settings on a medium city (12.6, population limit on Auto), 20 zombies dropped in together never took the city in
+12 games and 50 took it once; a handful usually gets put down.
 
 **Reading the map**: zoomed out, everyone is a dot in the colour of their side (the same colours as the
 counts), and wherever the dead gather the ground glows red. Labels go most important first (safe zones,

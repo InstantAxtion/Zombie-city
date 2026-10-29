@@ -12,6 +12,7 @@ final class PatchNotes {
                     "Ordinary zombies are slower: a 12 to 16 shamble and a 24 to 29 run (16 to 22 and 32 to 38 before), so anyone running can get away from one, until they tire.",
                     "They only break into a run in the last few steps before they reach someone (50, not 110), and before that come on only a little quicker than their shamble.",
                     "The freshly turned get much less of a burst of speed for their first 45 seconds (8% walking and 12% running, not 20% and 30%). Runners and brutes are as they were.",
+                    "Balance: people can outrun them now, and that tips it back towards the living. In test games on a medium city (population limit on Auto), 20 zombies took the city in none of 12 games (6 in 12.4 and 12.5) and 50 in 1 of 12 (all 12 before).",
             },
             {
                     "12.5  -  No civilian drivers, a steady head count",
