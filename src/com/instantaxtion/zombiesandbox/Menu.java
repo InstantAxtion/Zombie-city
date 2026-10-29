@@ -1358,26 +1358,18 @@ final class Menu {
         y = section(c, "Map", lx, y);
         int perRow = lw > 520 * dp ? 5 : lw > 330 * dp ? 4 : 3;
         float gap = 10 * dp, cw = (lw - gap * (perRow - 1)) / perRow, ch = Math.min(96 * dp, cw * 0.9f);
-        // (Maps no longer offered are left out, unless a loaded city code is using one. The real cities have
-        // their own section below.)
+        // (Maps no longer offered are left out, unless a loaded city code is using one.)
         int cards = 0;
         int[] shown = new int[CityConfig.PRESETS.length];
         for (int i = 0; i < CityConfig.PRESETS.length; i++)
-            if ((!CityConfig.retired(CityConfig.OPT_PRESET, i) || preset == i) && !RealCities.isReal(i)) shown[cards++] = i;
+            if (!CityConfig.retired(CityConfig.OPT_PRESET, i) || preset == i) shown[cards++] = i;
         y = mapCards(c, shown, cards, preset, lx, y, cw, ch, gap, perRow);
-        // (The real cities were taken out in 10.28; a loaded code using one still shows it above.)
-        if (RealCities.isReal(preset)) {
-            shown[0] = preset;
-            y = mapCards(c, shown, 1, preset, lx, y, cw, ch, gap, perRow);
-        }
-        boolean real = RealCities.isReal(preset);
-        if (preset == CityConfig.ISLANDS || preset == CityConfig.ARCHIPELAGO || real) {
-            // Islands comes in one size only; a real city is always the same city.
+        if (preset == CityConfig.ISLANDS || preset == CityConfig.ARCHIPELAGO) {
+            // Islands comes in one size only.
             plain.setTextAlign(Paint.Align.LEFT);
             plain.setTextSize(13 * dp);
             plain.setColor(0xFFB8BDC4);
-            String note = real ? "Map size: Massive, and always the same city."
-                    : preset == CityConfig.ARCHIPELAGO ? "Map size: Archipelago is always one size, " + CityConfig.ARCHIPELAGO_TILES + " tiles across (just over Massive)."
+            String note = preset == CityConfig.ARCHIPELAGO ? "Map size: Archipelago is always one size, " + CityConfig.ARCHIPELAGO_TILES + " tiles across (just over Massive)."
                     : "Map size: Islands is always one size, " + CityConfig.ISLANDS_TILES + " tiles across (between Large and Massive).";
             for (String line : wrap(note, lw - 4 * dp, plain)) {
                 c.drawText(line, lx + 2 * dp, y + 14 * dp, plain);

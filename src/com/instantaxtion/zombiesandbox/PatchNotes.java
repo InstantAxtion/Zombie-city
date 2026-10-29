@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "12.6";
-    static final int VERSION_CODE = 116;
+    static final String VERSION = "12.7";
+    static final int VERSION_CODE = 117;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "12.7  -  Runners slowed, the real cities gone",
+                    "Runners are slower: exactly half as fast again as an ordinary zombie, at a walk (18 to 24) and at a run (36 to 43), where they were nearly twice as fast (33 to 39 and 56 to 62). They chase the way ordinary zombies do and get the same small burst of speed when freshly turned, so they stay half as fast again at every step.",
+                    "The real cities are gone from the game, code and all: Los Angeles, Portland, Seattle and New York (they hadn't been on the New Game screen since 10.28). Saves and city codes on them no longer load. The game is smaller for it.",
+                    "Tests of things no longer in the game are gone: the real cities, and civilian traffic keeping to its lanes and the roads, on the highway and burning fuel.",
+            },
             {
                     "12.6  -  Slower zombies",
                     "Ordinary zombies are slower: a 12 to 16 shamble and a 24 to 29 run (16 to 22 and 32 to 38 before), so anyone running can get away from one, until they tire.",

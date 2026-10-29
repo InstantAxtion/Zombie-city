@@ -8,15 +8,14 @@ import java.util.Random;
  */
 final class CityConfig implements OptionSet {
     static final String[] PRESETS = {"Classic", "Downtown", "Suburbs", "Industrial", "Parkland", "Old Town",
-            "Small Town", "Campus", "Metropolis", "Village", "Seaside", "River City", "Lakeside", "Harbour", "Islands",
-            // (Since 10.18: real cities, premade, always the biggest size. See RealCities.)
-            "Los Angeles", "Portland", "Seattle", "New York", "Sydney", "Tokyo", "Paris",
-            // (10.56)
-            "Garrison State",
+            "Small Town", "Campus", "Metropolis", "Village", "", "", "Lakeside", "Harbour", "Islands",
+            // ((12.7) The places of maps taken out of the game, the real cities among them, are kept so the others keep
+            // their numbers: see removed.)
+            "", "", "", "", "", "", "",
+            "",
             // (10.60)
-            "Archipelago", "Mountain Valley",
-            // (11.0)
-            "Bay City", "Delta Marsh", "Fjord Town", "Canal City"};
+            "Archipelago", "",
+            "", "", "", ""};
     /** One line about each map, shown on the New Game screen. */
     static final String[] PRESET_INFO = {
             "A bit of everything: downtown towers, suburbs, parks, a precinct and an army base.",
@@ -34,7 +33,7 @@ final class CityConfig implements OptionSet {
             "Homes and parks round a lake in the middle of town, with a jetty, rowing boats and an island.",
             "A working port: quays, docks, cranes, container stacks and ships, with warehouses along the water.",
             "Three island towns in the sea, joined by bridges, with a causeway to the mainland. Always one size: between Large and Massive.",
-            RealCities.INFO[0], RealCities.INFO[1], RealCities.INFO[2], RealCities.INFO[3], "", "", "",
+            "", "", "", "", "", "", "",
             "",
             "One big island city in the middle of the sea, with two to five smaller island towns round it, every one lived in and joined to it by a bridge, and a causeway to the mainland. Always one size.",
             "",
@@ -184,7 +183,7 @@ final class CityConfig implements OptionSet {
         // (The real cities went in 10.28.)
         // (Downtown, Village and Lakeside went in 10.50.)
         if (option == OPT_PRESET) return value == 0 || value == 1 || value == 3 || value == 4 || value == 5 || value == 6 || value == 7
-                || value == 9 || value == 12 || value == 13 || RealCities.isReal(value) || removed(value);
+                || value == 9 || value == 12 || value == 13 || removed(value);
         // (The number of zombies at the start isn't a choice any more: the game starts quiet.)
         if (option == OPT_ZOMBIES) return value != 0;
         if (option == OPT_SIZE) return value < LARGE;
@@ -242,7 +241,7 @@ final class CityConfig implements OptionSet {
 
 
     /** Water on the map: none, the sea along one side (a beach or a port), a river, or a lake. */
-    static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5, W_REAL = 6;
+    static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5;
     /** The Islands map, and its one size (tiles across: a bit bigger than Massive). */
     static final int ISLANDS = 14, ISLANDS_TILES = 640;
     /** (10.60) The Archipelago (always one size, like Islands). */
@@ -251,12 +250,12 @@ final class CityConfig implements OptionSet {
     /**
      * (11.3) Maps taken out of the game altogether, code and all: Sydney, Tokyo and Paris (their countries are
      * gone), Seaside, River City, the Garrison State, the Mountain Valley, Bay City, Delta Marsh, Fjord Town and
-     * Canal City. Their numbers stay taken so the other maps keep
-     * theirs; saves and city codes on them no longer load.
+     * Canal City; ((12.7) and the last of the real cities, Los Angeles, Portland, Seattle and New York). Their
+     * numbers stay taken so the other maps keep theirs; saves and city codes on them no longer load.
      */
     static boolean removed(int preset) {
         // ((11.5) Suburbs (2) too.)
-        return preset == 2 || preset == 10 || preset == 11 || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        return preset == 2 || preset == 10 || preset == 11 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -266,22 +265,9 @@ final class CityConfig implements OptionSet {
         if (v[OPT_PRESET] == ISLANDS || v[OPT_PRESET] == ARCHIPELAGO) v[OPT_SIZE] = MASSIVE;
         if (removed(v[OPT_PRESET])) v[OPT_PRESET] = METROPOLIS;
         v[OPT_COUNTRY] = Country.USA;
-        // A real city is always the same city: the biggest size, in its own country.
-        RealCities.Spec real = RealCities.get(v[OPT_PRESET]);
-        if (real != null) {
-            v[OPT_SIZE] = HUGE;
-            seed = real.seed;
-            edits.clear();
-        }
-    }
-
-    /** The real city this is (null for a generated one). */
-    RealCities.Spec real() {
-        return civic >= 5 ? RealCities.get(v[OPT_PRESET]) : null;
     }
 
     int water() {
-        if (RealCities.isReal(v[OPT_PRESET])) return W_REAL;
         switch (v[OPT_PRESET]) {
             case 12: return W_LAKE;
             case 13: return W_HARBOUR;
@@ -607,7 +593,7 @@ final class CityConfig implements OptionSet {
         for (int i = 0; i < v.length; i++) {
             // (A random city is a made-up one: not one of the real cities.)
             do v[i] = r.nextInt(VALUES[i].length);
-            while (retired(i, v[i]) || (i == OPT_PRESET && RealCities.isReal(v[i])));
+            while (retired(i, v[i]));
         }
         v[OPT_SIZE] = LARGE;
         normalize();

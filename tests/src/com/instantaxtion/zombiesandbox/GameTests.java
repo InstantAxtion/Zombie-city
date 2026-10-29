@@ -18,8 +18,8 @@ public final class GameTests {
             public void run() {
                 // (Every map at Medium is built by the government buildings test.)
                 for (int p = 0; p < CityConfig.PRESETS.length + 5; p++) {
-                    // (The real cities only come in one size: see the 10.18 test.)
-                    if (RealCities.isReal(p)) continue;
+                    // (Maps taken out of the game don't build.)
+                    if (p < CityConfig.PRESETS.length && CityConfig.removed(p)) continue;
                     CityConfig c = new CityConfig();
                     boolean sizes = p >= CityConfig.PRESETS.length;
                     c.v[CityConfig.OPT_PRESET] = sizes ? 0 : p;
@@ -173,8 +173,9 @@ public final class GameTests {
                 CityConfig old = new CityConfig();
                 check(old.applyCode("12-44") && old.country() == Country.USA, "codes build American cities");
                 check(!new CityConfig().applyCode("22-77@16"), "a code for another country doesn't load");
-                for (int p : new int[]{10, 11, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
-                    check(CityConfig.removed(p) && CityConfig.retired(CityConfig.OPT_PRESET, p), CityConfig.PRESETS[p] + " is gone");
+                // ((12.7) The real cities too: Los Angeles, Portland, Seattle and New York, 15 to 18.)
+                for (int p : new int[]{10, 11, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
+                    check(CityConfig.removed(p) && CityConfig.retired(CityConfig.OPT_PRESET, p) && CityConfig.PRESETS[p].isEmpty(), "map " + p + " is gone");
                     check(!new CityConfig().applyCode(String.valueOf("123456789ABCDEFGHIJKLMNOPQRST".charAt(p)) + "3-5"), "and its city code doesn't load");
                     CityConfig c = new CityConfig();
                     c.v[CityConfig.OPT_PRESET] = p;
@@ -481,44 +482,6 @@ public final class GameTests {
                         + w.fleet.vehicles.size() + " vehicles)");
                 check(onRoad > 50, "patrol cars out on the roads (" + onRoad + " samples)");
                 check(wrong <= onRoad * 0.04f, "patrol cars on the wrong side " + wrong + " of " + onRoad);
-            }
-        });
-        test("traffic keeps to the roads, stops at junctions and never vanishes in view", new Check() {
-            public void run() {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.seed = 3;
-                World w = new World(c);
-                w.populate(c);
-                w.viewX0 = -100000;
-                w.viewY0 = -100000;
-                w.viewX1 = -99000;
-                w.viewY1 = -99000;
-                w.fleet.spawnTraffic(20);
-                // Now everything is on screen.
-                w.viewX0 = 0;
-                w.viewY0 = 0;
-                w.viewX1 = w.city.worldW();
-                w.viewY1 = w.city.worldH();
-                java.util.HashSet<Fleet.Vehicle> before = new java.util.HashSet<Fleet.Vehicle>();
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.CAR) before.add(v);
-                int pavement = 0, samples = 0, stops = 0;
-                for (int s = 0; s < 30 * 90; s++) {
-                    w.update(1 / 30f);
-                    for (Fleet.Vehicle v : w.fleet.vehicles) {
-                        if (v.type != Fleet.CAR || v.parked) continue;
-                        if (s % 15 == 0) {
-                            samples++;
-                            byte t = w.city.tiles[w.city.tileIndex(v.x, v.y)];
-                            if (t == City.SIDEWALK || t == City.PLAZA) pavement++;
-                        }
-                        if (v.held && v.speed < 3) stops++;
-                    }
-                }
-                for (Fleet.Vehicle v : before) check(w.fleet.vehicles.contains(v), "no car disappears while you can see it");
-                check(pavement * 50 < samples, "cars keep off the pavement");
-                check(stops > 0, "cars stop at lights and stop signs");
-                check(!w.city.junctions.isEmpty(), "junctions are found");
             }
         });
         test("the Build tool, and its edits in the city code and saves", new Check() {
@@ -972,7 +935,7 @@ public final class GameTests {
                 check(lowered && standby, "the rescue team is lowered and the helicopter waits at base for their call");
             }
         });
-        test("10.18: fewer maps, no animals, hikers out, people get clear, dirt lanes, the real cities", new Check() {
+        test("10.18: fewer maps, no animals, hikers out, people get clear, dirt lanes", new Check() {
             public void run() throws Exception {
                 check(CityConfig.retired(CityConfig.OPT_PRESET, 0) && CityConfig.retired(CityConfig.OPT_PRESET, 7), "Classic and Campus are gone");
                 CityConfig d = new CityConfig();
@@ -1036,46 +999,6 @@ public final class GameTests {
                         if (k < lanes.w && k - x < 25 && lanes.tiles[y * lanes.w + k] == City.DIRT && across <= 4 && !street) stubs++;
                     }
                 check(stubs == 0, stubs + " stretches of tarmac in the middle of a dirt lane");
-                // The real cities.
-                for (int i = 0; i < RealCities.NAMES.length; i++) {
-                    CityConfig rc = new CityConfig();
-                    rc.v[CityConfig.OPT_PRESET] = RealCities.FIRST + i;
-                    rc.normalize();
-                    RealCities.Spec spec = RealCities.get(RealCities.FIRST + i);
-                    check(rc.size() == CityConfig.HUGE && rc.country() == Country.USA, spec.name + " is always Massive");
-                    CityConfig back = new CityConfig();
-                    check(back.applyCode(rc.code()) && back.preset() == rc.preset() && back.seed == rc.seed, spec.name + ": its city code");
-                    City city = new City(rc, 0.05f);
-                    check(city.name.equals(spec.name), spec.name + " is called " + spec.name);
-                    int marks = city.structures.size(), water = 0;
-                    for (City.Building b : city.buildings) if (b.landmark >= 0 || (b.kind == City.STADIUM && b.name != null && !b.name.endsWith(" Stadium"))) marks++;
-                    for (byte t : city.tiles) if (t == City.WATER) water++;
-                    check(marks >= 4, spec.name + ": its landmarks (" + marks + ")");
-                    check(water > 0, spec.name + ": its water");
-                    boolean named = false;
-                    for (City.District dd : city.districts) if (dd.name.equals(spec.places.get(0).name)) named = true;
-                    check(named, spec.name + ": its neighbourhoods");
-                    boolean streets = false;
-                    for (City.Street st : city.streets)
-                        for (RealCities.StreetName sn : spec.eastWest) if (sn.name.equals(st.name)) streets = true;
-                    check(streets, spec.name + ": its streets");
-                    if (!spec.crossings.isEmpty()) {
-                        boolean bridge = false;
-                        for (City.Street st : city.streets)
-                            for (RealCities.Crossing cr : spec.crossings) if (cr.name.equals(st.name)) bridge = true;
-                        check(bridge, spec.name + ": its bridges");
-                    }
-                }
-                // A game in one: people about, hikers on its trails.
-                CityConfig la = new CityConfig();
-                la.v[CityConfig.OPT_PRESET] = RealCities.FIRST;
-                la.normalize();
-                World lw = new World(la);
-                lw.populate(la);
-                int out = 0;
-                for (Entity e : lw.entities) if (!e.dead && e.job == Entity.J_HIKER) out++;
-                for (int f = 0; f < 30 * 5; f++) lw.update(1 / 30f);
-                check(lw.humans > 100 && out > 0, "Los Angeles plays: " + lw.humans + " people, " + out + " hikers");
             }
         });
         test("10.19: gunfire heard, the ranger off the wall, out of hiding sooner, resupply, driveways, quick close-ups", new Check() {
@@ -1316,10 +1239,8 @@ public final class GameTests {
                 check(new City(old, 0.05f).curves.isEmpty(), "saved cities from before keep their straight streets");
             }
         });
-        test("10.28: no real cities or bloaters, tougher zombies, ring road, stations on the roads, a slower start", new Check() {
+        test("10.28: no bloaters, tougher zombies, ring road, stations on the roads, a slower start", new Check() {
             public void run() throws Exception {
-                for (int p = RealCities.FIRST; p < RealCities.FIRST + RealCities.NAMES.length; p++)
-                    check(CityConfig.retired(CityConfig.OPT_PRESET, p), "real city map " + p + " is gone");
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_PRESET] = 8;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
@@ -1360,7 +1281,7 @@ public final class GameTests {
                 check(w.alert == 0, "two strange calls aren't news yet (alert " + w.alert + ")");
             }
         });
-        test("10.29: highway interchanges with slip roads, no lights on the highway, steady traffic on it", new Check() {
+        test("10.29: highway interchanges with slip roads, no lights on the highway", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_PRESET] = 8;
@@ -1370,7 +1291,6 @@ public final class GameTests {
                 c.seed = 7;
                 World w = new World(c);
                 w.populate(c);
-                civilianTraffic(w);
                 City city = w.city;
                 check(city.hwyAxis >= 0 && !city.hwyExits.isEmpty(), "a highway with ways on and off");
                 boolean ew = city.hwyAxis == 0;
@@ -1399,12 +1319,9 @@ public final class GameTests {
                     int x = ew ? len / 2 : city.hwyAt + a, y = ew ? city.hwyAt + a : len / 2;
                     check(f[y * city.w + x] < City.FAR, "carriageway " + a + " connects to town");
                 }
-                for (int fr = 0; fr < 30 * 100; fr++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(w.fleet.throughTraffic() >= w.fleet.throughTarget() / 2,
-                        "the highway still has traffic after a while (" + w.fleet.throughTraffic() + " of " + w.fleet.throughTarget() + ")");
+                // ((12.5) Nobody drives along it now: no civilian traffic.)
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    check(v.type != Fleet.CAR || v.parked || v.evacStop >= 0, "no civilian drives a car");
             }
         });
         test("10.30: Massive maps have more towns and a big army base out in the country with checkpoints", new Check() {
@@ -1457,7 +1374,7 @@ public final class GameTests {
                 check(!l.outskirtsBase(), "none on a Medium map");
             }
         });
-        test("10.32: bridges over the highway, a big map saves and loads, fuel, evacuation, fallback bases", new Check() {
+        test("10.32: bridges over the highway, a big map saves and loads, evacuation, fallback bases", new Check() {
             public void run() throws Exception {
                 // Bridges at the interchanges: the road goes over, the highway runs on under it untouched.
                 CityConfig c = new CityConfig();
@@ -1493,7 +1410,6 @@ public final class GameTests {
                 m.seed = 5;
                 World w = new World(m);
                 w.populate(m);
-                civilianTraffic(w);
                 check(!w.city.checkpoints.isEmpty(), "the country base has its checkpoints");
                 int bases = 0;
                 for (City.Facility fa : w.city.facilities) if (fa.kind == City.FACILITY_BASE) bases++;
@@ -1502,10 +1418,6 @@ public final class GameTests {
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
-                // Cars burn fuel as they go.
-                int burned = 0;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.CAR && !v.parked && v.fuel < 0.999f) burned++;
-                check(burned > 5, "cars burn fuel (" + burned + ")");
                 // The town's base falls: command moves to the one still standing.
                 City.Facility main = w.city.mainBase();
                 main.fallen = true;
@@ -2090,66 +2002,6 @@ public final class GameTests {
                     rolled = car.crew.size() == 2 && car.speed > 5;
                 }
                 check(rolled, "they get in and drive off (crew " + car.crew.size() + ")");
-            }
-        });
-        test("10.42: cars drive the line of their lane - round corners, through junctions and back out - and traffic doesn't knot up", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_PRESET] = 8;
-                c.v[CityConfig.OPT_SIZE] = 3;
-                c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.seed = 5;
-                c.normalize();
-                c.seed = 5;
-                World w = new World(c);
-                w.rnd.setSeed(4);
-                w.populate(c);
-                civilianTraffic(w);
-                long samples = 0, careful = 0, stuck = 0, overlaps = 0, laneN = 0, planned = 0, cornerCut = 0;
-                double laneErr = 0;
-                for (int f = 0; f < 30 * 60; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    if (f < 90 || f % 10 != 0) continue;
-                    java.util.List<Fleet.Vehicle> vs = w.fleet.vehicles;
-                    for (Fleet.Vehicle v : vs) {
-                        if (v.type != Fleet.CAR || v.parked || v.broken || v.player != null || v.field == null) continue;
-                        samples++;
-                        if (v.careful > 0) careful++;
-                        if (v.stillT > 30) stuck++;
-                        if (v.corN >= 3) planned++;
-                        // A turn in a junction is planned as one corner, entry lane to exit lane - not tile by tile.
-                        for (int i = 2; i < v.corN; i++) {
-                            float ax = v.cor[i * 2 - 2] - v.cor[i * 2 - 4], ay = v.cor[i * 2 - 1] - v.cor[i * 2 - 3];
-                            float bx = v.cor[i * 2] - v.cor[i * 2 - 2], by = v.cor[i * 2 + 1] - v.cor[i * 2 - 1];
-                            if (Math.abs(ax * by - ay * bx) > 1 && w.city.junctionIdAt(v.cor[i * 2 - 2], v.cor[i * 2 - 1]) >= 0) cornerCut++;
-                        }
-                        // Mid-block, heading straight along the road: how far off the middle of its lane.
-                        int tx = (int) (v.x / City.T), ty = (int) (v.y / City.T);
-                        if (w.city.junctionIdAt(v.x, v.y) >= 0 || Math.abs(v.speed) < 10 || v.passing > 0 || v.yieldT > 0 || v.careful > 0) continue;
-                        float cx = (float) Math.cos(v.angle), cy = (float) Math.sin(v.angle);
-                        int dx = Math.abs(cx) > Math.abs(cy) ? (int) Math.signum(cx) : 0, dy = dx == 0 ? (int) Math.signum(cy) : 0;
-                        if (w.city.tiles[ty * w.city.w + tx] != City.ROAD || Math.abs(dx * cx + dy * cy) < 0.97f) continue;
-                        // (Its own lane, since 11.1, on a road with more than one each way.)
-                        float off = w.city.laneOffset(tx, ty, dx, dy, v.lightsOn() ? 0 : v.lane);
-                        float lx = (tx + 0.5f) * City.T - dy * off, ly = (ty + 0.5f) * City.T + dx * off;
-                        laneErr += Math.abs((v.x - lx) * -dy + (v.y - ly) * dx);
-                        laneN++;
-                    }
-                    for (int i = 0; i < vs.size(); i++)
-                        for (int j = i + 1; j < vs.size(); j++) {
-                            Fleet.Vehicle a = vs.get(i), b = vs.get(j);
-                            if (a.type == Fleet.CAR && b.type == Fleet.CAR && !a.parked && !b.parked && Math.hypot(a.x - b.x, a.y - b.y) < 7) overlaps++;
-                        }
-                }
-                check(samples > 5000, "traffic (" + samples + ")");
-                check(planned > samples * 0.8, "cars plan the line they drive (" + planned + " of " + samples + ")");
-                check(cornerCut > 0, "turns are planned as corners through the junction");
-                double err = laneErr / Math.max(1, laneN);
-                check(laneN > 1000 && err < 1.5, String.format("cars keep to the middle of their lane (off by %.2f px on average)", err));
-                check(careful < samples * 0.015, "hardly anyone goes round in circles (" + careful + " of " + samples + ")");
-                check(stuck < samples * 0.02, "hardly anyone stuck for half a minute (" + stuck + " of " + samples + ")");
-                check(overlaps <= 10, "cars don't end up on top of one another (" + overlaps + ")");
             }
         });
         test("10.45: calls always reach the map and follow the dead, units help each other, louder guns, shoves can fail, yards kept clear", new Check() {
@@ -2762,17 +2614,6 @@ public final class GameTests {
             System.out.println("FAIL  " + name + ": " + e);
             e.printStackTrace(System.out);
         }
-    }
-
-    /**
-     * ((12.5) Civilians don't drive any more, so a game has no traffic of its own: the tests of how cars drive put
-     * it on the roads themselves, as it was before.)
-     */
-    private static void civilianTraffic(World w) {
-        for (Fleet.Vehicle v : w.fleet.vehicles)
-            check(v.type != Fleet.CAR || v.parked || v.evacStop >= 0, "no civilian drives a car");
-        w.fleet.trafficTarget = Fleet.trafficFor(w.city);
-        w.fleet.spawnTraffic(w.fleet.trafficTarget);
     }
 
     private static void check(boolean ok, String what) {

@@ -135,8 +135,6 @@ final class City {
         boolean infestKnown;
         /** Shop windows smashed in, and shelves stripped bare. */
         boolean smashed, looted;
-        /** One of a real city's landmarks: its RealCities.L_ style, or -1. */
-        int landmark = -1;
         /**
          * How it looks after what it's been through (10.17, for drawing only): soot from a fire (0 to 1),
          * windows shot out in a fight inside (0 to 1), and the door broken in by the dead.
@@ -186,8 +184,6 @@ final class City {
     final Country country;
     /** The town's name, the same every time for a given city code. */
     final String name;
-    /** The real city this is (since 10.18), or null for a made-up one. */
-    final RealCities.Spec real;
     final int w, h;
     final byte[] tiles;
     final boolean[] solid;
@@ -230,10 +226,6 @@ final class City {
 
     /** Scatters district centres over the map, gives each a kind and a name, and assigns every tile to one. */
     private void makeDistricts() {
-        if (real != null) {
-            realDistricts();
-            return;
-        }
         // Only the town is split into districts; any countryside around it is one area of its own.
         float core = cfg.coreFraction();
         int m = core < 0.99f ? (int) (w * (1 - core) / 2) : 0;
@@ -427,7 +419,7 @@ final class City {
      * main road and bridge).
      */
     int roadSurface(int x, int y) {
-        if (cfg.civic < 9 || real != null) return SURF_ASPHALT;
+        if (cfg.civic < 9) return SURF_ASPHALT;
         int i = y * w + x;
         if (mainRoad[i] || (bridge != null && bridge[i])) return SURF_ASPHALT;
         // (10.29) The frontage road and the slip roads by the highway are tarmac, not country chip-seal.
@@ -542,8 +534,7 @@ final class City {
         Variants.extra = new Random(cfg.seed * 7919L + 101);
         Random nameRnd = new Random(cfg.seed * 31 + 7);
         country = Country.get(cfg.country());
-        real = cfg.real();
-        name = real != null ? real.name : country.townName(nameRnd);
+        name = country.townName(nameRnd);
         tiles = new byte[w * h];
         solid = new boolean[w * h];
         opaque = new boolean[w * h];
@@ -590,7 +581,7 @@ final class City {
             padsOnly = false;
         }
         // ((10.63) Map version 25: every map about as populous as the next, whatever its size or kind.)
-        if (cfg.civic >= 25 && real == null) balancePopulation(cfg.residentsTarget());
+        if (cfg.civic >= 25) balancePopulation(cfg.residentsTarget());
         clearDoorways();
         Arrays.fill(humanDist, FAR);
         Arrays.fill(zombieDist, FAR);
@@ -687,9 +678,6 @@ final class City {
             int use = Variants.use(b.variant);
             if (use == Variants.U_FOOD) b.food += 160;
             else if (use == Variants.U_ROUNDS) b.stock = 60;
-            // (The visitor centre, a camp store or a cabin out in the country.)
-            Integer mark = lotLandmark.get(l);
-            if (mark != null) b.landmark = mark;
             String own = lotNames.get(l);
             if (own != null) {
                 b.name = own;
@@ -727,7 +715,7 @@ final class City {
             int[] l = buildingLots.get(i);
             int k = l[6];
             if (k != OFFICE && k != APARTMENT && k != HOUSE && k != WAREHOUSE) continue;
-            if (lotNames.containsKey(l) || lotLandmark.containsKey(l)) continue;
+            if (lotNames.containsKey(l)) continue;
             int x0 = l[0], y0 = l[1], lw = l[2], lh = l[3];
             int min = k == HOUSE ? 4 : 6;
             if (lw < min || lh < min) continue;
@@ -1123,7 +1111,6 @@ final class City {
     }
     private final java.util.IdentityHashMap<int[], String> lotNames = new java.util.IdentityHashMap<int[], String>();
     private final java.util.IdentityHashMap<int[], Integer> lotResidents = new java.util.IdentityHashMap<int[], Integer>();
-    private final java.util.IdentityHashMap<int[], Integer> lotLandmark = new java.util.IdentityHashMap<int[], Integer>();
 
     void setTreeKind(int i, byte kind) {
         if (treeKind == null) treeKind = new byte[w * h];
@@ -2412,11 +2399,6 @@ final class City {
         Arrays.fill(tiles, SIDEWALK);
         industryAngle = rnd.nextFloat() * (float) Math.PI * 2;
         waterKind = cfg.water();
-        if (real != null) {
-            // (The towers rise round the real downtown.)
-            shiftX = Math.round(real.downX * w - w / 2f);
-            shiftY = Math.round(real.downY * h - h / 2f);
-        }
         if (waterKind == CityConfig.W_HARBOUR) seaY = h - Math.max(24, (int) (h * 0.18f));
         // ((11.0) The four new water maps have the sea along the bottom too, a little narrower.)
         if (waterKind == CityConfig.W_ISLANDS) islandLayout();
@@ -2438,7 +2420,7 @@ final class City {
             wildSide = side == 0 ? 1 : side == 1 ? 0 : side == 2 ? 3 : 2;
             // (10.34) Every map its own shape: the town longer one way than the other, and off-centre the
             // other way too.
-            if (cfg.civic >= 18 && waterKind == CityConfig.W_NONE && real == null && cfg.civic < 26) {
+            if (cfg.civic >= 18 && waterKind == CityConfig.W_NONE && cfg.civic < 26) {
                 // (Only ever narrower than the square, so there's still room round it for the highway and the ring road.)
                 float squeeze = 0.78f + sr.nextFloat() * 0.22f;
                 boolean across = sr.nextBoolean();
@@ -2466,7 +2448,7 @@ final class City {
         // A town out in the country grows its own shape instead of filling a square.
         boolean organic = m > 0 && !village;
         int in = organic ? 0 : 3;
-        if (m == 0 && waterKind != CityConfig.W_ISLANDS && real == null) {
+        if (m == 0 && waterKind != CityConfig.W_ISLANDS) {
             carve(new Street(bx0, by0, bx1, by0 + 3, false, false));
             // (By the sea, the bottom of the ring is the seafront.)
             carve(new Street(bx0, by1 - 3, bx1, by1, false, seaY > 0));
@@ -2495,8 +2477,6 @@ final class City {
                     }
                 }
             ensureCrossings(bx0, bx1, railY0, railRows);
-        } else if (real != null) {
-            realLayout();
         } else if (waterKind == CityConfig.W_ISLANDS) {
             islands();
         } else if (waterKind == CityConfig.W_LAKE) {
@@ -2515,7 +2495,7 @@ final class City {
         if (m >= 16 && cfg.civic >= 12) ringRoad(bx0, by0, bx1, by1);
         // (10.52) Map version 22: the beltway right round the map, before the country fills in round it (on the
         // water maps, the roads round the edge of town: see outerBelt).
-        if (cfg.civic >= 22 && m >= 16 && waterKind == CityConfig.W_NONE && real == null) beltway();
+        if (cfg.civic >= 22 && m >= 16 && waterKind == CityConfig.W_NONE) beltway();
         if (m > 0) {
             int n = w >= 400 ? 3 + rnd.nextInt(3) : w >= 300 ? 1 + rnd.nextInt(2) : rnd.nextInt(2);
             // (Since 10.20 the country is busier: more hamlets, the bigger ones small towns of their own.)
@@ -2533,8 +2513,7 @@ final class City {
         if (m > 0) tidyDeadEnds();
         // (10.30) A big army base of its own out in the country, on the Massive maps.
         // The lie of the land: hills, and out in the country mountains, streams, lakes, a park and campsites.
-        if (real != null) elev = new Terrain(this, new Random(cfg.seed * 977L + 3)).buildReal(real, realAreaAt);
-        else if (cfg.nature()) elev = new Terrain(this, new Random(cfg.seed * 977L + 3)).build();
+        if (cfg.nature()) elev = new Terrain(this, new Random(cfg.seed * 977L + 3)).build();
         if (fieldTile != null)
             for (int i = 0; i < w * h; i++) if (fieldTile[i] && tiles[i] == TREE) tiles[i] = GRASS;
         // Each neighbourhood is a place of its own, as far as anyone roaming between places is concerned.
@@ -2838,9 +2817,8 @@ final class City {
             if (st.x0 == 0 && st.y0 == 0 || st.x1 == w || st.y1 == h) st.name = country.ringRoad;
             else st.name = country.streetName(base, st.main || len > 40, rnd);
         }
-        if (real != null) realStreetNames();
         for (Street st : ringStreets) st.name = country.ringRoad;
-        if (cfg.civic >= 22 && waterKind != CityConfig.W_NONE && real == null) outerBelt();
+        if (cfg.civic >= 22 && waterKind != CityConfig.W_NONE) outerBelt();
         for (Street st : beltStreets) {
             st.name = BELTWAY;
             streets.add(st);
@@ -4108,595 +4086,6 @@ final class City {
     }
 
 
-    // ------------------------------------------------------------------ real cities (10.18)
-
-    /** Which of the real city's parks, woods or cemeteries each tile is in (its index + 1), or 0. */
-    byte[] realAreaAt;
-    private boolean[] realWater;
-    /**
-     * A real city's structures that stand up off the map and aren't buildings: towers, the Hollywood Sign,
-     * the Statue of Liberty, arches over bridges... {kind, x, y, height, x2, y2} in world units.
-     */
-    final List<float[]> structures = new ArrayList<float[]>();
-    /** Bridges built on purpose, with their real names. */
-    private final java.util.IdentityHashMap<Street, String> fixedNames = new java.util.IdentityHashMap<Street, String>();
-
-    private static boolean inPoly(float[] p, float x, float y) {
-        boolean in = false;
-        for (int i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
-            float xi = p[i], yi = p[i + 1], xj = p[j], yj = p[j + 1];
-            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in = !in;
-        }
-        return in;
-    }
-
-    private static float[] bounds(float[] p) {
-        float x0 = 1, y0 = 1, x1 = 0, y1 = 0;
-        for (int i = 0; i < p.length; i += 2) {
-            x0 = Math.min(x0, p[i]);
-            x1 = Math.max(x1, p[i]);
-            y0 = Math.min(y0, p[i + 1]);
-            y1 = Math.max(y1, p[i + 1]);
-        }
-        return new float[]{x0, y0, x1, y1};
-    }
-
-    /** The water, and which park or woods each tile is in, from the real city's map. */
-    private void realMasks() {
-        RealCities.Spec s = real;
-        realWater = new boolean[w * h];
-        realAreaAt = new byte[w * h];
-        boolean byLand = !s.land.isEmpty();
-        if (byLand) Arrays.fill(realWater, true);
-        List<float[]> landB = new ArrayList<float[]>(), seaB = new ArrayList<float[]>(), isleB = new ArrayList<float[]>();
-        for (float[] p : s.land) landB.add(bounds(p));
-        for (float[] p : s.sea) seaB.add(bounds(p));
-        for (float[] p : s.islands) isleB.add(bounds(p));
-        for (int y = 0; y < h; y++) {
-            float fy = (y + 0.5f) / h;
-            for (int x = 0; x < w; x++) {
-                float fx = (x + 0.5f) / w;
-                int i = y * w + x;
-                if (byLand)
-                    for (int k = 0; k < s.land.size(); k++) {
-                        float[] b = landB.get(k);
-                        if (fx >= b[0] && fx <= b[2] && fy >= b[1] && fy <= b[3] && inPoly(s.land.get(k), fx, fy)) {
-                            realWater[i] = false;
-                            break;
-                        }
-                    }
-                for (int k = 0; k < s.sea.size() && !realWater[i]; k++) {
-                    float[] b = seaB.get(k);
-                    if (fx >= b[0] && fx <= b[2] && fy >= b[1] && fy <= b[3] && inPoly(s.sea.get(k), fx, fy)) realWater[i] = true;
-                }
-                for (float[] l : s.lakes) {
-                    float dx = (fx - l[0]) / l[2], dy = (fy - l[1]) / l[3];
-                    if (dx * dx + dy * dy <= 1) realWater[i] = true;
-                }
-                for (int k = 0; k < s.islands.size(); k++) {
-                    float[] b = isleB.get(k);
-                    if (fx >= b[0] && fx <= b[2] && fy >= b[1] && fy <= b[3] && inPoly(s.islands.get(k), fx, fy)) realWater[i] = false;
-                }
-            }
-        }
-        // Rivers: a band of the given width along each line.
-        for (float[] r : s.rivers) {
-            float half = r[0] / 2f;
-            for (int k = 1; k + 3 < r.length; k += 2) {
-                float ax = r[k] * w, ay = r[k + 1] * h, bx = r[k + 2] * w, by = r[k + 3] * h;
-                int x0 = (int) Math.max(0, Math.min(ax, bx) - half - 2), x1 = (int) Math.min(w - 1, Math.max(ax, bx) + half + 2);
-                int y0 = (int) Math.max(0, Math.min(ay, by) - half - 2), y1 = (int) Math.min(h - 1, Math.max(ay, by) + half + 2);
-                float dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy + 0.0001f;
-                for (int y = y0; y <= y1; y++)
-                    for (int x = x0; x <= x1; x++) {
-                        float px = x + 0.5f, py = y + 0.5f;
-                        float t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
-                        float ex = ax + dx * t - px, ey = ay + dy * t - py;
-                        // (A gentle wobble, so the banks aren't ruler-straight.)
-                        float wob = (float) Math.sin(x * 0.11f + y * 0.07f) * 0.8f;
-                        if (ex * ex + ey * ey <= (half + wob) * (half + wob)) realWater[y * w + x] = true;
-                    }
-            }
-        }
-        // Islands in a river stay land.
-        for (int k = 0; k < s.islands.size(); k++) {
-            float[] b = isleB.get(k);
-            for (int y = (int) (b[1] * h); y <= Math.min(h - 1, (int) (b[3] * h) + 1); y++)
-                for (int x = (int) (b[0] * w); x <= Math.min(w - 1, (int) (b[2] * w) + 1); x++)
-                    if (inPoly(s.islands.get(k), (x + 0.5f) / w, (y + 0.5f) / h)) realWater[y * w + x] = false;
-        }
-        // Moats: a ring of water three tiles wide round the edge.
-        for (float[] mo : s.moats) {
-            int x0 = (int) (mo[0] * w), y0 = (int) (mo[1] * h), x1 = (int) (mo[2] * w), y1 = (int) (mo[3] * h);
-            for (int y = y0; y <= y1; y++)
-                for (int x = x0; x <= x1; x++)
-                    if (x < x0 + 3 || x > x1 - 3 || y < y0 + 3 || y > y1 - 3) realWater[y * w + x] = true;
-        }
-        for (int a = 0; a < s.areas.size(); a++) {
-            float[] p = s.areas.get(a).poly, b = bounds(p);
-            for (int y = Math.max(0, (int) (b[1] * h)); y <= Math.min(h - 1, (int) (b[3] * h) + 1); y++)
-                for (int x = Math.max(0, (int) (b[0] * w)); x <= Math.min(w - 1, (int) (b[2] * w) + 1); x++)
-                    if (inPoly(p, (x + 0.5f) / w, (y + 0.5f) / h)) realAreaAt[y * w + x] = (byte) (a + 1);
-        }
-    }
-
-    /**
-     * A real city: its streets laid out over the whole map, then the water, parks and woods put where they
-     * really are. Main roads cross rivers on bridges (and any street crosses a canal), the famous bridges go
-     * in by name; blocks the water or a park takes become shore or parkland; the landmarks go in last.
-     */
-    private void realLayout() {
-        RealCities.Spec s = real;
-        realMasks();
-        bridge = new boolean[w * h];
-        carve(new Street(0, 0, w, 3, false, true));
-        carve(new Street(0, h - 3, w, h, false, true));
-        carve(new Street(0, 0, 3, h, true, true));
-        carve(new Street(w - 3, 0, w, h, true, true));
-        split(3, 3, w - 3, h - 3, 0, -1, -1);
-        // Bridges: where a street crosses the water and carries on the far side.
-        boolean[] keep = new boolean[w * h];
-        for (Street st : streets) {
-            int len = st.vertical ? st.y1 - st.y0 : st.x1 - st.x0;
-            int mid = st.vertical ? (st.x0 + st.x1) / 2 : (st.y0 + st.y1) / 2;
-            int k = 0;
-            while (k < len) {
-                int x = st.vertical ? mid : st.x0 + k, y = st.vertical ? st.y0 + k : mid;
-                if (!realWater[y * w + x]) {
-                    k++;
-                    continue;
-                }
-                int a = k;
-                while (k < len && realWater[(st.vertical ? (st.y0 + k) * w + mid : mid * w + st.x0 + k)]) k++;
-                int run = k - a;
-                boolean ends = a > 0 && k < len;
-                if (ends && ((st.main && run <= 24) || run <= 4))
-                    for (int q = a; q < k; q++)
-                        for (int c = 0; c < st.width; c++) {
-                            int bx = st.vertical ? st.x0 + c : st.x0 + q, by = st.vertical ? st.y0 + q : st.y0 + c;
-                            if (bx >= 0 && by >= 0 && bx < w && by < h) keep[by * w + bx] = true;
-                        }
-            }
-        }
-        // The water, the parks and the woods.
-        for (int i = 0; i < w * h; i++) {
-            if (realWater[i]) {
-                if (keep[i] && tiles[i] == ROAD) {
-                    bridge[i] = true;
-                    continue;
-                }
-                tiles[i] = WATER;
-                roadDir[i] = 0;
-                mainRoad[i] = false;
-                continue;
-            }
-            int a = realAreaAt[i] - 1;
-            if (a < 0) continue;
-            // Park drives stay (the main roads through a big park); in the woods there are only trails.
-            boolean wild = s.areas.get(a).kind == 1;
-            if (tiles[i] == ROAD && mainRoad[i] && !wild) continue;
-            tiles[i] = GRASS;
-            roadDir[i] = 0;
-            mainRoad[i] = false;
-        }
-        // Blocks the water or a park takes over are gone; their land is shore or parkland.
-        List<int[]> kept = new ArrayList<int[]>();
-        for (int[] b : blocks) {
-            int water = 0, park = 0, all = 0;
-            for (int y = Math.max(0, b[1]); y < Math.min(h, b[3]); y++)
-                for (int x = Math.max(0, b[0]); x < Math.min(w, b[2]); x++) {
-                    all++;
-                    int i = y * w + x;
-                    if (realWater[i]) water++;
-                    else if (realAreaAt[i] > 0) park++;
-                }
-            if (water == 0 && park * 10 < all * 4) {
-                kept.add(b);
-                continue;
-            }
-            for (int y = Math.max(0, b[1]); y < Math.min(h, b[3]); y++)
-                for (int x = Math.max(0, b[0]); x < Math.min(w, b[2]); x++) {
-                    int i = y * w + x;
-                    if (realWater[i] || tiles[i] == ROAD) continue;
-                    tiles[i] = GRASS;
-                }
-        }
-        blocks.clear();
-        blocks.addAll(kept);
-        // Streets that ran on into the water (or the woods) stop at the last corner.
-        boolean[] dug = new boolean[w * h];
-        for (int[] e : deadEnds()) trimStub(e, dug);
-        fixJunctions(dug);
-        for (int t = 0; t < w * h; t++) if (dug[t]) tiles[t] = GRASS;
-        // The named bridges.
-        for (RealCities.Crossing c : s.crossings) realBridge(c);
-        // Roads cut off from the rest go back to grass (or water, over the water).
-        int[] comp = new int[w * h];
-        Arrays.fill(comp, -1);
-        List<Integer> sizes = new ArrayList<Integer>();
-        int[] qu = new int[w * h];
-        for (int s0 = 0; s0 < w * h; s0++) {
-            if (tiles[s0] != ROAD || comp[s0] >= 0) continue;
-            int id = sizes.size(), head = 0, tail = 0;
-            qu[tail++] = s0;
-            comp[s0] = id;
-            while (head < tail) {
-                int c = qu[head++], x = c % w, y = c / w;
-                int[] nb = {x > 0 ? c - 1 : -1, x < w - 1 ? c + 1 : -1, y > 0 ? c - w : -1, y < h - 1 ? c + w : -1};
-                for (int jn : nb)
-                    if (jn >= 0 && comp[jn] < 0 && tiles[jn] == ROAD) {
-                        comp[jn] = id;
-                        qu[tail++] = jn;
-                    }
-            }
-            sizes.add(tail);
-        }
-        int biggest = 0, main = -1;
-        for (int k = 0; k < sizes.size(); k++)
-            if (sizes.get(k) > biggest) {
-                biggest = sizes.get(k);
-                main = k;
-            }
-        for (int t = 0; t < w * h; t++)
-            if (comp[t] >= 0 && comp[t] != main) {
-                tiles[t] = realWater[t] ? WATER : GRASS;
-                roadDir[t] = 0;
-                mainRoad[t] = false;
-                bridge[t] = false;
-            }
-        // Blocks no road reaches any more (on an island with no bridge) are left as open ground.
-        for (int k = blocks.size() - 1; k >= 0; k--) {
-            int[] b = blocks.get(k);
-            boolean touches = false;
-            for (int y = Math.max(0, b[1] - 1); y <= Math.min(h - 1, b[3]) && !touches; y++)
-                for (int x = Math.max(0, b[0] - 1); x <= Math.min(w - 1, b[2]) && !touches; x++)
-                    if (tiles[y * w + x] == ROAD) touches = true;
-            if (!touches) {
-                blocks.remove(k);
-                fill(b[0], b[1], b[2] - b[0], b[3] - b[1], GRASS);
-            }
-        }
-        for (int si = streets.size() - 1; si >= 0; si--) {
-            Street st = streets.get(si);
-            boolean any = false;
-            for (int y = st.y0; y < st.y1 && !any; y++)
-                for (int x = st.x0; x < st.x1 && !any; x++)
-                    if (x >= 0 && y >= 0 && x < w && y < h && tiles[y * w + x] == ROAD) any = true;
-            if (!any) streets.remove(si);
-        }
-        // Parks: lawns and clumps of trees; woods; cemeteries with their graves; and the beaches.
-        Random pr = new Random(cfg.seed * 7L + 5);
-        for (int i = 0; i < w * h; i++) {
-            int a = realAreaAt[i] - 1;
-            if (a < 0 || tiles[i] != GRASS) continue;
-            int x = i % w, y = i / w;
-            int kind = s.areas.get(a).kind;
-            float clump = (float) (Math.sin(x * 0.21 + a) * Math.sin(y * 0.17 + a * 2) + Math.sin(x * 0.05 + y * 0.07));
-            float chance = kind == 1 ? 0.5f + clump * 0.2f : kind == 2 ? 0.08f : 0.08f + Math.max(0, clump) * 0.25f;
-            if (pr.nextFloat() < chance) tiles[i] = TREE;
-        }
-        for (int a = 0; a < s.areas.size(); a++) {
-            RealCities.Area ar = s.areas.get(a);
-            float[] b = bounds(ar.poly);
-            float cx = (b[0] + b[2]) / 2 * w * T, cy = (b[1] + b[3]) / 2 * h * T;
-            natureLabel(ar.name, cx, cy, NL_PARK);
-            if (ar.kind == 0) {
-                // A path across, both ways, and somewhere to sit.
-                int x0 = (int) (b[0] * w), y0 = (int) (b[1] * h), x1 = (int) (b[2] * w), y1 = (int) (b[3] * h);
-                int my = (y0 + y1) / 2, mx = (x0 + x1) / 2;
-                for (int x = x0; x <= x1; x++) realPath(x, my, a);
-                for (int y = y0; y <= y1; y++) realPath(mx, y, a);
-                openAreas.add(new float[]{cx, cy, 0});
-            } else if (ar.kind == 2) {
-                int x0 = (int) (b[0] * w), y0 = (int) (b[1] * h), x1 = (int) (b[2] * w), y1 = (int) (b[3] * h);
-                for (int y = y0 + 1; y < y1; y += 2)
-                    for (int x = x0 + 1; x < x1; x += 2) {
-                        int i = y * w + x;
-                        if (tiles[i] == GRASS && realAreaAt[i] == a + 1)
-                            addDecor(D_GRAVE, x * T + 4, y * T + 4, x * T + 10, y * T + 12, pr.nextInt(3));
-                    }
-            }
-        }
-        for (float[] be : s.beaches) {
-            float ax = be[0] * w, ay = be[1] * h, bx = be[2] * w, by = be[3] * h;
-            float dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy + 0.001f;
-            int x0 = (int) Math.max(1, Math.min(ax, bx) - 8), x1 = (int) Math.min(w - 2, Math.max(ax, bx) + 8);
-            int y0 = (int) Math.max(1, Math.min(ay, by) - 8), y1 = (int) Math.min(h - 2, Math.max(ay, by) + 8);
-            for (int y = y0; y <= y1; y++)
-                for (int x = x0; x <= x1; x++) {
-                    int i = y * w + x;
-                    if (tiles[i] != GRASS && tiles[i] != TREE && tiles[i] != SIDEWALK) continue;
-                    float t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
-                    if (World.hypot(ax + dx * t - x, ay + dy * t - y) > 6) continue;
-                    boolean shore = false;
-                    for (int q = 1; q <= 5 && !shore; q++)
-                        if (realWater[y * w + Math.max(0, x - q)] || realWater[y * w + Math.min(w - 1, x + q)]
-                                || realWater[Math.max(0, y - q) * w + x] || realWater[Math.min(h - 1, y + q) * w + x]) shore = true;
-                    if (!shore) continue;
-                    tiles[i] = SAND;
-                    if (pr.nextFloat() < 0.012f) addDecor(D_UMBRELLA, x * T - 7, y * T - 7, x * T + 7, y * T + 7, pr.nextInt(5));
-                }
-            openAreas.add(new float[]{(ax + bx) / 2 * T, (ay + by) / 2 * T, 0});
-        }
-        for (int i = 0; i < s.lakes.size(); i++) {
-            float[] l = s.lakes.get(i);
-            if (l[2] > 0.009f) openAreas.add(new float[]{l[0] * w * T, (l[1] + l[3] + 0.01f) * h * T, 0});
-        }
-        // The landmarks.
-        for (RealCities.Landmark lm : s.landmarks) realLandmark(lm);
-        // Boats out on the open water.
-        for (int k = 0; k < w / 10; k++) {
-            int bx = 4 + rnd.nextInt(w - 40), by = 4 + rnd.nextInt(h - 8);
-            boolean open = true;
-            for (int q = -3; q <= 5 && open; q++)
-                for (int r = -2; r <= 2 && open; r++) {
-                    int x = bx + q, y = by + r;
-                    if (x < 0 || y < 0 || x >= w || y >= h || tiles[y * w + x] != WATER || isBridge(x, y)) open = false;
-                }
-            if (open) addDecor(D_BOAT, bx * T, by * T, bx * T + 30, by * T + 10, rnd.nextInt(3));
-        }
-    }
-
-    /** A footpath tile across a park (not through its lakes or trees on the line: it clears them). */
-    private void realPath(int x, int y, int area) {
-        if (x < 0 || y < 0 || x >= w || y >= h) return;
-        int i = y * w + x;
-        if (realAreaAt[i] != area + 1 || (tiles[i] != GRASS && tiles[i] != TREE)) return;
-        tiles[i] = PLAZA;
-    }
-
-    /** One of the real bridges, built across the water at its place, with its name (and its towers or arch). */
-    private void realBridge(RealCities.Crossing c) {
-        int x = Math.round(c.x * w), y = Math.round(c.y * h);
-        // (From the middle of the water it crosses: look a little way along for it.)
-        int len = c.vertical ? h : w, at = c.vertical ? x - 1 : y - 1, mid = c.vertical ? y : x;
-        int found = -1;
-        for (int d = 0; d < 24 && found < 0; d++)
-            for (int sgn = -1; sgn <= 1 && found < 0; sgn += 2) {
-                int k = mid + d * sgn;
-                if (k < 0 || k >= len) continue;
-                int tx = c.vertical ? x : k, ty = c.vertical ? k : y;
-                if (tiles[ty * w + tx] == WATER) found = k;
-            }
-        if (found < 0) return;
-        int before = streets.size();
-        linkRoad(c.vertical, at, found, true);
-        if (streets.size() == before) return;
-        Street st = streets.get(streets.size() - 1);
-        fixedNames.put(st, c.name);
-        if (c.look == 0) return;
-        // Where it's over the water: the towers or the arch stand there.
-        int a = found, b = found;
-        while (a > 0 && isBridge(c.vertical ? x : a - 1, c.vertical ? a - 1 : y)) a--;
-        while (b < len - 1 && isBridge(c.vertical ? x : b + 1, c.vertical ? b + 1 : y)) b++;
-        float cx = c.vertical ? (at + 1.5f) * T : 0, cy = c.vertical ? 0 : (at + 1.5f) * T;
-        float x0 = c.vertical ? cx : (a + 0.5f) * T, y0 = c.vertical ? (a + 0.5f) * T : cy;
-        float x1 = c.vertical ? cx : (b + 0.5f) * T, y1 = c.vertical ? (b + 0.5f) * T : cy;
-        float height = c.look == RealCities.ST_BRIDGE_ARCH ? Math.min(200, 40 + (b - a) * 3.5f) : Math.min(150, 60 + (b - a) * 2);
-        structures.add(new float[]{c.look, x0, y0, height, x1, y1});
-    }
-
-    /** The real neighbourhoods, by name, each tile belonging to the nearest (with wobbly borders). */
-    private void realDistricts() {
-        RealCities.Spec s = real;
-        for (RealCities.Place pl : s.places) {
-            District d = new District();
-            d.type = pl.type;
-            d.name = pl.name;
-            d.x = pl.x * w;
-            d.y = pl.y * h;
-            districts.add(d);
-        }
-        int n = districts.size();
-        districtAt = new byte[w * h];
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++) {
-                float wx = x + (float) Math.sin(y * 0.21f) * 3, wy = y + (float) Math.sin(x * 0.17f) * 3;
-                int best = 0;
-                float bd = Float.MAX_VALUE;
-                for (int k = 0; k < n; k++) {
-                    District d = districts.get(k);
-                    float weight = d.type == DT_DOWNTOWN ? 1.3f : d.type == DT_SUBURB ? 0.85f : 1f;
-                    float dd = ((d.x - wx) * (d.x - wx) + (d.y - wy) * (d.y - wy)) * weight;
-                    if (dd < bd) {
-                        bd = dd;
-                        best = k;
-                    }
-                }
-                districtAt[y * w + x] = (byte) best;
-                districts.get(best).tiles++;
-            }
-        for (District d : districts) {
-            d.cx = (d.x + 0.5f) * T;
-            d.cy = (d.y + 0.5f) * T;
-        }
-    }
-
-    /** Real street names: each famous street on the line of streets nearest where it really runs. */
-    private void realStreetNames() {
-        for (int pass = 0; pass < 2; pass++) {
-            boolean vertical = pass == 1;
-            List<RealCities.StreetName> names = vertical ? real.northSouth : real.eastWest;
-            // The lines of street (by the position across), and who has claimed each.
-            java.util.TreeMap<Integer, Float> claimed = new java.util.TreeMap<Integer, Float>();
-            java.util.HashMap<Integer, java.util.List<RealCities.StreetName>> byLine = new java.util.HashMap<Integer, java.util.List<RealCities.StreetName>>();
-            java.util.TreeSet<Integer> lines = new java.util.TreeSet<Integer>();
-            for (Street st : streets) if (st.vertical == vertical) lines.add(vertical ? st.x0 : st.y0);
-            if (lines.isEmpty()) continue;
-            for (RealCities.StreetName sn : names) {
-                int want = Math.round(sn.pos * (vertical ? w : h));
-                Integer lo = lines.floor(want), hi = lines.ceiling(want);
-                Integer line = lo == null ? hi : hi == null ? lo : (want - lo <= hi - want ? lo : hi);
-                if (line == null || Math.abs(line - want) > 14) continue;
-                java.util.List<RealCities.StreetName> l = byLine.get(line);
-                if (l == null) byLine.put(line, l = new ArrayList<RealCities.StreetName>());
-                l.add(sn);
-            }
-            for (Street st : streets) {
-                if (st.vertical != vertical || fixedNames.containsKey(st)) continue;
-                java.util.List<RealCities.StreetName> l = byLine.get(vertical ? st.x0 : st.y0);
-                if (l == null) continue;
-                float across = vertical ? (st.y0 + st.y1) / 2f / h : (st.x0 + st.x1) / 2f / w;
-                RealCities.StreetName best = null;
-                float bd = Float.MAX_VALUE;
-                for (RealCities.StreetName sn : l) {
-                    if (across < sn.from || across > sn.to) continue;
-                    float d = Math.abs(sn.pos * (vertical ? w : h) - (vertical ? st.x0 : st.y0));
-                    if (d < bd) {
-                        bd = d;
-                        best = sn;
-                    }
-                }
-                if (best != null) st.name = best.name;
-            }
-        }
-        for (java.util.Map.Entry<Street, String> e : fixedNames.entrySet()) e.getKey().name = e.getValue();
-    }
-
-    /** Puts one of the real city's landmarks in place. */
-    private void realLandmark(RealCities.Landmark lm) {
-        int tx = Math.min(w - 2, Math.max(1, Math.round(lm.x * w))), ty = Math.min(h - 2, Math.max(1, Math.round(lm.y * h)));
-        float wx = (tx + 0.5f) * T, wy = (ty + 0.5f) * T;
-        if (lm.style >= RealCities.ST_NEEDLE) {
-            // (On the nearest dry land, if the spot given is just in the water.)
-            if (tiles[ty * w + tx] == WATER && lm.style != RealCities.ST_PIER) {
-                int[] q = nearestOf(tx, ty, 12, false);
-                if (q != null) {
-                    tx = q[0];
-                    ty = q[1];
-                }
-            }
-            realStructure(lm, tx, ty);
-            return;
-        }
-        // The block it's in (or the nearest one big enough).
-        int bi = -1;
-        float bd = Float.MAX_VALUE;
-        int needW = lm.style == RealCities.L_STADIUM ? Math.min(lm.w, 12) : Math.min(lm.w, 6), needH = lm.style == RealCities.L_STADIUM ? Math.min(lm.h, 11) : Math.min(lm.h, 4);
-        for (int k = 0; k < blocks.size(); k++) {
-            int[] b = blocks.get(k);
-            if (b.length > 4) continue;
-            int iw = b[2] - b[0] - 2, ih = b[3] - b[1] - 2;
-            if (iw < needW || ih < needH) continue;
-            float cx = (b[0] + b[2]) / 2f, cy = (b[1] + b[3]) / 2f;
-            boolean inside = tx >= b[0] && tx < b[2] && ty >= b[1] && ty < b[3];
-            float d = inside ? -1 : (float) World.hypot(cx - tx, cy - ty);
-            if (d < bd) {
-                bd = d;
-                bi = k;
-            }
-        }
-        byte here = tiles[ty * w + tx];
-        boolean open = here == GRASS || here == TREE || here == SAND || here == WATER || (realAreaAt != null && realAreaAt[ty * w + tx] > 0);
-        int lw = lm.w, lh = lm.h, x = -1, y = -1;
-        if (open && lm.style != RealCities.L_STADIUM) {
-            // Out in a park, on a hill or a point: the grounds cleared round it (moved a little to fit).
-            for (int r = 0; r <= 10 && x < 0; r++)
-                for (int dy = -r; dy <= r && x < 0; dy++)
-                    for (int dx = -r; dx <= r && x < 0; dx++) {
-                        if (Math.max(Math.abs(dx), Math.abs(dy)) != r) continue;
-                        int cx = tx + dx - lw / 2, cy = ty + dy - lh / 2;
-                        boolean ok = true;
-                        for (int j = cy - 2; j < cy + lh + 2 && ok; j++)
-                            for (int i = cx - 2; i < cx + lw + 2 && ok; i++) {
-                                if (i < 1 || j < 1 || i >= w - 1 || j >= h - 1) ok = false;
-                                else {
-                                    byte t = tiles[j * w + i];
-                                    if (t == WATER || t == BUILDING || t == ROAD || t == PIER) ok = false;
-                                }
-                            }
-                        if (ok) {
-                            x = cx;
-                            y = cy;
-                        }
-                    }
-            if (x >= 0) fill(x - 2, y - 2, lw + 4, lh + 4, PLAZA);
-            else open = false;
-        }
-        if (!open || lm.style == RealCities.L_STADIUM) {
-            if (bi < 0 || bd > 60) return;
-            int[] b = blocks.remove(bi);
-            fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
-            int ix = b[0] + 1, iy = b[1] + 1, iw = b[2] - b[0] - 2, ih = b[3] - b[1] - 2;
-            if (lm.style == RealCities.L_STADIUM) {
-                int sw = Math.min(iw, Math.max(12, lm.w)), sh = Math.min(ih, Math.max(11, lm.h));
-                fill(ix, iy, iw, ih, LOT);
-                int before = buildingLots.size();
-                stadium(ix + (iw - sw) / 2, iy + (ih - sh) / 2, sw, sh);
-                for (int k = before; k < buildingLots.size(); k++) lotNames.put(buildingLots.get(k), lm.name);
-                stadiumNamed = true;
-                natureLabel(lm.name, (ix + iw / 2f) * T, (iy + ih / 2f) * T, NL_LANDMARK);
-                return;
-            }
-            fill(ix, iy, iw, ih, PLAZA);
-            lw = Math.min(lw, iw);
-            lh = Math.min(lh, ih);
-            x = Math.max(ix, Math.min(ix + iw - lw, tx - lw / 2));
-            y = Math.max(iy, Math.min(iy + ih - lh, ty - lh / 2));
-            // A few trees round the plaza.
-            for (int j = iy; j < iy + ih; j++)
-                for (int i = ix; i < ix + iw; i++)
-                    if ((i == ix || j == iy || i == ix + iw - 1 || j == iy + ih - 1) && (i + j) % 4 == 0
-                            && (i < x - 1 || i > x + lw || j < y - 1 || j > y + lh)) tiles[j * w + i] = TREE;
-        }
-        int kind = lm.style == RealCities.L_CATHEDRAL ? CHURCH : OFFICE;
-        int[] col = Roofs.landmarkColours(lm.style);
-        fill(x, y, lw, lh, BUILDING);
-        int[] l = {x, y, lw, lh, col[0], rnd.nextInt(100000), kind, Math.max(1, lm.floors), col[1], -1};
-        buildingLots.add(l);
-        lotNames.put(l, lm.name);
-        lotLandmark.put(l, lm.style);
-        natureLabel(lm.name, (x + lw / 2f) * T, (y - 1) * T, NL_LANDMARK);
-    }
-
-    /** The nearest tile within r that is land (or water, if wet), or null. */
-    private int[] nearestOf(int tx, int ty, int r, boolean wet) {
-        for (int d = 1; d <= r; d++)
-            for (int dy = -d; dy <= d; dy++)
-                for (int dx = -d; dx <= d; dx++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) != d) continue;
-                    int x = tx + dx, y = ty + dy;
-                    if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) continue;
-                    if ((tiles[y * w + x] == WATER) == wet) return new int[]{x, y};
-                }
-        return null;
-    }
-
-    /** A structure that isn't a building: a tower, a statue, the sign on the hill, a pier, screens. */
-    private void realStructure(RealCities.Landmark lm, int tx, int ty) {
-        float wx = (tx + 0.5f) * T, wy = (ty + 0.5f) * T;
-        int k = lm.style;
-        if (k == RealCities.ST_PIER) {
-            // Out from the beach into the sea: the boards, and the big wheel near the end.
-            int x = tx;
-            while (x < w - 1 && tiles[ty * w + x] == WATER) x++;
-            int end = Math.max(1, x - 22);
-            for (int i = end; i < x; i++)
-                for (int j = ty - 1; j <= ty + 1; j++) tiles[j * w + i] = PIER;
-            structures.add(new float[]{RealCities.ST_FERRIS, (end + 5) * T, (ty + 0.5f) * T, 60, 0, 0});
-            natureLabel(lm.name, (end + 10) * T, (ty - 2) * T, NL_LANDMARK);
-            return;
-        }
-        int foot = k == RealCities.ST_LIBERTY ? 2 : k == RealCities.ST_HOLLYWOOD || k == RealCities.ST_SCREENS || k == RealCities.ST_FERRIS ? 0 : 1;
-        if (foot > 0) {
-            // The plaza round it, and its footing (solid).
-            for (int j = ty - foot - 2; j <= ty + foot + 1; j++)
-                for (int i = tx - foot - 2; i <= tx + foot + 1; i++) {
-                    if (i < 1 || j < 1 || i >= w - 1 || j >= h - 1) continue;
-                    byte t = tiles[j * w + i];
-                    if (t == WATER || t == BUILDING) continue;
-                    boolean inner = Math.abs(i - tx) < foot && Math.abs(j - ty) < foot;
-                    boolean leg = inner;
-                    if (t == ROAD && !leg) continue;
-                    tiles[j * w + i] = leg ? STATUE : PLAZA;
-                    roadDir[j * w + i] = 0;
-                }
-        }
-        structures.add(new float[]{k, wx, wy, lm.floors, 0, 0});
-        maxHeight = Math.max(maxHeight, Math.min(lm.floors, 520));
-        natureLabel(lm.name, wx, wy - (foot + 3) * T, NL_LANDMARK);
-    }
-
     // ------------------------------------------------------------------ water
 
     private List<float[]> beachSpots;
@@ -5741,7 +5130,6 @@ final class City {
             }
         }
         // (Paris keeps to its height limit outside La Défense.)
-        if (real != null && real.maxFloors > 0 && curDistrict != DT_DOWNTOWN) floors = Math.min(floors, real.maxFloors);
         if (kind == APARTMENT && curDistrict == DT_OLDTOWN) {
             floors = Math.min(floors, 5);
             wall = oldWall();
@@ -6767,7 +6155,7 @@ final class City {
      * left out, so it wraps most of the town.
      */
     private void ringRoad(int bx0, int by0, int bx1, int by1) {
-        if (waterKind != CityConfig.W_NONE || real != null) return;
+        if (waterKind != CityConfig.W_NONE) return;
         // (A village is too small for one.)
         if (cfg.density() == 0 && cfg.style() == CityConfig.STYLE_HOUSES) return;
         int o = 5, rw = 5;
@@ -7507,7 +6895,7 @@ final class City {
     }
 
     private void nameNeighbourhood(int x0, int y0, int x1, int y1, int type, int dt) {
-        if (districtAt == null || districts.size() > 110 || real != null) return;
+        if (districtAt == null || districts.size() > 110) return;
         String[][] ends = {{" Meadows", " Fields", " Chase", " Rise"}, {" Crescent", " Gardens", " Park"},
                 {" Green", " Common"}, {" Estate", " Court", " Towers"}, {" Acres", " Ranch", " Farms"},
                 {" Manor", " Reserve", " Hills"}, {" Business Park", " Trading Estate", " Commerce Park"}, {" Way", " Bends", " Vale"}};
@@ -10594,7 +9982,7 @@ final class City {
         for (float v : elev) top = Math.max(top, v);
         // (Only real mountains get snow.)
         // (Snow lower down in the north and the Alps; none in the tropics or the desert.)
-        float snow = country.snowLine > 0 && top > 55 && real == null ? top * country.snowLine : Float.MAX_VALUE;
+        float snow = country.snowLine > 0 && top > 55 ? top * country.snowLine : Float.MAX_VALUE;
         int[] px = new int[w * h];
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {
@@ -11470,7 +10858,6 @@ final class City {
             sign(sign, (x0 + x1) / 2, (y0 + y1) / 2, Math.min(9f, bw / (sign.length() * 0.72f)), 0xFFE8D8A8);
             return;
         }
-        if (own != null && own.landmark >= 0 && Roofs.drawLandmark(this, c, p, b, own)) return;
         if (b.length > 9 && b[9] >= 0 && Roofs.drawVariant(this, c, p, b, Variants.get(b[9]))) return;
         if (kind == HOUSE) {
             // Pitched roof: two slopes meeting at a ridge along the long side.

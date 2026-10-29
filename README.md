@@ -171,7 +171,7 @@ slow-acting, virulent or weak bites, tough or frail zombies, swift ones, keen or
 rising without a bite) and a hidden **city readiness** (unprepared, panicking, a gun town or well
 prepared). Both are revealed on the radio as the war goes on, and the Stats screen lists what's known.
 
-People tire when they sprint and the dead never do; ordinary zombies shamble and only lunge in the last few steps, slower than a running person, while runners run you down; body shots
+People tire when they sprint and the dead never do; ordinary zombies shamble and only lunge in the last few steps, slower than a running person, while runners go half as fast again, about as fast as a running person; body shots
 only wear a zombie down (one brought down without a headshot, or by a car, often gets back up) while
 headshots drop it for good; police and soldiers back off only at a walk while shooting, and can be overwhelmed. Both sides have the same senses: they see a long way
 in front of them, notice only what's close behind, and hear gunfire; the dead can smell the living a few
@@ -418,6 +418,11 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Runners slowed, the real cities gone (12.7):** runners are exactly half as fast again as an ordinary zombie
+(walking 18 to 24, running 36 to 43, from 33 to 39 and 56 to 62) and chase the same way. The last of the real cities -
+Los Angeles, Portland, Seattle and New York - are out of the game, code and all; saves and city codes on them no longer
+load. Tests of things no longer in the game (civilian traffic, the real cities) are gone.
 
 **Slower zombies (12.6):** ordinary zombies shamble at 12 to 16 and run at 24 to 29 (slower than a running person),
 only break into a run in the last few steps, and the freshly turned get only a small burst of speed. Runners and brutes

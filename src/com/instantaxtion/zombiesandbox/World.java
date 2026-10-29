@@ -1358,9 +1358,10 @@ final class World {
             case Entity.RUNNER:
                 e.hp = 28;
                 e.radius = 3.5f;
-                // ((11.0) A little quicker than before: 30 and 50.)
-                e.speed = 33 + rnd.nextFloat() * 6;
-                e.runSpeed = 56 + rnd.nextFloat() * 6;
+                // ((12.7) Half as fast again as an ordinary zombie, and no more: 33 to 39 and 56 to 62 before, nearly
+                // twice as fast, and they ran down anyone.)
+                e.speed = (12 + rnd.nextFloat() * 4) * RUNNER_PACE;
+                e.runSpeed = (24 + rnd.nextFloat() * 5) * RUNNER_PACE;
                 e.skin = 0xFF9DAA70;
                 break;
             default:
@@ -2601,18 +2602,22 @@ final class World {
      * walk before that. ((12.6) An ordinary zombie only breaks into its run in the last few steps (50, not 110) and
      * only a little quicker than its shamble before: they were too fast. Runners and brutes as before.)
      */
+    /** (12.7) How much faster a runner is than an ordinary zombie, at every pace. */
+    static final float RUNNER_PACE = 1.5f;
+
     private static float chaseSpeed(Entity z, float d) {
-        boolean shambler = z.type == Entity.ZOMBIE;
+        // ((12.7) Runners chase the same way, only faster: half as fast again at every step.)
+        boolean shambler = z.type == Entity.ZOMBIE || z.type == Entity.RUNNER;
         return d < (shambler ? 50 : 110) ? z.runSpeed : z.speed * (shambler ? 1.1f : 1.3f);
     }
 
     /** How much quicker the freshly turned are for a while: ((12.6) a shambler only a little). */
     private static float freshWalk(Entity z) {
-        return z.type == Entity.ZOMBIE ? 1.08f : 1.2f;
+        return z.type == Entity.ZOMBIE || z.type == Entity.RUNNER ? 1.08f : 1.2f;
     }
 
     private static float freshRun(Entity z) {
-        return z.type == Entity.ZOMBIE ? 1.12f : 1.3f;
+        return z.type == Entity.ZOMBIE || z.type == Entity.RUNNER ? 1.12f : 1.3f;
     }
 
     private void thinkZombie(Entity z, float dt) {
