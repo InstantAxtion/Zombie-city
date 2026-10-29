@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.0";
-    static final int VERSION_CODE = 120;
+    static final String VERSION = "13.1";
+    static final int VERSION_CODE = 121;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.1  -  Performance",
+                    "The simulation runs about twice as fast in the big cities: a Colossal city with 300 of the dead loose went from about 78 ms a step to about 37 ms on the test machine, and a Default city from about 36 ms to 16 ms.",
+                    "People off screen with nothing near them think and move less often in the biggest cities, and those with nothing to do this step are passed over without being looked at.",
+                    "Each person moves straight after they think, in one pass through the city instead of two.",
+                    "Off screen, people get out of each other's way every other or every third step in big cities.",
+                    "Buildings (who's visiting and who's inside) are updated a quarter at a time.",
+                    "The bitten are counted with everyone else instead of in a second pass, and the nearest pharmacy is found from a list of pharmacies instead of every building.",
+            },
             {
                     "13.0  -  Bigger cities, more stations and bases",
                     "A new map size, Colossal: 1280 tiles across, a quarter wider again than Gigantic, with about 30,000 people. It takes a while to build and needs a recent phone with plenty of memory.",

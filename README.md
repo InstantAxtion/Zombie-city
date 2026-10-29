@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Performance (13.1):** about twice as fast in the big cities (a Colossal city with 300 of the dead loose went from
+about 78 ms to 37 ms a step on the test machine). Off screen, people with nothing near think and move less often, those
+with nothing to do this step are skipped without being looked at, everyone moves straight after thinking in a single
+pass, crowds off screen are kept apart less often, buildings are updated a quarter at a time, and the bitten are counted
+in the same pass as everyone else.
+
 **Bigger cities, more stations and bases (13.0):** a new Colossal map size (1280 tiles across, a quarter wider than
 Gigantic), and Islands and Archipelago are built at it; the Large and Massive sizes are gone, leaving Default, Gigantic
 and Colossal. Cities are fuller: about

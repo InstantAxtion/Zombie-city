@@ -133,6 +133,11 @@ final class World {
     private final int gw, gh;
     private final int[] cellStart, cellCount, cellFill, zCount, zFill, aCount, aFill;
     private Entity[] sorted = new Entity[512];
+    /**
+     * ((13.1) Where each in the grid was, and how big, in the grid's own order: looking through a cell for who's
+     * close goes through these, side by side in memory, and only looks at the person themselves when they are.)
+     */
+    private float[] sortedX = new float[512], sortedY = new float[512], sortedR = new float[512];
     private int lodFrame;
     /** Counts up each time the grid is rebuilt; a leader marked with the current one has someone following. */
     private int hashFrame;
@@ -1783,6 +1788,7 @@ final class World {
         clearBarricades();
         medkits.clear();
         entities.clear();
+        Arrays.fill(lodWake, 0);
         corpses.clear();
         grenades.clear();
         explosions.clear();
@@ -1836,7 +1842,22 @@ final class World {
     }
 
     /** (10.34) How many frames' worth at a time the calm off screen, and the busy off screen, move and think. */
-    private int lodCalm = 3, lodBusy = 2;
+    private int lodCalm = 3, lodBusy = 2, lodNear = 2;
+    /**
+     * ((13.1) For each place in the list of people, the step on which whoever's there next has anything to do, when
+     * they're calm and off screen: until then they're passed over without being looked at at all. Just looking
+     * at each of thirty thousand people every step, to find there was nothing to do, was a fifth of the time.)
+     */
+    private int[] lodWake = new int[0], lodSet = new int[0];
+    private float lodViewX = -1e9f, lodViewY = -1e9f;
+
+    /** ((13.1) Whoever's at this place in the list has nothing to do until their next turn, every so many steps.) */
+    private void sleep(int i, int every) {
+        // (Not if they've just died, or been taken over, or anything has been added in the meantime.)
+        if (i >= lodWake.length || entities.get(i).dead || entities.get(i) == controlled) return;
+        lodWake[i] = lodFrame + every - (i + lodFrame) % every;
+        lodSet[i] = lodFrame;
+    }
 
     void update(float dt) {
         // ((10.36) The walking router is quick enough for far more routes than before: about forty a second.)
@@ -1849,7 +1870,6 @@ final class World {
         if (warBannerTime > 0) warBannerTime -= dt;
         // ((11.5) In a crowd of thousands, the grid of who's where every other step: nobody moves more than a step or
         // two in between, and everything that asks it allows for that.)
-        if (entities.size() < 3000 || (lodFrame & 1) == 0 || hashSize < 0) buildHash();
         fieldTimer -= dt;
         occTimer -= dt;
         if (fieldTimer <= 0) {
@@ -1880,15 +1900,30 @@ final class World {
         }
         recordReplay(dt);
         lodFrame++;
+        if (lodWake.length < entities.size()) {
+            lodWake = Arrays.copyOf(lodWake, entities.size() + 1024);
+            lodSet = Arrays.copyOf(lodSet, lodWake.length);
+        }
+        // (Looking somewhere else, everyone is looked at again: those coming into view move straight away.)
+        if (Math.abs(viewX0 - lodViewX) > 24 || Math.abs(viewY0 - lodViewY) > 24) {
+            Arrays.fill(lodWake, 0);
+            lodViewX = viewX0;
+            lodViewY = viewY0;
+        }
         for (int i = 0, n = entities.size(); i < n; i++) {
+            if (lodWake[i] - lodFrame > 0) continue;
             Entity e = entities.get(i);
             e.lodStep = 1;
             if (e.dead) continue;
             if (i == 0) {
                 // ((11.5) From six thousand people up, not twelve: a Large city in a panic is about ten thousand.)
                 boolean crowd = entities.size() > 6000;
-                lodCalm = crowd ? 4 : 3;
-                lodBusy = crowd ? 3 : 2;
+                // ((13.1) And with over eighteen thousand (the 20,000 to 30,000 of the bigger cities now), those with
+                // nothing going on and nobody watching less often again.)
+                boolean huge = entities.size() > 18000;
+                lodCalm = huge ? 8 : crowd ? 4 : 3;
+                lodBusy = huge ? 5 : crowd ? 3 : 2;
+                lodNear = huge ? 3 : 2;
             }
             // Far from any zombie and just going about their day: they decide what to do a third as often
             // (but still move every frame), which lets a city of thousands run smoothly.
@@ -1903,44 +1938,44 @@ final class World {
                 if (!seen) e.lodStep = (i + lodFrame) % lodCalm == 0 ? lodCalm : 0;
                 // (On a struggling phone, those off screen even less often.)
                 int every = quality == Q_FULL || seen ? lodCalm : quality == Q_REDUCED ? 5 : 8;
-                if ((i + lodFrame) % every != 0) continue;
-                think(e, dt * every);
+                if ((i + lodFrame) % every == 0) think(e, dt * every);
+                if (!seen && every == lodCalm) sleep(i, lodCalm);
             } else if (e.isZombie() && e.charge <= 0 && e.noiseTimer <= 0 && e != controlled && !onScreen(e)
                     && lodHDist(e) > 40) {
                 // The same for the dead shuffling about off screen with nobody near (since 10.31 on any phone,
                 // and they move every other frame too).
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
                 int every = quality == Q_LOW ? 3 : lodBusy;
-                if ((i + lodFrame) % every != 0) continue;
-                think(e, dt * every);
+                if ((i + lodFrame) % every == 0) think(e, dt * every);
+                if (every == lodBusy) sleep(i, lodBusy);
             } else if ((e.type == Entity.COP || e.type == Entity.SOLDIER) && e != controlled && !e.aiming && e.rig == null
                     && (e.task == Dispatch.T_NONE || e.task == Dispatch.T_POST || e.task == Dispatch.T_GUARD)
                     && !onScreen(e) && lodZDist(e) > 40) {
                 // ((10.57) Police and soldiers with nothing near them, on patrol, at a post or guarding a zone, off
                 // screen: every other frame too, like everyone else with nothing going on.)
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
-                if ((i + lodFrame) % lodBusy != 0) continue;
-                think(e, dt * lodBusy);
+                if ((i + lodFrame) % lodBusy == 0) think(e, dt * lodBusy);
+                sleep(i, lodBusy);
             } else if (e.type == Entity.CIVILIAN && e != controlled && !onScreen(e) && lodZDist(e) > 30) {
                 // (10.31) And people off screen who know what's going on but have none of the dead near them:
                 // every other frame (a Gigantic city in a panic is tens of thousands of them).
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
                 int every = quality == Q_FULL ? lodBusy : quality == Q_REDUCED ? 3 : 4;
-                if ((i + lodFrame) % every != 0) continue;
-                think(e, dt * every);
+                if ((i + lodFrame) % every == 0) think(e, dt * every);
+                if (every == lodBusy) sleep(i, lodBusy);
             } else if (e != controlled && e.rig == null && !e.aiming && e.ride == null && !onScreen(e)
                     && (e.type == Entity.CIVILIAN ? lodZDist(e) > 8
                         : e.isZombie() && e.charge <= 0 && lodHDist(e) > 8)) {
                 // ((11.5) Off screen and near the trouble but not in the thick of it - running from the dead a few
                 // streets off, or one of the dead heading for the living: every other frame, two frames' worth.
                 // Only those right up against it, or on screen, are worked out every frame.)
-                e.lodStep = (i + lodFrame) % 2 == 0 ? 2 : 0;
-                if ((i + lodFrame) % 2 != 0) continue;
-                think(e, dt * 2);
+                // ((13.1) Every third frame in the biggest cities.)
+                e.lodStep = (i + lodFrame) % lodNear == 0 ? lodNear : 0;
+                if ((i + lodFrame) % lodNear == 0) think(e, dt * lodNear);
+                sleep(i, lodNear);
             } else think(e, dt);
-        }
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity e = entities.get(i);
+            // ((13.1) Each moves as soon as they've thought, in the same pass: a second pass through tens of
+            // thousands of people just to move them cost almost as much again in fetching each one.)
             if (!e.dead && e.lodStep > 0) move(e, dt * e.lodStep);
         }
         for (int i = 0; i < surging.size(); i++) surge(surging.get(i));
@@ -2053,8 +2088,12 @@ final class World {
         heldHumans = -1;
     }
 
+    /** ((13.1) The bitten out and about, counted in recount. */
+    private int bittenOut;
+
     void recount() {
         Arrays.fill(counts, 0);
+        bittenOut = 0;
         commanders.clear();
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
@@ -2062,6 +2101,7 @@ final class World {
             // counted in their building below. At the start of a game that was everyone at home, twice.)
             if (e.removed) continue;
             counts[e.type]++;
+            if (e.infected) bittenOut++;
             if (e.role == Entity.ROLE_COMMANDER && e.type == Entity.SOLDIER) commanders.add(e);
         }
         fleet.countCrews(counts);
@@ -2159,9 +2199,8 @@ final class World {
         startHumans = Math.max(startHumans, h);
         if (outbreak) {
             int bitten = 0, armed = counts[Entity.COP] + counts[Entity.SOLDIER];
-            for (int i = 0, n = entities.size(); i < n; i++) if (entities.get(i).infected) bitten++;
-            // (Including the bitten hiding indoors.)
-            bitten += insideBitten;
+            // ((13.1) Counted along with everyone else, not in a second pass through tens of thousands of people.)
+            bitten = bittenOut + insideBitten;
             // Over only once it's stayed over for a few seconds.
             boolean clear = z == 0 && rising == 0 && lurking == 0 && bitten == 0 && h > 0;
             if (!clear) clearSince = -1;
@@ -2203,7 +2242,12 @@ final class World {
 
     private void buildHash() {
         int n = entities.size();
-        if (sorted.length < n) sorted = new Entity[n * 2];
+        if (sorted.length < n) {
+            sorted = new Entity[n * 2];
+            sortedX = new float[n * 2];
+            sortedY = new float[n * 2];
+            sortedR = new float[n * 2];
+        }
         // ((12.0) Only the cells someone was in last time are emptied, and only those with someone in now are laid
         // out: an empty cell's count is nought, so where it starts never matters. Clearing and going through every
         // cell of the map each frame was most of the work on the big maps.)
@@ -2243,9 +2287,11 @@ final class World {
         for (int i = 0; i < n; i++) {
             Entity e = entities.get(i);
             int c = hashCell[i];
-            if (e.isZombie()) sorted[zFill[c]++] = e;
-            else if (e.isArmed()) sorted[aFill[c]++] = e;
-            else sorted[cellFill[c]++] = e;
+            int at = e.isZombie() ? zFill[c]++ : e.isArmed() ? aFill[c]++ : cellFill[c]++;
+            sorted[at] = e;
+            sortedX[at] = e.x;
+            sortedY[at] = e.y;
+            sortedR[at] = e.radius;
         }
     }
 
@@ -7442,11 +7488,18 @@ final class World {
     }
 
     /** A pharmacy with stock left, within maxDist. */
+    /** ((13.1) The pharmacies, looked up once: every hurt person looked through every building in the city for one.) */
+    private java.util.List<City.Building> pharmacies;
+
     private City.Building pharmacyNear(Entity e, float maxDist) {
+        if (pharmacies == null) {
+            pharmacies = new ArrayList<City.Building>();
+            for (City.Building b : city.buildings) if (b.kind == City.PHARMACY) pharmacies.add(b);
+        }
         City.Building best = null;
         float bd = maxDist * maxDist;
-        for (int i = 0, n = city.buildings.size(); i < n; i++) {
-            City.Building b = city.buildings.get(i);
+        for (int i = 0, n = pharmacies.size(); i < n; i++) {
+            City.Building b = pharmacies.get(i);
             if (b.kind != City.PHARMACY || b.collapsed || b.stock <= 0) continue;
             float d = (b.doorX - e.x) * (b.doorX - e.x) + (b.doorY - e.y) * (b.doorY - e.y);
             if (d < bd) {
@@ -10297,13 +10350,17 @@ final class World {
                 if (!e.dead && e.errand != null) e.errand.heading++;
             }
         }
+        float frameDt = dt;
         for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            // ((13.1) A quarter of the buildings each frame, four frames' worth, for everything (not only the visitors,
+            // as since 10.31): tens of thousands of them on the biggest maps, nearly all with nothing going on.)
+            if (((i + lodFrame) & 3) != 0) continue;
+            dt = frameDt * 4;
             City.Building b = city.buildings.get(i);
             // The last shot's flash in the windows fades whatever happens next (it used to stay lit for good
             // when the fight ended, or everyone inside was lost, right after a shot).
             if (b.flash > 0) b.flash = Math.max(0, b.flash - dt);
-            // ((10.31) A quarter of the buildings each frame, four frames' worth: thousands of them in a big city.)
-            if (((i + lodFrame) & 3) == 0) updateVisitors(b, dt * 4);
+            updateVisitors(b, dt);
             if (apocalypse() && (!b.occupants.isEmpty() || !b.visitors.isEmpty())) emptyBuilding(b, dt);
             if (b.lurkers > 0 && !b.collapsed && b.occupants.isEmpty()) {
                 // Zombies inside burst out when someone comes close, or when they get restless.
@@ -11440,9 +11497,16 @@ final class World {
     }
 
     private void separate() {
+        // ((13.1) In a big city, those off screen get out of each other's way every other frame, a little harder each
+        // time: it was a good part of each frame, for crowds nobody is looking at.)
+        boolean big = entities.size() > 6000;
+        int sepEvery = entities.size() > 18000 ? 3 : 2;
         for (int i = 0, n = entities.size(); i < n; i++) {
+            // (Not those passed over this step: like those with lodStep 0, they've not moved.)
+            if (i < lodWake.length && lodWake[i] - lodFrame > 0 && lodSet[i] != lodFrame) continue;
             Entity e = entities.get(i);
             if (e.dead || e.lodStep == 0) continue;
+            if (big && (i + lodFrame) % sepEvery != 0 && !onScreen(e)) continue;
             // ((10.34) Someone standing still is left be: whoever walks into them steps aside themselves.)
             if (e.want <= 0.5f && e.stun <= 0 && e.vx == 0 && e.vy == 0 && entities.size() > 6000) continue;
             // Only the cells within touching distance (the biggest body is under 8 across, plus a little for
@@ -11450,11 +11514,15 @@ final class World {
             float reach = e.radius + 10;
             int cx0 = Math.max(0, (int) ((e.x - reach) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + reach) / CELL));
             int cy0 = Math.max(0, (int) ((e.y - reach) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + reach) / CELL));
-            float pushX = 0, pushY = 0;
+            float pushX = 0, pushY = 0, ex = e.x, ey = e.y, er = e.radius;
             for (int cy = cy0; cy <= cy1; cy++) {
                 for (int cx = cx0; cx <= cx1; cx++) {
                     int c = cy * gw + cx;
                     for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                        // ((13.1) Where they were when the grid was made, with a little to spare for this frame's
+                        // steps: only the few that close are looked at properly.)
+                        float sx = ex - sortedX[k], sy = ey - sortedY[k], sm = er + sortedR[k] + 2;
+                        if (sx * sx + sy * sy >= sm * sm) continue;
                         Entity o = sorted[k];
                         if (o == e || o.dead) continue;
                         float ddx = e.x - o.x, ddy = e.y - o.y;
@@ -11496,6 +11564,10 @@ final class World {
             int last = entities.size() - 1;
             entities.set(i, entities.get(last));
             entities.remove(last);
+            if (last < lodWake.length) {
+                lodWake[i] = 0;
+                lodWake[last] = 0;
+            }
             if (!e.removed) onDeath(e);
         }
     }
