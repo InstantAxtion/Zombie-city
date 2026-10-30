@@ -31,7 +31,15 @@ final class Synth {
     // ------------------------------------------------------------------ sound effects
 
     static short[] effect(int id) {
-        Random r = new Random(1234 + id);
+        return effect(id, 0);
+    }
+
+    /**
+     * ((13.4) Take number {@code variant} of a sound: made from another run of the random numbers, and a little
+     * higher or lower and quicker or slower, so no two shots in a firefight are quite the same.)
+     */
+    static short[] effect(int id, int variant) {
+        Random r = new Random(1234 + id + variant * 7919L);
         float[] out;
         switch (id) {
             case Sfx.PISTOL: out = gunshot(r, 0.22f, 26, 0.5f, 140); break;
@@ -66,15 +74,177 @@ final class Synth {
             case Sfx.GLASS: out = glass(r); break;
             case Sfx.POUND: out = pound(r); break;
             case Sfx.HUNTING: out = hunting(r); break;
+            case Sfx.SMG: out = smg(r); break;
+            case Sfx.CARBINE: out = carbine(r); break;
+            case Sfx.DMR: out = dmr(r); break;
+            case Sfx.RELOAD: out = reload(r); break;
+            case Sfx.DRY_FIRE: out = dryFire(r); break;
+            case Sfx.RICOCHET: out = ricochet(r); break;
+            case Sfx.MELEE: out = melee(r); break;
+            case Sfx.LAUNCHER: out = launcher(r); break;
+            case Sfx.CLIMB: out = climb(r); break;
             default: out = click(); break;
         }
+        if (variant > 0) out = vary(out, 1 + (r.nextFloat() - 0.5f) * (Sfx.gun(id) ? 0.12f : 0.18f));
         // ((11.7) Gunshots a bit louder: driven into a soft clip, so they hit harder at the same peak.)
         if (Sfx.gun(id)) {
             float max = 1e-6f;
             for (float v : out) max = Math.max(max, Math.abs(v));
             for (int i = 0; i < out.length; i++) out[i] = (float) Math.tanh(out[i] / max * 2.2f);
         }
-        return toPcm(out, id == Sfx.CLICK ? 0.5f : Sfx.gun(id) ? 0.97f : 0.92f);
+        // ((13.4) The handling sounds - a reload, a dry click, a climb - quieter than the shooting.)
+        boolean small = id == Sfx.RELOAD || id == Sfx.DRY_FIRE || id == Sfx.CLIMB || id == Sfx.RICOCHET;
+        return toPcm(out, id == Sfx.CLICK ? 0.5f : small ? 0.55f : Sfx.gun(id) ? 0.97f : 0.92f);
+    }
+
+    /** ((13.4) The same sound played back faster (factor above 1: shorter and higher) or slower. */
+    private static float[] vary(float[] in, float factor) {
+        int n = Math.max(1, (int) (in.length / factor));
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float p = i * factor;
+            int a = (int) p;
+            float f = p - a;
+            float x0 = a < in.length ? in[a] : 0, x1 = a + 1 < in.length ? in[a + 1] : 0;
+            o[i] = x0 + (x1 - x0) * f;
+        }
+        return o;
+    }
+
+    /** ((13.4) A sharp metallic tick at time {@code at}, ringing at {@code freq}. */
+    private static float tick(Random r, float t, float at, float freq, float decay) {
+        if (t < at) return 0;
+        float u = t - at;
+        return ((r.nextFloat() * 2 - 1) * 0.6f + (float) Math.sin(TAU * freq * u) * 0.8f) * (float) Math.exp(-u * decay);
+    }
+
+    /** ((13.4) A submachine gun: light, snappy, a short slap off the walls. */
+    private static float[] smg(Random r) {
+        float[] o = gunshot(r, 0.14f, 48, 0.5f, 230);
+        for (int i = 0; i < o.length; i++) {
+            float t = i / (float) RATE;
+            o[i] += tick(r, t, 0.012f, 3100, 260) * 0.25f;
+        }
+        return o;
+    }
+
+    /** ((13.4) A carbine: sharper than the rifle's bark, with a crack and a short tail. */
+    private static float[] carbine(Random r) {
+        int n = (int) (0.42f * RATE);
+        float[] o = new float[n];
+        float lp = 0, lp2 = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float white = r.nextFloat() * 2 - 1;
+            lp += (white - lp) * 0.42f;
+            lp2 += (white - lp2) * 0.06f;
+            o[i] = (i < 30 ? white * (1 - i / 30f) : 0) * 0.9f + lp * (float) Math.exp(-t * 34) * 1.1f
+                    + (float) Math.sin(TAU * 160 * t * (1 - t)) * (float) Math.exp(-t * 26) * 0.7f
+                    + lp2 * (float) Math.exp(-t * 7) * 0.5f;
+        }
+        return o;
+    }
+
+    /** ((13.4) A marksman's rifle: a hard supersonic crack, a heavy report, and the echo rolling back. */
+    private static float[] dmr(Random r) {
+        int n = (int) (1.0f * RATE);
+        float[] o = new float[n];
+        float lp = 0, lp2 = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float white = r.nextFloat() * 2 - 1;
+            lp += (white - lp) * 0.3f;
+            lp2 += (white - lp2) * 0.04f;
+            float echo = t > 0.18f ? (float) Math.exp(-(t - 0.18f) * 6) * 0.45f : 0;
+            o[i] = (i < 22 ? white * 1.2f : 0) + lp * (float) Math.exp(-t * 22) * 1.2f
+                    + (float) Math.sin(TAU * 95 * t) * (float) Math.exp(-t * 16) * 0.9f + lp2 * (echo + (float) Math.exp(-t * 4) * 0.35f);
+        }
+        return o;
+    }
+
+    /** ((13.4) Reloading: the empty magazine out, a fresh one slapped home, the bolt let go. */
+    private static float[] reload(Random r) {
+        int n = (int) (0.7f * RATE);
+        float[] o = new float[n];
+        float a = 0.05f + r.nextFloat() * 0.03f, b = 0.3f + r.nextFloat() * 0.06f, c = 0.52f + r.nextFloat() * 0.05f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            o[i] = tick(r, t, a, 1800, 90) * 0.6f + tick(r, t, b, 900, 70) * 0.9f + tick(r, t, b + 0.02f, 2600, 200) * 0.4f
+                    + tick(r, t, c, 1400, 60) * 0.8f + tick(r, t, c + 0.035f, 2100, 120) * 0.6f;
+        }
+        return o;
+    }
+
+    /** ((13.4) Pulling the trigger on an empty gun: one dry click. */
+    private static float[] dryFire(Random r) {
+        int n = (int) (0.12f * RATE);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            o[i] = tick(r, t, 0.002f, 2400 + r.nextInt(3) * 200, 140) + tick(r, t, 0.03f, 1500, 200) * 0.3f;
+        }
+        return o;
+    }
+
+    /** ((13.4) A round off a wall: the hit, then the whine of it spinning away. */
+    private static float[] ricochet(Random r) {
+        int n = (int) (0.45f * RATE);
+        float[] o = new float[n];
+        float f0 = 2600 + r.nextFloat() * 1400, f1 = 900 + r.nextFloat() * 500, phase = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE, u = t / 0.45f;
+            phase += (f0 + (f1 - f0) * u) / RATE;
+            float hit = i < 50 ? (r.nextFloat() * 2 - 1) * (1 - i / 50f) : 0;
+            o[i] = hit * 0.7f + (float) Math.sin(TAU * phase) * (float) Math.sin(Math.PI * Math.min(1, u * 4)) * (1 - u) * 0.6f;
+        }
+        return o;
+    }
+
+    /** ((13.4) A swing and a blow: the whoosh of a bat or an axe, and the heavy hit. */
+    private static float[] melee(Random r) {
+        int n = (int) (0.35f * RATE);
+        float[] o = new float[n];
+        float lp = 0, hit = 0.16f + r.nextFloat() * 0.03f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float white = r.nextFloat() * 2 - 1;
+            lp += (white - lp) * (0.05f + 0.25f * Math.min(1, t / hit));
+            float swish = t < hit ? lp * (float) Math.sin(Math.PI * t / hit) * 0.6f : 0;
+            float u = t - hit;
+            float thump = u > 0 ? ((float) Math.sin(TAU * 85 * u) * 1.1f + white * 0.5f) * (float) Math.exp(-u * 28) : 0;
+            o[i] = swish + thump;
+        }
+        return o;
+    }
+
+    /** ((13.4) A grenade launcher: the hollow thunk of the round leaving the tube. */
+    private static float[] launcher(Random r) {
+        int n = (int) (0.4f * RATE);
+        float[] o = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float white = r.nextFloat() * 2 - 1;
+            lp += (white - lp) * 0.08f;
+            o[i] = (float) Math.sin(TAU * 110 * t * (1 - t * 0.8f)) * (float) Math.exp(-t * 18) * 1.2f + lp * (float) Math.exp(-t * 10) * 1.4f
+                    + tick(r, t, 0.004f, 700, 80) * 0.3f;
+        }
+        return o;
+    }
+
+    /** ((13.4) One of the dead scrabbling up and over a barricade or a fence: scraping, the rattle, the drop. */
+    private static float[] climb(Random r) {
+        int n = (int) (0.9f * RATE);
+        float[] o = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float white = r.nextFloat() * 2 - 1;
+            lp += (white - lp) * 0.18f;
+            float scrape = lp * (0.5f + 0.5f * (float) Math.sin(TAU * 6 * t)) * (t < 0.65f ? 1 : 0) * 0.6f;
+            o[i] = scrape + tick(r, t, 0.12f, 420, 30) * 0.5f + tick(r, t, 0.38f, 520, 35) * 0.4f + tick(r, t, 0.7f, 90, 25) * 0.9f;
+        }
+        return o;
     }
 
     private static float[] gunshot(Random r, float dur, float decay, float bright, float thump) {

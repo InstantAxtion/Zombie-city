@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.3";
-    static final int VERSION_CODE = 123;
+    static final String VERSION = "13.4";
+    static final int VERSION_CODE = 124;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.4  -  New sound system, more gun sounds, the dead climb",
+                    "A new sound system: the game mixes its own sound now, straight to the phone's audio output at its own sample rate (in its low-latency mode on Android 8 and up), instead of the system's sound pool.",
+                    "32 voices, with the more important sounds (explosions, gunfire) taking the place of lesser ones when they're all in use, a limit on how many of one sound play at once, and anything cut short faded out instead of clicking off.",
+                    "Several takes of every gunshot, groan and explosion, picked at random and played a touch higher or lower each time, so a firefight isn't one sample over and over.",
+                    "Distance you can hear: sounds further off are muffled as well as quieter, and gunfire and explosions echo back off the buildings, more so from further away.",
+                    "A limiter on the whole mix: a big firefight is loud but never breaks up. The music crossfades from one piece to the next and dips under heavy fighting.",
+                    "New sounds: the submachine gun, the carbine and the marksman's rifle each have their own (they borrowed the rifle's and the sniper's), the grenade launcher thunks (it used the pistol), reloading, the click of an empty gun, ricochets off walls, rifle-butt and bat blows, and the dead climbing over.",
+                    "The dead climb over fences, barricades and the quarantine walls to get at someone just the other side, after pushing at it a moment, and slowly: about two and a half seconds for most, under two for runners, three and a half for brutes (the living take about half a second). Outside a safe zone they still mostly claw at the wall, but now and then one climbs in.",
+            },
             {
                     "13.3  -  Top Fighters, rides, borrowing, steadier big maps",
                     "Top Fighters: a Kills button at the top of the screen (and in the pause menu) lists the living with the most kills - name, unit, what they are, health. Tap one to go straight there and follow them (or the car, truck or helicopter they're in).",

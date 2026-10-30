@@ -8,6 +8,9 @@ final class Sound {
     void play(int id, float volume, float pan) {
     }
 
+    void play(int id, float volume, float pan, float distance) {
+    }
+
     void setVolumes(float music, float sfx) {
     }
 

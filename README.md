@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**New sound system, more gun sounds, the dead climb (13.4):** the game mixes its own sound (a 32-voice mixer with
+priorities, several takes of each sound, distance muffling, an echo off the buildings and a limiter) straight to the
+phone's audio output, and the music crossfades and ducks under fighting. New sounds for the submachine gun, carbine,
+marksman's rifle, grenade launcher, reloads, empty guns, ricochets, melee blows and climbing. The dead climb over
+fences, barricades and quarantine walls to reach someone close behind them, slowly (about 2.5 seconds).
+
 **Top Fighters, rides, borrowing and steadier big maps (13.3):** a Kills button (and Top Fighters in the pause menu)
 lists the living with the most kills; tap one to follow them. Help from outside is three quarters of the city's own
 police and soldiers. Police and soldiers borrow ammo from a partner whenever one is close, soldiers ride trucks out to

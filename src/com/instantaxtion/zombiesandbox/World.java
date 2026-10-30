@@ -2892,6 +2892,12 @@ final class World {
             if (d > 16 && !city.passLine(z.x, z.y, t.x, t.y)) {
                 // Right up against a safe zone's wall with them on the other side: tear at it.
                 if (dispatch.wallOwner != null && clawWall(z, dt)) return;
+                // ((13.4) Just the other side of a fence or a barricade: straight at it, to climb over (see
+                // zombieClimb), rather than all the way round.)
+                if (d < CLIMB_REACH && climbable(z, t)) {
+                    steer(z, ddx / d, ddy / d, chaseSpeed(z, d));
+                    return;
+                }
                 if (followField(z, city.humanDist, chaseSpeed(z, d))) return;
             }
             if (t.aloft && d < 22) {
@@ -3729,7 +3735,8 @@ final class World {
             z.hurt = 1;
         }
         e.angle = (float) Math.atan2(ddy, ddx);
-        emit(Sfx.THUD, z.x, z.y);
+        // ((13.4) A blow with a rifle butt or a baton has a sound of its own.)
+        emit(strong ? Sfx.MELEE : Sfx.THUD, z.x, z.y);
     }
 
     // ------------------------------------------------------------------ taking control
@@ -3845,7 +3852,7 @@ final class World {
         z.stun = Math.max(z.stun, z.type == Entity.BRUTE ? 0.2f : axe ? 0.4f : 0.8f);
         tryMove(z, ddx / d * (axe ? 5 : 9) / z.mass, ddy / d * (axe ? 5 : 9) / z.mass);
         bloodBurst(z.x, z.y, 3, ddx / d, ddy / d);
-        emit(Sfx.THUD, z.x, z.y);
+        emit(Sfx.MELEE, z.x, z.y);
         if (wasUp && z.hp <= 0 && z.isZombie()) killMade(e);
     }
 
@@ -8225,13 +8232,16 @@ final class World {
                 // (A launcher reloads quicker than a man can pull another pin.)
                 if (launcher) {
                     e.grenadeCd = 7;
-                    emit(Sfx.PISTOL, e.x, e.y);
+                    emit(Sfx.LAUNCHER, e.x, e.y);
                 }
             }
             return;
         }
         e.aiming = false;
-        if (e.reload <= 0 && e.ammo < e.magSize / 2 && e.reserve > 0) e.reload = soldier ? 2.2f : 1.6f;
+        if (e.reload <= 0 && e.ammo < e.magSize / 2 && e.reserve > 0) {
+            e.reload = soldier ? 2.2f : 1.6f;
+            emit(Sfx.RELOAD, e.x, e.y);
+        }
         if (stationary) {
             standAt(e, e.postX, e.postY, 1f);
             return;
@@ -10051,7 +10061,13 @@ final class World {
         e.aiming = true;
         e.angle = turn(e.angle, (float) Math.atan2(t.y - e.y, t.x - e.x), dt * 14);
         if (e.ammo <= 0) {
-            if (e.reload <= 0 && e.reserve > 0) e.reload = e.type == Entity.SOLDIER ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+            if (e.reload <= 0 && e.reserve > 0) {
+                e.reload = e.type == Entity.SOLDIER ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+                emit(Sfx.RELOAD, e.x, e.y);
+            } else if (e.reload <= 0 && e.reserve <= 0 && rnd.nextFloat() < dt * 1.5f) {
+                // ((13.4) Nothing left: the click of a trigger on an empty gun.)
+                emit(Sfx.DRY_FIRE, e.x, e.y);
+            }
             return true;
         }
         // ((12.8) Only once the gun is on it: a moment to bring it round, not a shot off to the side.)
@@ -10340,7 +10356,10 @@ final class World {
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
         accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e)));
-        if (e.ammo <= 0 && e.reserve > 0) e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+        if (e.ammo <= 0 && e.reserve > 0) {
+            e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+            emit(Sfx.RELOAD, e.x, e.y);
+        }
         // (10.45) How far the shot carries depends on the gun: a pistol's crack, a shotgun's boom, a rifle's
         // report, a machine gun's chatter.
         float loud = gunLoudness(e);
@@ -10402,6 +10421,8 @@ final class World {
                     impactPuff(ex - (float) Math.cos(a) * 2, ey - (float) Math.sin(a) * 2, 0xFFB8B0A0);
                     bulletHole(ex, ey, e.x, e.y);
                     hitWall = true;
+                    // ((13.4) Now and then the whine of one coming off the wall.)
+                    if (rnd.nextFloat() < 0.2f) emit(Sfx.RICOCHET, ex, ey);
                     break;
                 }
                 if (s > 12 && ((int) s) % 8 == 0) car = vehicleAt(ex, ey);
@@ -10414,7 +10435,7 @@ final class World {
         }
         particle(mx, my, 0, 0, 0.06f, soldier ? 3.2f : 2.6f, 0xFFFFE9A0, P_FLASH);
         int gunSound = e.weapon == Entity.W_SHOTGUN ? Sfx.SHOTGUN : e.weapon == Entity.W_HUNTING ? Sfx.HUNTING : e.weapon == Entity.W_REVOLVER ? Sfx.REVOLVER
-                : e.weapon == Entity.W_SMG || e.weapon == Entity.W_CARBINE ? Sfx.RIFLE : e.weapon == Entity.W_DMR ? Sfx.SNIPER : -1;
+                : e.weapon == Entity.W_SMG ? Sfx.SMG : e.weapon == Entity.W_CARBINE ? Sfx.CARBINE : e.weapon == Entity.W_DMR ? Sfx.DMR : -1;
         if (gunSound >= 0) emit(gunSound, e.x, e.y);
         else emit(e.role == Entity.ROLE_MARKSMAN ? Sfx.SNIPER : !soldier || e.role == Entity.ROLE_COMMANDER ? Sfx.PISTOL : e.role == Entity.ROLE_SNIPER ? Sfx.SNIPER
                 : e.role == Entity.ROLE_GUNNER ? Sfx.MG : Sfx.RIFLE, e.x, e.y);
@@ -11464,7 +11485,7 @@ final class World {
         // (10.51) Halfway over a fence or the highway barrier: nothing else until they're down the other side.
         if (e.vaultT > 0) {
             e.vaultT -= dt;
-            float f = 1 - Math.max(0, e.vaultT) / VAULT_TIME;
+            float f = 1 - Math.max(0, e.vaultT) / Math.max(0.05f, e.vaultDur);
             e.x = e.vaultX0 + (e.vaultX1 - e.vaultX0) * f;
             e.y = e.vaultY0 + (e.vaultY1 - e.vaultY0) * f;
             e.vx = e.vy = 0;
@@ -11548,10 +11569,16 @@ final class World {
         float l = (float) Math.sqrt(e.mx * e.mx + e.my * e.my);
         if (l < 0.01f) return;
         float dx = e.mx / l, dy = e.my / l, reach = e.radius + 5;
-        if (!city.circleBlocked(e.x + dx * reach, e.y + dy * reach, e.radius)) return;
+        if (!city.circleBlocked(e.x + dx * reach, e.y + dy * reach, e.radius)) {
+            e.climbPress = 0;
+            return;
+        }
         // (10.51) Running at a fence they can get over: over it, not round.
         if (!e.isZombie() && e.type != Entity.DOG && e.want > e.speed * 1.2f && e.ride == null && e != controlled
                 && tryVault(e, reach + 3)) return;
+        // ((13.4) The dead climb over too - fences, barricades, the quarantine walls - but only after pressing up
+        // against it a while, and slowly.)
+        if (e.isZombie() && e != controlled && e.want > 1 && zombieClimb(e, reach + 3)) return;
         for (int step = 1; step <= 4; step++) {
             for (int side = 0; side < 2; side++) {
                 float a = step * 0.42f * (side == 0 ? e.slideSide : -e.slideSide);
@@ -11568,8 +11595,53 @@ final class World {
     }
 
     static final float VAULT_TIME = 0.55f;
+    /** ((13.4) How long the dead take to get over a barrier: the ordinary ones, the quick ones, the big ones. */
+    static final float CLIMB_TIME = 2.4f, CLIMB_RUNNER = 1.8f, CLIMB_BRUTE = 3.5f;
+    /** ((13.4) How long one of the dead pushes at a barrier before it starts to climb. */
+    static final float CLIMB_PRESS = 1.2f;
+
+    /** ((13.4) How close the living must be, beyond a barrier, for the dead to climb it rather than go round. */
+    static final float CLIMB_REACH = 7 * City.T;
+
+    /**
+     * ((13.4) Whether the first thing in the way on the straight line from z to t is a fence or a barricade, one tile
+     * thick, with open ground the other side: something to climb.
+     */
+    private boolean climbable(Entity z, Entity t) {
+        float dx = t.x - z.x, dy = t.y - z.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        dx /= d;
+        dy /= d;
+        for (float s = City.T * 0.5f; s < Math.min(d, City.T * 3); s += City.T * 0.5f) {
+            int i = city.tileIndex(z.x + dx * s, z.y + dy * s);
+            if (i < 0 || !city.solid[i]) continue;
+            if (city.tiles[i] != City.FENCE) return false;
+            int j = city.tileIndex(z.x + dx * (s + City.T), z.y + dy * (s + City.T));
+            return j >= 0 && !city.solid[j];
+        }
+        return false;
+    }
+
+    /** ((13.4) One of the dead up against a barrier it wants to get past: over it, once it's pushed at it a while. */
+    private boolean zombieClimb(Entity z, float probe) {
+        z.climbPress += 1 / 30f * Math.max(1, z.lodStep);
+        if (z.climbPress < CLIMB_PRESS) return false;
+        if (!tryVault(z, probe)) {
+            z.climbPress = 0;
+            return false;
+        }
+        z.climbPress = 0;
+        float t = z.type == Entity.BRUTE ? CLIMB_BRUTE : z.type == Entity.RUNNER ? CLIMB_RUNNER : CLIMB_TIME;
+        z.vaultDur = z.vaultT = t * (0.85f + rnd.nextFloat() * 0.3f);
+        emit(Sfx.CLIMB, z.x, z.y);
+        return true;
+    }
 
     private boolean tryVault(Entity e, float probe) {
+        return tryVault(e, probe, false);
+    }
+
+    /** ((13.4) zoneWall: a stretch of a safe zone's wall will do too (the dead climbing in). */
+    private boolean tryVault(Entity e, float probe, boolean zoneWall) {
         float l = (float) Math.sqrt(e.mx * e.mx + e.my * e.my);
         if (l < 0.01f) return false;
         float ux = e.mx / l, uy = e.my / l;
@@ -11582,14 +11654,15 @@ final class World {
             ux = 0;
         }
         int t1 = city.tileIndex(e.x + ux * probe, e.y + uy * probe);
-        if (t1 < 0 || city.tiles[t1] != City.FENCE) return false;
+        boolean wall = zoneWall && t1 >= 0 && dispatch.wallOwner != null && dispatch.wallOwner[t1] != null && dispatch.wallSeg[t1] >= 0;
+        if (t1 < 0 || (city.tiles[t1] != City.FENCE && !wall)) return false;
         int fx = t1 % city.w, fy = t1 / city.w;
         float lx = (fx + 0.5f) * City.T + ux * City.T, ly = (fy + 0.5f) * City.T + uy * City.T;
         // Keep the line along the fence they were at, only the crossing is to the tile's middle.
         if (ux != 0) ly = e.y;
         else lx = e.x;
         if (city.circleBlocked(lx, ly, e.radius)) return false;
-        e.vaultT = VAULT_TIME;
+        e.vaultT = e.vaultDur = VAULT_TIME;
         e.vaultX0 = e.x;
         e.vaultY0 = e.y;
         e.vaultX1 = lx;
@@ -14631,6 +14704,17 @@ final class World {
         if (d > City.T * 0.5f + z.radius + 3) steer(z, cx / d, cy / d, z.speed * 0.6f);
         else steer(z, 0, 0, 0);
         z.angle = turn(z.angle, (float) Math.atan2(cy, cx), dt * 4);
+        // ((13.4) Now and then one gets a grip and climbs over, slowly, instead of clawing the wall down.)
+        if (seg >= 0 && d < City.T * 0.5f + z.radius + 6 && rnd.nextFloat() < dt * 0.06f) {
+            z.mx = cx;
+            z.my = cy;
+            if (tryVault(z, d + 3, true)) {
+                float t = z.type == Entity.BRUTE ? CLIMB_BRUTE : z.type == Entity.RUNNER ? CLIMB_RUNNER : CLIMB_TIME;
+                z.vaultDur = z.vaultT = t * 1.3f;
+                emit(Sfx.CLIMB, z.x, z.y);
+                return true;
+            }
+        }
         dispatch.damageWall(zone, seg, (z.type == Entity.BRUTE ? 12 : z.type == Entity.CRAWLER ? 1.5f : 4) * dt);
         if (rnd.nextFloat() < dt * 0.8f) emit(Sfx.THUD, z.x, z.y);
         return true;

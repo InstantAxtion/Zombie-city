@@ -1994,20 +1994,6 @@ final class GameView extends View implements Menu.Host {
                 : android.view.HapticFeedbackConstants.LONG_PRESS);
     }
 
-    /** How far a sound carries, compared with the usual (most of a screen). */
-    private static float carry(int type) {
-        switch (type) {
-            case Sfx.EXPLOSION: case Sfx.CANNON: case Sfx.COLLAPSE: return 3.2f;
-            case Sfx.ROTOR: case Sfx.JET: return 2.6f;
-            case Sfx.SIREN: case Sfx.AMB_SIREN: case Sfx.ALARM: return 2.2f;
-            case Sfx.MG: case Sfx.RIFLE: case Sfx.SHOTGUN: case Sfx.SNIPER: case Sfx.HUNTING: case Sfx.BURST: return 2.2f;
-            case Sfx.PISTOL: case Sfx.REVOLVER: return 1.6f;
-            case Sfx.CRASH: case Sfx.HORN: return 1.4f;
-            case Sfx.GROAN: case Sfx.GROAN_DEEP: case Sfx.BITE: case Sfx.SPIT: return 0.7f;
-            default: return 1f;
-        }
-    }
-
     private void playSounds(float master) {
         haptics();
         float vw = getWidth() / scale, vh = getHeight() / scale;
@@ -2018,14 +2004,15 @@ final class GameView extends View implements Menu.Host {
             int type = world.evType[i];
             // (10.32) Loud things carry: a battle, an explosion or a helicopter is heard a long way off, faintly;
             // a groan only close by.
-            float r = reach * carry(type);
+            float r = reach * Sfx.carry(type);
             if (d > r) continue;
             float f = d / r;
             float vol = master * (1 - 0.85f * f) * (1 - 0.15f * f * f);
             if (type == Sfx.GROAN || type == Sfx.GROAN_DEEP || type == Sfx.SCREAM) vol *= 0.6f;
             // ((11.7) Gunshots a bit louder, near and far.)
             if (Sfx.gun(type)) vol *= 1.3f;
-            sound.play(type, vol, Math.max(-1, Math.min(1, ddx / (vw / 2))) * 0.8f);
+            // ((13.4) And how far off: the mixer muffles it and gives it more echo the further away it is.)
+            sound.play(type, vol, Math.max(-1, Math.min(1, ddx / (vw / 2))) * 0.8f, f);
         }
         world.evCount = 0;
     }

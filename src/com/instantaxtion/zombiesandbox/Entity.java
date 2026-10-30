@@ -306,6 +306,10 @@ final class Entity {
     float warnCd;
     /** (10.51) Climbing over a fence: time left, and from where to where. */
     float vaultT, vaultX0, vaultY0, vaultX1, vaultY1;
+    /** ((13.4) How long this climb over takes: a moment for the living, a struggle for the dead.) */
+    float vaultDur = 0.55f;
+    /** ((13.4) How long one of the dead has been pressed up against a barrier it could climb. */
+    float climbPress;
     /** Time until this shooter's next gunshot alerts the people around (one per burst, not per round). */
     float alertCd;
     /** When they last came out of hiding into a quiet street (they don't go straight back in on hearsay). */
