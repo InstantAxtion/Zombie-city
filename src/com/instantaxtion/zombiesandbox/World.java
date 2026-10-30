@@ -946,6 +946,17 @@ final class World {
         }
         startHikers();
         recount();
+        // ((13.3) The walking router's clusters all worked out while the city is still loading (a fraction of a second
+        // even on the biggest map), not in the first moments of play, when everyone sets off at once.)
+        city.warmPaths((city.w / Nav.CS + 1) * (city.h / Nav.CS + 1));
+        // (And the ways on foot to the stations and bases: about a second on a Colossal map.)
+        while (city.warmFacilityField()) {
+        }
+        // ((13.3) Help from outside: three quarters as many again as the police and soldiers the city starts with.)
+        if (dispatch.policeReserve > 0 || dispatch.squadReserve > 0) {
+            dispatch.policeReserve = Math.round(counts[Entity.COP] * Dispatch.OUTSIDE_SHARE);
+            dispatch.squadReserve = Math.round(counts[Entity.SOLDIER] * Dispatch.OUTSIDE_SHARE);
+        }
     }
 
     /**
@@ -1685,6 +1696,46 @@ final class World {
         return best;
     }
 
+    /**
+     * ((13.3) The living with the most kills, most first: out on the streets, or aboard a car, truck or helicopter
+     * (indoors, they can't be watched, so not them). For the Top Fighters list.)
+     */
+    ArrayList<Entity> topFighters(int n) {
+        ArrayList<Entity> all = new ArrayList<Entity>();
+        java.util.IdentityHashMap<Entity, Boolean> seen = new java.util.IdentityHashMap<Entity, Boolean>();
+        for (int i = 0, c = entities.size(); i < c; i++) {
+            Entity e = entities.get(i);
+            if (e.kills > 0 && !e.dead && !e.removed && !e.isZombie() && seen.put(e, Boolean.TRUE) == null) all.add(e);
+        }
+        for (int i = 0, c = fleet.vehicles.size(); i < c; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.removedFromFleet) continue;
+            for (int k = 0; k < v.crew.size(); k++) {
+                Entity e = v.crew.get(k);
+                if (e.kills > 0 && e.hp > 0 && !e.isZombie() && seen.put(e, Boolean.TRUE) == null) all.add(e);
+            }
+            for (int k = 0; k < v.riders.size(); k++) {
+                Entity e = v.riders.get(k);
+                if (e.kills > 0 && e.hp > 0 && !e.isZombie() && seen.put(e, Boolean.TRUE) == null) all.add(e);
+            }
+        }
+        java.util.Collections.sort(all, new java.util.Comparator<Entity>() {
+            @Override
+            public int compare(Entity a, Entity b) {
+                return b.kills - a.kills;
+            }
+        });
+        while (all.size() > n) all.remove(all.size() - 1);
+        return all;
+    }
+
+    /** ((13.3) What someone is, for the Top Fighters list: "SWAT officer", "Machine gunner", "Civilian"...) */
+    static String kindOf(Entity e) {
+        if (e.role > 0 && e.role < Entity.ROLE_NAMES.length && (e.type == Entity.COP || e.type == Entity.SOLDIER)) return Entity.ROLE_NAMES[e.role];
+        if (e.type == Entity.COP) return "Police officer";
+        return e.type >= 0 && e.type < Entity.NAMES.length ? Entity.NAMES[e.type] : "";
+    }
+
     ArrayList<int[]> heroes(int n) {
         ArrayList<int[]> all = new ArrayList<int[]>();
         for (int i = 0, c = entities.size(); i < c; i++) {
@@ -1863,7 +1914,10 @@ final class World {
         // ((10.36) The walking router is quick enough for far more routes than before: about forty a second.)
         pathBudget = Math.min(12, pathBudget + dt * 40);
         // (10.49) The walking router's map, worked out a few clusters at a time instead of all at once mid-trip.
-        city.warmPaths(quality == Q_FULL ? 3 : 1);
+        // ((13.3) More at a time on the bigger maps: a Colossal map has six thousand clusters, which took over a minute
+        // of play at three a step.)
+        int clusters = (city.w / Nav.CS) * (city.h / Nav.CS);
+        city.warmPaths((quality == Q_FULL ? 3 : 1) + clusters / 200);
         time += dt;
         shake = Math.max(0, shake - dt * 3);
         if (messageTime > 0) messageTime -= dt;
@@ -1871,6 +1925,8 @@ final class World {
         // ((11.5) In a crowd of thousands, the grid of who's where every other step: nobody moves more than a step or
         // two in between, and everything that asks it allows for that.)
         if (entities.size() < 3000 || (lodFrame & 1) == 0 || hashSize < 0) buildHash();
+        // ((13.3) The ways on foot to the stations and bases, one at a time ahead of need (see City.warmFacilityField).)
+        if (lodFrame % 15 == 7) city.warmFacilityField();
         fieldTimer -= dt;
         occTimer -= dt;
         if (fieldTimer <= 0) {
@@ -2236,6 +2292,8 @@ final class World {
 
     /** ((11.5) Each one's cell, from the first pass over everyone to the second.) */
     private int[] hashCell = new int[64];
+    private byte[] hashKind = new byte[64];
+    private float[] hashX = new float[64], hashY = new float[64], hashR = new float[64];
     private int hashSize = -1;
     /** ((12.0) The cells with anyone in them, as of the last grid.) */
     private int[] usedCells = new int[256];
@@ -2259,7 +2317,13 @@ final class World {
         usedN = 0;
         hashFrame++;
         hashSize = n;
-        if (hashCell.length < n) hashCell = new int[n * 2];
+        if (hashCell.length < n) {
+            hashCell = new int[n * 2];
+            hashKind = new byte[n * 2];
+            hashX = new float[n * 2];
+            hashY = new float[n * 2];
+            hashR = new float[n * 2];
+        }
         for (int i = 0; i < n; i++) {
             Entity e = entities.get(i);
             if (e.leader != null && !e.dead) e.leader.followerFrame = hashFrame;
@@ -2269,8 +2333,15 @@ final class World {
                 if (usedN == usedCells.length) usedCells = Arrays.copyOf(usedCells, usedN * 2);
                 usedCells[usedN++] = c;
             }
-            if (e.isZombie()) zCount[c]++;
-            else if (e.isArmed()) aCount[c]++;
+            // ((13.3) What they are and where, kept side by side for the second pass below, which then doesn't need
+            // to look at each of them again.)
+            byte kind = e.isZombie() ? (byte) 0 : e.isArmed() ? (byte) 1 : (byte) 2;
+            hashKind[i] = kind;
+            hashX[i] = e.x;
+            hashY[i] = e.y;
+            hashR[i] = e.radius;
+            if (kind == 0) zCount[c]++;
+            else if (kind == 1) aCount[c]++;
         }
         // Each cell lists its zombies first, then everyone else, so a search for one or the other only looks at
         // what it wants (a crowd of thousands doesn't slow down looking for the one zombie among them).
@@ -2286,13 +2357,12 @@ final class World {
         }
         cellStart[cellCount.length] = acc;
         for (int i = 0; i < n; i++) {
-            Entity e = entities.get(i);
-            int c = hashCell[i];
-            int at = e.isZombie() ? zFill[c]++ : e.isArmed() ? aFill[c]++ : cellFill[c]++;
-            sorted[at] = e;
-            sortedX[at] = e.x;
-            sortedY[at] = e.y;
-            sortedR[at] = e.radius;
+            int c = hashCell[i], kind = hashKind[i];
+            int at = kind == 0 ? zFill[c]++ : kind == 1 ? aFill[c]++ : cellFill[c]++;
+            sorted[at] = entities.get(i);
+            sortedX[at] = hashX[i];
+            sortedY[at] = hashY[i];
+            sortedR[at] = hashR[i];
         }
     }
 
@@ -2475,6 +2545,18 @@ final class World {
         if (e != controlled && !e.isZombie() && (e.isArmed() || e.hasGun) && e.melee <= 0 && e.ammo <= 0 && e.reserve <= 0
                 && e.reload <= 0) {
             Entity z = nearest(e, DRY_KEEP, true, false);
+            // ((13.3) A partner close by with rounds to spare: to them, round the dead (that's below), rather than
+            // only ever backing off from the dead and never getting a magazine.)
+            if (z != null && e.isArmed() && e.task != Dispatch.T_BORROW && e.task != Dispatch.T_BOARD) {
+                Entity mate = lenderFor(e, 160);
+                if (mate != null) {
+                    dispatch.releaseForResupply(e);
+                    e.task = Dispatch.T_BORROW;
+                    e.protector = mate;
+                    e.taskTimer = 15;
+                }
+            }
+            if (e.task == Dispatch.T_BORROW && e.protector != null && !e.protector.dead) z = null;
             boolean jumpIn = z != null && e.task == Dispatch.T_BOARD && e.rig != null
                     && World.hypot(e.rig.x - e.x, e.rig.y - e.y) < 16 && World.hypot(z.x - e.x, z.y - e.y) > 10;
             if (z != null && !jumpIn) {
@@ -4916,11 +4998,12 @@ final class World {
         }
         e.paused = false;
         e.aiming = false;
+        // ((13.3) Flat out, a little quicker than their usual run: the truck is waiting.)
         if (d > 48) {
-            walkToSpot(e, v.x, v.y, e.runSpeed);
+            walkToSpot(e, v.x, v.y, e.runSpeed * 1.1f);
             return true;
         }
-        steer(e, ddx / d, ddy / d, e.runSpeed);
+        steer(e, ddx / d, ddy / d, e.runSpeed * 1.1f);
         if (e.blocked) {
             e.blocked = false;
             e.unstick = 0.5f;
@@ -6918,8 +7001,10 @@ final class World {
             fleet.boarded(v, e);
             return true;
         }
-        v.waitTimer = Math.max(v.waitTimer, 1.5f);
-        steer(e, ddx / d, ddy / d, e.runSpeed);
+        // ((13.3) The car waits longer for them, and they run to it round whatever's in the way, flat out.)
+        v.waitTimer = Math.max(v.waitTimer, 3f);
+        if (d > 40 && (e.blocked || !city.los(e.x, e.y, v.x, v.y))) walkToSpot(e, v.x, v.y, e.runSpeed * 1.1f);
+        else steer(e, ddx / d, ddy / d, e.runSpeed * 1.1f);
         return true;
     }
 
@@ -7753,6 +7838,47 @@ final class World {
         return Math.min(e.runSpeed * 0.8f, e.speed * (swarmed ? 1.3f : 1.1f));
     }
 
+    /** ((13.3) The dead further off than this, in tiles, and soldiers with nothing to do ride out to them. */
+    static final int RIDE_TILES = 50;
+    /** ((13.3) Further than this from base and soldiers with nothing to do ride back. */
+    static final float RIDE_HOME = 900;
+
+    /**
+     * ((13.3) Soldiers with nothing to do, a long way from the dead or from base: a truck for them and the rest of
+     * their squad about them, to the nearest call where the dead are, or back to base with no call to go to. True
+     * once one is on its way; they wait for it then (see boardStep).
+     */
+    private boolean rideOut(Entity e, float dt) {
+        if (e.rig != null || e.ride != null || e == controlled || (e.driveCd -= dt) > 0) return false;
+        e.driveCd = 10;
+        if (nearest(e, 100, true, false) != null) return false;
+        Dispatch.Incident inc = null;
+        float bd = 4000;
+        for (int i = 0, n = dispatch.incidents.size(); i < n; i++) {
+            Dispatch.Incident q = dispatch.incidents.get(i);
+            if (q.resolved) continue;
+            float d = (float) World.hypot(q.x - e.x, q.y - e.y);
+            if (d < bd && d > RIDE_HOME * 0.7f) {
+                bd = d;
+                inc = q;
+            }
+        }
+        java.util.ArrayList<Entity> group = new java.util.ArrayList<Entity>();
+        group.add(e);
+        int n = gatherLiving(e.x, e.y, 150);
+        for (int i = 0; i < n && group.size() < 8; i++) {
+            Entity o = gathered[i];
+            if (o != e && !o.dead && o.type == Entity.SOLDIER && o.task == Dispatch.T_NONE && o.rig == null && o.ride == null && o != controlled) group.add(o);
+        }
+        if (!fleet.driveTo(group, inc)) return false;
+        for (Entity o : group) o.driveCd = 10;
+        if (time > rideSaidAt) {
+            rideSaidAt = time + 25;
+            dispatch.say(Dispatch.WHO_MILITARY, e, inc != null ? "Long walk to " + inc.place + ". Getting a truck." : "Long walk back to base. Getting a truck.", e.x, e.y);
+        }
+        return true;
+    }
+
     private void thinkArmed(Entity e, float dt) {
         boolean soldier = e.type == Entity.SOLDIER;
         float range = soldier ? (e.role == Entity.ROLE_SNIPER ? 380 : e.role == Entity.ROLE_COMMANDER ? 180
@@ -7779,7 +7905,8 @@ final class World {
                 && e.ride == null && e.agency != 3 && e.role != Entity.ROLE_PILOT && (e.driveCd -= dt) <= 0) {
             e.driveCd = 8;
             Dispatch.Incident inc = e.incident;
-            if (World.hypot(inc.x - e.x, inc.y - e.y) > 700 && nearest(e, 100, true, false) == null) {
+            // ((13.3) Soldiers from 500 away, not 700.)
+            if (World.hypot(inc.x - e.x, inc.y - e.y) > (soldier ? 500 : 700) && nearest(e, 100, true, false) == null) {
                 java.util.ArrayList<Entity> group = new java.util.ArrayList<Entity>();
                 group.add(e);
                 int n = gatherLiving(e.x, e.y, 150), seats = e.type == Entity.COP ? 4 : 8;
@@ -7827,7 +7954,8 @@ final class World {
         if (dry && e.task != Dispatch.T_RESUPPLY && e.task != Dispatch.T_BORROW && e.task != Dispatch.T_BOARD && !e.scout) {
             City.Facility f = restockPoint(e);
             // ((10.60) A partner close by with plenty: a magazine off them first, rather than a long walk back.)
-            Entity mate = f == null || World.hypot(f.x - e.x, f.y - e.y) > 300 ? lenderFor(e, 240) : null;
+            // ((13.3) Whenever there's one about, not only when the station is a long way off.)
+            Entity mate = lenderFor(e, 240);
             if (mate != null) {
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_BORROW;
@@ -7866,7 +7994,14 @@ final class World {
         if (!dry && stock < 0.22f && e.lowCd <= 0 && (e.task == Dispatch.T_NONE || e.task == Dispatch.T_RESPOND)) {
             e.lowCd = 25;
             City.Facility f = restockPoint(e);
-            if (f != null && World.hypot(f.x - e.x, f.y - e.y) < 1600 && nearest(e, 70, true, false) == null) {
+            // ((13.3) A partner right there with plenty: a magazine or two off them, and stay in the fight.)
+            Entity mate = lenderFor(e, 120);
+            if (mate != null) {
+                e.task = Dispatch.T_BORROW;
+                e.protector = mate;
+                e.taskTimer = 12;
+                dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. " + Dispatch.name(mate) + ", spare a mag?", e.x, e.y);
+            } else if (f != null && World.hypot(f.x - e.x, f.y - e.y) < 1600 && nearest(e, 70, true, false) == null) {
                 dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. Heading back to " + f.name + " to restock.", e.x, e.y);
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_RESUPPLY;
@@ -7875,7 +8010,7 @@ final class World {
         if (e.task == Dispatch.T_BORROW) {
             Entity l = e.protector;
             // ((10.60) And not chasing a partner who's drawn away: back to the station after all.)
-            if (l == null || l.dead || l.ammo + l.reserve < fullReserve(l) * 0.5f || World.hypot(l.x - e.x, l.y - e.y) > 600 || e.taskTimer <= 0) {
+            if (l == null || l.dead || l.removed || l.reserve <= 0 || World.hypot(l.x - e.x, l.y - e.y) > 600 || e.taskTimer <= 0) {
                 e.task = Dispatch.T_NONE;
                 e.protector = null;
                 if (l != null && !l.dead && restockPoint(e) != null) {
@@ -7896,7 +8031,8 @@ final class World {
                     return;
                 }
                 // Shared out: half of what they can spare.
-                int spare = Math.max(e.magSize, (l.ammo + l.reserve - (int) (fullReserve(l) * 0.45f)) / 2);
+                // ((13.3) Half of what they have beyond a third of a load, two magazines at least where they have them.)
+                int spare = Math.max(e.magSize * 2, (l.ammo + l.reserve - fullReserve(l) / 3) / 2);
                 spare = Math.min(spare, l.reserve);
                 l.reserve -= spare;
                 e.reserve += spare;
@@ -8290,6 +8426,8 @@ final class World {
         }
         int dist = city.fieldAt(city.zombieDist, e.x, e.y);
         int hunt = soldier ? 200 : 40;
+        // ((13.3) The dead a long way off: soldiers ride out to the nearest call there, rather than walk across town.)
+        if (soldier && e.task == Dispatch.T_NONE && (e.ammo > 0 || e.reserve > 0) && dist >= RIDE_TILES && dist < hunt && rideOut(e, dt)) return;
         if ((e.ammo > 0 || e.reserve > 0) && dist < hunt && followField(e, city.zombieDist, e.speed * 1.3f)) return;
         if (e.agency == 3 && e.task == Dispatch.T_NONE && e.rig == null && rangerOnFoot(e, dt)) return;
         // ((11.1) Officers with no call walk a beat.)
@@ -8319,6 +8457,8 @@ final class World {
             City.Facility base = city.nearestFacility(City.FACILITY_BASE, e.x, e.y);
             if (base != null) {
                 float bx = base.x - e.x, by = base.y - e.y;
+                // ((13.3) A long way from base: a truck back, not the walk.)
+                if (bx * bx + by * by > RIDE_HOME * RIDE_HOME && rideOut(e, dt)) return;
                 if (bx * bx + by * by > base.r * base.r * 2.2f && followField(e, city.field(base), e.speed * 0.8f)) return;
                 // ((11.1) And once there, fall in: squads in ranks on the parade ground, ready to go.)
                 if (alert >= 1 && bx * bx + by * by < base.r * base.r * 2.2f) {
@@ -10087,10 +10227,27 @@ final class World {
     }
 
     /** The squad member a soldier sticks with: the lowest-numbered one still standing. */
+    /** ((13.3) The soldiers of each squad, listed again once a second: for squadLead, which went through everyone. */
+    private final java.util.HashMap<Integer, ArrayList<Entity>> squadRoster = new java.util.HashMap<Integer, ArrayList<Entity>>();
+    private int squadRosterAt = -999;
+
     private Entity squadLead(Entity e) {
+        if (lodFrame - squadRosterAt >= 30 || lodFrame < squadRosterAt) {
+            squadRosterAt = lodFrame;
+            for (ArrayList<Entity> l : squadRoster.values()) l.clear();
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity o = entities.get(i);
+                if (o.dead || o.type != Entity.SOLDIER) continue;
+                ArrayList<Entity> l = squadRoster.get(o.squad);
+                if (l == null) squadRoster.put(o.squad, l = new ArrayList<Entity>());
+                l.add(o);
+            }
+        }
+        ArrayList<Entity> squad = squadRoster.get(e.squad);
+        if (squad == null) return null;
         Entity best = null;
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity o = entities.get(i);
+        for (int i = 0, n = squad.size(); i < n; i++) {
+            Entity o = squad.get(i);
             if (o == e || o.dead || o.type != Entity.SOLDIER || o.squad != e.squad || o.member >= e.member) continue;
             if (o.task != Dispatch.T_NONE) continue;
             if (best == null || o.member < best.member) best = o;
@@ -11844,15 +12001,22 @@ final class World {
     Entity nearestZombie(float x, float y, float radius) {
         Entity best = null;
         float bd = radius * radius;
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity o = entities.get(i);
-            if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
-            float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
-            if (d < bd) {
-                bd = d;
-                best = o;
+        // ((13.3) From the grid: it went through everyone in the city, for every lookout and every building's door.)
+        int cx0 = Math.max(0, (int) ((x - radius) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + radius) / CELL));
+        int cy0 = Math.max(0, (int) ((y - radius) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + radius) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
+                    float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
+                    if (d < bd) {
+                        bd = d;
+                        best = o;
+                    }
+                }
             }
-        }
         return best;
     }
 
@@ -13953,7 +14117,9 @@ final class World {
 
     /** (11.0) The ground has changed: the ways worked out over it are worked out again when next needed. */
     private void routesChanged() {
-        city.editsDone();
+        // ((13.3) Not all thrown away: the quarantine walls go up a stretch at a time, and each stretch had every
+        // station's way on foot worked out again at once, holding a big game up for most of a second each time.)
+        city.fieldsStale();
         for (City.Building d : doorPaths) d.field = null;
         doorPaths.clear();
         errandSpots = null;
@@ -14045,21 +14211,35 @@ final class World {
     /** How many rescue teams the police have (their helicopters): more on the bigger maps and with more precincts. */
     int rescueTeams = 1;
 
+    // ((13.3) These two from the grid of who's where, near (x, y): they went through all thirty thousand people for each
+    // of the hundreds cut off by the dead, which held a Colossal game up for seconds at a time.)
     private int countCiviliansNear(float x, float y, float r) {
         int n = 0;
-        for (int i = 0, m = entities.size(); i < m; i++) {
-            Entity o = entities.get(i);
-            if (!o.dead && o.type == Entity.CIVILIAN && Math.abs(o.x - x) < r && Math.abs(o.y - y) < r) n++;
-        }
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c] + aCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (!o.dead && o.type == Entity.CIVILIAN && Math.abs(o.x - x) < r && Math.abs(o.y - y) < r) n++;
+                }
+            }
         return n;
     }
 
     private Entity nearestArmed(float x, float y, float r) {
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity o = entities.get(i);
-            if (o.dead || !o.isArmed()) continue;
-            if ((o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) < r * r) return o;
-        }
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || !o.isArmed()) continue;
+                    if ((o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) < r * r) return o;
+                }
+            }
         return null;
     }
 
@@ -14510,17 +14690,32 @@ final class World {
     private Entity lenderFor(Entity e, float range) {
         Entity best = null;
         float bd = range * range;
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity o = entities.get(i);
-            if (o == e || o.dead || !o.isArmed() || o.scout) continue;
-            if (o.ammo + o.reserve < fullReserve(o) * 0.7f + o.magSize) continue;
-            float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
-            if (d < bd) {
-                bd = d;
-                best = o;
+        // ((13.3) Only those armed, from the grid, near them: it went through everyone in the city each time.)
+        int cx0 = Math.max(0, (int) ((e.x - range) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + range) / CELL));
+        int cy0 = Math.max(0, (int) ((e.y - range) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + range) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o == e || o.dead || o.removed || !o.isArmed() || o.scout || o.task == Dispatch.T_BORROW) continue;
+                    if (!canLend(o)) continue;
+                    float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
+                    if (d < bd) {
+                        bd = d;
+                        best = o;
+                    }
+                }
             }
-        }
         return best;
+    }
+
+    /**
+     * ((13.3) Enough to share: two magazines in reserve, or a third of a full load. It used to take most of a full
+     * load, so after the first few minutes of a fight hardly anyone could spare a round.)
+     */
+    private boolean canLend(Entity o) {
+        return o.reserve >= Math.max(1, o.magSize) && o.ammo + o.reserve >= Math.max(o.magSize * 2, fullReserve(o) / 3);
     }
 
     /**

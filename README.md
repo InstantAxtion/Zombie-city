@@ -419,6 +419,13 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Top Fighters, rides, borrowing and steadier big maps (13.3):** a Kills button (and Top Fighters in the pause menu)
+lists the living with the most kills; tap one to follow them. Help from outside is three quarters of the city's own
+police and soldiers. Police and soldiers borrow ammo from a partner whenever one is close, soldiers ride trucks out to
+far fights and back to base instead of walking, vehicles wait longer for people to board and people run to get in.
+Memory is watched and freed before a phone runs out, a Colossal game uses about 60 MB less, and the long pauses on the
+biggest maps (stations' ways on foot worked out again all at once, the walking router, whole-city searches) are gone.
+
 **Performance (13.1, fixed in 13.2):** about 43% less time a step in the big cities (a Colossal city with 300 of the
 dead loose went from about 78 ms to 44 ms on the test machine). 13.1 itself left the grid of who's where unbuilt, so
 nobody noticed or attacked anyone; 13.2 fixes that. Off screen, people with nothing near think and move less often, those

@@ -149,10 +149,17 @@ final class City {
         /** Path to the door (made when someone first needs it). */
         int[] field;
         /** Bullet holes and scorch marks on the walls: {side, along, up, size} each, in a ring buffer. */
-        final float[] marks = new float[MAX_MARKS * 4];
+        // ((13.3) Made with the first mark: most buildings are never hit, and sixteen thousand empty ones were 12 MB.)
+        float[] marks;
         int markCount, markNext;
 
+        float[] marks() {
+            if (marks == null) marks = new float[MAX_MARKS * 4];
+            return marks;
+        }
+
         void mark(int side, float along, float up, float size) {
+            float[] marks = marks();
             int i = markNext * 4;
             marks[i] = side;
             marks[i + 1] = along;
@@ -862,6 +869,8 @@ final class City {
     };
     private int[] fieldTmp;
     private int fieldsNeeded;
+    /** ((13.3) Facilities whose way on foot is out of date (a building came down), to be worked out again in turn. */
+    private final java.util.LinkedHashSet<Facility> staleFields = new java.util.LinkedHashSet<Facility>();
 
     /** (10.55) How many facilities anyone walks to (all but the fire stations), and a couple to spare. */
     private int fieldsNeeded() {
@@ -885,9 +894,41 @@ final class City {
 
     static final int FAR_C = 0xFFFF;
 
+    /**
+     * ((13.3) Works out the way on foot to one more facility nobody has needed yet, ahead of time: a few a second
+     * from the start, instead of a dozen at once in the same moment when the panic starts - on a Colossal map that
+     * held the game up for seconds, long enough for a phone to say the game wasn't responding.) False when there's
+     * nothing left to do.
+     */
+    boolean warmFacilityField() {
+        if (!staleFields.isEmpty()) {
+            Facility f = staleFields.iterator().next();
+            staleFields.remove(f);
+            if (facilityFields.containsKey(f)) facilityFields.put(f, walkField16(f.x, f.y));
+            return true;
+        }
+        if (facilityFields.size() >= fieldsNeeded()) return false;
+        for (int i = 0, n = facilities.size(); i < n; i++) {
+            Facility f = facilities.get(i);
+            if (f.kind == FACILITY_FIRE || facilityFields.containsKey(f)) continue;
+            field(f);
+            return true;
+        }
+        return false;
+    }
+
     /** (10.54) Drops the facilities' ways on foot (they're worked out again when next wanted). */
+    /**
+     * ((13.3) The ground has changed a little (a building down, a stretch of quarantine wall up): the ways on foot to
+     * the facilities are worked out again one at a time (see warmFacilityField), and the old ones used meanwhile.
+     */
+    void fieldsStale() {
+        staleFields.addAll(facilityFields.keySet());
+    }
+
     void clearFieldCaches() {
         facilityFields.clear();
+        staleFields.clear();
     }
 
     /** (10.31) A 16-bit walking field to (x, y) (half the memory: calls each have one). */
@@ -6031,7 +6072,8 @@ final class City {
     static final int SLIP_LEN = 28;
     /** One-way slip roads: which way along each tile traffic may go (as oneWay), and (10.32) its exact heading. */
     byte[] slipWay;
-    float[] slipAng;
+    /** ((13.3) The way each slip road tile runs, in 256ths of a turn: a byte, not a float, for each tile of the map.) */
+    byte[] slipAng;
 
     /** (10.32) A step from tile n to tile t (dx, dy) that doesn't go against a slip road's way, at either end. */
     private boolean slipOk(int n, int t, int dx, int dy) {
@@ -6041,7 +6083,7 @@ final class City {
     private boolean slipStep(int i, int dx, int dy) {
         if (slipWay[i] <= 0) return true;
         if (slipAng == null) return wayOk(slipWay, i, dx, dy);
-        float a = slipAng[i];
+        float a = slipAng[i] * (float) (Math.PI * 2 / 256);
         return dx * (float) Math.cos(a) + dy * (float) Math.sin(a) > -0.35f;
     }
 
@@ -6132,13 +6174,13 @@ final class City {
                         int i = y * w + x;
                         if (tiles[i] != ROAD || (oneWay != null && oneWay[i] != 0) || curveTile == null || !curveTile[i]) continue;
                         byte had = slipWay[i];
-                        if (slipAng == null) slipAng = new float[w * h];
+                        if (slipAng == null) slipAng = new byte[w * h];
                         float ang = (float) Math.atan2(dy, dx);
                         // (Where two slip roads meet going different ways: both ways there.)
                         if (had == 0) {
                             slipWay[i] = code;
-                            slipAng[i] = ang;
-                        } else if (had > 0 && Math.cos(ang - slipAng[i]) < 0.3f) slipWay[i] = -1;
+                            slipAng[i] = (byte) Math.round(ang * (256 / (Math.PI * 2)));
+                        } else if (had > 0 && Math.cos(ang - slipAng[i] * (Math.PI * 2 / 256)) < 0.3f) slipWay[i] = -1;
                     }
             }
         }
@@ -7981,7 +8023,9 @@ final class City {
                 opaque[k] = false;
             }
         drawRubble(b);
-        facilityFields.clear();
+        // ((13.3) The ways on foot still work (a building down only opens new ways): each is worked out again in its
+        // turn, not all at once the next moment - which stopped a Colossal game dead every time a building fell.)
+        fieldsStale();
     }
 
     private void drawRubble(Building b) {
@@ -12493,7 +12537,13 @@ final class City {
 
     /** (10.49) A few more of the walking router's clusters worked out ahead of need (once it's in use). */
     void warmPaths(int n) {
-        if (nav != null) nav.warm(n);
+        // ((13.3) From the start, not once someone first needs a route: on a Colossal map the first few moments of a
+        // panic worked out hundreds of clusters at once and held the game up for most of a second.)
+        if (nav == null) {
+            if (walkCost == null) computeWalkCost();
+            nav = new Nav(this);
+        }
+        nav.warm(n);
     }
 
     int[] oldFindPath(float sx, float sy, float tx, float ty, int maxExpand) {

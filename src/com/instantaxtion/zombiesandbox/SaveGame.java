@@ -556,7 +556,7 @@ final class SaveGame {
                     b.stock = in.readInt();
                     b.markCount = in.readInt();
                     b.markNext = in.readInt();
-                    for (int k = 0; k < b.markCount * 4; k++) b.marks[k] = in.readFloat();
+                    for (int k = 0; k < b.markCount * 4; k++) b.marks()[k] = in.readFloat();
                     if (collapsed) w.city.collapse(b);
                 }
                 int burned = in.readInt();

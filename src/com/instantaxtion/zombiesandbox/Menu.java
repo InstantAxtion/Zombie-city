@@ -52,6 +52,9 @@ final class Menu {
         /** Moves the camera to a spot. */
         void jumpTo(float x, float y);
 
+        /** ((13.3) Back to the game, the camera following someone (or the car or truck they're in). */
+        void watch(Entity e);
+
         /** Hides the buttons and panels until the next tap. */
         void hideHud();
 
@@ -63,7 +66,7 @@ final class Menu {
     }
 
     static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
-            SAVES = 9, LOG = 10, REPLAY = 11;
+            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12;
     /** The save slot screen: saving (from the pause menu) or loading (from the main menu). */
     private boolean savingMode;
     Records records;
@@ -71,7 +74,8 @@ final class Menu {
     private static final int A_CONTINUE = 0, A_NEW = 1, A_SETTINGS = 2, A_NOTES = 3, A_QUIT = 4, A_RESUME = 5,
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
-            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000;
+            A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000,
+            A_TOP = 29, A_TOP_ROW = 600;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -168,7 +172,7 @@ final class Menu {
     }
 
     void open(int s) {
-        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG) {
+        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP) {
             if (screen == MAIN || screen == PAUSE || screen == NONE) returnTo = screen;
         } else {
             returnTo = MAIN;
@@ -176,6 +180,7 @@ final class Menu {
         screen = s;
         scroll = 0;
         if (s == NOTES) settings.markNotesRead();
+        if (s == TOP) topAt = -99;
         if (s == SETUP && !config.keepCity) {
             config.newSeed(rnd);
             config.dropRetired();
@@ -242,6 +247,7 @@ final class Menu {
             case RECORDS: drawRecords(c, w, h); break;
             case SAVES: drawSaves(c, w, h); break;
             case LOG: drawLog(c, w, h); break;
+            case TOP: drawTop(c, w, h); break;
             case REPLAY: drawReplay(c, w, h, dt); break;
         }
         for (Button b : buttons) drawButton(c, b);
@@ -514,9 +520,9 @@ final class Menu {
         backdrop(c, w, h, 0.6f);
         // ((12.0) Restart: the same city from the start, with a second tap to be sure.)
         boolean sure = time - restartArmedAt < 4;
-        String[] labels = {"Resume", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", sure ? "Tap again to restart" : "Restart City",
+        String[] labels = {"Resume", "Top Fighters", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", sure ? "Tap again to restart" : "Restart City",
                 "New Game", "Settings", "Main Menu"};
-        int[] actions = {A_RESUME, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
+        int[] actions = {A_RESUME, A_TOP, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
         int cols = w > h ? 2 : 1, rowsN = (labels.length + cols - 1) / cols;
         float gap = 7 * dp, bh = Math.min(46 * dp, (h - 138 * dp - gap * (rowsN - 1)) / rowsN);
         float colW = Math.min(300 * dp, (w - 60 * dp) / cols);
@@ -625,6 +631,66 @@ final class Menu {
 
     private final java.util.WeakHashMap<Dispatch.Message, ArrayList<String>> logLines = new java.util.WeakHashMap<Dispatch.Message, ArrayList<String>>();
     private float logW;
+
+    /** ((13.3) The Top Fighters list, looked up again once a second rather than every frame. */
+    private java.util.ArrayList<Entity> topList = new java.util.ArrayList<Entity>();
+    private float topAt = -99;
+
+    /** ((13.3) The living with the most kills, most first. Tap one to go and watch them. */
+    private void drawTop(Canvas c, int w, int h) {
+        float top = header(c, w, h, "Top Fighters");
+        World world = host.world();
+        if (time - topAt > 1) {
+            topAt = time;
+            topList = world.topFighters(50);
+        }
+        float side = 16 * dp, maxW = Math.min(w - side * 2, 720 * dp), x0 = (w - maxW) / 2;
+        listArea.set(0, top, w, h - 12 * dp);
+        c.save();
+        c.clipRect(listArea);
+        float y = top + 8 * dp - scroll, rh = 52 * dp;
+        for (int i = 0; i < topList.size(); i++) {
+            Entity e = topList.get(i);
+            if (y + rh > top && y < h) {
+                tmp.set(x0, y, x0 + maxW, y + rh);
+                fill.setColor(i < 3 ? 0xE02A2E22 : 0xE0202328);
+                c.drawRoundRect(tmp, 8 * dp, 8 * dp, fill);
+                text.setTextAlign(Paint.Align.LEFT);
+                text.setTextSize(15 * dp);
+                text.setColor(i == 0 ? 0xFFFFD54A : i < 3 ? ACCENT : INK);
+                c.drawText((i + 1) + ".", x0 + 10 * dp, y + 22 * dp, text);
+                String who = Names.person(e.nameSeed);
+                if (e.type == Entity.COP || e.type == Entity.SOLDIER) who += "  (" + Dispatch.name(e) + ")";
+                text.setColor(INK);
+                c.drawText(fit(text, who, maxW - 130 * dp), x0 + 40 * dp, y + 22 * dp, text);
+                plain.setTextAlign(Paint.Align.LEFT);
+                plain.setTextSize(12 * dp);
+                plain.setColor(MUTED);
+                int hp = (int) Math.max(1, Math.ceil(100 * e.hp / Math.max(1, e.maxHp)));
+                String what = World.kindOf(e) + "  -  " + hp + "% health" + (e.dead ? "  -  aboard a vehicle" : "");
+                c.drawText(fit(plain, what, maxW - 130 * dp), x0 + 40 * dp, y + 41 * dp, plain);
+                text.setTextAlign(Paint.Align.RIGHT);
+                text.setTextSize(16 * dp);
+                text.setColor(ACCENT);
+                c.drawText(e.kills + (e.kills == 1 ? " kill" : " kills"), x0 + maxW - 12 * dp, y + 23 * dp, text);
+                plain.setTextAlign(Paint.Align.RIGHT);
+                plain.setColor(MUTED);
+                c.drawText("Watch \u25B6", x0 + maxW - 12 * dp, y + 41 * dp, plain);
+                Button b = button("", A_TOP_ROW + i, false, x0, Math.max(y, top), x0 + maxW, y + rh);
+                b.invisible = true;
+            }
+            y += rh + 6 * dp;
+        }
+        c.restore();
+        if (topList.isEmpty()) {
+            plain.setTextAlign(Paint.Align.CENTER);
+            plain.setColor(MUTED);
+            c.drawText("Nobody has put down any of the dead yet.", w / 2f, top + 40 * dp, plain);
+        }
+        contentHeight = y + scroll - top;
+        clampScroll();
+        drawScrollHint(c, w);
+    }
 
     /** Every radio message this game, newest first. Tap one to go there. */
     private void drawLog(Canvas c, int w, int h) {
@@ -1682,6 +1748,11 @@ final class Menu {
     }
 
     private void act(int action) {
+        if (action >= A_TOP_ROW && action < A_LOG_FILTER) {
+            int idx = action - A_TOP_ROW;
+            if (idx < topList.size()) host.watch(topList.get(idx));
+            return;
+        }
         if (action >= A_LOG_FILTER) {
             logFilter = action - A_LOG_FILTER;
             scroll = 0;
@@ -1799,6 +1870,9 @@ final class Menu {
             case A_LOAD:
                 savingMode = false;
                 open(SAVES);
+                break;
+            case A_TOP:
+                open(TOP);
                 break;
             case A_LOG:
                 open(LOG);

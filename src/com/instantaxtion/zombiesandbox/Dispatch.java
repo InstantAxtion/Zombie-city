@@ -339,13 +339,16 @@ final class Dispatch {
     final ArrayList<Convoy> convoys = new ArrayList<Convoy>();
 
     /**
-     * Help from outside the city (10.20) is either on or off. On ((10.60) more than before): about 320 police
+     * Help from outside the city (10.20) is either on or off. ((13.3) These are only until the city is populated: then
+     * it's three quarters of the city's own force, see OUTSIDE_SHARE.) On ((10.60) more than before): about 320 police
      * officers in waves from the towns around (other cities' police, highway patrol, sheriff's deputies, SWAT teams
      * and federal agents), quick to come, more often and in bigger waves the worse the city is losing; and about
      * 240 soldiers in three waves: a quick reaction force in Humvees, the main convoy with armour, and air assaults
      * by helicopter put down wherever it's worst.
      */
     static final int OUTSIDE_POLICE = 320, OUTSIDE_SOLDIERS = 240;
+    /** ((13.3) Set once the city is populated: three quarters of its own police force, and of its soldiers.) */
+    static final float OUTSIDE_SHARE = 0.75f;
 
     Dispatch(World w, int reinforcementLevel) {
         this.w = w;
@@ -1464,8 +1467,13 @@ final class Dispatch {
                 if (e.incident == least) e.orderField = null;
             }
         }
-        inc.field = city.walkField16(inc.x, inc.y);
+        // ((13.3) Out to a long walk, not the whole map: a call a long way off is driven to, and anyone beyond it finds
+        // their own way. On a Colossal map each new call held the game up while the whole city was searched.)
+        inc.field = city.walkField16(inc.x, inc.y, CALL_REACH);
     }
+
+    /** ((13.3) How far, in steps of walking cost, a call's way on foot is worked out. */
+    static final int CALL_REACH = 300;
 
     /** (10.54) How far those at a call that's over go on to the next one together (further, they stand down). */
     private static final float MOVE_ON = 2600;

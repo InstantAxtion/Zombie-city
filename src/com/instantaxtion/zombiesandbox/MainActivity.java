@@ -128,6 +128,13 @@ public class MainActivity extends Activity {
         game.requestFocus();
     }
 
+    /** ((13.3) The phone is short of memory: the game lets go of what it can work out again. */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW) game.trimMemory();
+    }
+
     @Override
     protected void onPause() {
         game.pause();

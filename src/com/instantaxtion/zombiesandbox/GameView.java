@@ -67,8 +67,8 @@ final class GameView extends View implements Menu.Host {
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten"};
-    private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5;
-    private static final int TOP_BUTTONS = 6;
+    private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5, BTN_TOP = 6;
+    private static final int TOP_BUTTONS = 7;
     private static final int[] SPEEDS = {1, 2, 4, 8};
     private static final int[] BRUSHES = {1, 5, 10, 25};
     private static final int[] SHOP_AWNINGS = {0xFFD83A3A, 0xFF2E7D4F, 0xFF2E5FB0, 0xFFE8A21C, 0xFF8A2E6B};
@@ -523,6 +523,11 @@ final class GameView extends View implements Menu.Host {
                 out.close();
             }
             return true;
+        } catch (OutOfMemoryError oom) {
+            // ((13.3) Out of memory saving (on the way out of the app): let go of what can be worked out again and
+            // say it didn't save, rather than crash.)
+            trimMemory();
+            return false;
         } catch (Exception e) {
             return false;
         }
@@ -572,6 +577,21 @@ final class GameView extends View implements Menu.Host {
         // (Loaded on the loader thread; if it fails the screen says so.)
         loadSave(f);
         return true;
+    }
+
+    @Override
+    public void watch(Entity e) {
+        continueGame();
+        Object in = e.dead ? whereIs(e) : null;
+        if (in instanceof Fleet.Vehicle) {
+            Fleet.Vehicle v = (Fleet.Vehicle) in;
+            jumpTo(v.x, v.y);
+            followV = v;
+        } else if (!e.dead) {
+            jumpTo(e.x, e.y);
+            follow = e;
+        } else world.say(Names.person(e.nameSeed) + " is out of sight");
+        click();
     }
 
     @Override
@@ -930,6 +950,31 @@ final class GameView extends View implements Menu.Host {
     private float simAcc;
     /** (10.60) How the city is doing, as the stats panel says it (see Dispatch.pressure). */
     private static final String[] PRESSURE = {"", "Stretched", "Losing", "Overrun"};
+    /** ((13.3) Until the memory in use is next looked at, and until it can be freed again. */
+    private float memoryCheck, memoryFreedAgo = 99;
+
+    /**
+     * ((13.3) Close to the phone's memory limit: let go of everything that can be worked out again (the ways on
+     * foot, the sharp close-ups of the map) before it runs out, rather than after - running out was what crashed
+     * the biggest maps.)
+     */
+    private void guardMemory(float dt) {
+        memoryFreedAgo += dt;
+        memoryCheck -= dt;
+        if (memoryCheck > 0) return;
+        memoryCheck = 2;
+        Runtime rt = Runtime.getRuntime();
+        long used = rt.totalMemory() - rt.freeMemory(), max = rt.maxMemory();
+        if (max > 0 && used > max * 0.85f && memoryFreedAgo > 20) trimMemory();
+    }
+
+    /** ((13.3) Frees what can be worked out again; also when the phone says it's short of memory. */
+    void trimMemory() {
+        memoryFreedAgo = 0;
+        chunks.clear();
+        if (world != null) world.freeMemory();
+    }
+
     /** (10.59) Simulation steps that failed and were skipped (see onDraw). */
     int simErrors;
     private static final float SIM_STEP = 1 / 30f;
@@ -1076,6 +1121,7 @@ final class GameView extends View implements Menu.Host {
             // Never spend much more than about half a frame simulating: when that's used up, what's left of the
             // time goes in one last, longer step (up to a tenth of a second) instead of being lost.
             long simStart = System.nanoTime();
+            guardMemory(frameDt);
             try {
                 for (int i = 0; i < steps; i++) {
                     world.update(step);
@@ -6519,7 +6565,7 @@ final class GameView extends View implements Menu.Host {
         drawMapLabels(c);
         drawPopups(c);
         // Top buttons.
-        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], settings.buildings3d() ? "3D" : "Top", "Clear", "Menu"};
+        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], settings.buildings3d() ? "3D" : "Top", "Clear", "Menu", "Kills"};
         text.setTextSize((portrait ? 11 : 12) * dp);
         text.setTextAlign(Paint.Align.CENTER);
         for (int i = 0; i < TOP_BUTTONS; i++) {
@@ -8121,6 +8167,10 @@ final class GameView extends View implements Menu.Host {
                 break;
             case BTN_CLEAR:
                 clearMenu = !clearMenu;
+                break;
+            case BTN_TOP:
+                // ((13.3) Straight to the Top Fighters list.)
+                menu.open(Menu.TOP);
                 break;
             case BTN_MENU:
                 menu.open(Menu.PAUSE);

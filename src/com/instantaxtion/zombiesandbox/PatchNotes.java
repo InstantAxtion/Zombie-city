@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.2";
-    static final int VERSION_CODE = 122;
+    static final String VERSION = "13.3";
+    static final int VERSION_CODE = 123;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.3  -  Top Fighters, rides, borrowing, steadier big maps",
+                    "Top Fighters: a Kills button at the top of the screen (and in the pause menu) lists the living with the most kills - name, unit, what they are, health. Tap one to go straight there and follow them (or the car, truck or helicopter they're in).",
+                    "Help from outside is now three quarters of the city's own force: as many police again, times three quarters, as the city starts with, and the same for soldiers (it was a fixed 320 officers and 240 soldiers whatever the map).",
+                    "Police and soldiers borrow ammo properly: anyone dry asks the nearest partner with rounds to spare, whenever there's one close (not only when the station is far), running low they top up from a partner right there, and with the dead close they make for the partner round them instead of only backing off. A partner with two magazines to spare now counts (it used to take most of a full load).",
+                    "Soldiers ride more and walk less: with nothing to do and the dead a long way off, a squad calls a truck to the nearest call there; a long way from base, a truck back; and on a call from 500 away, not 700.",
+                    "Vehicles wait longer: a troop truck waits up to 25 seconds for its squad (6 before), a patrol car 40 for its partner, a truck picking up a squad a minute and a half (45 seconds), buses up to 70 seconds at the stop and a helicopter 30 for its crew.",
+                    "People run to get in: a little quicker than their usual run, round whatever is in the way, and a car stopped for someone waits longer for them.",
+                    "Fewer crashes on the biggest maps: the game watches its memory and lets go of what it can work out again before the phone runs out (and when the phone says it's short), and running out while saving no longer crashes. A Colossal game uses about 60 MB less: vehicles let go of old routes, routes are packed tighter, and buildings only keep a list of bullet holes once they have one.",
+                    "Far fewer long pauses on the big maps: the ways on foot to the stations and bases, and the walking router, are worked out while the city loads; a building coming down or a stretch of quarantine wall going up no longer has every station's way worked out again at once; a 911 call's way on foot only reaches as far as anyone would walk; and the rescue helicopter's look for people cut off, the nearest zombie, and squad leaders no longer go through everyone in the city. The worst single step on a Colossal Islands map went from nearly a second to under a fifth of one on the test machine.",
+            },
             {
                     "13.2  -  Fix: nobody reacting to anyone",
                     "Fixed 13.1 leaving the grid of who's where unbuilt after the start: people, police, soldiers and the dead didn't notice, attack or run from each other.",

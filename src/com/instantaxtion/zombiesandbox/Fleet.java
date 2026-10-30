@@ -725,13 +725,29 @@ final class Fleet {
      * the way from where it set off (everything else is off the route). A whole-map field per car took most of
      * a phone's memory on the big maps.
      */
+    /**
+     * ((13.3) Lets go of routes nothing will drive again: those of vehicles parked up, and old ones still held on to
+     * as the route a lane, a junction or a stretch of road was worked out from after the vehicle had a new one. On
+     * a Colossal map they came to a hundred megabytes, and phones ran out of memory.)
+     */
+    private void releaseRoutes() {
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.parked && v.player == null && v.speed == 0) v.field = null;
+            if (v.pathField != v.field) v.pathField = null;
+            if (v.exitRoute != v.field) v.exitRoute = null;
+            if (v.corOf != v.field) v.corOf = null;
+        }
+    }
+
     static final class Route {
         private int[] keys, vals;
         private int mask, size;
 
         Route(int entries) {
+            // ((13.3) Up to three quarters full, not half: a route was a quarter of a Colossal map's memory.)
             int n = 16;
-            while (n < entries * 2) n <<= 1;
+            while (n * 3 < entries * 4) n <<= 1;
             keys = new int[n];
             vals = new int[n];
             java.util.Arrays.fill(keys, -1);
@@ -755,7 +771,7 @@ final class Fleet {
 
         void put(int k, int v) {
             next = null;
-            if ((size + 1) * 2 > keys.length) grow();
+            if ((size + 1) * 4 > keys.length * 3) grow();
             int i = slot(k);
             while (keys[i] != -1 && keys[i] != k) i = (i + 1) & mask;
             if (keys[i] == -1) size++;
@@ -2089,6 +2105,7 @@ final class Fleet {
 
     void update(float dt) {
         frameNo++;
+        if (frameNo % 30 == 0) releaseRoutes();
         patrolCount = patrolCars();
         staffPatrols(dt);
         driverTimer -= dt;
@@ -3356,12 +3373,14 @@ final class Fleet {
             v.speed = 0;
             v.timer += dt;
             // (10.34: quicker off the mark: most of the squad aboard after a few seconds will do.)
-            boolean ready = v.crew.size() >= v.crewWanted || (v.timer > 6 && v.crew.size() * 3 >= v.crewWanted * 2)
-                    || (v.timer > 11 && !v.crew.isEmpty());
+            // ((13.3) Longer for the rest: it used to go with two thirds aboard after six seconds, and leave the others
+            // behind to walk.)
+            boolean ready = v.crew.size() >= v.crewWanted || (v.timer > 15 && v.crew.size() * 3 >= v.crewWanted * 2)
+                    || (v.timer > 25 && !v.crew.isEmpty());
             if (!ready) {
                 // ((10.52) A car taking outside help home waits longer: the station it came from can be a walk away,
                 // and giving up only sent another, and another.)
-                if (v.timer > (v.leaving ? 60 : 22)) {
+                if (v.timer > (v.leaving ? 90 : 45)) {
                     dropCrew(v);
                     // ((12.3) An army truck nobody came for goes back in its bay, or stays parked where it is: it
                     // vanished before, and a base soon had none left to send anyone anywhere.)
@@ -3763,14 +3782,15 @@ final class Fleet {
         int walking = 0;
         for (Entity e : v.squad) {
             if (e.dead || e.removed || e.isZombie()) continue;
-            if (World.hypot(e.x - v.x, e.y - v.y) > 500 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_BOARD)) continue;
+            if (World.hypot(e.x - v.x, e.y - v.y) > 700 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_BOARD)) continue;
             walking++;
             if (e.task != Dispatch.T_BOARD) {
                 e.rig = v;
                 e.task = Dispatch.T_BOARD;
             }
         }
-        if ((walking > 0 && v.timer < 45) || v.timer < 2) return false;
+        // ((13.3) A minute and a half for them to get there, not 45 seconds.)
+        if ((walking > 0 && v.timer < 90) || v.timer < 2) return false;
         v.pickup = false;
         for (Entity e : v.squad)
             if (!e.dead && e.task == Dispatch.T_BOARD && e.rig == v) {
@@ -4978,7 +4998,8 @@ final class Fleet {
             if (st != null) w.boardEvac(v, v.evacStop, st.x, st.y, World.STOP_REACH + 8, BUS_SEATS - v.riders.size());
             boolean full = v.riders.size() >= BUS_SEATS, danger = w.countZombiesNear(v.x, v.y, 60) >= 2;
             boolean nobody = st == null || w.waitingFor(v.evacStop, st.x, st.y, true) == 0;
-            if (full || danger || (v.timer > 12 && nobody) || v.timer > 40) leaveWithBus(v, st);
+            // ((13.3) Longer at the stop for those still coming.)
+            if (full || danger || (v.timer > 20 && nobody) || v.timer > 70) leaveWithBus(v, st);
             return false;
         }
         // On the way out.
@@ -5728,7 +5749,8 @@ final class Fleet {
     /**
      * (11.0) Officers or soldiers sent to a call a long way off don't walk it: an empty police car or army truck
      * close by takes them, or with none, one comes out from the station or base to pick them up, and drives them
-     * there. False if there's nothing to take them (they go on foot).
+     * there. False if there's nothing to take them (they go on foot). ((13.3) With no call, inc null: a lift back to
+     * the station or base.)
      */
     boolean driveTo(java.util.List<Entity> group, Dispatch.Incident inc) {
         if (group.isEmpty()) return false;
@@ -5758,7 +5780,7 @@ final class Fleet {
         if (fetch) {
             City.Facility f = city.nearestFacility(type == Entity.COP ? City.FACILITY_POLICE : City.FACILITY_BASE, sx, sy);
             // ((12.3) The army sends a truck from further off: driven, even a long way round beats the walk.)
-            boolean fromBase = f != null && World.hypot(f.x - sx, f.y - sy) <= World.hypot(inc.x - sx, inc.y - sy) * (type == Entity.SOLDIER ? 1.5f : 0.8f);
+            boolean fromBase = f != null && (inc == null || World.hypot(f.x - sx, f.y - sy) <= World.hypot(inc.x - sx, inc.y - sy) * (type == Entity.SOLDIER ? 1.5f : 0.8f));
             Entity drv = null;
             if (fromBase) {
                 for (int i = 0; i < vehicles.size() && v == null; i++) {
@@ -5869,7 +5891,7 @@ final class Fleet {
         ArrayList<Entity> mine = onFoot(v);
         for (int i = 0; i < mine.size(); i++) {
             Entity e = mine.get(i);
-            if (!e.dead && e.rig == v && e.task == Dispatch.T_BOARD && Math.abs(e.x - v.x) < 160 && Math.abs(e.y - v.y) < 160) return true;
+            if (!e.dead && e.rig == v && e.task == Dispatch.T_BOARD && Math.abs(e.x - v.x) < 400 && Math.abs(e.y - v.y) < 400) return true;
         }
         return false;
     }
@@ -5881,7 +5903,7 @@ final class Fleet {
         if (v.state == MUSTER) {
             v.speed = 0;
             v.timer += dt;
-            if (v.crew.size() >= v.crewWanted || (v.timer > 8 && !v.crew.isEmpty() && (v.timer > 25 || !partnerComing(v)))) {
+            if (v.crew.size() >= v.crewWanted || (v.timer > 12 && !v.crew.isEmpty() && (v.timer > 40 || !partnerComing(v)))) {
                 dropCrew(v);
                 // ((10.41) Mounted up for a call: off to it with the lights on; a patrol car after.)
                 Dispatch.Incident inc = v.incident;
@@ -5890,7 +5912,7 @@ final class Fleet {
                 v.incident = null;
                 v.state = PATROL;
                 if (!newDestination(v)) v.stuckTimer = 99;
-            } else if (v.timer > 20) {
+            } else if (v.timer > 40) {
                 dropCrew(v);
                 v.parked = true;
             }
@@ -6143,7 +6165,7 @@ final class Fleet {
                 v.refuel = 5;
                 return false;
             }
-            if (pilotIn && (v.crew.size() >= v.crewWanted || v.timer > 15)) {
+            if (pilotIn && (v.crew.size() >= v.crewWanted || v.timer > 30)) {
                 // Anyone who didn't make it in time stays behind.
                 for (int i = 0, n = w.entities.size(); i < n; i++) {
                     Entity e = w.entities.get(i);
