@@ -11727,6 +11727,11 @@ final class City {
     int zombieLimit = 70;
 
     void computeFields(List<Entity> entities) {
+        computeFields(entities, true, true);
+    }
+
+    /** ((13.5) One or both: on the biggest maps they're worked out in turn, not in the same step.) */
+    void computeFields(List<Entity> entities, boolean doZombies, boolean doHumans) {
         // Only near distances matter (how far the nearest zombie or person is, within smelling range), so
         // the searches stop spreading after a while instead of covering a whole massive map.
         // (10.31) Only the dead and raiders go by the scent of the living: with neither about (a calm city of tens
@@ -11740,7 +11745,8 @@ final class City {
         }
         // ((10.34) Not so far out in a crowded city: that search covered most of a Gigantic map.)
         zombieLimit = entities.size() > 12000 ? 48 : 70;
-        bfs(zombieDist, entities, true, zombieLimit);
+        if (doZombies) bfs(zombieDist, entities, true, zombieLimit);
+        if (!doHumans) return;
         // (And with only the dead to smell them, only the living within reach of one count: the rest of the city
         // can't be smelled from anywhere a zombie is.)
         nearZombiesOnly = !raiders;

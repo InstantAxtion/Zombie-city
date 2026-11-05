@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Performance (13.5):** about a fifth less work each step on the Colossal maps (32 to 25 ms a step on the test machine
+in an outbreak). The screen finds who's in view from the grid of who's where instead of going through everyone each
+frame, explosions no longer rebuild that grid, the grid is rebuilt less often and packed tighter, searches look at
+packed positions first, the fields the simulation reads for everyone are kept together in memory, and the biggest
+cities update off-screen crowds a little less often.
+
 **New sound system, more gun sounds, the dead climb (13.4):** the game mixes its own sound (a 32-voice mixer with
 priorities, several takes of each sound, distance muffling, an echo off the buildings and a limiter) straight to the
 phone's audio output, and the music crossfades and ducks under fighting. New sounds for the submachine gun, carbine,

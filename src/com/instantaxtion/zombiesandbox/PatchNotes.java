@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.4";
-    static final int VERSION_CODE = 124;
+    static final String VERSION = "13.5";
+    static final int VERSION_CODE = 125;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.5  -  Performance",
+                    "About a fifth less work each step on the Colossal maps, and less on the others (on the test machine: 32 to 25 ms a step on a Colossal city in an outbreak, 28 to 22 on Colossal Islands).",
+                    "Drawing the screen no longer goes through everyone in the city to find who's in view: it asks the grid of who's where (a few hundred looked at, not thirty thousand, every frame drawn). The cards for whoever you follow or control count their group twice a second, not every frame.",
+                    "An explosion no longer has the whole grid of who's where made again: in a big fight on a big map that was a fifth of the time.",
+                    "The grid of who's where is made every fourth step in the biggest cities (every other before), packed tighter, and the searches through it look at where people were first, kept side by side in memory, before looking at anyone themselves.",
+                    "What the game looks at for everyone every step is kept together in memory, so looking at each person is quicker.",
+                    "The maps of where the dead and the living are are worked out in turn rather than in the same step, so no one step does both.",
+                    "In the biggest cities, those off screen with nothing near them think and move a little less often, crowds off screen are kept apart every fourth step, and the dead are cleared away and the population counted less often.",
+            },
             {
                     "13.4  -  New sound system, more gun sounds, the dead climb",
                     "A new sound system: the game mixes its own sound now, straight to the phone's audio output at its own sample rate (in its low-latency mode on Android 8 and up), instead of the system's sound pool.",

@@ -44,15 +44,26 @@ final class Entity {
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
             "(unused)", "Marine", "Recon scout"};
 
-    int type, role;
+    /*
+     * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
+     * often they need thinking about - declared first and together, so it sits side by side in memory: looking at
+     * each of thirty thousand people used to mean fetching four or five scattered pieces of them.)
+     */
+    boolean dead, removed;
+    Entity leader;
+    int type, role, task;
     float x, y, vx, vy, angle;
     float hp, maxHp, radius, speed, runSpeed, mass = 1f;
+    float fleeTimer, stun, charge, noiseTimer, vaultT;
+    int lodZ, lodZAt, lodH, lodHAt, followerFrame, nameSeed;
+    /** (10.31) How many frames' worth this one moves this frame: 1, or for the calm off screen 3 every third frame (0 between). */
+    transient int lodStep = 1;
 
     // Desired movement for this tick: unit direction and speed.
     float mx, my, want;
 
-    float cooldown, reload, biteCd, grenadeCd, meleeCd, stun;
-    float wanderAngle, wanderTimer, fleeTimer, infectTimer;
+    float cooldown, reload, biteCd, grenadeCd, meleeCd;
+    float wanderAngle, wanderTimer, infectTimer;
     /** (11.1) Police and soldiers with nothing on: where their beat or duty takes them next, and how long they wait there. */
     float dutyX, dutyY, dutyWait, dutyFor;
     /** (11.2) The way along the street an officer on the beat is walking. */
@@ -70,17 +81,16 @@ final class Entity {
 
     /** Safe zone checkpoints: already checked for bites, and turned away. */
     boolean screened, refused;
-    boolean infected, dead, removed, killedByZombie, gibbed, aiming, blocked, paused;
+    boolean infected, killedByZombie, gibbed, aiming, blocked, paused;
 
     int body, head, skin;
     /** For zombies: what the zombie used to be, or -1 if it was spawned as a zombie. */
     int origin = -1;
 
     // Zombies: where a noise came from, and the screamer's cooldown.
-    float noiseX, noiseY, noiseTimer, screamCd;
+    float noiseX, noiseY, screamCd;
 
-    // Dispatch: current job, radio callsign and speech icons.
-    int task;
+    // Dispatch: current job (task, at the top), radio callsign and speech icons.
     Dispatch.Incident incident;
     /** ((12.0) The call whose perimeter they have a place on, and where on it.) */
     transient Dispatch.Incident ringOf;
@@ -110,8 +120,7 @@ final class Entity {
     /** A dropped gun a civilian is going to pick up. */
     World.Pickup pickup;
 
-    /** Family: followers stay with their leader. A dog's owner is its leader too. */
-    Entity leader;
+    // (leader, at the top: family, followers stay with their leader.)
     /** ((11.6) The way a soldier's squad is heading, eased, for their place in the wedge: 0, 0 for not yet known.) */
     transient float formHx, formHy;
     /** Zombie hordes: members follow a leader who roams the city. */
@@ -139,8 +148,7 @@ final class Entity {
     City.Facility enlistAt;
     /** Zombies approach from their own angle so a crowd surrounds its prey. */
     float flank;
-    /** Picks this person's name (see {@link Names}). */
-    int nameSeed;
+    // (nameSeed, at the top: picks this person's name, see Names.)
     /** Zombies shot or run down by this person. */
     int kills;
     /** Newly turned zombies are quicker for a while. */
@@ -221,7 +229,7 @@ final class Entity {
     /** The last hard knock (blast, car, charge), so the body flies the right way if it kills them. Fades fast. */
     float knockX, knockY;
     /** Brutes: a charge in progress (seconds left), its direction and cooldown. Crawlers: lying in wait. */
-    float charge, chargeCd, chargeX, chargeY;
+    float chargeCd, chargeX, chargeY;
     boolean hidden;
     /** Armed residents holding a building together. */
     boolean militia;
@@ -265,12 +273,8 @@ final class Entity {
     }
     /** The last place this one went on an errand (so they go somewhere else next). */
     City.Building lastErrand;
-    /** Set to the world's grid frame when someone is following this one. */
-    int followerFrame;
-    /** ((11.5) The distances last looked up for the world's level of detail, and when.) */
-    int lodZ, lodZAt, lodH, lodHAt;
-    /** (10.31) How many frames' worth this one moves this frame: 1, or for the calm off screen 3 every third frame (0 between). */
-    transient int lodStep = 1;
+    // ((13.5) followerFrame (set to the world's grid frame when someone is following this one), lodZ, lodZAt, lodH and
+    // lodHAt (the distances last looked up for the level of detail, and when) and lodStep: declared at the top.)
     /** (10.34) Until a fleeing civilian looks round for a cop or soldier again. */
     transient float protectorCd;
     /** (10.36) Following a route: the closest yet to the point it's heading for, and how long since that improved. */
@@ -305,7 +309,7 @@ final class Entity {
     /** (10.50) Until a civilian running from the dead next shouts a warning to those about. */
     float warnCd;
     /** (10.51) Climbing over a fence: time left, and from where to where. */
-    float vaultT, vaultX0, vaultY0, vaultX1, vaultY1;
+    float vaultX0, vaultY0, vaultX1, vaultY1;
     /** ((13.4) How long this climb over takes: a moment for the living, a struggle for the dead.) */
     float vaultDur = 0.55f;
     /** ((13.4) How long one of the dead has been pressed up against a barrier it could climb. */

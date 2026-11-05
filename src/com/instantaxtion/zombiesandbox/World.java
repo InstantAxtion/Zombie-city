@@ -131,7 +131,7 @@ final class World {
     // Spatial hash (counting sort into cells).
     private static final int CELL = 32;
     private final int gw, gh;
-    private final int[] cellStart, cellCount, cellFill, zCount, zFill, aCount, aFill;
+    private final int[] cellStart, cellCount, zCount, aCount;
     private Entity[] sorted = new Entity[512];
     /**
      * ((13.1) Where each in the grid was, and how big, in the grid's own order: looking through a cell for who's
@@ -643,11 +643,10 @@ final class World {
         gh = (int) Math.ceil(city.worldH() / CELL);
         cellStart = new int[gw * gh + 1];
         zCount = new int[gw * gh];
-        zFill = new int[gw * gh];
         aCount = new int[gw * gh];
-        aFill = new int[gw * gh];
         cellCount = new int[gw * gh];
-        cellFill = new int[gw * gh];
+        // ((13.5) In place of three arrays of where the next of each kind went.)
+        hashCnt = new int[gw * gh * 3];
         // ((11.5) No courthouse armoury: the government buildings are just buildings now.)
         if (false) {
             City.Building b = city.courthouse;
@@ -1924,7 +1923,9 @@ final class World {
         if (warBannerTime > 0) warBannerTime -= dt;
         // ((11.5) In a crowd of thousands, the grid of who's where every other step: nobody moves more than a step or
         // two in between, and everything that asks it allows for that.)
-        if (entities.size() < 3000 || (lodFrame & 1) == 0 || hashSize < 0) buildHash();
+        // ((13.5) And every fourth step with over eighteen thousand: it was a fifth of each step on the biggest maps.)
+        int hashEvery = entities.size() < 3000 ? 1 : entities.size() > 18000 ? 4 : 2;
+        if (lodFrame % hashEvery == 0 || hashSize < 0) buildHash();
         // ((13.3) The ways on foot to the stations and bases, one at a time ahead of need (see City.warmFacilityField).)
         if (lodFrame % 15 == 7) city.warmFacilityField();
         fieldTimer -= dt;
@@ -1935,7 +1936,13 @@ final class World {
             if (entities.size() > 12000) fieldTimer *= 2;
             // ((11.5) And half as often again from six thousand.)
             else if (entities.size() > 6000) fieldTimer *= 1.5f;
-            city.computeFields(entities);
+            if (entities.size() > 18000) {
+                // ((13.5) With over eighteen thousand, the two in turn, each every three quarters of a second: both at
+                // once were the longest step of every few.)
+                fieldTimer *= 0.75f;
+                fieldTurn = !fieldTurn;
+                city.computeFields(entities, fieldTurn, !fieldTurn);
+            } else city.computeFields(entities);
         }
         dispatch.update(dt);
         if ((rosterCd -= dt) <= 0) {
@@ -1971,16 +1978,17 @@ final class World {
             if (lodWake[i] - lodFrame > 0) continue;
             Entity e = entities.get(i);
             e.lodStep = 1;
-            if (e.dead) continue;
+            if (e.dead || e.hp <= 0) continue;
             if (i == 0) {
                 // ((11.5) From six thousand people up, not twelve: a Large city in a panic is about ten thousand.)
                 boolean crowd = entities.size() > 6000;
                 // ((13.1) And with over eighteen thousand (the 20,000 to 30,000 of the bigger cities now), those with
                 // nothing going on and nobody watching less often again.)
                 boolean huge = entities.size() > 18000;
-                lodCalm = huge ? 8 : crowd ? 4 : 3;
-                lodBusy = huge ? 5 : crowd ? 3 : 2;
-                lodNear = huge ? 3 : 2;
+                // ((13.5) A little less often again in the biggest cities: nobody sees them, and nothing's near.)
+                lodCalm = huge ? 10 : crowd ? 4 : 3;
+                lodBusy = huge ? 6 : crowd ? 3 : 2;
+                lodNear = huge ? 4 : 2;
             }
             // Far from any zombie and just going about their day: they decide what to do a third as often
             // (but still move every frame), which lets a city of thousands run smoothly.
@@ -2063,7 +2071,9 @@ final class World {
         updateDrones(dt);
         updateDanger(dt);
         updateGrenades(dt);
-        cleanup();
+        // ((13.5) Every other step in the biggest cities: it means looking at everyone. (Anyone at nought in between
+        // is passed over as if gone: see the loop above.))
+        if (entities.size() <= 18000 || (lodFrame & 1) == 0) cleanup();
         updateCorpses(dt);
         updateBuildings(dt);
         updateHoldouts(dt);
@@ -2087,7 +2097,8 @@ final class World {
             newRecruits.clear();
         }
         // ((11.5) The head counts every other step in a crowd of thousands: they're only read off for the panels.)
-        if (entities.size() < 3000 || (lodFrame & 1) == 0) recount();
+        // ((13.5) Every fourth step with over eighteen thousand: the numbers on screen don't need it more often.)
+        if (entities.size() < 3000 || (lodFrame & (entities.size() > 18000 ? 3 : 1)) == 0) recount();
         statTimer += dt;
         if (statTimer >= statStep) {
             statTimer = 0;
@@ -2291,7 +2302,64 @@ final class World {
     }
 
     /** ((11.5) Each one's cell, from the first pass over everyone to the second.) */
+    /** ((13.5) Which of the two maps of where the dead and the living are is worked out next, on the biggest maps. */
+    private boolean fieldTurn;
+
+    /**
+     * ((13.5) Everyone within (x0, y0)-(x1, y1), into out, from the grid of who's where: for the screen, which looked
+     * at all thirty thousand people every time it was drawn to find the few hundred in view. With most of the map in
+     * view it's quicker to go through everyone, and does.
+     */
+    void collectInView(float x0, float y0, float x1, float y1, ArrayList<Entity> out) {
+        int cx0 = Math.max(0, (int) ((x0 - GRID_SLACK) / CELL)), cx1 = Math.min(gw - 1, (int) ((x1 + GRID_SLACK) / CELL));
+        int cy0 = Math.max(0, (int) ((y0 - GRID_SLACK) / CELL)), cy1 = Math.min(gh - 1, (int) ((y1 + GRID_SLACK) / CELL));
+        if (hashSize < 0 || (long) (cx1 - cx0 + 1) * (cy1 - cy0 + 1) * 4 > entities.size()) {
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+                out.add(e);
+            }
+            return;
+        }
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + cellCount[c]; k < end; k++) {
+                    Entity e = sorted[k];
+                    // (Not those gone since: indoors, into a car, or cleared away.)
+                    if (e.dead || e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+                    out.add(e);
+                }
+            }
+        // (And anyone come into the world since the grid was made: they're at the end of the list.)
+        for (int i = hashSize, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+            out.add(e);
+        }
+    }
+
+    /** ((13.5) How many follow e (family, friends, a patrol), counted at most twice a second: for the cards. */
+    int followers(Entity e) {
+        if (e != followersOf || time - followersAt > 0.5f || time < followersAt) {
+            followersOf = e;
+            followersAt = time;
+            int n = 0;
+            for (int i = 0, m = entities.size(); i < m; i++) if (entities.get(i).leader == e) n++;
+            followersN = n;
+        }
+        return followersN;
+    }
+
+    private Entity followersOf;
+    private float followersAt;
+    private int followersN;
+
+    /** ((13.5) How far anyone may have gone since the grid was made: a few steps at a run, and a little more. */
+    static final float GRID_SLACK = 10;
     private int[] hashCell = new int[64];
+    /** ((13.5) Each cell's count of the dead, the armed and the rest, side by side; then where the next of each goes. */
+    private int[] hashCnt;
     private byte[] hashKind = new byte[64];
     private float[] hashX = new float[64], hashY = new float[64], hashR = new float[64];
     private int hashSize = -1;
@@ -2324,15 +2392,14 @@ final class World {
             hashY = new float[n * 2];
             hashR = new float[n * 2];
         }
+        // ((13.5) Counted, and later filled, in one array with each cell's three counts side by side: one place in
+        // memory to go to for each of thirty thousand people, not three or four.)
+        int[] cnt = hashCnt;
         for (int i = 0; i < n; i++) {
             Entity e = entities.get(i);
             if (e.leader != null && !e.dead) e.leader.followerFrame = hashFrame;
             int c = cellOf(e);
             hashCell[i] = c;
-            if (cellCount[c]++ == 0) {
-                if (usedN == usedCells.length) usedCells = Arrays.copyOf(usedCells, usedN * 2);
-                usedCells[usedN++] = c;
-            }
             // ((13.3) What they are and where, kept side by side for the second pass below, which then doesn't need
             // to look at each of them again.)
             byte kind = e.isZombie() ? (byte) 0 : e.isArmed() ? (byte) 1 : (byte) 2;
@@ -2340,29 +2407,42 @@ final class World {
             hashX[i] = e.x;
             hashY[i] = e.y;
             hashR[i] = e.radius;
-            if (kind == 0) zCount[c]++;
-            else if (kind == 1) aCount[c]++;
+            int b = c * 3;
+            if (cnt[b] + cnt[b + 1] + cnt[b + 2] == 0) {
+                if (usedN == usedCells.length) usedCells = Arrays.copyOf(usedCells, usedN * 2);
+                usedCells[usedN++] = c;
+            }
+            cnt[b + kind]++;
         }
         // Each cell lists its zombies first, then everyone else, so a search for one or the other only looks at
         // what it wants (a crowd of thousands doesn't slow down looking for the one zombie among them).
         // ((11.5) And among everyone else, the police and soldiers first: a search for them skips the crowd too.)
         int acc = 0;
         for (int k = 0; k < usedN; k++) {
-            int c = usedCells[k];
+            int c = usedCells[k], b = c * 3;
+            int nz = cnt[b], na = cnt[b + 1], all = nz + na + cnt[b + 2];
             cellStart[c] = acc;
-            zFill[c] = acc;
-            aFill[c] = acc + zCount[c];
-            cellFill[c] = acc + zCount[c] + aCount[c];
-            acc += cellCount[c];
+            zCount[c] = nz;
+            aCount[c] = na;
+            cellCount[c] = all;
+            // (From here the same array holds where the next of each kind goes.)
+            cnt[b] = acc;
+            cnt[b + 1] = acc + nz;
+            cnt[b + 2] = acc + nz + na;
+            acc += all;
         }
         cellStart[cellCount.length] = acc;
         for (int i = 0; i < n; i++) {
-            int c = hashCell[i], kind = hashKind[i];
-            int at = kind == 0 ? zFill[c]++ : kind == 1 ? aFill[c]++ : cellFill[c]++;
+            int at = cnt[hashCell[i] * 3 + hashKind[i]]++;
             sorted[at] = entities.get(i);
             sortedX[at] = hashX[i];
             sortedY[at] = hashY[i];
             sortedR[at] = hashR[i];
+        }
+        // (Emptied again for next time, only where anyone was.)
+        for (int k = 0; k < usedN; k++) {
+            int b = usedCells[k] * 3;
+            cnt[b] = cnt[b + 1] = cnt[b + 2] = 0;
         }
     }
 
@@ -2375,12 +2455,17 @@ final class World {
     private Entity nearest(Entity from, float radius, boolean wantZombie, boolean needLos) {
         float best = radius * radius;
         Entity res = null;
+        float fx = from.x, fy = from.y, reach2 = (radius + GRID_SLACK) * (radius + GRID_SLACK);
         int cx0 = Math.max(0, (int) ((from.x - radius) / CELL)), cx1 = Math.min(gw - 1, (int) ((from.x + radius) / CELL));
         int cy0 = Math.max(0, (int) ((from.y - radius) / CELL)), cy1 = Math.min(gh - 1, (int) ((from.y + radius) / CELL));
         for (int cy = cy0; cy <= cy1; cy++) {
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
                 for (int k = wantZombie ? cellStart[c] : cellStart[c] + zCount[c], end = wantZombie ? cellStart[c] + zCount[c] : cellStart[c] + cellCount[c]; k < end; k++) {
+                    // ((13.5) From where they were when the grid was made first (side by side in memory), with room for
+                    // the few steps since: only those that could be close enough are looked at themselves.)
+                    float px = sortedX[k] - fx, py = sortedY[k] - fy;
+                    if (px * px + py * py > reach2) continue;
                     Entity o = sorted[k];
                     // ((12.0) Not one already finished off this moment, waiting to be cleared away.)
                     if (o.dead || o.hp <= 0 || o.isZombie() != wantZombie || o == from) continue;
@@ -2448,12 +2533,16 @@ final class World {
 
     int countZombiesNear(float x, float y, float radius) {
         int count = 0;
+        float reach2 = (radius + GRID_SLACK) * (radius + GRID_SLACK);
         int cx0 = Math.max(0, (int) ((x - radius) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + radius) / CELL));
         int cy0 = Math.max(0, (int) ((y - radius) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + radius) / CELL));
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
                 for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
+                    // ((13.5) Only those that could be close enough looked at themselves (see nearest).)
+                    float px = sortedX[k] - x, py = sortedY[k] - y;
+                    if (px * px + py * py > reach2) continue;
                     Entity o = sorted[k];
                     if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - x, ddy = o.y - y;
@@ -11672,6 +11761,29 @@ final class World {
         return true;
     }
 
+    /** ((13.5) One caught by a blast at (x, y): hurt, thrown and frightened, the more the closer. */
+    private void blast(Entity o, float x, float y, float radius, float damage) {
+        if (o.dead) return;
+        float ddx = o.x - x, ddy = o.y - y;
+        float d = (float) Math.sqrt(ddx * ddx + ddy * ddy);
+        if (d > radius) return;
+        float f = 1 - d / radius;
+        o.hp -= damage * (0.25f + 0.75f * f);
+        o.hurt = 1;
+        o.killedByZombie = false;
+        if (o.hp <= 0 && f > 0.4f) o.gibbed = true;
+        if (d > 0.01f) tryMove(o, ddx / d * 16 * f / o.mass, ddy / d * 16 * f / o.mass);
+        if (d > 0.01f) {
+            o.knockX = ddx / d * 180 * f / o.mass;
+            o.knockY = ddy / d * 180 * f / o.mass;
+        }
+        if (!o.isZombie()) {
+            o.fleeTimer = 3;
+            o.threatX = x;
+            o.threatY = y;
+        }
+    }
+
     /** Moves with wall sliding. Returns false if the move was (at least partly) blocked. */
     private static final float[] SIDESTEPS = {0.8f, -0.8f, 1.4f, -1.4f};
 
@@ -11731,7 +11843,8 @@ final class World {
         // ((13.1) In a big city, those off screen get out of each other's way every other frame, a little harder each
         // time: it was a good part of each frame, for crowds nobody is looking at.)
         boolean big = entities.size() > 6000;
-        int sepEvery = entities.size() > 18000 ? 3 : 2;
+        // ((13.5) Every fourth step with over eighteen thousand.)
+        int sepEvery = entities.size() > 18000 ? 4 : 2;
         for (int i = 0, n = entities.size(); i < n; i++) {
             // (Not those passed over this step: like those with lodStep 0, they've not moved.)
             if (i < lodWake.length && lodWake[i] - lodFrame > 0 && lodSet[i] != lodFrame) continue;
@@ -11752,7 +11865,7 @@ final class World {
                     for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
                         // ((13.1) Where they were when the grid was made, with a little to spare for this frame's
                         // steps: only the few that close are looked at properly.)
-                        float sx = ex - sortedX[k], sy = ey - sortedY[k], sm = er + sortedR[k] + 2;
+                        float sx = ex - sortedX[k], sy = ey - sortedY[k], sm = er + sortedR[k] + 4;
                         if (sx * sx + sy * sy >= sm * sm) continue;
                         Entity o = sorted[k];
                         if (o == e || o.dead) continue;
@@ -12174,35 +12287,19 @@ final class World {
     }
 
     void explode(float x, float y, float radius, float damage) {
-        int cx0 = Math.max(0, (int) ((x - radius) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + radius) / CELL));
-        int cy0 = Math.max(0, (int) ((y - radius) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + radius) / CELL));
-        buildHash();
+        // ((13.5) From the grid as it stands, with room for the steps since it was made, and anyone come into the world
+        // since: the whole grid was made again for every grenade, rocket and shell, which in a big fight on a big map
+        // was a fifth of the time.)
+        float reach = radius + GRID_SLACK;
+        int cx0 = Math.max(0, (int) ((x - reach) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + reach) / CELL));
+        int cy0 = Math.max(0, (int) ((y - reach) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + reach) / CELL));
+        if (hashSize < 0) buildHash();
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
                 int c = cy * gw + cx;
-                for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
-                    Entity o = sorted[k];
-                    if (o.dead) continue;
-                    float ddx = o.x - x, ddy = o.y - y;
-                    float d = (float) Math.sqrt(ddx * ddx + ddy * ddy);
-                    if (d > radius) continue;
-                    float f = 1 - d / radius;
-                    o.hp -= damage * (0.25f + 0.75f * f);
-                    o.hurt = 1;
-                    o.killedByZombie = false;
-                    if (o.hp <= 0 && f > 0.4f) o.gibbed = true;
-                    if (d > 0.01f) tryMove(o, ddx / d * 16 * f / o.mass, ddy / d * 16 * f / o.mass);
-                    if (d > 0.01f) {
-                        o.knockX = ddx / d * 180 * f / o.mass;
-                        o.knockY = ddy / d * 180 * f / o.mass;
-                    }
-                    if (!o.isZombie()) {
-                        o.fleeTimer = 3;
-                        o.threatX = x;
-                        o.threatY = y;
-                    }
-                }
+                for (int k = cellStart[c], end = cellStart[c] + cellCount[c]; k < end; k++) blast(sorted[k], x, y, radius, damage);
             }
+        for (int i = hashSize, n = entities.size(); i < n; i++) blast(entities.get(i), x, y, radius, damage);
         for (int i = corpses.size() - 1; i >= 0; i--) {
             Corpse c = corpses.get(i);
             float ddx = c.x - x, ddy = c.y - y;

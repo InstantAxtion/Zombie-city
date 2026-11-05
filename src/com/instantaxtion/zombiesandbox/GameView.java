@@ -2247,11 +2247,7 @@ final class GameView extends View implements Menu.Host {
         viewR = vx1;
         viewB = vy1;
         onScreen.clear();
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
-            if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
-            onScreen.add(e);
-        }
+        world.collectInView(vx0, vy0, vx1, vy1, onScreen);
         if (scale > 0.8f && (world.city.waterKind != CityConfig.W_NONE || world.city.elev != null)) drawWaterLife(c, vx0, vy0, vx1, vy1);
 
         for (int i = 0; i < world.dcount; i++) {
@@ -6837,8 +6833,7 @@ final class GameView extends View implements Menu.Host {
             String who = e.leader.type == Entity.DOG ? Names.dog(e.leader.nameSeed) : Names.person(e.leader.nameSeed);
             lines.add(e.type == Entity.DOG ? "Owner: " + who : e.type == Entity.SOLDIER ? "Sticking with " + who : "With " + who);
         }
-        int followers = 0;
-        for (int i = 0, n = world.entities.size(); i < n; i++) if (world.entities.get(i).leader == e) followers++;
+        int followers = world.followers(e);
         if (followers > 0 && !e.isArmed()) lines.add((e.task == Dispatch.T_PATROL ? "Leading a patrol of " : "Looking after ")
                 + followers + (followers == 1 ? " other" : " others"));
         if (e.leadsHorde) lines.add("Leading a horde of about " + e.hordeSize);
@@ -7326,8 +7321,7 @@ final class GameView extends View implements Menu.Host {
         String gun = e.canShoot() ? "   " + e.gunName() + " " + e.ammo + " + " + e.reserve : "";
         String place = car != null ? "   Driving (" + Math.max(0, (int) (100 * car.hp / car.maxHp)) + "%)"
                 : world.controlledIn != null ? "   Inside: barricade " + (int) world.controlledIn.barricade + "%, food " + world.controlledIn.food : "";
-        int group = 0;
-        for (int i = 0, n = world.entities.size(); i < n; i++) if (world.entities.get(i).leader == e) group++;
+        int group = world.followers(e);
         String info = who + "   Health " + Math.max(0, (int) e.hp) + "/" + (int) e.maxHp + gun
                 + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "") + place + (group > 0 ? "   Group " + group : "")
                 + (e.infected ? "   BITTEN: " + Math.max(0, (int) e.infectTimer) + "s" : "")
