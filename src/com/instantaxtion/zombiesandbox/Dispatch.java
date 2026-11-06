@@ -918,7 +918,8 @@ final class Dispatch {
                     break;
                 case T_GUARD:
                     e.slot = e.zone.guards++;
-                    if (World.hypot(e.x - e.zone.x, e.y - e.zone.y) < e.zone.baseR * 1.3f) e.zone.onSite++;
+                    // ((14.0) A combat engineer gets the wall up as fast as three.)
+                    if (World.hypot(e.x - e.zone.x, e.y - e.zone.y) < e.zone.baseR * 1.3f) e.zone.onSite += e.role == Entity.ROLE_ENGINEER ? 3 : 1;
                     break;
                 case T_SHELTER:
                     e.zone.sheltered++;
@@ -2962,6 +2963,18 @@ final class Dispatch {
             releaseWallMap(z);
             return null;
         }
+        // ((14.0) And the army's combat engineers who aren't busy, to get the wall up faster.)
+        int eng = 0;
+        for (int i = 0, n = w.entities.size(); i < n && eng < 2; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.role != Entity.ROLE_ENGINEER || e.type != Entity.SOLDIER || e.rig != null || e.ride != null) continue;
+            if (e.task != T_NONE && e.task != T_POST) continue;
+            e.task = T_GUARD;
+            e.zone = z;
+            z.guards++;
+            eng++;
+        }
+        if (eng > 0) say(WHO_MILITARY, null, "Military: Combat engineers on the way to " + z.place + " to help get the wall up.", z.x, z.y);
         zones.add(z);
         if (!military) {
             int n = w.fleet.roadblocks(z);

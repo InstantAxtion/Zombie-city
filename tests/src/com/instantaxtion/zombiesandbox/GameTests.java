@@ -2412,7 +2412,9 @@ public final class GameTests {
                 c.normalize();
                 check(c.coreFraction() >= 0.85f, "nine tenths town (" + c.coreFraction() + ")");
                 // The new roles.
-                check(Entity.ROLE_NAMES.length == 16 && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE]), "every role named");
+                // ((14.0) And the combat engineers and the mortar teams.)
+                check(Entity.ROLE_NAMES.length == 18 && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
+                        && "Combat engineer".equals(Entity.ROLE_NAMES[Entity.ROLE_ENGINEER]) && "Mortar team".equals(Entity.ROLE_NAMES[Entity.ROLE_MORTAR]), "every role named");
             }
         });
         test("11.5: guards at the gates replaced, kinds of building with uses, leaders who decide, new layouts", new Check() {
@@ -2796,6 +2798,152 @@ public final class GameTests {
                 int nearTruck = 0;
                 for (Entity e : squad) if (truck != null && !e.dead && Math.hypot(e.x - truck.x, e.y - truck.y) < 60) nearTruck++;
                 check(filled && nearTruck >= 1, "the soldiers filled up at the truck, not the base (" + filled + ", " + nearTruck + " by it)");
+            }
+        });
+        test("14.0: the engineers' bulldozer pushes wrecks off the roads, and engineers get a safe zone's wall up faster", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                Fleet.Vehicle dozer = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_DOZER) dozer = v;
+                check(dozer != null && dozer.parked, "the base has its bulldozer, parked");
+                int engineers = 0;
+                for (Entity e : w.entities) if (!e.dead && e.role == Entity.ROLE_ENGINEER) engineers++;
+                check(engineers == 2, "and two combat engineers (" + engineers + ")");
+                // Two wrecks on roads in town.
+                java.util.Random r = new java.util.Random(8);
+                java.util.List<Fleet.Vehicle> wrecks = new java.util.ArrayList<Fleet.Vehicle>();
+                for (int k = 0; k < 400 && wrecks.size() < 2; k++) {
+                    float[] q = w.city.randomWalkableInTown(r);
+                    Fleet.Vehicle car = w.fleet.placeCar(q[0], q[1]);
+                    if (car == null) continue;
+                    int t = w.city.tileIndex(car.x, car.y);
+                    if (t < 0 || w.city.tiles[t] != City.ROAD || !w.city.inTown(car.x, car.y) || Math.hypot(car.x - dozer.x, car.y - dozer.y) > 2000) {
+                        w.fleet.discard(car);
+                        continue;
+                    }
+                    car.broken = true;
+                    car.parked = true;
+                    car.speed = 0;
+                    wrecks.add(car);
+                }
+                check(wrecks.size() == 2, "two wrecks on the road");
+                // Nothing happens on a calm day; once the dead are about, the bulldozer goes out.
+                for (int f = 0; f < 30 * 10; f++) w.update(1 / 30f);
+                check(dozer.parked && !wrecks.get(0).removedFromFleet, "left be on a calm day");
+                boolean cleared = false;
+                for (int f = 0; f < 30 * 240 && !cleared; f++) {
+                    w.alert = Math.max(w.alert, 1);
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    cleared = wrecks.get(0).removedFromFleet && wrecks.get(1).removedFromFleet;
+                }
+                check(cleared, "both wrecks pushed off the road (" + w.fleet.dozerCleared + ")");
+                check(w.fleet.vehicles.contains(dozer) && !dozer.broken, "the bulldozer is still in service");
+                // A safe zone going up: a free engineer goes to help. (One placed there: on a calm day the base's own may be
+                // indoors.)
+                w.alert = 2;
+                for (float[] a : w.city.openAreas) {
+                    if (!w.dispatch.zones.isEmpty()) break;
+                    if (!w.city.inTown(a[0], a[1])) continue;
+                    float[] p = w.city.findWalkable(a[0] + 200, a[1]);
+                    Entity eng = p == null ? null : w.spawnSoldier(Entity.ROLE_ENGINEER, p[0], p[1]);
+                    w.dispatch.orderZone(a[0], a[1]);
+                    if (w.dispatch.zones.isEmpty() && eng != null) eng.dead = eng.removed = true;
+                }
+                check(!w.dispatch.zones.isEmpty(), "a safe zone set up");
+                int helping = 0;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.role == Entity.ROLE_ENGINEER && e.task == Dispatch.T_GUARD && !w.dispatch.zones.isEmpty() && e.zone == w.dispatch.zones.get(0)) helping++;
+                check(helping >= 1, "engineers sent to help get its wall up (" + helping + ")");
+            }
+        });
+        test("14.0: a mortar team shells a pack of the dead a few streets off, but not with police beside them", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 31;
+                c.normalize();
+                c.seed = 31;
+                World w = new World(c);
+                w.populate(c);
+                int mortars = 0;
+                for (Entity e : w.entities) if (!e.dead && e.role == Entity.ROLE_MORTAR) mortars++;
+                check(w.city.mainBase() == null || mortars >= 1, "the base has a mortar team (" + mortars + ")");
+                java.util.Random r = new java.util.Random(3);
+                for (int round = 0; round < 2; round++) {
+                    w.clearZombies();
+                    w.dispatch.incidents.clear();
+                    // A mortar team, and 400 off a pack of ten of the dead at a call (with police beside them, the second time).
+                    float[] m = null, pack = null;
+                    for (int k = 0; k < 4000 && pack == null; k++) {
+                        m = w.city.randomWalkableInTown(r);
+                        float a = r.nextFloat() * 6.283f;
+                        float[] q = w.city.findWalkable(m[0] + (float) Math.cos(a) * 400, m[1] + (float) Math.sin(a) * 400);
+                        if (q != null && Math.abs(Math.hypot(q[0] - m[0], q[1] - m[1]) - 400) < 40 && w.countZombiesNear(q[0], q[1], 300) == 0) pack = q;
+                    }
+                    Entity mortar = w.spawnSoldier(Entity.ROLE_MORTAR, m[0], m[1]);
+                    mortar.task = Dispatch.T_HOLD;
+                    mortar.postX = m[0];
+                    mortar.postY = m[1];
+                    java.util.List<Entity> dead = new java.util.ArrayList<Entity>();
+                    for (int z = 0; z < 10; z++) {
+                        float[] p = w.city.findWalkable(pack[0] + (z % 4) * 6, pack[1] + (z / 4) * 6);
+                        Entity zz = w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                        zz.speed = zz.runSpeed = 0;
+                        dead.add(zz);
+                    }
+                    java.util.List<Entity> cops = new java.util.ArrayList<Entity>();
+                    if (round == 1)
+                        for (int k = 0; k < 2; k++) {
+                            float[] p = w.city.findWalkable(pack[0] + 30, pack[1] + k * 10);
+                            Entity cop = w.spawn(Entity.COP, p[0], p[1]);
+                            cop.ammo = cop.reserve = 0;
+                            cop.task = Dispatch.T_HOLD;
+                            cop.postX = p[0];
+                            cop.postY = p[1];
+                            cops.add(cop);
+                        }
+                    // (Everyone on the map's grid of who's where before the call comes in.)
+                    for (int f = 0; f < 5; f++) {
+                        for (Entity zz : dead) zz.speed = zz.runSpeed = 0;
+                        w.update(1 / 30f);
+                    }
+                    Dispatch.Incident inc = new Dispatch.Incident();
+                    inc.x = pack[0];
+                    inc.y = pack[1];
+                    inc.place = "the test";
+                    inc.zombiesNear = 10;
+                    w.dispatch.incidents.add(inc);
+                    int rounds = mortar.grenades;
+                    for (int f = 0; f < 30 * 20; f++) {
+                        inc.resolved = false;
+                        if (!w.dispatch.incidents.contains(inc)) w.dispatch.incidents.add(inc);
+                        for (Entity zz : dead) zz.speed = zz.runSpeed = 0;
+                        // (The officers stay put beside them: out of rounds, they'd otherwise walk off.)
+                        for (Entity cop : cops) {
+                            cop.x = cop.postX;
+                            cop.y = cop.postY;
+                            cop.hp = cop.maxHp;
+                        }
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                    }
+                    int down = 0;
+                    for (Entity zz : dead) if (zz.dead || zz.hp <= 0) down++;
+                    if (round == 0) check(mortar.grenades < rounds && down >= 3, "the pack shelled (" + (rounds - mortar.grenades) + " shells, " + down + " down)");
+                    else check(mortar.grenades == rounds, "no shells with police beside the pack (" + (rounds - mortar.grenades) + ")");
+                    mortar.dead = mortar.removed = true;
+                    for (Entity cop : cops) cop.dead = cop.removed = true;
+                }
             }
         });
         test("every screen draws", new Check() {

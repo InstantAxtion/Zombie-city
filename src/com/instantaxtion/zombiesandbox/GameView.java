@@ -46,9 +46,9 @@ final class GameView extends View implements Menu.Host {
     private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
-            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN};
+            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
     private static final String[] MIL_NAMES = {"Soldier", "Commander", "Sniper", "Machine gunner", "National Guard",
-            "Grenadier", "Marine", "Recon scout", "Combat medic"};
+            "Grenadier", "Marine", "Recon scout", "Combat medic", "Combat engineer", "Mortar team"};
     // One line about each option in the pickers.
     private static final String[] CIV_INFO = {"Goes about their day, runs and hides from zombies"};
     private static final String[] COP_INFO = {"Pistol, answers 911 calls", "Shield blocks bites from the front",
@@ -59,7 +59,8 @@ final class GameView extends View implements Menu.Host {
     private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
-            "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)"};
+            "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
+            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
     private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile", "Big and tough, shoves people aside"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
@@ -2706,7 +2707,7 @@ final class GameView extends View implements Menu.Host {
             World.Grenade g = world.grenades.get(i);
             float t = g.t / g.dur;
             float x = g.sx + (g.tx - g.sx) * t, y = g.sy + (g.ty - g.sy) * t;
-            float hgt = (float) Math.sin(t * Math.PI) * 22;
+            float hgt = (float) Math.sin(t * Math.PI) * (g.shell ? 90 : 22);
             fill.setColor(0x55000000);
             c.drawCircle(x, y, 1.6f, fill);
             fill.setColor(0xFF2F3A1E);
@@ -4122,6 +4123,9 @@ final class GameView extends View implements Menu.Host {
         } else if (v.kind == Fleet.K_BEARCAT) {
             hl = 10.2f;
             hw = 5.4f;
+        } else if (v.kind == Fleet.K_DOZER) {
+            hl = 8.5f;
+            hw = 5.4f;
         }
         int model = v.type == Fleet.CAR ? v.model : -1;
         if (model >= 0) {
@@ -4223,6 +4227,21 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(-hl * 0.75f, -2.2f, -hl * 0.45f, -0.6f, fill);
             c.drawRect(-hl * 0.75f, 0.6f, -hl * 0.45f, 2.2f, fill);
             drawRoofGun(c, v, 0, 3.2f, 7.5f, body);
+        } else if (v.kind == Fleet.K_DOZER) {
+            // ((14.0) The engineers' bulldozer: tracks down each side, the cab at the back, the blade across the front.)
+            fill.setColor(0xFF1C1D1A);
+            c.drawRect(-hl, -hw - 0.6f, hl * 0.7f, -hw + 1.6f, fill);
+            c.drawRect(-hl, hw - 1.6f, hl * 0.7f, hw + 0.6f, fill);
+            fill.setColor(City.darken(body, 0.8f));
+            c.drawRect(-hl * 0.85f, -hw * 0.55f, -hl * 0.1f, hw * 0.55f, fill);
+            fill.setColor(0xFF1E2A33);
+            c.drawRect(-hl * 0.75f, -hw * 0.4f, -hl * 0.35f, hw * 0.4f, fill);
+            fill.setColor(0xFF2A2A26);
+            c.drawCircle(hl * 0.25f, -hw * 0.35f, 0.9f, fill);
+            fill.setColor(v.broken ? 0xFF6A6A66 : 0xFF9A9C96);
+            c.drawRect(hl * 0.8f, -hw - 1.2f, hl + 1.4f, hw + 1.2f, fill);
+            fill.setColor(0xFF6E706A);
+            c.drawRect(hl * 0.8f, -hw - 1.2f, hl * 0.95f, hw + 1.2f, fill);
         } else if (v.kind == Fleet.K_HUMVEE) {
             // A Humvee: broad and low, the windscreen, and the gunner's ring on the roof.
             fill.setColor(City.darken(body, 0.85f));
@@ -6142,6 +6161,17 @@ final class GameView extends View implements Menu.Host {
                     // The launcher slung under the barrel.
                     fill.setColor(0xFF34362A);
                     c.drawRect(r * 0.9f, r * 0.45f, r * 1.9f, r * 0.85f, fill);
+                } else if (role == Entity.ROLE_MORTAR) {
+                    // ((14.0) The mortar tube slung across the back, and its baseplate.)
+                    fill.setColor(0xFF2A2E22);
+                    c.drawRect(-r * 1.1f, -r * 0.25f, r * 0.2f, r * 0.12f, fill);
+                    c.drawCircle(-r * 0.9f, r * 0.45f, r * 0.32f, fill);
+                } else if (role == Entity.ROLE_ENGINEER) {
+                    // ((14.0) A combat engineer: a hi-vis band across the shoulders and a tool bag on the back.)
+                    fill.setColor(0xFFF2A21C);
+                    c.drawRect(-r * 0.25f, -r * 0.95f, r * 0.05f, r * 0.95f, fill);
+                    fill.setColor(0xFF5A4A2E);
+                    c.drawRect(-r * 1.0f, -r * 0.4f, -r * 0.55f, r * 0.4f, fill);
                 } else if (role == Entity.ROLE_CORPSMAN) {
                     // A white armband with a red cross, and the medic's bag on the back.
                     fill.setColor(0xFFF2F2F2);

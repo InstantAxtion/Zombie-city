@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.9";
-    static final int VERSION_CODE = 129;
+    static final String VERSION = "14.0";
+    static final int VERSION_CODE = 130;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.0  -  Engineers and mortars",
+                    "Each army base has a bulldozer. Once the dead are about, it goes out to wrecked and abandoned vehicles left on the roads in town and pushes them off, one after another, then comes home. Before, a wreck in the road stayed there, and everyone had to find a way round it.",
+                    "Each base has two combat engineers (a hi-vis band and a tool bag). When a safe zone goes up, those who are free go to help, and each gets the wall up as fast as three soldiers.",
+                    "Each base has a mortar team. With none of the dead close, it shells the biggest pack of them at a call a few streets off (six or more together, 150 to 650 away), a shell every seven seconds, 16 rounds. Never with police or soldiers near where it lands, and near civilians only when the dead there far outnumber them - and a shell can land a little off. The shot is loud: the dead nearby hear it.",
+                    "Combat engineers and mortar teams can be placed from the Military picker.",
+            },
             {
                     "13.9  -  Combat medics and ammo trucks",
                     "Combat medics are back in the army's squads (the third soldier of each, with the red cross armband and the bag on their back). With none of the dead close, a medic runs to the most badly hurt police officer or soldier nearby (or patches themselves up) and a few seconds kneeling over them puts half their strength back. A bite can't be treated: the infected are passed over. You can place one from the Military picker too.",

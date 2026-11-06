@@ -47,6 +47,8 @@ final class World {
 
     static final class Grenade {
         float sx, sy, tx, ty, t, dur;
+        /** ((14.0) A mortar shell: high and slow, and a bigger blast.) */
+        boolean shell;
     }
 
     static final class Explosion {
@@ -870,12 +872,31 @@ final class World {
                 snipers--;
             } else if (e.member == 3 && cfg.nature()) applyRole(e, Entity.ROLE_CORPSMAN);
         }
+        // ((14.0) Two riflemen at each base are its combat engineers.)
+        for (City.Facility f : city.facilities) {
+            if (f.kind != City.FACILITY_BASE) continue;
+            int engineers = 0;
+            for (int i = firstSoldier, n = entities.size(); i < n && engineers < 2; i++) {
+                Entity e = entities.get(i);
+                if (e.type != Entity.SOLDIER || e.role != Entity.ROLE_RIFLE || World.hypot(e.x - f.x, e.y - f.y) > f.r + 300) continue;
+                applyRole(e, Entity.ROLE_ENGINEER);
+                engineers++;
+            }
+            // ((14.0) And one with the base's mortar.)
+            for (int i = firstSoldier, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (e.type != Entity.SOLDIER || e.role != Entity.ROLE_RIFLE || World.hypot(e.x - f.x, e.y - f.y) > f.r + 300) continue;
+                applyRole(e, Entity.ROLE_MORTAR);
+                break;
+            }
+        }
         if (soldiers >= 5) {
             float[] p = base != null ? new float[]{base.x, base.y} : city.randomWalkable(rnd);
             spawnSoldier(Entity.ROLE_COMMANDER, p[0], p[1]);
         }
         // ((12.3) Trucks enough at each base for the soldiers there.)
         fleet.stockBases();
+        fleet.ensureDozers();
         // Guards on the base gates. ((11.3) Not the precinct doors: every officer is out on the beat.)
         for (City.Facility f : city.facilities) {
             int type = f.kind == City.FACILITY_BASE ? Entity.SOLDIER : -1;
@@ -1537,6 +1558,13 @@ final class World {
     void applyRole(Entity e, int role) {
         e.role = role;
         switch (role) {
+            case Entity.ROLE_MORTAR:
+                // ((14.0) A carbine for close in, and the tube and its rounds on their back.)
+                e.hp = e.maxHp = 100;
+                e.magSize = 30;
+                e.reserve = 90;
+                e.grenades = MORTAR_ROUNDS;
+                break;
             case Entity.ROLE_CORPSMAN:
                 // ((13.9) A rifle, fewer spare rounds, no grenades: the bag is full of dressings.)
                 e.hp = e.maxHp = 100;
@@ -1788,6 +1816,7 @@ final class World {
         fleet.stationHelis();
         fleet.stockStations();
         fleet.stockBases();
+        fleet.ensureDozers();
         int cops = 0;
         for (Entity e : entities) if (!e.dead && e.type == Entity.COP) cops++;
         // ((11.4) Counting those aboard the patrol cars too.)
@@ -7991,6 +8020,80 @@ final class World {
         return true;
     }
 
+    /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
+    static final int MORTAR_ROUNDS = 16;
+    static final float MORTAR_MIN = 150, MORTAR_MAX = 650, MORTAR_EVERY = 7, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
+
+    /**
+     * (14.0) A mortar team: with none of the dead close, at the biggest pack of them at a call a few streets off (six or
+     * more together), a shell every few seconds. Never with police or soldiers near where it lands; near civilians only
+     * when the dead there far outnumber them - and a shell can land a little off. True when it fired.
+     */
+    private boolean mortarStep(Entity e) {
+        if (e.grenades <= 0 || e.grenadeCd > 0 || nearest(e, 90, true, false) != null) return false;
+        float bestX = 0, bestY = 0;
+        int best = 5;
+        for (int i = 0; i < dispatch.incidents.size(); i++) {
+            Dispatch.Incident inc = dispatch.incidents.get(i);
+            if (inc.resolved) continue;
+            float d = (float) World.hypot(inc.x - e.x, inc.y - e.y);
+            if (d < MORTAR_MIN - 60 || d > MORTAR_MAX + 60) continue;
+            // (Where they're thickest round the call: the middle of them.)
+            float[] at = packNear(inc.x, inc.y, 120);
+            if (at == null) continue;
+            float ad = (float) World.hypot(at[0] - e.x, at[1] - e.y);
+            int n = countZombiesNear(at[0], at[1], MORTAR_BLAST);
+            if (ad < MORTAR_MIN || ad > MORTAR_MAX || n <= best) continue;
+            if (armedNear(at[0], at[1], MORTAR_BLAST + 25) > 0) continue;
+            if (countCiviliansNear(at[0], at[1], MORTAR_BLAST + 10) * 3 > n) continue;
+            best = n;
+            bestX = at[0];
+            bestY = at[1];
+        }
+        e.grenadeCd = 1.5f;
+        if (best <= 5) return false;
+        steer(e, 0, 0, 0);
+        e.aiming = false;
+        e.angle = (float) Math.atan2(bestY - e.y, bestX - e.x);
+        e.grenades--;
+        e.grenadeCd = MORTAR_EVERY;
+        float d = (float) World.hypot(bestX - e.x, bestY - e.y);
+        Grenade g = new Grenade();
+        g.sx = e.x;
+        g.sy = e.y;
+        // (Not quite where it's aimed: further off, further out.)
+        float spread = 8 + d * 0.03f;
+        g.tx = bestX + (rnd.nextFloat() * 2 - 1) * spread;
+        g.ty = bestY + (rnd.nextFloat() * 2 - 1) * spread;
+        g.dur = 2.2f + d / 450;
+        g.shell = true;
+        grenades.add(g);
+        emit(Sfx.LAUNCHER, e.x, e.y);
+        noise(e.x, e.y, 160);
+        dispatch.chatter(Dispatch.WHO_MILITARY, e, "Shot out! " + e.grenades + " rounds left.", e.x, e.y);
+        return true;
+    }
+
+    /** The middle of the dead within r of (x, y), or null if there are none. */
+    private float[] packNear(float x, float y, float r) {
+        float sx = 0, sy = 0;
+        int n = 0;
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || !o.isZombie() || (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) > r * r) continue;
+                    sx += o.x;
+                    sy += o.y;
+                    n++;
+                }
+            }
+        return n == 0 ? null : new float[]{sx / n, sy / n};
+    }
+
     /** How far a combat medic goes to someone wounded, and how long patching them up takes. */
     static final float MEDIC_REACH = 160, MEDIC_TIME = 3.5f;
 
@@ -8078,6 +8181,8 @@ final class World {
         }
         // ((13.9) A combat medic with nothing to shoot at patches up the wounded nearby.)
         if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
+        // ((14.0) A mortar team shells a pack of the dead a few streets off.)
+        if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e)) return;
         // ((11.0) On foot to a call a long way off, with nothing to fight here: a car or truck to take them, if
         // there's one (with whoever else nearby is going there too).)
         if (e.task == Dispatch.T_RESPOND && e.incident != null && !e.incident.resolved && !e.onScene && e.rig == null
@@ -12705,7 +12810,9 @@ final class World {
                 grenades.remove(i);
                 // ((10.62) Smaller and weaker than before (48 across, 140): it kills what's right on it and hurts
                 // the rest, rather than clearing a street.)
-                explode(g.tx, g.ty, 36, 110);
+                // ((14.0) A mortar shell: a little bigger.)
+                if (g.shell) explode(g.tx, g.ty, MORTAR_BLAST, MORTAR_DAMAGE);
+                else explode(g.tx, g.ty, 36, 110);
             }
         }
     }

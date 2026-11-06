@@ -40,6 +40,8 @@ final class Fleet {
     static final int K_APC = 1, K_HUMVEE = 2, K_RIOT_VAN = 3, K_BIKE = 4, K_POLICE_HELI = 5, K_RESCUE_HELI = 6;
     /** (11.0) The police's armoured BearCat. (8 was the bomb squad's truck, gone in 11.3.) */
     static final int K_BEARCAT = 7;
+    /** (14.0) The army engineers' bulldozer: pushes wrecks off the roads in town. */
+    static final int K_DOZER = 8;
 
     /** Kinds of everyday car (which ones are about depends on the country). */
     static final int M_SEDAN = 0, M_PICKUP = 1, M_SUV = 2, M_KEI = 3, M_HATCH = 4, M_VAN = 5, M_TAXI = 6, M_BUS = 7,
@@ -276,6 +278,9 @@ final class Fleet {
          */
         int cargo;
         boolean ammoTruck;
+        /** ((14.0) A bulldozer: the wreck it's on its way to push off the road, its base, and the seconds left pushing.) */
+        Vehicle clearing;
+        City.Facility dozerBase;
         /** A supply truck from outside, once it's over (10.19): restocking this store or armoury, then off the map. */
         boolean restock;
         City.Building restockShop;
@@ -320,6 +325,7 @@ final class Fleet {
                 if (v.kind == K_HUMVEE) return (v.guardUnit ? Country.guard()[1] + " " : "") + "Humvee" + (v.loop ? "  -  base patrol" : "");
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
                 if (v.kind == K_BEARCAT) return "Police BearCat";
+                if (v.kind == K_DOZER) return "Army engineers' bulldozer";
                 return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : v.ammoTruck ? "Army ammo truck  -  " + v.cargo + " rounds" : "Army truck";
             case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
             case TANK: return "Tank";
@@ -1548,6 +1554,156 @@ final class Fleet {
         return v;
     }
 
+    // ------------------------------------------------------------------ (14.0) the engineers' bulldozer
+
+    /** Wrecks the bulldozers have pushed off the roads this game. */
+    int dozerCleared;
+
+    /** How long pushing a wreck off the road takes, and how far a bulldozer goes for one. */
+    static final float DOZER_PUSH = 4, DOZER_REACH = 2500;
+
+    /** Each army base still standing has its bulldozer, parked in the yard (made again after a game is loaded). */
+    void ensureDozers() {
+        for (City.Facility f : city.facilities) {
+            if (f.kind != City.FACILITY_BASE || f.fallen) continue;
+            boolean has = false;
+            for (int i = 0; i < vehicles.size() && !has; i++) has = vehicles.get(i).kind == K_DOZER && vehicles.get(i).dozerBase == f;
+            if (has) continue;
+            float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
+            if (g == null) continue;
+            float[] p = bay(g, f);
+            if (p == null) continue;
+            Vehicle v = make(TRUCK);
+            v.kind = K_DOZER;
+            v.dozerBase = f;
+            v.x = v.homeX = p[0];
+            v.y = v.homeY = p[1];
+            v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
+            v.state = IDLE;
+            v.parked = true;
+            v.speed = 0;
+            v.passengerType = Entity.SOLDIER;
+            vehicles.add(v);
+        }
+    }
+
+    /** A wreck or an abandoned vehicle left on a road in town, not already being seen to; the nearest to (x, y). */
+    private Vehicle wreckToClear(float x, float y, float reach) {
+        Vehicle best = null;
+        float bd = reach;
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle o = vehicles.get(i);
+            if (o.removedFromFleet || o.kind == K_DOZER || o.player != null || o.standby || !o.riders.isEmpty()) continue;
+            if (o.type != CAR && o.type != CRUISER && o.type != TRUCK && o.type != AMBULANCE) continue;
+            if (!o.broken && !o.burnt && o.state != ABANDONED) continue;
+            int t = city.tileIndex(o.x, o.y);
+            if (t < 0 || city.tiles[t] != City.ROAD || !city.inTown(o.x, o.y)) continue;
+            boolean taken = false;
+            for (int k = 0; k < n && !taken; k++) taken = vehicles.get(k).clearing == o;
+            if (taken) continue;
+            float d = (float) World.hypot(o.x - x, o.y - y);
+            if (d < bd) {
+                bd = d;
+                best = o;
+            }
+        }
+        return best;
+    }
+
+    /** (14.0) Every few seconds: a bulldozer parked at its base goes out to the nearest wreck in the way, once the dead are about. */
+    private void dozers() {
+        if (w.alert < 1) return;
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.kind != K_DOZER || !v.parked || v.broken || v.burnt) continue;
+            if (v.dozerBase != null && v.dozerBase.fallen) continue;
+            Vehicle o = wreckToClear(v.x, v.y, DOZER_REACH);
+            if (o == null || !dozerTo(v, o)) continue;
+            w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Engineers are taking the bulldozer out to clear a wreck off "
+                    + city.placeName(o.x, o.y) + ".", o.x, o.y);
+        }
+    }
+
+    private boolean dozerTo(Vehicle v, Vehicle o) {
+        float[] p = city.nearestDrivable(o.x, o.y);
+        if (p == null) return false;
+        v.parked = false;
+        v.state = DRIVE;
+        v.stuckTimer = 0;
+        v.clearing = o;
+        if (!route(v, p[0], p[1])) {
+            v.clearing = null;
+            v.parked = true;
+            v.state = IDLE;
+            return false;
+        }
+        v.place = city.placeName(o.x, o.y);
+        return true;
+    }
+
+    /** At the end of a drive: at the wreck, push it; home, park. */
+    private boolean dozerArrived(Vehicle v) {
+        v.speed = 0;
+        Vehicle o = v.clearing;
+        if (v.state == DRIVE && o != null && !o.removedFromFleet && World.hypot(o.x - v.x, o.y - v.y) < 40) {
+            v.state = SCENE;
+            v.timer = DOZER_PUSH;
+            v.angle = (float) Math.atan2(o.y - v.y, o.x - v.x);
+            return false;
+        }
+        if (v.state == RETURN) {
+            v.state = IDLE;
+            v.parked = true;
+            v.clearing = null;
+            return false;
+        }
+        return dozerNext(v);
+    }
+
+    /** Pushing the wreck: a few seconds, then it's off the road for good. */
+    private boolean dozerPush(Vehicle v, float dt) {
+        Vehicle o = v.clearing;
+        v.speed = 0;
+        if (o == null || o.removedFromFleet) return dozerNext(v);
+        float dx = o.x - v.x, dy = o.y - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        v.angle = (float) Math.atan2(dy, dx);
+        if (d > 20) {
+            // (Up to it, slowly, over whatever's in the way.)
+            float step = Math.min(d - 18, 18 * dt);
+            v.x += dx / d * step;
+            v.y += dy / d * step;
+            return false;
+        }
+        v.timer -= dt;
+        // (Shoving it along, a little at a time.)
+        float a = v.angle;
+        o.x += (float) Math.cos(a) * 4 * dt;
+        o.y += (float) Math.sin(a) * 4 * dt;
+        if (v.soundCd <= 0) {
+            v.soundCd = 1.2f;
+            w.emit(Sfx.CRASH, o.x, o.y);
+        }
+        if (v.timer > 0) return false;
+        discard(o);
+        dozerCleared++;
+        return dozerNext(v);
+    }
+
+    /** On to the next wreck near here, or back to base. */
+    private boolean dozerNext(Vehicle v) {
+        v.clearing = null;
+        Vehicle o = w.alert >= 1 ? wreckToClear(v.x, v.y, DOZER_REACH / 2) : null;
+        if (o != null && dozerTo(v, o)) return false;
+        v.state = RETURN;
+        v.stuckTimer = 0;
+        if (!route(v, v.homeX, v.homeY)) {
+            // (No way home from here: it waits where it is.)
+            v.state = IDLE;
+            v.parked = true;
+        }
+        return false;
+    }
+
     /** An army truck carrying ammunition from an armoury to a safe zone. */
     boolean sendSupply(City.Facility from, Dispatch.SafeZone z, int rounds) {
         int before = vehicles.size();
@@ -2236,6 +2392,7 @@ final class Fleet {
         }
         if (trafficTimer <= 0) {
             trafficTimer = 6;
+            dozers();
             if (movingTraffic() < trafficTarget * trafficScale && w.zombieCount() < 10 && w.alert < 2) spawnTraffic(1);
             int parked = 0;
             // Old wrecks and parked cars are towed away, but never while you're watching.
@@ -3391,6 +3548,15 @@ final class Fleet {
 
     private boolean updateCar(Vehicle v, float dt) {
         if (!v.parked) v.pullTried = false;
+        if (v.kind == K_DOZER && v.state == SCENE) return dozerPush(v, dt);
+        // ((14.0) Close, and the traffic rules won't take it the last bit up to a stopped vehicle: it goes straight in.)
+        if (v.kind == K_DOZER && v.state == DRIVE && v.clearing != null && !v.clearing.removedFromFleet
+                && World.hypot(v.clearing.x - v.x, v.clearing.y - v.y) < 110 && (Math.abs(v.speed) < 6 || World.hypot(v.clearing.x - v.x, v.clearing.y - v.y) < 30)) {
+            v.state = SCENE;
+            v.timer = DOZER_PUSH;
+            v.speed = 0;
+            return false;
+        }
         if (v.recon) return reconStep(v, dt);
         if (v.type == TRUCK) turret(v, dt);
         if (v.state == PICKUP) return pickupStep(v, dt);
@@ -3593,6 +3759,7 @@ final class Fleet {
         // (Reinforcements on their long drive in wait a little longer in a jam before getting out to walk.)
         if (v.stuckTimer > (v.reinforcement ? 12 : 4)) arrived = true;
         if (arrived) {
+            if (v.kind == K_DOZER) return dozerArrived(v);
             if (v.state == DRIVE && v.block != null) {
                 // A roadblock car: only set up if the zone still needs it and it got close to its spot.
                 if (v.block.removed || World.hypot(v.x - v.tx, v.y - v.ty) > 90) {
@@ -5863,7 +6030,7 @@ final class Fleet {
         for (int i = 0, m = vehicles.size(); i < m; i++) {
             Vehicle o = vehicles.get(i);
             if (o.type != vtype || o.broken || o.burnt || o.player != null || o.removedFromFleet || !o.crew.isEmpty() || o.block != null
-                    || o.zone != null || o.loop || o.leaving || o.kind == K_BIKE || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
+                    || o.zone != null || o.loop || o.leaving || o.kind == K_BIKE || o.kind == K_DOZER || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
             if (!o.standby && !o.parked && o.state != ABANDONED) continue;
             float d = (float) World.hypot(o.x - sx, o.y - sy);
             if (d < bd && w.countZombiesNear(o.x, o.y, 80) == 0) {

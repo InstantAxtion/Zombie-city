@@ -40,9 +40,13 @@ final class Entity {
     static final int ROLE_PILOT = 12;
     /** (11.0) Marines landed by boat; army recon scouts. (13 was the bomb technician, gone in 11.3.) */
     static final int ROLE_MARINE = 14, ROLE_RECON = 15;
+    /** (14.0) Army combat engineers (two at each base): they get a safe zone's wall up three times as fast. */
+    static final int ROLE_ENGINEER = 16;
+    /** (14.0) An army mortar team: shells packs of the dead a few streets off (its rounds are kept as grenades). */
+    static final int ROLE_MORTAR = 17;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -268,6 +272,7 @@ final class Entity {
                     case ROLE_GUNNER: return "Machine gun";
                     case ROLE_SNIPER: return "Sniper rifle";
                     case ROLE_GRENADIER: return "Rifle and grenade launcher";
+                    case ROLE_MORTAR: return "Carbine and mortar";
                     case ROLE_COMMANDER: return "Pistol";
                     default: return "Assault rifle";
                 }

@@ -85,7 +85,7 @@ on the phone, so the APK contains no audio files.
 - **Railways**: trains run through most cities, with level crossings and a station.
 - **Recruitment**: after heavy losses, police and the army ask civilians to volunteer. Only some agree
   (gun owners more often, people with family or injuries less); volunteers train at the precinct or base.
-- **Military roles**: riflemen, grenadiers, combat medics (who patch up the wounded, not the bitten), machine gunners, snipers and a commander who boosts nearby soldiers
+- **Military roles**: riflemen, grenadiers, combat medics (who patch up the wounded, not the bitten), combat engineers (with the base's bulldozer), mortar teams, machine gunners, snipers and a commander who boosts nearby soldiers
   and calls in armor or air support.
 - **Buildings** include apartment blocks, parking garages and pharmacies (which patch people up).
 - **Destructible buildings**: blasts crack, scorch and eventually collapse buildings. Walls collect
@@ -418,6 +418,11 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Engineers and mortars (14.0):** each army base has a bulldozer that pushes wrecks off the roads in town once the
+dead are about, two combat engineers who get a safe zone's wall up three times as fast, and a mortar team that shells
+packs of the dead a few streets off (never with police or soldiers there, near civilians only when the dead far
+outnumber them).
 
 **Combat medics and ammo trucks (13.9):** each army squad has a combat medic again, who patches up wounded police and
 soldiers nearby when none of the dead are close (never the bitten). When soldiers run low at a fight far from the base,
