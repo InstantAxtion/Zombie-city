@@ -2487,6 +2487,13 @@ public final class GameTests {
                         City.slowSteps = false;
                         check(a == b && java.util.Arrays.equals(f1, f2), "the same route from the table as the long way (" + preset + ", " + k + ")");
                         routes++;
+                        // ((13.6) And off road, where the table now does the steps a car could take too.)
+                        City.slowSteps = false;
+                        a = city.offroadField(f1, tx, ty, from);
+                        City.slowSteps = true;
+                        b = city.offroadField(f2, tx, ty, from);
+                        City.slowSteps = false;
+                        check(a == b && java.util.Arrays.equals(f1, f2), "the same off-road route from the table as the long way (" + preset + ", " + k + ")");
                     }
                     // A barricade goes up: nobody walks through it.
                     float[] spot = null;
@@ -2507,6 +2514,54 @@ public final class GameTests {
                     }
                 }
                 check(routes > 50 && spots > 10000, "checked enough");
+            }
+        });
+        test("13.6: routes to a busy goal are just as short from the kept search, and a change on the map is taken into account", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 8;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.LARGE;
+                c.seed = 36;
+                c.normalize();
+                World w = new World(c);
+                City city = w.city;
+                java.util.Random r = new java.util.Random(9);
+                int compared = 0, same = 0;
+                for (int round = 0; round < 2; round++) {
+                    if (round == 1) {
+                        // A barricade goes up somewhere: the kept searches are thrown away and the routes still agree.
+                        for (int k = 0; k < 200; k++) {
+                            float x = r.nextFloat() * city.worldW(), y = r.nextFloat() * city.worldH();
+                            if (!city.circleBlocked(x, y, 4) && w.placeBarricade(x, y) != null) break;
+                        }
+                    }
+                    for (int goal = 0; goal < 6; goal++) {
+                        float gx, gy;
+                        do {
+                            gx = r.nextFloat() * city.worldW();
+                            gy = r.nextFloat() * city.worldH();
+                        } while (city.circleBlocked(gx, gy, 4));
+                        for (int k = 0; k < 12; k++) {
+                            float sx, sy;
+                            do {
+                                sx = r.nextFloat() * city.worldW();
+                                sy = r.nextFloat() * city.worldH();
+                            } while (city.circleBlocked(sx, sy, 4) || Math.max(Math.abs(sx - gx), Math.abs(sy - gy)) < 40 * City.T);
+                            int[] kept = city.findPath(sx, sy, gx, gy, 9000);
+                            Nav.plainSearch = true;
+                            int[] plain = city.findPath(sx, sy, gx, gy, 9000);
+                            Nav.plainSearch = false;
+                            check((kept == null) == (plain == null), "a way there either way, or neither");
+                            if (kept == null || plain == null) continue;
+                            float lk = routeLength(city, sx, sy, kept), lp = routeLength(city, sx, sy, plain);
+                            check(lk <= lp * 1.03f + 2 * City.T, "as short from the kept search (" + lk + " vs " + lp + ")");
+                            check(kept[kept.length - 1] == plain[plain.length - 1], "to the same place");
+                            compared++;
+                            if (java.util.Arrays.equals(kept, plain)) same++;
+                        }
+                    }
+                }
+                check(compared > 100 && same * 2 > compared, "compared enough (" + compared + ", " + same + " the very same)");
             }
         });
         test("every screen draws", new Check() {
@@ -2564,6 +2619,18 @@ public final class GameTests {
         });
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
+    }
+
+    /** How far it is along a walking route's corners from (sx, sy). */
+    private static float routeLength(City city, float sx, float sy, int[] route) {
+        float len = 0, x = sx, y = sy;
+        for (int t : route) {
+            float nx = (t % city.w + 0.5f) * City.T, ny = (t / city.w + 0.5f) * City.T;
+            len += (float) Math.hypot(nx - x, ny - y);
+            x = nx;
+            y = ny;
+        }
+        return len;
     }
 
     /** Everyone alive: out and about, inside on errands, sheltering, or riding in a vehicle. */

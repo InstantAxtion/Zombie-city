@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Performance: routes and hitches (13.6):** about a third less work each step in an outbreak (18 to 12 ms a step on
+a Colossal city, 13 to 8.5 on a Large one, on the test machine), and the slowest steps about half as long. Long walks
+to a place many people are heading for (the outbreak, a safe zone, a cordon) reuse one search kept from that place
+instead of planning each from scratch, with routes just as short; survivors forming patrols, choosing a safe zone's
+block and off-road emergency routes no longer hold the game up for a moment.
+
 **Performance (13.5):** about a fifth less work each step on the Colossal maps (32 to 25 ms a step on the test machine
 in an outbreak). The screen finds who's in view from the grid of who's where instead of going through everyone each
 frame, explosions no longer rebuild that grid, the grid is rebuilt less often and packed tighter, searches look at

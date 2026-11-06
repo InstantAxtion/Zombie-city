@@ -17,6 +17,8 @@ import java.util.Arrays;
  * (a barricade, a wall going up, a building coming down) the clusters it touches are worked out again.
  */
 final class Nav {
+    /** ((13.6) For the tests: plan every trip from scratch, without the searches kept from busy goals.) */
+    static boolean plainSearch;
     static final int CS = 16;
     private static final int FAR = Integer.MAX_VALUE / 4;
 
@@ -26,6 +28,11 @@ final class Nav {
     // Gateways: a tile each, the cluster it's in, its partner across the border and the cost of the step over.
     private int nodes;
     private int[] nodeTile = new int[1024], nodeCluster = new int[1024], nodePartner = new int[1024], nodeCross = new int[1024];
+    // ((13.6) Each gateway's tile x and y, and where it is in its cluster's list, so a search doesn't keep dividing
+    // and looking them up; and once its cluster is worked out, the gateways it can reach across it and the cost of
+    // each: the long trips spent most of their time going through every pair, most of them out of reach.)
+    private int[] nodeX = new int[1024], nodeY = new int[1024], nodeSlot = new int[1024];
+    private int[][] adjTo, adjCost, revTo, revCost;
     private int[][] clusterNodes;
     private int[] clusterCount;
     /** Within each cluster, the cost from each of its gateways to each other one (FAR if there's no way). */
@@ -46,6 +53,7 @@ final class Nav {
         if (intraReady == null) return;
         int x = i % w, y = i / w, k = (y / CS) * cw + x / CS;
         intraReady[k] = false;
+        dropTrees();
         int lx = x % CS, ly = y % CS;
         if (lx == 0 || ly == 0 || lx == CS - 1 || ly == CS - 1) entrancesDirty = true;
     }
@@ -56,8 +64,12 @@ final class Nav {
 
     /** What stepping onto tile i costs (x10, before the diagonal's extra), a little more right beside a wall. */
     private int cost(int i) {
+        return cost(i, i % w, i / w);
+    }
+
+    /** As above, for tile i at (x, y), already known. */
+    private int cost(int i, int x, int y) {
         int base = c.walkCost[i] * 10;
-        int x = i % w, y = i / w;
         if ((x > 0 && c.solid[i - 1]) || (x < w - 1 && c.solid[i + 1]) || (y > 0 && c.solid[i - w]) || (y < h - 1 && c.solid[i + w]))
             base += 6;
         return base;
@@ -77,6 +89,10 @@ final class Nav {
         clusterNodes = new int[cw * ch][];
         intra = new int[cw * ch][];
         intraReady = new boolean[cw * ch];
+        adjTo = new int[nodeTile.length][];
+        adjCost = new int[nodeTile.length][];
+        revTo = new int[nodeTile.length][];
+        revCost = new int[nodeTile.length][];
         for (int cy = 0; cy < ch; cy++)
             for (int cx = 0; cx < cw; cx++) {
                 // The border on the right, then the one below.
@@ -92,8 +108,15 @@ final class Nav {
         // Each cluster's own list of its gateways.
         for (int k = 0; k < cw * ch; k++) clusterNodes[k] = new int[clusterCount[k]];
         int[] fill = new int[cw * ch];
+        if (adjTo.length < nodes) {
+            adjTo = new int[nodes][];
+            adjCost = new int[nodes][];
+            revTo = new int[nodes][];
+            revCost = new int[nodes][];
+        }
         for (int n = 0; n < nodes; n++) {
             int k = nodeCluster[n];
+            nodeSlot[n] = fill[k];
             clusterNodes[k][fill[k]++] = n;
         }
         if (oldNodes != null)
@@ -105,9 +128,11 @@ final class Nav {
                 if (!same) continue;
                 intra[k] = oldIntra[k];
                 intraReady[k] = true;
+                linkCluster(k);
             }
         entrancesDirty = false;
         warmAt = 0;
+        dropTrees();
     }
 
     private int warmAt;
@@ -166,9 +191,14 @@ final class Nav {
             nodeCluster = Arrays.copyOf(nodeCluster, n);
             nodePartner = Arrays.copyOf(nodePartner, n);
             nodeCross = Arrays.copyOf(nodeCross, n);
+            nodeX = Arrays.copyOf(nodeX, n);
+            nodeY = Arrays.copyOf(nodeY, n);
+            nodeSlot = Arrays.copyOf(nodeSlot, n);
         }
         int x = tile % w, y = tile / w, k = (y / CS) * cw + x / CS;
         nodeTile[nodes] = tile;
+        nodeX[nodes] = x;
+        nodeY[nodes] = y;
         nodeCluster[nodes] = k;
         clusterCount[k]++;
         return nodes++;
@@ -182,6 +212,7 @@ final class Nav {
         int[] m = new int[n * n];
         Arrays.fill(m, FAR);
         int x0 = (k % cw) * CS, y0 = (k / cw) * CS, x1 = Math.min(w, x0 + CS), y1 = Math.min(h, y0 + CS);
+        box(x0, y0, x1, y1);
         for (int a = 0; a < n; a++) {
             int[] d = local(nodeTile[list[a]], x0, y0, x1, y1);
             for (int b = 0; b < n; b++) {
@@ -191,13 +222,65 @@ final class Nav {
         }
         intra[k] = m;
         intraReady[k] = true;
+        linkCluster(k);
+    }
+
+    /** Each of cluster k's gateways' reachable others across it, and the cost to each, from its worked-out costs. */
+    private void linkCluster(int k) {
+        int[] list = clusterNodes[k], m = intra[k];
+        int n = list.length;
+        for (int a = 0; a < n; a++) {
+            int count = 0;
+            for (int b = 0; b < n; b++) if (b != a && m[a * n + b] < FAR) count++;
+            int[] to = new int[count], cost = new int[count];
+            count = 0;
+            for (int b = 0; b < n; b++)
+                if (b != a && m[a * n + b] < FAR) {
+                    to[count] = list[b];
+                    cost[count++] = m[a * n + b];
+                }
+            adjTo[list[a]] = to;
+            adjCost[list[a]] = cost;
+            // (And the other way: the ones that can reach it, for the searches back from a goal.)
+            count = 0;
+            for (int b = 0; b < n; b++) if (b != a && m[b * n + a] < FAR) count++;
+            to = new int[count];
+            cost = new int[count];
+            count = 0;
+            for (int b = 0; b < n; b++)
+                if (b != a && m[b * n + a] < FAR) {
+                    to[count] = list[b];
+                    cost[count++] = m[b * n + a];
+                }
+            revTo[list[a]] = to;
+            revCost[list[a]] = cost;
+        }
     }
 
     // Small searches inside one cluster (or a box of them).
     private int[] lDist = new int[CS * CS];
     private long[] lHeap = new long[256];
+    /**
+     * ((13.6) The cluster's tiles, open or not and what each costs, looked up once for all the searches from its
+     * gateways (one each) instead of in every one of them, eight times a tile.)
+     */
+    private final boolean[] lOpen = new boolean[CS * CS];
+    private final int[] lCost = new int[CS * CS];
 
-    /** Costs from tile s to every tile of the box (x0..x1, y0..y1: one cluster), FAR where it can't get. */
+    /** Fills in lOpen and lCost for the box (one cluster), for local to use. */
+    private void box(int x0, int y0, int x1, int y1) {
+        for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++) {
+                int i = y * w + x, li = (y - y0) * CS + (x - x0);
+                lOpen[li] = open(i);
+                lCost[li] = lOpen[li] ? cost(i, x, y) : 0;
+            }
+    }
+
+    /**
+     * Costs from tile s to every tile of the box (x0..x1, y0..y1: one cluster), FAR where it can't get; box() must
+     * have been called for it first.
+     */
     private int[] local(int s, int x0, int y0, int x1, int y1) {
         int bw = CS;
         Arrays.fill(lDist, FAR);
@@ -215,11 +298,10 @@ final class Nav {
             for (int q = 0; q < 8; q++) {
                 int dx = DX[q], dy = DY[q], nx = tx + dx, ny = ty + dy;
                 if (nx < x0 || ny < y0 || nx >= x1 || ny >= y1) continue;
-                int nb = ny * w + nx;
-                if (!open(nb)) continue;
-                if (dx != 0 && dy != 0 && (!open(ty * w + nx) || !open(ny * w + tx))) continue;
-                int ng = g + cost(nb) * (dx != 0 && dy != 0 ? 14 : 10) / 10;
-                int nli = (ny - y0) * bw + (nx - x0);
+                int nli = li + dy * bw + dx;
+                if (!lOpen[nli]) continue;
+                if (dx != 0 && dy != 0 && (!lOpen[li + dx] || !lOpen[li + dy * bw])) continue;
+                int ng = g + lCost[nli] * (dx != 0 && dy != 0 ? 14 : 10) / 10;
                 if (ng >= lDist[nli]) continue;
                 lDist[nli] = ng;
                 if (size == lHeap.length) lHeap = Arrays.copyOf(lHeap, size * 2);
@@ -273,7 +355,7 @@ final class Nav {
                 int nb = ny * w + nx;
                 if (!open(nb) && nb != g) continue;
                 if (dx != 0 && dy != 0 && (!open(ty * w + nx) || !open(ny * w + tx))) continue;
-                int ng = aG[t] + cost(nb) * (dx != 0 && dy != 0 ? 14 : 10) / 10;
+                int ng = aG[t] + cost(nb, nx, ny) * (dx != 0 && dy != 0 ? 14 : 10) / 10;
                 if (aStamp[nb] == run && ng >= aG[nb]) continue;
                 aStamp[nb] = run;
                 aG[nb] = ng;
@@ -317,13 +399,15 @@ final class Nav {
         return straighten(s, tiles);
     }
 
-    private int[] hG, hFrom, hStamp;
+    private int[] hG, hFrom, hStamp, hDone;
     private int hRun, hSize, goalX, goalY;
     private long[] hHeap = new long[1024];
 
     private int[] hierarchical(int s, int g) {
         if (entrancesDirty || clusterNodes == null) buildEntrances();
         int ks = clusterOf(s), kg = clusterOf(g);
+        GoalTree tree = plainSearch ? null : treeFor(g);
+        if (tree != null) return fromTree(tree, s, ks);
         ensureIntra(ks);
         ensureIntra(kg);
         // From the start to each gateway of its cluster, and from each of the goal's cluster's to the goal.
@@ -333,6 +417,7 @@ final class Nav {
             hG = new int[n];
             hFrom = new int[n];
             hStamp = new int[n];
+            hDone = new int[n];
         }
         int run = ++hRun;
         hSize = 0;
@@ -344,31 +429,28 @@ final class Nav {
         hFrom[START] = -1;
         int[] ls = clusterNodes[ks];
         for (int a = 0; a < ls.length; a++) if (toStart[a] < FAR) relax(START, ls[a], toStart[a], run);
-        int[] lg = clusterNodes[kg];
         int expanded = 0;
         while (hSize > 0) {
             long top = hHeap[0];
             hHeap[0] = hHeap[--hSize];
             down(hHeap, hSize);
-            int u = (int) (top & 0xFFFFFFFFL), f = (int) (top >>> 32);
+            int u = (int) (top & 0xFFFFFFFFL);
             if (u == GOAL) break;
-            if (f - h(u) > hG[u]) continue;
+            // (Already done by a cheaper way: the heap keeps the dearer entries it was pushed with before.)
+            if (hDone[u] == run) continue;
+            hDone[u] = run;
             if (++expanded > 60000) return null;
-            int k = nodeCluster[u];
+            int k = nodeCluster[u], gu = hG[u];
             // Over the border.
-            relax(u, nodePartner[u], hG[u] + nodeCross[u], run);
+            relax(u, nodePartner[u], gu + nodeCross[u], run);
             // Across its own cluster.
             ensureIntra(k);
-            int[] list = clusterNodes[k], m = intra[k];
-            int n = list.length, ai = indexIn(list, u);
-            for (int b = 0; b < n; b++) {
-                int d = m[ai * n + b];
-                if (d < FAR && list[b] != u) relax(u, list[b], hG[u] + d, run);
-            }
+            int[] to = adjTo[u], co = adjCost[u];
+            for (int b = 0; b < to.length; b++) relax(u, to[b], gu + co[b], run);
             // And on to the goal itself.
             if (k == kg) {
-                int d = toGoal[indexIn(lg, u)];
-                if (d < FAR) relax(u, GOAL, hG[u] + d, run);
+                int d = toGoal[nodeSlot[u]];
+                if (d < FAR) relax(u, GOAL, gu + d, run);
             }
         }
         if (hStamp[GOAL] != run) return null;
@@ -377,6 +459,14 @@ final class Nav {
         for (int n = hFrom[GOAL]; n != START; n = hFrom[n]) count++;
         int[] seq = new int[count];
         for (int n = hFrom[GOAL], i = count - 1; n != START; n = hFrom[n]) seq[i--] = n;
+        return fill(s, g, seq, count, null);
+    }
+
+    /**
+     * The tiles from s through the gateways seq[0..count) to g, filled in one cluster at a time; by a kept search's
+     * stretches from each gateway on to the next, when the route comes from one (the same for everyone after).
+     */
+    private int[] fill(int s, int g, int[] seq, int count, GoalTree tree) {
         IntList out = new IntList();
         int at = s;
         for (int i = 0; i <= count; i++) {
@@ -389,10 +479,15 @@ final class Nav {
             } else {
                 int k = clusterOf(next);
                 int cx0 = (k % cw) * CS, cy0 = (k / cw) * CS;
-                int[] part = astar(at, next, Math.max(0, cx0 - 1), Math.max(0, cy0 - 1), Math.min(w, cx0 + CS + 1), Math.min(h, cy0 + CS + 1), 3000);
+                int[] part = tree != null && i > 0 ? tree.seg[seq[i - 1]] : null;
+                if (part == null) {
+                    part = astar(at, next, Math.max(0, cx0 - 1), Math.max(0, cy0 - 1), Math.min(w, cx0 + CS + 1), Math.min(h, cy0 + CS + 1), 3000);
+                    if (part != null && tree != null && i > 0) tree.seg[seq[i - 1]] = part;
+                }
                 if (part == null) {
                     // The map's changed since: work the cluster out again next time, and fall back for now.
                     intraReady[k] = false;
+                    dropTrees();
                     return null;
                 }
                 for (int t : part) out.add(t);
@@ -402,15 +497,132 @@ final class Nav {
         return out.toArray();
     }
 
+    // ------------------------------------------------------------------ searches back from a busy goal
+
+    /**
+     * ((13.6) Where crowds head for one place (everyone called to an outbreak, a rally point, a cordon) the same
+     * long trip across the map was planned from scratch for each of them, a few thousand gateways looked at every
+     * time. Now once a goal's been asked for twice lately, the search is run backwards from it instead and kept: each
+     * new trip there only carries it on as far as its own start, and most find it already there. The routes are
+     * just as short (it's the same search, the other way round), and the map changing throws them all away.)
+     */
+    private static final class GoalTree {
+        int goal, used;
+        int[] dist, next;
+        boolean[] done;
+        int[][] seg;
+        long[] heap = new long[1024];
+        int size;
+    }
+
+    private static final int TREES = 4;
+    private final GoalTree[] trees = new GoalTree[TREES];
+    private final int[] recentGoals = new int[48];
+    private int recentAt, treeClock;
+
+    private void dropTrees() {
+        for (int i = 0; i < TREES; i++) trees[i] = null;
+    }
+
+    /** The kept search back from goal g, started now if it's been a goal lately; null to plan the usual way. */
+    private GoalTree treeFor(int g) {
+        treeClock++;
+        for (GoalTree t : trees)
+            if (t != null && t.goal == g) {
+                t.used = treeClock;
+                return t;
+            }
+        boolean again = false;
+        for (int r : recentGoals) if (r == g + 1) again = true;
+        recentGoals[recentAt] = g + 1;
+        recentAt = (recentAt + 1) % recentGoals.length;
+        if (!again) return null;
+        int slot = 0;
+        for (int i = 0; i < TREES; i++) {
+            if (trees[i] == null) {
+                slot = i;
+                break;
+            }
+            if (trees[i].used < trees[slot].used) slot = i;
+        }
+        GoalTree t = new GoalTree();
+        t.goal = g;
+        t.used = treeClock;
+        t.dist = new int[nodes];
+        t.next = new int[nodes];
+        t.done = new boolean[nodes];
+        t.seg = new int[nodes][];
+        Arrays.fill(t.dist, FAR);
+        int kg = clusterOf(g);
+        ensureIntra(kg);
+        int[] toGoal = costsInCluster(g, kg), lg = clusterNodes[kg];
+        for (int a = 0; a < lg.length; a++) if (toGoal[a] < FAR) treeRelax(t, lg[a], toGoal[a], -1);
+        trees[slot] = t;
+        return t;
+    }
+
+    private static void treeRelax(GoalTree t, int n, int d, int via) {
+        if (t.done[n] || d >= t.dist[n]) return;
+        t.dist[n] = d;
+        t.next[n] = via;
+        if (t.size == t.heap.length) t.heap = Arrays.copyOf(t.heap, t.size * 2);
+        t.heap[t.size] = ((long) d << 32) | n;
+        up(t.heap, t.size++);
+    }
+
+    /** The route from s (in cluster ks) by the kept search back from its goal, carried on as far as s needs. */
+    private int[] fromTree(GoalTree t, int s, int ks) {
+        ensureIntra(ks);
+        int[] toStart = costsInCluster(s, ks), ls = clusterNodes[ks];
+        int best = FAR, bestNode = -1;
+        for (int a = 0; a < ls.length; a++) {
+            int n = ls[a];
+            if (t.done[n] && toStart[a] < FAR && toStart[a] + t.dist[n] < best) {
+                best = toStart[a] + t.dist[n];
+                bestNode = n;
+            }
+        }
+        int expanded = 0;
+        while (t.size > 0 && (int) (t.heap[0] >>> 32) < best) {
+            long top = t.heap[0];
+            t.heap[0] = t.heap[--t.size];
+            down(t.heap, t.size);
+            int v = (int) (top & 0xFFFFFFFFL), d = (int) (top >>> 32);
+            if (t.done[v] || d > t.dist[v]) continue;
+            t.done[v] = true;
+            if (++expanded > 60000) return null;
+            int k = nodeCluster[v];
+            if (k == ks) {
+                int a = nodeSlot[v];
+                if (toStart[a] < FAR && toStart[a] + d < best) {
+                    best = toStart[a] + d;
+                    bestNode = v;
+                }
+            }
+            // Back over the border, and back across its own cluster.
+            int p = nodePartner[v];
+            treeRelax(t, p, d + nodeCross[p], v);
+            ensureIntra(k);
+            int[] from = revTo[v], co = revCost[v];
+            for (int b = 0; b < from.length; b++) treeRelax(t, from[b], d + co[b], v);
+        }
+        if (bestNode < 0) return null;
+        int count = 0;
+        for (int n = bestNode; n >= 0; n = t.next[n]) count++;
+        int[] seq = new int[count];
+        count = 0;
+        for (int n = bestNode; n >= 0; n = t.next[n]) seq[count++] = n;
+        return fill(s, t.goal, seq, count, t);
+    }
+
     /** The estimate on from gateway n (or the goal, nothing) to the goal. */
     private int h(int n) {
         if (n >= nodes) return 0;
-        int t = nodeTile[n];
-        return heur(t % w, t / w, goalX, goalY);
+        return heur(nodeX[n], nodeY[n], goalX, goalY);
     }
 
     private void relax(int from, int to, int g, int run) {
-        if (hStamp[to] == run && g >= hG[to]) return;
+        if (hStamp[to] == run && (g >= hG[to] || hDone[to] == run)) return;
         hStamp[to] = run;
         hG[to] = g;
         hFrom[to] = from;
@@ -423,14 +635,10 @@ final class Nav {
         return ((t / w) / CS) * cw + (t % w) / CS;
     }
 
-    private static int indexIn(int[] list, int n) {
-        for (int i = 0; i < list.length; i++) if (list[i] == n) return i;
-        return -1;
-    }
-
     /** From tile t to each gateway of its cluster k (FAR where there's no way within the cluster). */
     private int[] costsInCluster(int t, int k) {
         int x0 = (k % cw) * CS, y0 = (k / cw) * CS, x1 = Math.min(w, x0 + CS), y1 = Math.min(h, y0 + CS);
+        box(x0, y0, x1, y1);
         int[] d = local(t, x0, y0, x1, y1);
         int[] list = clusterNodes[k];
         int[] out = new int[list.length];

@@ -11918,13 +11918,25 @@ final class City {
             // Back at the vehicle: finish off the lanes round it, then stop.
             if (stopAt == Integer.MAX_VALUE && (fromRoad ? t == from : Math.abs(tx - fx) <= 1 && Math.abs(ty - fy) <= 1)) stopAt = d + (aim ? 60 : 160);
             int link = bridgeTo(t);
-            if (!offroad && !slowSteps) {
+            if (!slowSteps) {
                 // ((11.5) The quick way: each step's cost and rules looked up from the table made once for the map.)
+                // ((13.6) Off road too: any step a car can take is the same for a four-wheel drive, which can also go
+                // onto open ground: only those steps are worked out the long way. Off-road searches did every step
+                // the long way, and an emergency crossing a big map held the game up for a moment.)
                 if (stepC == null) buildSteps();
                 int sb = t * 4;
                 for (int k = 0; k < 4; k++) {
                     int sc = stepC[sb + k];
-                    if (sc < 0 || (strict && (sc & 64) == 0)) continue;
+                    if (sc < 0) {
+                        if (!offroad) continue;
+                        int nn = k == 0 ? t + 1 : k == 1 ? t - 1 : k == 2 ? t + w : t - w;
+                        if (nn < 0 || nn >= w * h) continue;
+                        byte nt = tiles[nn];
+                        if (nt != GRASS && nt != SAND && nt != TRAIL) continue;
+                        sc = stepCost(t, k);
+                        if (sc < 0) continue;
+                    }
+                    if (strict && (sc & 64) == 0) continue;
                     int c = sc & 63, n = k == 0 ? t + 1 : k == 1 ? t - 1 : k == 2 ? t + w : t - w;
                     if (gt + c >= dist[n]) continue;
                     if (dist[n] == FAR) dfTouch(n);
@@ -12001,28 +12013,34 @@ final class City {
         if (junction == null) computeJunctions();
         byte[] sc = new byte[w * h * 4];
         stepC = sc;
+        // (The table is for ordinary traffic, whatever search asked for it first.)
+        boolean was = offroad;
+        offroad = false;
         for (int t = 0; t < w * h; t++) fillSteps(t);
+        offroad = was;
     }
 
     private void fillSteps(int t) {
+        for (int k = 0; k < 4; k++) stepC[t * 4 + k] = (byte) stepCost(t, k);
+    }
+
+    /** The step from tile t in direction k (right, left, down, up): its cost, +64 if onto road or track; -1 if not allowed. */
+    private int stepCost(int t, int k) {
         int tx = t % w, ty = t / w, link = bridgeTo(t);
-        for (int k = 0; k < 4; k++) {
-            int nx = tx + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = ty + (k == 2 ? 1 : k == 3 ? -1 : 0);
-            stepC[t * 4 + k] = -1;
-            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-            int n = ny * w + nx, c = driveCost(n), base = c;
-            if (link >= 0 && oneWay != null && oneWay[n] != 0) continue;
-            if (oneWay != null && oneWay[t] != 0 && bridgeTo(n) >= 0) continue;
-            if (oneWay != null && c >= 0 && (!oneWayOk(n, tx - nx, ty - ny) || !oneWayOk(t, tx - nx, ty - ny))) continue;
-            if (divided != null && c >= 0 && (!wayOk(divided, n, tx - nx, ty - ny) || !wayOk(divided, t, tx - nx, ty - ny))) continue;
-            if (slipWay != null && c >= 0 && !slipOk(n, t, tx - nx, ty - ny)) continue;
-            if (c >= 0 && c <= 4 && junctionId[n] < 0 && junctionId[t] < 0) {
-                byte rd = roadDir[n];
-                if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
-            }
-            if (c < 0) continue;
-            stepC[t * 4 + k] = (byte) (c | (base <= 4 ? 64 : 0));
+        int nx = tx + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = ty + (k == 2 ? 1 : k == 3 ? -1 : 0);
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) return -1;
+        int n = ny * w + nx, c = driveCost(n), base = c;
+        if (link >= 0 && oneWay != null && oneWay[n] != 0) return -1;
+        if (oneWay != null && oneWay[t] != 0 && bridgeTo(n) >= 0) return -1;
+        if (oneWay != null && c >= 0 && (!oneWayOk(n, tx - nx, ty - ny) || !oneWayOk(t, tx - nx, ty - ny))) return -1;
+        if (divided != null && c >= 0 && (!wayOk(divided, n, tx - nx, ty - ny) || !wayOk(divided, t, tx - nx, ty - ny))) return -1;
+        if (slipWay != null && c >= 0 && !slipOk(n, t, tx - nx, ty - ny)) return -1;
+        if (c >= 0 && c <= 4 && junctionId[n] < 0 && junctionId[t] < 0) {
+            byte rd = roadDir[n];
+            if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
         }
+        if (c < 0) return -1;
+        return c | (base <= 4 ? 64 : 0);
     }
 
     /** ((11.5) A tile has changed: its steps, and its neighbours' onto it, are worked out again.) */

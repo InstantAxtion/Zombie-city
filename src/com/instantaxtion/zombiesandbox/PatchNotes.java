@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.5";
-    static final int VERSION_CODE = 125;
+    static final String VERSION = "13.6";
+    static final int VERSION_CODE = 126;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.6  -  Performance: routes and hitches",
+                    "About a third less work each step in an outbreak, and far fewer hitches (on the test machine: 18 to 12 ms a step on a Colossal city, 13 to 8.5 on a Large one; the slowest steps about half as long).",
+                    "Where crowds head for one place (everyone called to the outbreak, a safe zone, a cordon post) the long walk there is no longer planned from scratch for each of them: once a place has been asked for twice, the search is run back from it and kept, and each new trip there carries it on only as far as it needs. The routes are just as short, and any change to the map (a barricade, a wall) starts them afresh. Walking routes take about a third of the time they did.",
+                    "Planning a walk across the map looks only at the ways actually open across each part of it, and works out each part's ground once instead of once for every way into it.",
+                    "Armed survivors banding together into patrols look for each other nearby instead of through everyone in the city: it held the game up for a moment every second in a big city.",
+                    "Choosing the block for a safe zone picks out the landmarks once, not for every block on the map: the game no longer stands still for a moment when one goes up.",
+                    "Off-road routes for emergency vehicles use the same quick table as everyday traffic for every step a car could take, working out only the steps onto open ground.",
+            },
             {
                     "13.5  -  Performance",
                     "About a fifth less work each step on the Colossal maps, and less on the others (on the test machine: 32 to 25 ms a step on a Colossal city in an outbreak, 28 to 22 on Colossal Islands).",

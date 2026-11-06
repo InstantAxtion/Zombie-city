@@ -6714,14 +6714,24 @@ final class World {
                 }
             } else if (e.hasGun && e.ammo + e.reserve > 6 && rnd.nextFloat() < 0.02f) {
                 // Other armed people nearby fall in behind them.
+                // ((13.6) Found from the grid, the cells within reach, not by going through everyone in the city for
+                // each of them: with thousands armed in a big city it held the game up for a moment every second.)
                 int joined = 0;
-                for (int k = 0; k < n && joined < 3; k++) {
-                    Entity o = entities.get(k);
-                    if (o == e || o.type != Entity.CIVILIAN || !o.hasGun || o.leader != null || o.task != Dispatch.T_NONE) continue;
-                    if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > 90 * 90) continue;
-                    o.leader = e;
-                    joined++;
-                }
+                float reach = 90 + GRID_SLACK;
+                int cx0 = Math.max(0, (int) ((e.x - reach) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + reach) / CELL));
+                int cy0 = Math.max(0, (int) ((e.y - reach) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + reach) / CELL));
+                for (int cy = cy0; cy <= cy1 && joined < 3; cy++)
+                    for (int cx = cx0; cx <= cx1 && joined < 3; cx++) {
+                        int c = cy * gw + cx;
+                        // (Past the dead and the police and soldiers, at the front of each cell.)
+                        for (int k = cellStart[c] + zCount[c] + aCount[c], end = cellStart[c] + cellCount[c]; k < end && joined < 3; k++) {
+                            Entity o = sorted[k];
+                            if (o == e || o.dead || o.type != Entity.CIVILIAN || !o.hasGun || o.leader != null || o.task != Dispatch.T_NONE) continue;
+                            if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > 90 * 90) continue;
+                            o.leader = e;
+                            joined++;
+                        }
+                    }
                 if (joined >= 1) {
                     e.task = Dispatch.T_PATROL;
                     e.talkTimer = 2;

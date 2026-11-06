@@ -2669,6 +2669,12 @@ final class Dispatch {
         }
         int[] best = null;
         float bestScore = -Float.MAX_VALUE;
+        // ((13.6) The landmarks picked out once, not looked for among every building in the city for each block:
+        // on a big map that was a few thousand blocks times tens of thousands of buildings, and the game stood still
+        // for a moment whenever a safe zone went up.)
+        ArrayList<City.Building> marks = new ArrayList<City.Building>();
+        for (int i = 0, n = city.buildings.size(); i < n; i++)
+            if (landmark(city.buildings.get(i))) marks.add(city.buildings.get(i));
         for (int[] b : city.blocks()) {
             int tx0 = b[0] + 1, ty0 = b[1] + 1, tx1 = b[2] - 2, ty1 = b[3] - 2;
             int bw = tx1 - tx0 + 1, bh = ty1 - ty0 + 1;
@@ -2695,7 +2701,7 @@ final class Dispatch {
             for (City.Facility f : city.facilities)
                 if (f.x > tx0 * City.T && f.x < (tx1 + 1) * City.T && f.y > ty0 * City.T && f.y < (ty1 + 1) * City.T
                         && f.kind == (military ? City.FACILITY_BASE : City.FACILITY_POLICE)) score += 25;
-            City.Building mark = landmarkIn(tx0, ty0, tx1, ty1);
+            City.Building mark = landmarkIn(marks, tx0, ty0, tx1, ty1);
             if (mark != null) score += 8;
             if (score > bestScore) {
                 bestScore = score;
@@ -2715,14 +2721,24 @@ final class Dispatch {
     }
 
     private City.Building landmarkIn(int tx0, int ty0, int tx1, int ty1) {
-        for (int i = 0, n = city.buildings.size(); i < n; i++) {
-            City.Building b = city.buildings.get(i);
-            if (b.collapsed || b.name == null) continue;
-            if (b.kind != City.SCHOOL && b.kind != City.CHURCH && b.kind != City.MARKET && b.kind != City.MALL
-                    && b.kind != City.STADIUM && b.kind != City.HOSPITAL && b.kind != City.STATION) continue;
+        return landmarkIn(city.buildings, tx0, ty0, tx1, ty1);
+    }
+
+    /** The first landmark among these with its door inside the block. */
+    private City.Building landmarkIn(java.util.List<City.Building> list, int tx0, int ty0, int tx1, int ty1) {
+        for (int i = 0, n = list.size(); i < n; i++) {
+            City.Building b = list.get(i);
+            if (!landmark(b)) continue;
             if (b.doorX > tx0 * City.T && b.doorX < (tx1 + 1) * City.T && b.doorY > ty0 * City.T && b.doorY < (ty1 + 1) * City.T) return b;
         }
         return null;
+    }
+
+    /** A school, church, market, mall, stadium, hospital or station, standing and named: worth building a zone round. */
+    private static boolean landmark(City.Building b) {
+        if (b.collapsed || b.name == null) return false;
+        return b.kind == City.SCHOOL || b.kind == City.CHURCH || b.kind == City.MARKET || b.kind == City.MALL
+                || b.kind == City.STADIUM || b.kind == City.HOSPITAL || b.kind == City.STATION;
     }
 
     /**
