@@ -85,7 +85,7 @@ on the phone, so the APK contains no audio files.
 - **Railways**: trains run through most cities, with level crossings and a station.
 - **Recruitment**: after heavy losses, police and the army ask civilians to volunteer. Only some agree
   (gun owners more often, people with family or injuries less); volunteers train at the precinct or base.
-- **Military roles**: riflemen, machine gunners, snipers and a commander who boosts nearby soldiers
+- **Military roles**: riflemen, grenadiers, combat medics (who patch up the wounded, not the bitten), machine gunners, snipers and a commander who boosts nearby soldiers
   and calls in armor or air support.
 - **Buildings** include apartment blocks, parking garages and pharmacies (which patch people up).
 - **Destructible buildings**: blasts crack, scorch and eventually collapse buildings. Walls collect
@@ -418,6 +418,11 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Combat medics and ammo trucks (13.9):** each army squad has a combat medic again, who patches up wounded police and
+soldiers nearby when none of the dead are close (never the bitten). When soldiers run low at a fight far from the base,
+the base sends an ammo truck (800 rounds, at most two out at once, 2,000 kept back at the base): they wait for it and fill
+up there instead of walking back.
 
 **A quieter radio, hot spots, the dead in helmets (13.8):** routine talk between units (en route, on scene, mounted up,
 a spare magazine, kill counts) is no longer on the radio, and the same news within 15 seconds goes out once: a 10-minute

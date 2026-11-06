@@ -868,7 +868,7 @@ final class World {
             else if (e.member == 3 && snipers > 0) {
                 applyRole(e, Entity.ROLE_SNIPER);
                 snipers--;
-            }
+            } else if (e.member == 3 && cfg.nature()) applyRole(e, Entity.ROLE_CORPSMAN);
         }
         if (soldiers >= 5) {
             float[] p = base != null ? new float[]{base.x, base.y} : city.randomWalkable(rnd);
@@ -1463,11 +1463,12 @@ final class World {
 
     /**
      * A squad's second soldier is its grenadier; its fourth carries the machine gun. (Reserve squads arriving by
-     * truck are made up the same way.) (No combat medics since 10.50.)
+     * truck are made up the same way.) ((13.9) And its third is the combat medic again: gone in 10.50, back now.)
      */
     void kitOut(Entity e) {
         if (e.type != Entity.SOLDIER || e.role != Entity.ROLE_RIFLE) return;
         if (e.member == 4) applyRole(e, Entity.ROLE_GUNNER);
+        else if (e.member == 3) applyRole(e, Entity.ROLE_CORPSMAN);
         else if (e.member == 2) applyRole(e, Entity.ROLE_GRENADIER);
     }
 
@@ -1534,10 +1535,15 @@ final class World {
 
     /** Commanders carry a pistol and a radio, snipers a scoped rifle, gunners a belt-fed machine gun. */
     void applyRole(Entity e, int role) {
-        // (No combat medics since 10.50: grenadiers instead.)
-        if (role == Entity.ROLE_CORPSMAN) role = Entity.ROLE_GRENADIER;
         e.role = role;
         switch (role) {
+            case Entity.ROLE_CORPSMAN:
+                // ((13.9) A rifle, fewer spare rounds, no grenades: the bag is full of dressings.)
+                e.hp = e.maxHp = 100;
+                e.magSize = 30;
+                e.reserve = 120;
+                e.grenades = 0;
+                break;
             case Entity.ROLE_RIOT:
                 // A shield, a helmet and pads: slower, but bites from the front glance off.
                 e.hp = e.maxHp = 90;
@@ -1762,7 +1768,6 @@ final class World {
                 e.removed = true;
             }
         for (Entity e : entities) if (e.role == Entity.ROLE_K9 && e.type == Entity.COP) e.role = 0;
-        for (Entity e : entities) if (e.role == Entity.ROLE_CORPSMAN && e.type == Entity.SOLDIER) e.role = Entity.ROLE_GRENADIER;
         findWilds();
         buildRoster();
         // ((11.7) A saved game well into it already knows.)
@@ -6478,6 +6483,7 @@ final class World {
         escalate();
         leadersDecide(1);
         supplies();
+        fieldSupplies();
         militias();
         if (outbreak) updateWar();
         int z = zombieCount();
@@ -7985,6 +7991,71 @@ final class World {
         return true;
     }
 
+    /** How far a combat medic goes to someone wounded, and how long patching them up takes. */
+    static final float MEDIC_REACH = 160, MEDIC_TIME = 3.5f;
+
+    /**
+     * (13.9) A combat medic: with none of the dead close, to the most badly hurt police officer or soldier nearby
+     * (or themselves), and a few seconds kneeling over them puts half their strength back. A bite can't be treated:
+     * the infected are passed over. True while busy with it.
+     */
+    private boolean medicStep(Entity e, float dt) {
+        if (nearest(e, 70, true, false) != null) {
+            e.patient = null;
+            return false;
+        }
+        Entity p = e.patient;
+        if (p != null && (p.dead || p.removed || p.infected || p.hp >= p.maxHp * 0.95f || p.ride != null
+                || World.hypot(p.x - e.x, p.y - e.y) > MEDIC_REACH * 1.5f)) p = e.patient = null;
+        if (p == null) {
+            if ((e.medicCd -= dt) > 0) return false;
+            e.medicCd = 1.5f;
+            p = woundedNear(e);
+            if (p == null) return false;
+            e.patient = p;
+            e.treatT = 0;
+        }
+        float dx = p.x - e.x, dy = p.y - e.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        if (p != e && d > 14) {
+            walkToSpot(e, p.x, p.y, e.runSpeed);
+            return true;
+        }
+        steer(e, 0, 0, 0);
+        e.aiming = false;
+        if (p != e) e.angle = turn(e.angle, (float) Math.atan2(dy, dx), 0.3f);
+        e.treatT += dt;
+        if (e.treatT >= MEDIC_TIME) {
+            p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.5f);
+            dispatch.chatter(Dispatch.WHO_MILITARY, e, p == e ? "Patching myself up." : "Medic here. " + Dispatch.name(p) + ", you're good to go.", e.x, e.y);
+            e.patient = null;
+            e.treatT = 0;
+            e.medicCd = 3;
+        }
+        return true;
+    }
+
+    /** The most badly hurt police officer or soldier within a medic's reach (themselves too), or null. */
+    private Entity woundedNear(Entity e) {
+        Entity best = e.hp < e.maxHp * 0.6f && !e.infected ? e : null;
+        float worst = best != null ? e.hp / e.maxHp : 0.7f;
+        float r = MEDIC_REACH;
+        int cx0 = Math.max(0, (int) ((e.x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((e.y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o == e || o.dead || o.removed || o.infected || o.ride != null || !o.isArmed()) continue;
+                    float share = o.hp / o.maxHp;
+                    if (share >= worst || World.hypot(o.x - e.x, o.y - e.y) > r) continue;
+                    worst = share;
+                    best = o;
+                }
+            }
+        return best;
+    }
+
     private void thinkArmed(Entity e, float dt) {
         boolean soldier = e.type == Entity.SOLDIER;
         float range = soldier ? (e.role == Entity.ROLE_SNIPER ? 380 : e.role == Entity.ROLE_COMMANDER ? 180
@@ -8005,6 +8076,8 @@ final class World {
             Entity z = nearestInReach(e);
             if (z != null) shove(e, z, true);
         }
+        // ((13.9) A combat medic with nothing to shoot at patches up the wounded nearby.)
+        if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
         // ((11.0) On foot to a call a long way off, with nothing to fight here: a car or truck to take them, if
         // there's one (with whoever else nearby is going there too).)
         if (e.task == Dispatch.T_RESPOND && e.incident != null && !e.incident.resolved && !e.onScene && e.rig == null
@@ -8062,6 +8135,7 @@ final class World {
             // ((10.60) A partner close by with plenty: a magazine off them first, rather than a long walk back.)
             // ((13.3) Whenever there's one about, not only when the station is a long way off.)
             Entity mate = lenderFor(e, 240);
+            Fleet.Vehicle truck = null;
             if (mate != null) {
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_BORROW;
@@ -8070,6 +8144,15 @@ final class World {
                 if (!e.outOfAmmoSaid) {
                     e.outOfAmmoSaid = true;
                     dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm dry! " + Dispatch.name(mate) + ", throw me a mag!", e.x, e.y);
+                }
+            } else if (soldier && ((truck = fleet.ammoTruckNear(e.x, e.y, TRUCK_REACH)) != null || (truck = fleet.ammoTruckComing(e.x, e.y, 600)) != null)) {
+                // ((13.9) An army truck with spare rounds near: there, not all the way back to the base.)
+                dispatch.releaseForResupply(e);
+                e.task = Dispatch.T_RESUPPLY;
+                e.supplyTruck = truck;
+                if (!e.outOfAmmoSaid) {
+                    e.outOfAmmoSaid = true;
+                    dispatch.chatter(Dispatch.WHO_MILITARY, e, "I'm dry! Back to the truck for rounds.", e.x, e.y);
                 }
             } else if (f != null) {
                 if (!e.outOfAmmoSaid) {
@@ -8102,11 +8185,17 @@ final class World {
             City.Facility f = restockPoint(e);
             // ((13.3) A partner right there with plenty: a magazine or two off them, and stay in the fight.)
             Entity mate = lenderFor(e, 120);
+            Fleet.Vehicle truck = soldier && mate == null && nearest(e, 70, true, false) == null ? fleet.ammoTruckNear(e.x, e.y, TRUCK_REACH) : null;
             if (mate != null) {
                 e.task = Dispatch.T_BORROW;
                 e.protector = mate;
                 e.taskTimer = 12;
                 dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. " + Dispatch.name(mate) + ", spare a mag?", e.x, e.y);
+            } else if (truck != null) {
+                dispatch.chatter(Dispatch.WHO_MILITARY, e, "Running low. Back to the truck for rounds.", e.x, e.y);
+                dispatch.releaseForResupply(e);
+                e.task = Dispatch.T_RESUPPLY;
+                e.supplyTruck = truck;
             } else if (f != null && World.hypot(f.x - e.x, f.y - e.y) < 1600 && nearest(e, 70, true, false) == null) {
                 dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. Heading back to " + f.name + " to restock.", e.x, e.y);
                 dispatch.releaseForResupply(e);
@@ -8152,6 +8241,49 @@ final class World {
         if (e.scout && dry) {
             scout(e, dt);
             return;
+        }
+        // ((13.9) On the way back to the base, and an army truck with rounds has pulled up near: to it instead.)
+        if (soldier && e.task == Dispatch.T_RESUPPLY && e.supplyTruck == null && (e.driveCd -= dt) <= 0) {
+            e.driveCd = 2;
+            e.supplyTruck = fleet.ammoTruckNear(e.x, e.y, TRUCK_REACH);
+        }
+        if (e.task == Dispatch.T_RESUPPLY && e.supplyTruck != null) {
+            Fleet.Vehicle v = e.supplyTruck;
+            boolean coming = v.ammoTruck && v.speed > 3 && v.state != Fleet.RETURN;
+            if (v.cargo <= 0 || v.broken || v.burnt || v.removedFromFleet || (v.speed > 3 && !coming)) {
+                // (Gone, or emptied before they got there: the base after all.)
+                e.supplyTruck = null;
+            } else if (coming) {
+                // (On its way: wait for it where it's going, out of the fight.)
+                float wx = v.tx - e.x, wy = v.ty - e.y;
+                e.aiming = false;
+                if (wx * wx + wy * wy > 60 * 60) walkToSpot(e, v.tx, v.ty, e.speed);
+                else steer(e, 0, 0, 0);
+                return;
+            } else {
+                float tx = v.x - e.x, ty = v.y - e.y, td = (float) Math.sqrt(tx * tx + ty * ty);
+                if (td < 18) {
+                    int take = Math.min(v.cargo, Math.max(0, fullReserve(e) - e.reserve));
+                    v.cargo -= take;
+                    e.reserve += take;
+                    int top = Math.min(e.magSize - e.ammo, e.reserve);
+                    e.ammo += top;
+                    e.reserve -= top;
+                    e.reload = 1.5f;
+                    e.task = Dispatch.T_NONE;
+                    e.supplyTruck = null;
+                    e.outOfAmmoSaid = false;
+                    return;
+                }
+                e.aiming = false;
+                Entity t = nearest(e, 24, true, false);
+                if (t != null) {
+                    float ax = e.x - t.x, ay = e.y - t.y, ad = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
+                    float fx = ax / ad + 0.8f * tx / (td + 0.001f), fy = ay / ad + 0.8f * ty / (td + 0.001f), fd = (float) Math.sqrt(fx * fx + fy * fy) + 0.001f;
+                    flee(e, fx / fd, fy / fd, e.runSpeed);
+                } else walkToSpot(e, v.x, v.y, e.runSpeed);
+                return;
+            }
         }
         if (e.task == Dispatch.T_RESUPPLY) {
             City.Facility f = restockPoint(e);
@@ -9481,6 +9613,47 @@ final class World {
     }
 
     // ------------------------------------------------------------------ the war: supplies, escalation
+
+    /** (13.9) How far soldiers go to a truck for rounds, and how far from the base a fight must be for an ammo truck. */
+    static final float TRUCK_REACH = 500, AMMO_TRUCK_FROM = 700;
+
+    /**
+     * (13.9) Ammo trucks: every ten seconds, a fight where two or more soldiers are running low, a long way from the
+     * base and with no army truck carrying rounds nearby, gets a truck from the base with a load of them, which waits
+     * there while the soldiers fill up.
+     */
+    private void fieldSupplies() {
+        if (!outbreak || ((int) time) % 10 != 0) return;
+        for (int i = 0; i < dispatch.incidents.size(); i++) {
+            Dispatch.Incident inc = dispatch.incidents.get(i);
+            if (inc.resolved || fleet.ammoTruckFor(inc)) continue;
+            // (Those there, or just set off for the base: a soldier out of rounds is let go from the call at once.)
+            int low = 0;
+            for (int k = 0, n = entities.size(); k < n && low < 2; k++) {
+                Entity e = entities.get(k);
+                if (e.dead || e.type != Entity.SOLDIER || e.ride != null || World.hypot(e.x - inc.x, e.y - inc.y) > 350) continue;
+                float stock = (e.ammo + e.reserve) / (float) Math.max(1, e.magSize + fullReserve(e));
+                if (stock < 0.35f) low++;
+            }
+            if (low < 2 || fleet.ammoTruckNear(inc.x, inc.y, TRUCK_REACH) != null) continue;
+            City.Facility f = city.nearestFacility(City.FACILITY_BASE, inc.x, inc.y);
+            if (f == null || f.fallen || f.ammo < Fleet.AMMO_KEEP + 400 || World.hypot(f.x - inc.x, f.y - inc.y) < AMMO_TRUCK_FROM
+                    || fleet.ammoTrucksOut() >= Fleet.AMMO_TRUCKS_OUT) continue;
+            Fleet.Vehicle v = fleet.sendAmmoTruck(f, inc);
+            if (v == null) continue;
+            dispatch.say(Dispatch.WHO_MILITARY, null, "Military: An ammo truck is leaving " + f.name + " for the squads at " + inc.place + ".", inc.x, inc.y);
+            // (Those low and near, or already setting off for the base, wait for it instead.)
+            for (int k = 0, n = entities.size(); k < n; k++) {
+                Entity e = entities.get(k);
+                if (e.dead || e.type != Entity.SOLDIER || e.ride != null || e.rig != null || World.hypot(e.x - inc.x, e.y - inc.y) > 600) continue;
+                float stock = (e.ammo + e.reserve) / (float) Math.max(1, e.magSize + fullReserve(e));
+                if (stock >= 0.35f || (e.task != Dispatch.T_RESUPPLY && e.task != Dispatch.T_NONE && e.task != Dispatch.T_RESPOND)) continue;
+                dispatch.releaseForResupply(e);
+                e.task = Dispatch.T_RESUPPLY;
+                e.supplyTruck = v;
+            }
+        }
+    }
 
     /** Supply trucks: the army keeps safe zones in ammunition, while its own armoury lasts. */
     private void supplies() {

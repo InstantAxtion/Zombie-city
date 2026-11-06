@@ -579,7 +579,8 @@ public final class GameTests {
                     if (e.role == Entity.ROLE_GRENADIER) gren++;
                     if (e.role == Entity.ROLE_MARKSMAN) marks++;
                 }
-                check(medic == 0 && gren > 0, "squads have grenadiers and (since 10.50) no combat medics (" + medic + ", " + gren + ")");
+                // ((13.9) Combat medics are back: gone from 10.50 to 13.8.)
+                check(medic > 0 && gren > 0, "squads have grenadiers and combat medics (" + medic + ", " + gren + ")");
                 check(marks > 0, "a police marksman at the precinct (" + marks + ")");
                 int bikes = 0;
                 for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_BIKE) bikes++;
@@ -2683,6 +2684,118 @@ public final class GameTests {
                 w.clearZombies();
                 w.update(1 / 30f);
                 check(w.hotSpots(8).isEmpty(), "nothing listed with no fighting");
+            }
+        });
+        test("13.9: squads have a combat medic again, who patches up the wounded but not the bitten", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 21;
+                c.normalize();
+                c.seed = 21;
+                World w = new World(c);
+                w.populate(c);
+                int medics = 0, soldiers = 0;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.type == Entity.SOLDIER) {
+                        soldiers++;
+                        if (e.role == Entity.ROLE_CORPSMAN) medics++;
+                    }
+                check(soldiers < 8 || medics * 8 >= soldiers, "about one soldier in four is a medic (" + medics + " of " + soldiers + ")");
+                java.util.Random r = new java.util.Random(4);
+                float[] q = w.city.randomWalkableInTown(r);
+                Entity medic = w.spawnSoldier(Entity.ROLE_CORPSMAN, q[0], q[1]);
+                float[] a = w.city.findWalkable(q[0] + 60, q[1]), b = w.city.findWalkable(q[0] - 60, q[1]);
+                Entity hurt = w.spawnSoldier(Entity.ROLE_RIFLE, a[0], a[1]);
+                Entity bitten = w.spawnSoldier(Entity.ROLE_RIFLE, b[0], b[1]);
+                hurt.hp = hurt.maxHp * 0.3f;
+                bitten.hp = bitten.maxHp * 0.2f;
+                bitten.infected = true;
+                bitten.infectTimer = 999;
+                for (Entity e : new Entity[]{medic, hurt, bitten}) {
+                    e.task = Dispatch.T_HOLD;
+                    e.postX = e.x;
+                    e.postY = e.y;
+                }
+                float before = hurt.hp;
+                for (int f = 0; f < 30 * 20; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(hurt.hp >= before + hurt.maxHp * 0.4f, "the wounded soldier patched up (" + (int) before + " to " + (int) hurt.hp + ")");
+                check(bitten.hp <= bitten.maxHp * 0.25f, "the bitten one left alone (" + (int) bitten.hp + ")");
+            }
+        });
+        test("13.9: soldiers low on rounds at a fight far from the base get an ammo truck, and fill up at it", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                City.Facility base = w.city.mainBase();
+                check(base != null, "a base");
+                // A call a long drive from the base, with three soldiers on it nearly out of rounds.
+                java.util.Random r = new java.util.Random(6);
+                float[] at = null;
+                for (int k = 0; k < 4000 && at == null; k++) {
+                    float[] q = w.city.randomWalkableInTown(r);
+                    float[] road = w.city.nearestDrivable(q[0], q[1]);
+                    if (road != null && Math.hypot(q[0] - base.x, q[1] - base.y) > 1200 && w.fleet.canDrive(base.x, base.y, road[0], road[1])) at = q;
+                }
+                check(at != null, "a call a long way off");
+                Dispatch.Incident inc = new Dispatch.Incident();
+                inc.x = at[0];
+                inc.y = at[1];
+                inc.place = "the test";
+                inc.zombiesNear = 3;
+                w.dispatch.incidents.add(inc);
+                java.util.List<Entity> squad = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 3; k++) {
+                    float[] p = w.city.findWalkable(at[0] + k * 8, at[1]);
+                    Entity e = w.spawnSoldier(Entity.ROLE_RIFLE, p[0], p[1]);
+                    e.task = Dispatch.T_RESPOND;
+                    e.incident = inc;
+                    e.onScene = true;
+                    e.ammo = 0;
+                    e.reserve = 0;
+                    squad.add(e);
+                }
+                inc.soldiers = 3;
+                // (A few of the dead far off, so the outbreak isn't over.)
+                float[] farSpot = null;
+                for (int k = 0; k < 4000 && farSpot == null; k++) {
+                    float[] q = w.city.randomWalkable(r);
+                    if (Math.hypot(q[0] - at[0], q[1] - at[1]) > 1500 && Math.hypot(q[0] - base.x, q[1] - base.y) > 1500) farSpot = q;
+                }
+                check(farSpot != null, "somewhere far off for a few of the dead");
+                int baseAmmo = base.ammo;
+                Fleet.Vehicle truck = null;
+                boolean filled = false;
+                for (int f = 0; f < 30 * 240 && !filled; f++) {
+                    inc.resolved = false;
+                    inc.age = 0;
+                    // (A call with none of the dead at it is closed: this one stays open, as a real fight would.)
+                    if (!w.dispatch.incidents.contains(inc)) w.dispatch.incidents.add(inc);
+                    // (Kept going: police shoot the dead, and the outbreak would be over.)
+                    if (f % 30 == 0 && w.zombies < 2) w.spawn(Entity.ZOMBIE, farSpot[0], farSpot[1]);
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    for (Fleet.Vehicle v : w.fleet.vehicles) if (v.ammoTruck) truck = v;
+                    int full = 0;
+                    for (Entity e : squad) if (!e.dead && e.ammo + e.reserve > 60) full++;
+                    filled = full >= 2;
+                }
+                check(truck != null, "an ammo truck sent out from the base");
+                check(truck == null || base.ammo < baseAmmo, "loaded from the base's armoury");
+                int nearTruck = 0;
+                for (Entity e : squad) if (truck != null && !e.dead && Math.hypot(e.x - truck.x, e.y - truck.y) < 60) nearTruck++;
+                check(filled && nearTruck >= 1, "the soldiers filled up at the truck, not the base (" + filled + ", " + nearTruck + " by it)");
             }
         });
         test("every screen draws", new Check() {

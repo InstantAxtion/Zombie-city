@@ -137,6 +137,11 @@ final class Entity {
     float surge, surgeCd;
     /** (11.0) Seconds until an officer or soldier walking to a far call next looks for a ride (see World.thinkArmed). */
     transient float driveCd;
+    /** ((13.9) A combat medic: who they're on their way to patch up, how long they've been at it, and the wait till they look again.) */
+    transient Entity patient;
+    transient float treatT, medicCd;
+    /** ((13.9) The army truck with spare rounds they're on their way to, instead of the base.) */
+    transient Fleet.Vehicle supplyTruck;
     /** (11.0) Signed up as a reserve pilot; and the helicopter they've been called up to fly. */
     transient boolean pilotReserve;
     transient Fleet.Vehicle pilotFor;

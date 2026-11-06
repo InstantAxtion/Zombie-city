@@ -270,6 +270,12 @@ final class Fleet {
         Entity guard;
         /** A supply truck: rounds of ammunition it's carrying to a safe zone. */
         int supply;
+        /**
+         * ((13.9) An ammo truck: the rounds it's carrying for soldiers at a fight, who fill up from it there instead
+         * of going back to the base.)
+         */
+        int cargo;
+        boolean ammoTruck;
         /** A supply truck from outside, once it's over (10.19): restocking this store or armoury, then off the map. */
         boolean restock;
         City.Building restockShop;
@@ -314,7 +320,7 @@ final class Fleet {
                 if (v.kind == K_HUMVEE) return (v.guardUnit ? Country.guard()[1] + " " : "") + "Humvee" + (v.loop ? "  -  base patrol" : "");
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
                 if (v.kind == K_BEARCAT) return "Police BearCat";
-                return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : "Army truck";
+                return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : v.ammoTruck ? "Army ammo truck  -  " + v.cargo + " rounds" : "Army truck";
             case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
             case TANK: return "Tank";
             case AMBULANCE: return "Ambulance";
@@ -1471,6 +1477,74 @@ final class Fleet {
         e.rig = v;
         v.crew.add(e);
         vehicles.add(v);
+        return v;
+    }
+
+    /**
+     * (13.9) The rounds an ammo truck takes out to a fight, from the base's armoury (enough to fill up four soldiers),
+     * how many may be out at once, and what the base keeps back for itself.
+     */
+    static final int AMMO_TRUCK_CARGO = 800, AMMO_TRUCKS_OUT = 2, AMMO_KEEP = 2000;
+
+    /** (13.9) Ammo trucks out now (not on their way home). */
+    int ammoTrucksOut() {
+        int n = 0;
+        for (int i = 0, m = vehicles.size(); i < m; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.ammoTruck && v.cargo > 0 && !v.broken && v.state != RETURN) n++;
+        }
+        return n;
+    }
+
+    /**
+     * (13.9) An army truck standing by with spare rounds within reach of (x, y): stopped, not wrecked, not a supply
+     * run to a safe zone. The nearest, or null.
+     */
+    Vehicle ammoTruckNear(float x, float y, float reach) {
+        Vehicle best = null;
+        float bd = reach;
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.type != TRUCK || v.cargo <= 0 || v.broken || v.burnt || v.removedFromFleet || v.speed > 3 || v.supply > 0) continue;
+            float d = (float) World.hypot(v.x - x, v.y - y);
+            if (d < bd) {
+                bd = d;
+                best = v;
+            }
+        }
+        return best;
+    }
+
+    /** (13.9) An ammo truck already on its way to this call. */
+    boolean ammoTruckFor(Dispatch.Incident inc) {
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.ammoTruck && v.incident == inc && !v.broken && v.cargo > 0) return true;
+        }
+        return false;
+    }
+
+    /** (13.9) An ammo truck on its way to a fight within reach of (x, y), to wait for; or null. */
+    Vehicle ammoTruckComing(float x, float y, float reach) {
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.ammoTruck && v.cargo > 0 && !v.broken && !v.removedFromFleet && v.state != RETURN && World.hypot(v.tx - x, v.ty - y) < reach) return v;
+        }
+        return null;
+    }
+
+    /** (13.9) An army truck from the base with a load of ammunition for the soldiers at a fight, which waits there. */
+    Vehicle sendAmmoTruck(City.Facility from, Dispatch.Incident inc) {
+        int take = Math.min(AMMO_TRUCK_CARGO, from.ammo - AMMO_KEEP);
+        if (take <= 0) return null;
+        int before = vehicles.size();
+        if (!send(Entity.SOLDIER, 0, from.x, from.y, inc.x, inc.y, inc, null, inc.place) || vehicles.size() == before) return null;
+        Vehicle v = vehicles.get(vehicles.size() - 1);
+        v.ammoTruck = true;
+        from.ammo -= take;
+        v.cargo = take;
+        v.incident = inc;
+        v.passengerType = Entity.SOLDIER;
         return v;
     }
 
@@ -3364,7 +3438,8 @@ final class Fleet {
             v.speed = Math.max(0, v.speed - dt * 200);
             v.timer -= dt;
             v.quiet = w.countZombiesNear(v.x, v.y, 200) > 0 ? 0 : v.quiet + dt;
-            if (v.timer <= 0 || v.quiet > 20) {
+            // ((13.9) An ammo truck goes once it's handed everything out.)
+            if (v.timer <= 0 || v.quiet > 20 || (v.ammoTruck && v.cargo <= 0)) {
                 v.state = RETURN;
                 v.speed = 0;
                 v.standby = false;
@@ -3624,7 +3699,7 @@ final class Fleet {
                 // when they're sent on to the next fight, they climb back in (Fleet.mountUp) instead of walking.)
                 if (v.type == TRUCK && v.supply == 0 && v.passengerType == Entity.SOLDIER && v.incident != null && city.inTown(v.x, v.y)) {
                     v.state = SCENE;
-                    v.timer = 150;
+                    v.timer = v.ammoTruck ? 300 : 150;
                     v.quiet = -40;
                     v.speed = 0;
                     v.standby = true;
@@ -3642,6 +3717,12 @@ final class Fleet {
                 v.state = RETURN;
                 v.speed = 0;
                 return !route(v, v.homeX, v.homeY);
+            }
+            // ((13.9) Rounds it didn't hand out go back in the armoury.)
+            if (v.state == RETURN && v.type == TRUCK && v.cargo > 0 && World.hypot(v.x - v.homeX, v.y - v.homeY) < 200) {
+                City.Facility f = city.nearestFacility(City.FACILITY_BASE, v.x, v.y);
+                if (f != null) f.ammo += v.cargo;
+                v.cargo = 0;
             }
             // An army truck back at base parks in its bay again.
             if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !w.peopleNear(v.homeX, v.homeY, 14)

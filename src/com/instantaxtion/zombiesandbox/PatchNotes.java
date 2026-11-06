@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.8";
-    static final int VERSION_CODE = 128;
+    static final String VERSION = "13.9";
+    static final int VERSION_CODE = 129;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.9  -  Combat medics and ammo trucks",
+                    "Combat medics are back in the army's squads (the third soldier of each, with the red cross armband and the bag on their back). With none of the dead close, a medic runs to the most badly hurt police officer or soldier nearby (or patches themselves up) and a few seconds kneeling over them puts half their strength back. A bite can't be treated: the infected are passed over. You can place one from the Military picker too.",
+                    "Ammo trucks: when two or more soldiers are running low at a fight a long way from the base, the base sends a truck out with 800 rounds. Soldiers there wait for it instead of walking all the way back, then fill up at it; once it's empty it goes home, and what it didn't hand out goes back in the armoury. At most two are out at once, and the base always keeps 2,000 rounds back.",
+                    "A soldier on the way back to the base for rounds goes to an ammo truck instead if one has pulled up within reach.",
+            },
             {
                     "13.8  -  A quieter radio, hot spots, the dead in helmets",
                     "Far less radio chatter: routine talk between units (en route, on scene, mounted up, a spare magazine, falling back, kill counts, a call closed with nothing found) no longer goes out on the radio. You still see them talk. On the test machine a 10-minute outbreak went from about 5,500 messages to a few hundred, so the calls that matter (911, officers down, requests for help, the news) aren't buried, and the Radio Log keeps minutes of them, not seconds.",
