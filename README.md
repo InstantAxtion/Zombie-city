@@ -419,6 +419,11 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Soldiers ride (13.7):** a truck waiting for its squad waits while they're on their way (up to a minute and a half)
+instead of giving up after 45 seconds and leaving them to walk, sets off once everyone still coming is aboard, and no
+longer leaves one of them a few steps behind. Trucks giving up on a squad still on its way went from about one in thirteen
+to about one in a hundred across four test cities; police cars waiting for officers work the same way.
+
 **Performance: routes and hitches (13.6):** about a third less work each step in an outbreak (18 to 12 ms a step on
 a Colossal city, 13 to 8.5 on a Large one, on the test machine), and the slowest steps about half as long. Long walks
 to a place many people are heading for (the outbreak, a safe zone, a cordon) reuse one search kept from that place

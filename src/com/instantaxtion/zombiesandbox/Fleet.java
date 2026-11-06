@@ -213,6 +213,10 @@ final class Fleet {
         /** The station it belongs to (fire engines and patrol cars), and how many it waits to take aboard. */
         City.Facility station;
         int crewWanted, crewSpawns;
+        /** ((13.7) While mustering: how many of those it's waiting for are still on their way to it, counted each second.) */
+        transient int coming = -1;
+        /** ((13.7) And how far off the nearest of them is.) */
+        transient float comingNear;
         /** (11.1) Which lane it keeps to on a road with more than one each way (0 the inside one). */
         int lane;
         /** (11.0) A reserve pilot on their way to fly it. */
@@ -3371,16 +3375,26 @@ final class Fleet {
         if (v.state == MUSTER) {
             // A troop truck at the gate, waiting for its squad to climb aboard.
             v.speed = 0;
+            float was = v.timer;
             v.timer += dt;
+            // ((13.7) Who's still on the way, once a second: a squad sent to a truck a few streets off takes most of a
+            // minute to run there, and the truck gave up after 45 seconds and left them to walk the whole way.)
+            if (v.coming < 0 || (int) v.timer != (int) was) v.coming = comingTo(v);
             // (10.34: quicker off the mark: most of the squad aboard after a few seconds will do.)
             // ((13.3) Longer for the rest: it used to go with two thirds aboard after six seconds, and leave the others
             // behind to walk.)
-            boolean ready = v.crew.size() >= v.crewWanted || (v.timer > 15 && v.crew.size() * 3 >= v.crewWanted * 2)
-                    || (v.timer > 25 && !v.crew.isEmpty());
+            // ((13.7) Off as soon as everyone still coming is aboard; the stragglers left behind only once the wait is long
+            // and most are in.)
+            // (Never with one of them almost there.)
+            boolean straggling = v.coming == 0 || v.comingNear > 120;
+            boolean ready = v.crew.size() >= v.crewWanted || (!v.crew.isEmpty() && v.coming == 0)
+                    || (straggling && v.timer > 30 && v.crew.size() * 3 >= v.crewWanted * 2) || (straggling && v.timer > 60 && !v.crew.isEmpty())
+                    || (v.timer > 90 && !v.crew.isEmpty());
             if (!ready) {
                 // ((10.52) A car taking outside help home waits longer: the station it came from can be a walk away,
                 // and giving up only sent another, and another.)
-                if (v.timer > (v.leaving ? 90 : 45)) {
+                // ((13.7) Any truck or car waits as long while its people are on their way, and not at all once nobody is.)
+                if (v.timer > 90 || (v.timer > 3 && v.coming == 0)) {
                     dropCrew(v);
                     // ((12.3) An army truck nobody came for goes back in its bay, or stays parked where it is: it
                     // vanished before, and a base soon had none left to send anyone anywhere.)
@@ -5867,6 +5881,21 @@ final class Fleet {
             else if (v.patrol && v.incident == inc && v.state == MUSTER) n += Math.max(v.crew.size(), v.crewWanted);
             else if (v.pickupFor == inc && v.passengerType == Entity.COP) n += v.squad.size();
         }
+        return n;
+    }
+
+    /** (13.7) How many tied to this vehicle are still alive and on their way to climb in (and the nearest's distance). */
+    private int comingTo(Vehicle v) {
+        int n = 0;
+        float near = Float.MAX_VALUE;
+        for (int i = 0, m = w.entities.size(); i < m; i++) {
+            Entity e = w.entities.get(i);
+            if (e.rig == v && !e.dead && e.task == Dispatch.T_BOARD) {
+                n++;
+                near = Math.min(near, (float) World.hypot(e.x - v.x, e.y - v.y));
+            }
+        }
+        v.comingNear = near;
         return n;
     }
 

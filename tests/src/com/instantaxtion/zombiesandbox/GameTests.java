@@ -2564,6 +2564,72 @@ public final class GameTests {
                 check(compared > 100 && same * 2 > compared, "compared enough (" + compared + ", " + same + " the very same)");
             }
         });
+        test("13.7: a truck waits for its squad to run to it from a long way off, and leaves once they're all aboard", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                w.clearZombies();
+                City.Facility base = w.city.mainBase();
+                check(base != null, "the city has a base");
+                java.util.List<Entity> squad = new java.util.ArrayList<Entity>();
+                for (Entity e : w.entities)
+                    if (squad.size() < 4 && !e.dead && e.type == Entity.SOLDIER && e.rig == null && Math.hypot(e.x - base.x, e.y - base.y) < base.r + 200) squad.add(e);
+                check(squad.size() == 4, "four soldiers at the base");
+                // Somewhere a long run from the base (most of a minute and a half on foot), and a call the other way.
+                java.util.Random r = new java.util.Random(3);
+                float[] spot = null, call = null;
+                for (int k = 0; k < 4000 && (spot == null || call == null); k++) {
+                    float an = r.nextFloat() * 6.283f;
+                    float[] p = w.city.findWalkable(base.x + (float) Math.cos(an) * 1500, base.y + (float) Math.sin(an) * 1500);
+                    if (spot == null) {
+                        if (p != null && Math.hypot(p[0] - base.x, p[1] - base.y) > 1350 && w.city.findPath(p[0], p[1], base.x, base.y, 9000) != null) spot = p;
+                        continue;
+                    }
+                    float[] q = w.city.nearestDrivable(base.x - (float) Math.cos(an) * 1500, base.y - (float) Math.sin(an) * 1500);
+                    if (q != null && Math.hypot(q[0] - base.x, q[1] - base.y) > 1200 && w.fleet.canDrive(base.x, base.y, q[0], q[1])) call = q;
+                }
+                check(spot != null && call != null, "a spot a long run off, and a call");
+                for (int i = 0; i < squad.size(); i++) {
+                    Entity e = squad.get(i);
+                    e.task = Dispatch.T_NONE;
+                    e.x = spot[0] + (i % 2) * 6;
+                    e.y = spot[1] + (i / 2) * 6;
+                    e.path = null;
+                }
+                Dispatch.Incident inc = new Dispatch.Incident();
+                inc.x = call[0];
+                inc.y = call[1];
+                inc.place = "the test";
+                inc.zombiesNear = 1;
+                w.dispatch.incidents.add(inc);
+                int before = w.fleet.vehicles.size();
+                check(w.fleet.troopTruck(squad, base, inc), "a truck for them from the base");
+                Fleet.Vehicle truck = null;
+                for (int i = before; i < w.fleet.vehicles.size(); i++) if (w.fleet.vehicles.get(i).state == Fleet.MUSTER) truck = w.fleet.vehicles.get(i);
+                check(truck != null, "the truck waits at the base");
+                boolean left = false;
+                float waited = 0;
+                for (int f = 0; f < 30 * 120 && !left; f++) {
+                    inc.resolved = false;
+                    inc.age = 0;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    waited += 1 / 30f;
+                    left = truck.state != Fleet.MUSTER;
+                }
+                String how = "";
+                for (Entity e : squad) how += " [task " + e.task + (e.rig == truck ? " this truck" : e.rig == null ? " no truck" : " another") + ", " + (int) Math.hypot(e.x - truck.x, e.y - truck.y) + " off]";
+                check(left && waited > 45, "it waited for them (" + (int) waited + " s, state " + truck.state + ", crew " + truck.crew.size() + how + ")");
+                check(truck.crew.size() == 4, "all four aboard when it left (" + truck.crew.size() + how + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

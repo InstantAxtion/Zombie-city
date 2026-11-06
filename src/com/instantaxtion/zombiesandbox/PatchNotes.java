@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.6";
-    static final int VERSION_CODE = 126;
+    static final String VERSION = "13.7";
+    static final int VERSION_CODE = 127;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.7  -  Soldiers ride",
+                    "A truck waiting for a squad to climb in waits as long as they're on their way (up to a minute and a half), not 45 seconds: a squad sent to a truck a few streets off often hadn't got there yet, and the truck gave up and left them to walk the whole way. Across four test cities in an outbreak, about one truck in thirteen gave up like that (one in five on the worst); now about one in a hundred, when a squad is stuck.",
+                    "It sets off as soon as everyone still coming is aboard, and no longer drives off with one of the squad a few steps away: it only leaves stragglers behind when they're well back (and most are in), instead of leaving the moment two thirds were aboard.",
+                    "Police cars waiting for their officers wait the same way.",
+            },
             {
                     "13.6  -  Performance: routes and hitches",
                     "About a third less work each step in an outbreak, and far fewer hitches (on the test machine: 18 to 12 ms a step on a Colossal city, 13 to 8.5 on a Large one; the slowest steps about half as long).",
