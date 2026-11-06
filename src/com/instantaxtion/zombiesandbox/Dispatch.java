@@ -409,7 +409,56 @@ final class Dispatch {
         if (callouts.size() > 30) callouts.remove(0);
     }
 
+    /**
+     * ((13.8) Routine talk between units - en route, on scene, mounted up, a spare magazine, falling back: the speaker
+     * is seen to talk, but it doesn't go out on the radio. It was most of what was said: well over a thousand lines
+     * a minute in a big outbreak, burying the calls that mattered and filling the Radio Log in seconds.)
+     */
+    void chatter(int who, Entity speaker, String text, float x, float y) {
+        if (speaker != null) speaker.talkTimer = 2.5f;
+    }
+
+    /** ((13.8) When each kind of message last went out, so the same news isn't repeated within REPEAT seconds.) */
+    private final java.util.HashMap<String, Float> lastSaid = new java.util.HashMap<String, Float>();
+    static final float REPEAT = 15;
+
+    /**
+     * The kind of a message, for telling repeats: who it's from and what it says with the names (any word with a
+     * capital) and numbers left out, so a stampede on one street and then another are the same news.
+     */
+    static String kindOf(int who, String text) {
+        StringBuilder k = new StringBuilder(text.length() + 4).append(who).append(':');
+        boolean start = true, skipping = false;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            boolean letter = Character.isLetter(ch) || ch == '\'' || ch == '-';
+            if (start && Character.isUpperCase(ch)) {
+                k.append('X');
+                skipping = true;
+            } else if (skipping && letter) {
+                // (The rest of the name.)
+            } else if (ch >= '0' && ch <= '9') {
+                skipping = false;
+            } else {
+                skipping = false;
+                k.append(ch);
+            }
+            start = !letter && !(ch >= '0' && ch <= '9');
+        }
+        return k.toString();
+    }
+
     void say(int who, Entity speaker, String text, float x, float y) {
+        // ((13.8) The same kind of news again within a few seconds (a second "People are turning into monsters", a
+        // third officer down in the same fight) is left out: it's on the map already.)
+        String kind = kindOf(who, text);
+        Float last = lastSaid.get(kind);
+        if (last != null && w.time - last < REPEAT && w.time >= last) {
+            if (speaker != null) speaker.talkTimer = 2.5f;
+            return;
+        }
+        if (lastSaid.size() > 400) lastSaid.clear();
+        lastSaid.put(kind, w.time);
         String label = who == WHO_911 ? "911" : who == WHO_POLICE ? "Police" : who == WHO_MILITARY ? "Military" : "Info";
         if (speaker != null) {
             label = name(speaker);
@@ -821,14 +870,14 @@ final class Dispatch {
         }
         target.militaryRequested = true;
         if (w.fleet.mountUp(pick, target)) {
-            say(WHO_MILITARY, lead, squadName + " squad, mounting up. Driving to " + target.place + " to support the police.", target.x, target.y);
+            chatter(WHO_MILITARY, lead, squadName + " squad, mounting up. Driving to " + target.place + " to support the police.", target.x, target.y);
             return;
         }
         // ((11.0) A truck near them, or one from the base to pick them up, rather than a long walk.)
         if (bd > 600 * 600 && w.fleet.driveTo(pick, target)) {
             if (w.time > driveSaidAt) {
                 driveSaidAt = w.time + 20;
-                say(WHO_MILITARY, lead, squadName + " squad, a truck's picking us up for " + target.place + ".", target.x, target.y);
+                chatter(WHO_MILITARY, lead, squadName + " squad, a truck's picking us up for " + target.place + ".", target.x, target.y);
             }
             return;
         }
@@ -838,7 +887,7 @@ final class Dispatch {
             e.onScene = false;
             target.soldiers++;
         }
-        say(WHO_MILITARY, lead, squadName + " squad moving to " + target.place + " to support the police.", target.x, target.y);
+        chatter(WHO_MILITARY, lead, squadName + " squad moving to " + target.place + " to support the police.", target.x, target.y);
     }
 
     private void census() {
@@ -906,7 +955,7 @@ final class Dispatch {
             e.postY = q != null ? q[1] : p[1];
         }
         Entity lead = units.get(0);
-        say(lead.type == Entity.SOLDIER ? WHO_MILITARY : WHO_POLICE, lead, "Copy, moving to " + city.placeName(p[0], p[1])
+        chatter(lead.type == Entity.SOLDIER ? WHO_MILITARY : WHO_POLICE, lead, "Copy, moving to " + city.placeName(p[0], p[1])
                 + (units.size() > 1 ? " with " + (units.size() - 1) + " more." : "."), lead.x, lead.y);
     }
 
@@ -1352,13 +1401,13 @@ final class Dispatch {
         }
         for (int i = 0; i < moving.size(); i++) if (moving.get(i).incident == inc) release(moving.get(i));
         if (speaker != null && next != null) {
-            say(speaker.type == Entity.COP ? WHO_POLICE : WHO_MILITARY, speaker,
+            chatter(speaker.type == Entity.COP ? WHO_POLICE : WHO_MILITARY, speaker,
                     inc.place + " is clear. Moving on to " + next.place + ".", inc.x, inc.y);
         } else if (speaker != null && inc.onScene) {
-            say(speaker.type == Entity.COP ? WHO_POLICE : WHO_MILITARY, speaker,
+            chatter(speaker.type == Entity.COP ? WHO_POLICE : WHO_MILITARY, speaker,
                     inc.place + " is clear. Returning to patrol.", inc.x, inc.y);
         } else {
-            say(WHO_POLICE, null, "Dispatch: No sign of hostiles at " + inc.place + ". Closing the call.", inc.x, inc.y);
+            chatter(WHO_POLICE, null, "Dispatch: No sign of hostiles at " + inc.place + ". Closing the call.", inc.x, inc.y);
         }
     }
 
@@ -1579,10 +1628,10 @@ final class Dispatch {
         }
         if (type == Entity.COP) {
             int reported = Math.max(1, Math.max(inc.reported, inc.zombiesNear));
-            say(WHO_POLICE, null, "Dispatch: " + names + ", respond to " + inc.place + ". " + reported
+            chatter(WHO_POLICE, null, "Dispatch: " + names + ", respond to " + inc.place + ". " + reported
                     + " hostile" + (reported == 1 ? "" : "s") + " reported.", inc.x, inc.y);
             Entity first = units.get(0);
-            say(WHO_POLICE, first, "10-4, en route.", first.x, first.y);
+            chatter(WHO_POLICE, first, "10-4, en route.", first.x, first.y);
         }
         int got = units.size();
         units.clear();
@@ -1594,7 +1643,7 @@ final class Dispatch {
         inc.onScene = true;
         String text = inc.zombiesNear > 0 ? "On scene at " + inc.place + ". Engaging " + inc.zombiesNear + " hostile"
                 + (inc.zombiesNear == 1 ? "" : "s") + "." : "On scene at " + inc.place + ". Searching the area.";
-        say(e.type == Entity.COP ? WHO_POLICE : WHO_MILITARY, e, text, inc.x, inc.y);
+        chatter(e.type == Entity.COP ? WHO_POLICE : WHO_MILITARY, e, text, inc.x, inc.y);
     }
 
     void onDeath(Entity e) {
@@ -1639,7 +1688,7 @@ final class Dispatch {
         if (!squad.isEmpty() && zone == null && (w.fleet.mountUp(squad, inc)
                 || (World.hypot(squad.get(0).x - x, squad.get(0).y - y) > 600 && w.fleet.driveTo(squad, inc)))) {
             Entity lead = squad.get(0);
-            say(WHO_MILITARY, lead, "Copy that, Police. " + SQUADS[Math.max(0, lead.squad) % SQUADS.length]
+            chatter(WHO_MILITARY, lead, "Copy that, Police. " + SQUADS[Math.max(0, lead.squad) % SQUADS.length]
                     + " squad mounting up, on our way to " + place + ".", lead.x, lead.y);
             squad.clear();
         } else if (!squad.isEmpty()) {
@@ -1653,7 +1702,7 @@ final class Dispatch {
                     e.incident = inc;
                 }
             }
-            say(WHO_MILITARY, lead, "Copy that, Police. " + SQUADS[Math.max(0, lead.squad) % SQUADS.length]
+            chatter(WHO_MILITARY, lead, "Copy that, Police. " + SQUADS[Math.max(0, lead.squad) % SQUADS.length]
                     + " squad moving to " + place + ".", lead.x, lead.y);
             squad.clear();
         } else if (!sendReserveSquad(x, y, place, inc, zone)) {
@@ -2070,7 +2119,7 @@ final class Dispatch {
                 ArrayList<Entity> squad = nearestFree(Entity.SOLDIER, e.x, e.y, Math.min(4, want - have), 1500);
                 int n = squad.size();
                 if (n > 0 && w.fleet.mountUp(squad, inc)) {
-                    say(WHO_MILITARY, null, "Military: " + n + " mounting up to support at " + inc.place + ".", inc.x, inc.y);
+                    chatter(WHO_MILITARY, null, "Military: " + n + " mounting up to support at " + inc.place + ".", inc.x, inc.y);
                     squad.clear();
                     return;
                 }

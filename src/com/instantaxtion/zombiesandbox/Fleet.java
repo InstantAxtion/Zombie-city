@@ -3439,7 +3439,7 @@ final class Fleet {
             }
             v.state = DRIVE;
             v.stuckTimer = 0;
-            w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. Rolling out to "
+            w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. Rolling out to "
                     + inc.place + ".", v.x, v.y);
             return false;
         }
@@ -3606,7 +3606,7 @@ final class Fleet {
                 }
                 v.squad.addAll(out);
                 if (!out.isEmpty() && v.place != null)
-                    w.dispatch.say(Dispatch.WHO_MILITARY, out.get(0), "On the ground at " + v.place + ". Moving in.", v.x, v.y);
+                    w.dispatch.chatter(Dispatch.WHO_MILITARY, out.get(0), "On the ground at " + v.place + ". Moving in.", v.x, v.y);
             }
             if (v.state == DRIVE) {
                 unload(v, true);
@@ -3784,7 +3784,7 @@ final class Fleet {
         v.stuckTimer = 0;
         v.place = city.placeName(spot[0], spot[1]);
         if (v.squad.size() > 0)
-            w.dispatch.say(v.passengerType == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, v.squad.get(0),
+            w.dispatch.chatter(v.passengerType == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, v.squad.get(0),
                     (v.type == TRUCK ? "Truck" : "Car") + " coming out to " + v.place + " to pick us up.", v.x, v.y);
         return false;
     }
@@ -3829,7 +3829,7 @@ final class Fleet {
                 v.place = to.place;
                 v.state = DRIVE;
                 v.stuckTimer = 0;
-                w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. On our way to " + to.place + ".", v.x, v.y);
+                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. On our way to " + to.place + ".", v.x, v.y);
                 return false;
             }
         }
@@ -4688,7 +4688,7 @@ final class Fleet {
         if (first == null) return;
         int who = v.passengerType == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE;
         if (announce && v.place != null)
-            w.dispatch.say(who, first, "On the ground at " + v.place + ". Moving in.", v.x, v.y);
+            w.dispatch.chatter(who, first, "On the ground at " + v.place + ". Moving in.", v.x, v.y);
         else if (!announce)
             w.dispatch.say(who, first, (v.type == TRUCK ? "Our truck is wrecked" : "Our car is wrecked")
                     + " on " + city.placeName(v.x, v.y) + ". Continuing on foot.", v.x, v.y);
@@ -4868,7 +4868,7 @@ final class Fleet {
                 e.rig = v;
                 e.task = Dispatch.T_BOARD;
             }
-            w.dispatch.say(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, first, (v.type == CRUISER ? "Taking this car" : "Taking this truck")
+            w.dispatch.chatter(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, first, (v.type == CRUISER ? "Taking this car" : "Taking this truck")
                     + " on " + city.placeName(v.x, v.y) + (group.size() > 1 ? ", picking up " + (group.size() - 1) + " more." : "."), v.x, v.y);
         }
     }
@@ -5381,7 +5381,7 @@ final class Fleet {
             v.incident = inc;
             if (respond(v, inc)) {
                 v.place = inc.place;
-                w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", shots fired at " + inc.place + ". Responding.", tx, ty);
+                w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", shots fired at " + inc.place + ". Responding.", tx, ty);
             } else v.incident = null;
         }
     }
@@ -5406,8 +5406,8 @@ final class Fleet {
         v.incident = inc;
         v.stuckTimer = 0;
         w.emit(Sfx.SIREN, v.x, v.y);
-        w.dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: " + callsign(v) + ", respond to " + inc.place + ".", inc.x, inc.y);
-        if (!v.crew.isEmpty()) w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
+        w.dispatch.chatter(Dispatch.WHO_POLICE, null, "Dispatch: " + callsign(v) + ", respond to " + inc.place + ".", inc.x, inc.y);
+        if (!v.crew.isEmpty()) w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
         return true;
     }
 
@@ -6046,7 +6046,7 @@ final class Fleet {
                 }
             } else if (v.soundCd <= 0 && !out.isEmpty()) {
                 v.soundCd = 4;
-                w.dispatch.say(Dispatch.WHO_POLICE, out.get(0), callsign(v) + ", contact on "
+                w.dispatch.chatter(Dispatch.WHO_POLICE, out.get(0), callsign(v) + ", contact on "
                         + city.placeName(v.x, v.y) + ". We're out of the car.", v.x, v.y);
             }
             return false;
@@ -6140,7 +6140,7 @@ final class Fleet {
         v.onward = null;
         v.ammoRun = f;
         v.stuckTimer = 0;
-        w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", we're nearly out of rounds. Heading to " + f.name + " to restock.", v.x, v.y);
+        w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", we're nearly out of rounds. Heading to " + f.name + " to restock.", v.x, v.y);
         return true;
     }
 
@@ -6345,7 +6345,7 @@ final class Fleet {
                 boolean lift = v.passengers > 0 && h != null;
                 v.homeX = lift ? h.x : v.baseX;
                 v.homeY = lift ? h.y : v.baseY;
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Team's on the ground. "
+                w.dispatch.chatter(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Team's on the ground. "
                         + (lift ? "Got the lookout off the tower, taking them to the hospital, then back to base." : "Heading back to base.")
                         + " Call us when you need us.", v.x, v.y);
             } else if (step == 2) {

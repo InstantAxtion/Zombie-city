@@ -419,6 +419,11 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**A quieter radio, hot spots, the dead in helmets (13.8):** routine talk between units (en route, on scene, mounted up,
+a spare magazine, kill counts) is no longer on the radio, and the same news within 15 seconds goes out once: a 10-minute
+outbreak went from about 5,500 radio messages to a few hundred. A **Hot spots** list (the red button on the minimap's corner)
+shows the busiest fights, the most of the dead first; tap one to go there. The armoured dead wear their helmets.
+
 **Soldiers ride (13.7):** a truck waiting for its squad waits while they're on their way (up to a minute and a half)
 instead of giving up after 45 seconds and leaving them to walk, sets off once everyone still coming is aboard, and no
 longer leaves one of them a few steps behind. Trucks giving up on a squad still on its way went from about one in thirteen
@@ -840,7 +845,7 @@ a Guard Headquarters (the National Guard comes sooner).
   map: people in blue, the dead in green, and a red mark wherever someone turned. Drag the timeline to
   scrub. Saved games keep their replay.
 - Tap anyone with **Move** to follow them and see who they are. The **minimap** (the part of the city round you, on the
-  bigger maps) jumps the camera; the button in its corner opens the **tactical map**. Take a **screenshot** from the pause menu.
+  bigger maps) jumps the camera; the button in its corner opens the **tactical map**. The red button on its other corner opens **Hot spots**: the busiest fights right now, the worst first (tap one to go there). Take a **screenshot** from the pause menu.
 - Zoom right in and roofs turn see-through, so you can see who is hiding inside.
 
 A person killed by a zombie gets up again as a zombie a few seconds later. Bites can also infect: an

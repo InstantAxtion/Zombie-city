@@ -2630,6 +2630,61 @@ public final class GameTests {
                 check(truck.crew.size() == 4, "all four aboard when it left (" + truck.crew.size() + how + ")");
             }
         });
+        test("13.8: routine talk stays off the radio, the same news isn't repeated, and the hot spots list the worst fights first", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 12;
+                c.normalize();
+                c.seed = 12;
+                World w = new World(c);
+                w.populate(c);
+                Dispatch d = w.dispatch;
+                Entity cop = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP) cop = e;
+                int before = d.messageCount;
+                d.chatter(Dispatch.WHO_POLICE, cop, "10-4, en route.", cop.x, cop.y);
+                check(d.messageCount == before && cop.talkTimer > 0, "routine talk: seen to talk, not on the radio");
+                d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Main St! People are being trampled.", 0, 0);
+                d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Oak Ave! People are being trampled.", 0, 0);
+                check(d.messageCount == before + 1, "the same news twice in a row goes out once");
+                for (int f = 0; f < 30 * 16; f++) w.update(1 / 30f);
+                int at = d.messageCount;
+                d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Elm Rd! People are being trampled.", 0, 0);
+                check(d.messageCount == at + 1, "and again once a while has passed");
+                // Two fights: the bigger one first, with its numbers.
+                w.clearZombies();
+                d.incidents.clear();
+                java.util.Random r = new java.util.Random(2);
+                float[][] spots = new float[2][];
+                for (int k = 0; k < 2; k++) {
+                    float[] q;
+                    do q = w.city.randomWalkableInTown(r);
+                    while (k == 1 && Math.hypot(q[0] - spots[0][0], q[1] - spots[0][1]) < 800);
+                    spots[k] = q;
+                    for (int z = 0; z < (k == 0 ? 3 : 7); z++) {
+                        float[] p = w.city.findWalkable(q[0] + (z % 3) * 8, q[1] + (z / 3) * 8);
+                        w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                    }
+                    Dispatch.Incident inc = new Dispatch.Incident();
+                    inc.x = q[0];
+                    inc.y = q[1];
+                    inc.place = "spot " + k;
+                    d.incidents.add(inc);
+                }
+                w.update(1 / 30f);
+                java.util.List<World.HotSpot> hot = w.hotSpots(8);
+                check(hot.size() == 2, "both fights listed (" + hot.size() + ")");
+                if (hot.size() == 2) {
+                    check(hot.get(0).place.equals("spot 1") && hot.get(0).dead >= 6 && hot.get(1).dead >= 2,
+                            "the worst first (" + hot.get(0).place + " " + hot.get(0).dead + ", " + hot.get(1).place + " " + hot.get(1).dead + ")");
+                }
+                w.clearZombies();
+                w.update(1 / 30f);
+                check(w.hotSpots(8).isEmpty(), "nothing listed with no fighting");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "13.7";
-    static final int VERSION_CODE = 127;
+    static final String VERSION = "13.8";
+    static final int VERSION_CODE = 128;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "13.8  -  A quieter radio, hot spots, the dead in helmets",
+                    "Far less radio chatter: routine talk between units (en route, on scene, mounted up, a spare magazine, falling back, kill counts, a call closed with nothing found) no longer goes out on the radio. You still see them talk. On the test machine a 10-minute outbreak went from about 5,500 messages to a few hundred, so the calls that matter (911, officers down, requests for help, the news) aren't buried, and the Radio Log keeps minutes of them, not seconds.",
+                    "The same news within 15 seconds, wherever it is (another stampede, another officer down), goes out once.",
+                    "Hot spots: a new list of the busiest fights right now, the most of the dead first, with how many of the dead and how many police and soldiers are at each, and safe zones under attack. Open it with the red button on the corner of the minimap (or the Hot spots chip when the minimap is closed); tap one to go there.",
+                    "Police and soldiers who come back as the dead in their body armour now wear their helmets too, police navy and army olive, so they can be told apart at a glance.",
+            },
             {
                     "13.7  -  Soldiers ride",
                     "A truck waiting for a squad to climb in waits as long as they're on their way (up to a minute and a half), not 45 seconds: a squad sent to a truck a few streets off often hadn't got there yet, and the truck gave up and left them to walk the whole way. Across four test cities in an outbreak, about one truck in thirteen gave up like that (one in five on the worst); now about one in a hundred, when a squad is stuck.",

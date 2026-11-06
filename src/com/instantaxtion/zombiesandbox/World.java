@@ -2867,7 +2867,7 @@ final class World {
                             o.fear = pressing >= 3 ? 25 : 10;
                             if (pressing >= 3 && o.shareCd <= 0 && rnd.nextFloat() < 0.15f) {
                                 o.shareCd = 20;
-                                dispatch.say(o.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, o,
+                                dispatch.chatter(o.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, o,
                                         "Shots fired by " + city.placeName(dx, dy) + ". Moving to assist.", dx, dy);
                             }
                             break;
@@ -7041,9 +7041,9 @@ final class World {
         if (time - lastRecruitSay < 8) return;
         lastRecruitSay = time;
         if (type == Entity.COP)
-            dispatch.say(Dispatch.WHO_POLICE, r, "New recruit, sworn in at " + where + ". Ready for duty.", r.x, r.y);
+            dispatch.chatter(Dispatch.WHO_POLICE, r, "New recruit, sworn in at " + where + ". Ready for duty.", r.x, r.y);
         else
-            dispatch.say(Dispatch.WHO_MILITARY, r, "Volunteer reporting in at " + where + ", trained and armed.", r.x, r.y);
+            dispatch.chatter(Dispatch.WHO_MILITARY, r, "Volunteer reporting in at " + where + ", trained and armed.", r.x, r.y);
     }
 
     /** Word spreads: people near someone who spots a zombie start running too. */
@@ -8069,12 +8069,12 @@ final class World {
                 e.taskTimer = 20;
                 if (!e.outOfAmmoSaid) {
                     e.outOfAmmoSaid = true;
-                    dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm dry! " + Dispatch.name(mate) + ", throw me a mag!", e.x, e.y);
+                    dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm dry! " + Dispatch.name(mate) + ", throw me a mag!", e.x, e.y);
                 }
             } else if (f != null) {
                 if (!e.outOfAmmoSaid) {
                     e.outOfAmmoSaid = true;
-                    dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm out of ammo! Heading back to " + f.name + " to resupply.", e.x, e.y);
+                    dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm out of ammo! Heading back to " + f.name + " to resupply.", e.x, e.y);
                 }
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_RESUPPLY;
@@ -8086,12 +8086,12 @@ final class World {
                     e.task = Dispatch.T_BORROW;
                     e.protector = lender;
                     e.taskTimer = 30;
-                    dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm dry and the armouries are empty. "
+                    dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm dry and the armouries are empty. "
                             + Dispatch.name(lender) + ", can you spare a few rounds?", e.x, e.y);
                 } else {
                     e.scout = true;
                     City.Facility home = supplyPoint(e);
-                    dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Out of ammo, and there's none to be had. Falling back"
+                    dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Out of ammo, and there's none to be had. Falling back"
                             + (home != null ? " to " + home.name : "") + " to keep watch. I'll call in what I see.", e.x, e.y);
                 }
             }
@@ -8106,9 +8106,9 @@ final class World {
                 e.task = Dispatch.T_BORROW;
                 e.protector = mate;
                 e.taskTimer = 12;
-                dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. " + Dispatch.name(mate) + ", spare a mag?", e.x, e.y);
+                dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. " + Dispatch.name(mate) + ", spare a mag?", e.x, e.y);
             } else if (f != null && World.hypot(f.x - e.x, f.y - e.y) < 1600 && nearest(e, 70, true, false) == null) {
-                dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. Heading back to " + f.name + " to restock.", e.x, e.y);
+                dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Running low. Heading back to " + f.name + " to restock.", e.x, e.y);
                 dispatch.releaseForResupply(e);
                 e.task = Dispatch.T_RESUPPLY;
             }
@@ -8250,7 +8250,7 @@ final class World {
         if (goal == A_WOUNDED && t != null) {
             if (!e.retreatSaid) {
                 e.retreatSaid = true;
-                dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm hit! Falling back!", e.x, e.y);
+                dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm hit! Falling back!", e.x, e.y);
             }
             float ddx = t.x - e.x, ddy = t.y - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
             flee(e, -ddx / d, -ddy / d, e.runSpeed);
@@ -9101,7 +9101,7 @@ final class World {
             }
             if (ok && time > squadRideSaidAt && inc.ride) {
                 squadRideSaidAt = time + 25;
-                dispatch.say(Dispatch.WHO_MILITARY, a, Dispatch.SQUADS[Math.max(0, a.squad) % Dispatch.SQUADS.length] + " squad, mounting up for "
+                dispatch.chatter(Dispatch.WHO_MILITARY, a, Dispatch.SQUADS[Math.max(0, a.squad) % Dispatch.SQUADS.length] + " squad, mounting up for "
                         + inc.place + ".", a.x, a.y);
             }
         }
@@ -9224,7 +9224,7 @@ final class World {
         if (best != e.goal) {
             e.goalTime = 0;
             if (best == A_FALLBACK && rnd.nextFloat() < 0.35f)
-                dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
                         rnd.nextBoolean() ? "Too many of them! Falling back!" : "We can't hold here! Pull back to the others!", e.x, e.y);
         }
         e.goal = best;
@@ -9322,7 +9322,7 @@ final class World {
     private void killStreak(Entity e) {
         highlight(Names.person(e.nameSeed) + ": " + e.kills + " kills", e.x, e.y);
         String line = String.format(java.util.Locale.US, STREAK_LINES[rnd.nextInt(STREAK_LINES.length)], e.kills);
-        if (e.isArmed()) dispatch.say(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, line, e.x, e.y);
+        if (e.isArmed()) dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, line, e.x, e.y);
         else dispatch.say(Dispatch.WHO_INFO, null, Names.person(e.nameSeed) + ": \"" + line + "\"", e.x, e.y);
     }
 
@@ -9337,6 +9337,64 @@ final class World {
         if (e.aiming || e.reload > 0 || (alert >= 2 && !recovering)) return true;
         int t = e.task;
         return t == Dispatch.T_RESPOND || t == Dispatch.T_GUARD || e.onScene;
+    }
+
+    /** (13.8) One of the busiest fights going on right now, for the hot spots list. */
+    static final class HotSpot {
+        float x, y;
+        String place;
+        int dead, armed;
+        boolean zone;
+    }
+
+    /** How far round a call or a safe zone's wall the dead and the armed are counted for its hot spot. */
+    static final float HOT_REACH = 160;
+
+    /**
+     * (13.8) The busiest fights right now, the most of the dead first (at most max): open calls with the dead about,
+     * and safe zones with the dead at the wall. Two spots almost on top of each other count as one.
+     */
+    java.util.List<HotSpot> hotSpots(int max) {
+        java.util.ArrayList<HotSpot> out = new java.util.ArrayList<HotSpot>();
+        if (hashSize < 0) buildHash();
+        for (int i = 0; i < dispatch.incidents.size(); i++) {
+            Dispatch.Incident inc = dispatch.incidents.get(i);
+            if (inc.resolved) continue;
+            addHot(out, inc.x, inc.y, inc.place, HOT_REACH, false);
+        }
+        for (int i = 0; i < dispatch.zones.size(); i++) {
+            Dispatch.SafeZone z = dispatch.zones.get(i);
+            if (z.removed) continue;
+            addHot(out, z.x, z.y, z.place, z.r + 60, true);
+        }
+        java.util.Collections.sort(out, new java.util.Comparator<HotSpot>() {
+            public int compare(HotSpot a, HotSpot b) {
+                return a.dead != b.dead ? b.dead - a.dead : b.armed - a.armed;
+            }
+        });
+        while (out.size() > max) out.remove(out.size() - 1);
+        return out;
+    }
+
+    private void addHot(java.util.List<HotSpot> out, float x, float y, String place, float r, boolean zone) {
+        int dead = countZombiesNear(x, y, r);
+        if (dead <= 0) return;
+        HotSpot h = new HotSpot();
+        h.x = x;
+        h.y = y;
+        h.place = place != null ? place : city.placeName(x, y);
+        h.dead = dead;
+        h.armed = armedNear(x, y, r);
+        h.zone = zone;
+        for (int i = 0; i < out.size(); i++) {
+            HotSpot o = out.get(i);
+            if (Math.abs(o.x - x) < HOT_REACH && Math.abs(o.y - y) < HOT_REACH) {
+                // (The same fight: the busier of the two, a safe zone's name over a call's.)
+                if (dead > o.dead || (zone && !o.zone)) out.set(i, h);
+                return;
+            }
+        }
+        out.add(h);
     }
 
     int armedNear(float x, float y, float r) {

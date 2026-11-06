@@ -352,6 +352,7 @@ final class GameView extends View implements Menu.Host {
             case KeyEvent.KEYCODE_ESCAPE:
                 if (ev.getRepeatCount() > 0) return true;
                 if (tactical) tactical = false;
+                else if (hotOpen) hotOpen = false;
                 else if (world.controlled != null && code == KeyEvent.KEYCODE_ESCAPE) releaseControl();
                 else if (picker >= 0 || clearMenu) {
                     picker = -1;
@@ -833,6 +834,11 @@ final class GameView extends View implements Menu.Host {
             click();
             return true;
         }
+        if (hotOpen && !menu.isOpen()) {
+            hotOpen = false;
+            click();
+            return true;
+        }
         // ((12.0) Back shuts whatever is open over the city first - a picker, the Clear menu, a card, being someone -
         // as on any other app, instead of going straight to the pause menu.)
         if (!menu.isOpen() && hasGame) {
@@ -1239,6 +1245,7 @@ final class GameView extends View implements Menu.Host {
             else if (!hudHidden) {
                 drawUi(c);
                 if (tactical) drawTactical(c);
+                else if (hotOpen) drawHot(c);
             }
         } catch (OutOfMemoryError oom) {
             c.restoreToCount(saves);
@@ -1398,6 +1405,8 @@ final class GameView extends View implements Menu.Host {
         miniX.setEmpty();
         mapChip.setEmpty();
         tacBtn.setEmpty();
+        hotBtn.setEmpty();
+        hotChip.setEmpty();
         if (!settings.minimap() || world.controlled != null || miniClosed) {
             miniRect.setEmpty();
         } else {
@@ -1558,6 +1567,9 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(bx - bu, by - bu, bx + bu, by + bu, stroke);
             c.drawLine(bx - bu, by, bx + bu, by, stroke);
             c.drawLine(bx, by - bu, bx, by + bu, stroke);
+            // ((13.8) And one in the corner below it opens the hot spots list.)
+            hotBtn.set(miniRect.left - 2 * dp, miniRect.bottom - 16 * dp, miniRect.left + 16 * dp, miniRect.bottom + 2 * dp);
+            drawHotIcon(c, hotBtn.centerX(), hotBtn.centerY());
             // A little x in the corner closes it.
             miniX.set(miniRect.right - 16 * dp, miniRect.top - 2 * dp, miniRect.right + 2 * dp, miniRect.top + 16 * dp);
             fill.setColor(0xE0101216);
@@ -1580,7 +1592,114 @@ final class GameView extends View implements Menu.Host {
             c.drawRoundRect(mapChip, 9 * dp, 9 * dp, fill);
             text.setColor(0xFFF2F2F2);
             c.drawText("Map", mapChip.centerX(), mapChip.centerY() + 4 * dp, text);
+            // ((13.8) And beside it, the hot spots.)
+            float hw = text.measureText("Hot spots") + 20 * dp;
+            hotChip.set(mapChip.left - 8 * dp - hw, top, mapChip.left - 8 * dp, top + 28 * dp);
+            fill.setColor(0xE0202227);
+            c.drawRoundRect(hotChip, 9 * dp, 9 * dp, fill);
+            text.setColor(0xFFFFB0A0);
+            c.drawText("Hot spots", hotChip.centerX(), hotChip.centerY() + 4 * dp, text);
         }
+    }
+
+    // ------------------------------------------------------------------ (13.8) hot spots
+
+    /**
+     * The busiest fights right now, the most of the dead first: a call or a safe zone each, with how many of the dead
+     * and how many police and soldiers are there. Tap one to go there.
+     */
+    private boolean hotOpen, hotDown;
+    private final RectF hotBtn = new RectF(), hotChip = new RectF(), hotClose = new RectF();
+    private java.util.List<World.HotSpot> hot = new java.util.ArrayList<World.HotSpot>();
+    private final java.util.ArrayList<RectF> hotRows = new java.util.ArrayList<RectF>();
+    private float hotAt = -99;
+    private World hotWorld;
+    static final int HOT_MAX = 8;
+
+    private void openHot() {
+        click();
+        hotOpen = true;
+        hotDown = false;
+        tactical = false;
+        hotAt = -99;
+    }
+
+    /** A small red circle with a "!" in it. */
+    private void drawHotIcon(Canvas c, float x, float y) {
+        fill.setColor(0xE0101216);
+        c.drawCircle(x, y, 8 * dp, fill);
+        fill.setColor(0xFFE0503C);
+        c.drawCircle(x, y, 6 * dp, fill);
+        fill.setColor(0xFFFFFFFF);
+        c.drawRect(x - 0.9f * dp, y - 3.6f * dp, x + 0.9f * dp, y + 0.8f * dp, fill);
+        c.drawCircle(x, y + 2.6f * dp, 1 * dp, fill);
+    }
+
+    private void drawHot(Canvas c) {
+        // (Worked out again once a second while it's open.)
+        if (hotWorld != world || world.time - hotAt > 1 || world.time < hotAt) {
+            hotWorld = world;
+            hotAt = world.time;
+            hot = world.hotSpots(HOT_MAX);
+        }
+        fill.setColor(0xF0101216);
+        c.drawRect(0, 0, getWidth(), getHeight(), fill);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(16 * dp);
+        text.setColor(0xFFF2F2F2);
+        c.drawText("Hot spots", getWidth() / 2f, 30 * dp, text);
+        float left = 16 * dp, right = getWidth() - 16 * dp, y = 56 * dp, rowH = 50 * dp;
+        hotRows.clear();
+        if (hot.isEmpty()) {
+            text.setTextSize(12.5f * dp);
+            text.setColor(0xFFB8BCC4);
+            c.drawText("No fighting anywhere right now.", getWidth() / 2f, y + 30 * dp, text);
+        }
+        for (int i = 0; i < hot.size() && y + rowH < getHeight() - 8 * dp; i++) {
+            World.HotSpot h = hot.get(i);
+            RectF r = new RectF(left, y, right, y + rowH - 6 * dp);
+            hotRows.add(r);
+            fill.setColor(0xE0262A30);
+            c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
+            // A bar for how bad it is next to the worst.
+            float share = (float) h.dead / Math.max(1, hot.get(0).dead);
+            fill.setColor(0xFFC8402E);
+            c.drawRect(r.left, r.bottom - 3 * dp, r.left + (r.width()) * share, r.bottom, fill);
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(13 * dp);
+            text.setColor(0xFFF2F2F2);
+            String name = (h.zone ? "Safe zone: " : "") + h.place;
+            c.drawText(fitText(name, r.width() - 24 * dp), r.left + 12 * dp, r.top + 19 * dp, text);
+            text.setTextSize(11.5f * dp);
+            text.setColor(0xFFB8BCC4);
+            String line = h.dead + " of the dead   " + (h.armed == 0 ? "no police or soldiers" : h.armed + (h.armed == 1 ? " officer or soldier" : " police and soldiers"));
+            c.drawText(fitText(line, r.width() - 24 * dp), r.left + 12 * dp, r.top + 36 * dp, text);
+            y += rowH;
+        }
+        text.setTextAlign(Paint.Align.CENTER);
+        hotClose.set(getWidth() - 44 * dp, 8 * dp, getWidth() - 8 * dp, 40 * dp);
+        fill.setColor(0xE0303238);
+        c.drawRoundRect(hotClose, 9 * dp, 9 * dp, fill);
+        stroke.setColor(0xFFE0E0E0);
+        stroke.setStrokeWidth(2 * dp);
+        float mx = hotClose.centerX(), my = hotClose.centerY(), u = 6 * dp;
+        c.drawLine(mx - u, my - u, mx + u, my + u, stroke);
+        c.drawLine(mx - u, my + u, mx + u, my - u, stroke);
+    }
+
+    private void hotTap(float x, float y) {
+        click();
+        for (int i = 0; i < hotRows.size() && i < hot.size(); i++) {
+            if (!hotRows.get(i).contains(x, y)) continue;
+            World.HotSpot h = hot.get(i);
+            follow = null;
+            followV = null;
+            camX = h.x - getWidth() / scale / 2;
+            camY = h.y - barTop / scale / 2;
+            clampCamera();
+            break;
+        }
+        hotOpen = false;
     }
 
     // ------------------------------------------------------------------ (10.32) tactical map
@@ -6195,6 +6314,16 @@ final class GameView extends View implements Menu.Host {
                     c.drawCircle(r * 0.0f, -r * 0.1f, r * 0.2f, fill);
                 }
             } else if (e.isZombie()) {
+                if (e.armored) {
+                    // ((13.8) Still in their helmet, so they can be told apart at a glance: police navy with the
+                    // visor up, army olive.)
+                    boolean cop = e.origin == Entity.COP;
+                    fill.setColor(cop ? 0xFF1C2438 : 0xFF4C5833);
+                    c.drawCircle(-r * 0.04f, 0, r * 0.54f, fill);
+                    fill.setColor(cop ? 0xFF8C9AB4 : 0xFF3A4428);
+                    oval.set(r * 0.28f, -r * 0.42f, r * 0.62f, r * 0.42f);
+                    c.drawOval(oval, fill);
+                }
                 fill.setColor(0xFF5A1414);
                 c.drawCircle(-r * 0.1f, r * 0.18f, r * 0.2f, fill);
                 if (e.type == Entity.RUNNER) {
@@ -7909,7 +8038,17 @@ final class GameView extends View implements Menu.Host {
         }
         if (world.controlled != null) {
             tactical = false;
+            hotOpen = false;
             return controlTouch(ev);
+        }
+        if (hotOpen) {
+            mode = MODE_NONE;
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) hotDown = true;
+            else if (ev.getActionMasked() == MotionEvent.ACTION_UP && hotDown) {
+                hotDown = false;
+                hotTap(ev.getX(), ev.getY());
+            }
+            return true;
         }
         if (tactical) {
             mode = MODE_NONE;
@@ -8081,8 +8220,13 @@ final class GameView extends View implements Menu.Host {
                     return true;
                 }
         }
+        if (!hotBtn.isEmpty() && hotBtn.contains(x, y) || !hotChip.isEmpty() && hotChip.contains(x, y)) {
+            openHot();
+            return true;
+        }
         if (!tacBtn.isEmpty() && tacBtn.contains(x, y)) {
             click();
+            hotOpen = false;
             tactical = true;
             tacDown = false;
             tacTimer = 0;
