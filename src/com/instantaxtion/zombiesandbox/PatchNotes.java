@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.0";
-    static final int VERSION_CODE = 130;
+    static final String VERSION = "14.1";
+    static final int VERSION_CODE = 131;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.1  -  Crash reports",
+                    "If the game ever closes unexpectedly, what went wrong is written down, and the next time it starts it shows you (the version, your phone, and where in the game it happened) with a button to copy it, so it can be passed on and fixed.",
+            },
             {
                     "14.0  -  Engineers and mortars",
                     "Each army base has a bulldozer. Once the dead are about, it goes out to wrecked and abandoned vehicles left on the roads in town and pushes them off, one after another, then comes home. Before, a wreck in the road stayed there, and everyone had to find a way round it.",

@@ -419,6 +419,9 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Crash reports (14.1):** if the game closes unexpectedly, the next time it starts it shows what went wrong, with a
+button to copy it.
+
 **Engineers and mortars (14.0):** each army base has a bulldozer that pushes wrecks off the roads in town once the
 dead are about, two combat engineers who get a safe zone's wall up three times as fast, and a mortar team that shells
 packs of the dead a few streets off (never with police or soldiers there, near civilians only when the dead far
