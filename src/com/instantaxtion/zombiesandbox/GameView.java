@@ -2704,6 +2704,8 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(b.doorX - 4, b.doorY + 1.2f, b.doorX + 4, b.doorY + 2.9f, fill);
         }
 
+        // ((15.6) The ferry across the bay.)
+        if (world.ferryBoat != null) drawBoat(c, world.ferryBoat);
         for (int i = 0, n = world.boats.size(); i < n; i++) {
             float[] b = world.boats.get(i);
             if (b[0] < vx0 - 30 || b[0] > vx1 + 30 || b[1] < vy0 - 30 || b[1] > vy1 + 30) continue;

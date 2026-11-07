@@ -839,6 +839,7 @@ final class World {
             }
             postTrafficOfficers();
         }
+        if (city.prison != null) populatePrison();
         dispatch.riotVans = cfg.nature() ? Math.min(3, stations) : 0;
         dispatch.bearcats = cfg.nature() ? Math.min(3, stations) : 0;
         dispatch.policeAir = cfg.nature() && stations > 0 ? 2 : 0;
@@ -1836,6 +1837,11 @@ final class World {
     /** Recomputes counts and paths after a save has been loaded. */
     void afterLoad() {
         fieldTimer = 0;
+        // ((15.6) The island prison's gate, open again if it had fallen.)
+        if (prisonFallen) {
+            city.openPrisonGate();
+            routesChanged();
+        }
         // (Games saved before 10.18 may have dogs in them: there are no animals now.)
         for (Entity e : entities)
             if (e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG) {
@@ -2163,6 +2169,7 @@ final class World {
         updatePickups(dt);
         updateEffects(dt);
         if (!boats.isEmpty()) moveBoats(dt);
+        if (city.ferry != null) moveFerry(dt);
         lifeTimer -= dt;
         if (lifeTimer <= 0) {
             lifeTimer = 1;
@@ -4578,6 +4585,15 @@ final class World {
         }
         // ((14.2) A raider gang: out to strip the shops, and they'll shoot whoever's there for the same.)
         if (e.raider && raiderStep(e, dt)) return;
+        // ((15.6) Locked up in the island prison: about the yard, and away from the dead if they're in there too.)
+        if (e.inmate && !prisonFallen && e != controlled) {
+            Entity z = nearest(e, 90, true, false);
+            if (z != null) {
+                float zd = (float) World.hypot(e.x - z.x, e.y - z.y) + 0.001f;
+                flee(e, (e.x - z.x) / zd, (e.y - z.y) / zd, e.runSpeed);
+            } else wander(e, e.speed * 0.5f);
+            return;
+        }
         // ((10.31) Not even looking when the nearest of the dead is well out of reach: most of a big city, most
         // of the time.)
         boolean zNear = city.fieldAt(city.zombieDist, e.x, e.y) <= 100 / City.T + 6;
@@ -6730,6 +6746,7 @@ final class World {
     /** Once a second: the infection evolves, and after it's over the city slowly recovers. */
     private void cityLife() {
         keyBuildings();
+        if (city.prison != null) prisonLife();
         reservePilots();
         if (((int) time) % 5 == 0) fleet.stationHelis();
         government();
@@ -8850,6 +8867,145 @@ final class World {
         if (e.patrolX == 0) return false;
         walkToSpot(e, e.patrolX, e.patrolY, e.speed);
         return true;
+    }
+
+    // ------------------------------------------------------------------ (15.6) the island prison
+
+    /** (15.6) The island prison has fallen (its gate open), and the outbreak has been started inside it. */
+    boolean prisonFallen, prisonSeeded;
+    /** (15.6) The ferry across the bay: {x, y, heading x, heading y, speed, kind}, which landing it's making for, and its wait there. */
+    float[] ferryBoat;
+    private int ferryLeg;
+    private float ferryWait;
+
+    /** (15.6) A random spot in the prison yard, or null. */
+    private float[] prisonYardSpot() {
+        int[] p = city.prison;
+        for (int k = 0; k < 40; k++) {
+            float x = (p[0] + 2 + rnd.nextFloat() * (p[2] - p[0] - 4)) * City.T, y = (p[1] + 2 + rnd.nextFloat() * (p[3] - p[1] - 4)) * City.T;
+            int t = city.tileIndex(x, y);
+            if (t >= 0 && !city.solid[t] && city.tiles[t] == City.LOT) return new float[]{x, y};
+        }
+        return null;
+    }
+
+    /** (15.6) The prison's inmates in their orange, out in the yard, and its guards with their shotguns. */
+    private void populatePrison() {
+        int[] p = city.prison;
+        int area = (p[2] - p[0]) * (p[3] - p[1]);
+        int inmates = Math.max(30, Math.min(140, area / 8)), guards = Math.max(6, Math.min(10, inmates / 14));
+        for (int i = 0; i < inmates; i++) {
+            float[] q = prisonYardSpot();
+            if (q == null) break;
+            Entity e = spawn(Entity.CIVILIAN, q[0], q[1]);
+            if (e == null) break;
+            e.inmate = true;
+            e.body = 0xFFE07A2A;
+            e.home = null;
+            e.hasGun = false;
+            e.ammo = e.reserve = 0;
+            e.melee = 0;
+        }
+        for (int i = 0; i < guards; i++) {
+            float[] q = prisonYardSpot();
+            if (q == null) break;
+            Entity g = spawn(Entity.COP, q[0], q[1]);
+            if (g == null) break;
+            g.role = Entity.ROLE_PRISON_GUARD;
+            g.body = 0xFF4A5560;
+            setGun(g, Entity.W_SHOTGUN, 40);
+            g.task = Dispatch.T_POST;
+            g.postX = q[0];
+            g.postY = q[1];
+        }
+        float[] f = city.ferry;
+        ferryBoat = new float[]{f[0], f[1], 0, 1, 0, 1};
+    }
+
+    /** (15.6) Inside the prison walls (the yard and the buildings in it)? */
+    boolean inPrison(float x, float y) {
+        int[] p = city.prison;
+        return p != null && x > p[0] * City.T && x < p[2] * City.T && y > p[1] * City.T && y < p[3] * City.T;
+    }
+
+    /**
+     * (15.6) Once a second on the Prison Island: the outbreak starts inside the walls (an inmate bitten) if it hasn't
+     * started anywhere else first; and once the dead are loose in there and the guards are down to the last few, the
+     * prison falls: the gate opens, and inmates and the dead alike pour out over the causeway.
+     */
+    private void prisonLife() {
+        if (!prisonSeeded && !outbreak && time > PRISON_QUIET) {
+            prisonSeeded = true;
+            java.util.List<Entity> in = new java.util.ArrayList<Entity>();
+            for (Entity e : entities) if (e.inmate && !e.dead && !e.infected) in.add(e);
+            // (A fight in the yard: several bitten, turning one after another all over the yard, too many at once
+            // for the guards to put down one by one.)
+            java.util.Collections.shuffle(in, rnd);
+            for (int k = 0; k < Math.min(5, in.size()); k++) {
+                Entity e = in.get(k);
+                e.infected = true;
+                e.infectTimer = 10 + k * 6 + rnd.nextFloat() * 6;
+                if (patientZero == null) markPatientZero(e);
+                if (k == 0) timeline("A fight in the prison yard: inmates bitten", e.x, e.y);
+            }
+        }
+        if (prisonFallen) return;
+        int dead = 0, guards = 0;
+        for (Entity e : entities) {
+            if (e.dead || !inPrison(e.x, e.y)) continue;
+            if (e.isZombie()) dead++;
+            else if (e.role == Entity.ROLE_PRISON_GUARD) guards++;
+        }
+        if ((dead >= 6 && (guards <= 1 || dead > guards * 4)) || (blackout && dead > 0)) fallPrison();
+    }
+
+    /** (15.6) How long the Prison Island stays quiet before the outbreak starts inside the walls. */
+    static final float PRISON_QUIET = 45;
+
+    /** (15.6) The prison falls: the gate opens and everyone inside is loose. */
+    void fallPrison() {
+        if (prisonFallen || city.prison == null) return;
+        prisonFallen = true;
+        city.openPrisonGate();
+        routesChanged();
+        int loose = 0;
+        for (Entity e : entities)
+            if (e.inmate) {
+                e.inmate = false;
+                if (!e.dead) loose++;
+            }
+        float gx = (city.prisonGate[0] + 1.5f) * City.T, gy = city.prisonGate[1] * City.T;
+        banner("PRISON BREAK", "The dead have overrun the island prison and its gate is open. " + loose + " inmates are loose.");
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: The island prison has fallen. Inmates and the dead coming over the causeway. All units to the seafront!", gx, gy);
+        timeline("The island prison fell", gx, gy);
+        dispatch.sighting(gx, gy - 4 * City.T, null);
+    }
+
+    /** (15.6) The ferry: across the bay from one landing to the other, a little wait at each, and back. */
+    private void moveFerry(float dt) {
+        if (ferryBoat == null) {
+            float[] f = city.ferry;
+            ferryBoat = new float[]{f[0], f[1], 0, 1, 0, 1};
+        }
+        float[] b = ferryBoat, f = city.ferry;
+        if (ferryWait > 0) {
+            ferryWait -= dt;
+            b[4] = 0;
+            return;
+        }
+        float tx = f[ferryLeg * 2], ty = f[ferryLeg * 2 + 1];
+        float dx = tx - b[0], dy = ty - b[1], d = (float) Math.sqrt(dx * dx + dy * dy);
+        if (d < 3) {
+            ferryWait = 12;
+            ferryLeg = 1 - ferryLeg;
+            return;
+        }
+        b[4] = Math.min(28, d * 0.8f + 4);
+        b[2] += (dx / d - b[2]) * Math.min(1, dt * 2);
+        b[3] += (dy / d - b[3]) * Math.min(1, dt * 2);
+        float l = (float) Math.sqrt(b[2] * b[2] + b[3] * b[3]) + 0.001f;
+        b[0] += b[2] / l * b[4] * dt;
+        b[1] += b[3] / l * b[4] * dt;
     }
 
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */

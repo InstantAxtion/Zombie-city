@@ -584,6 +584,20 @@ final class City {
             computeSolid();
             for (int[] l : buildingLots) createBuilding(l);
         }
+        // ((15.6) The prison's buildings: the cell blocks lettered, the admin block, nobody sheltering in any of them.)
+        if (prison != null) {
+            char letter = 'A';
+            for (Building b : buildings) {
+                if (b.x0 < prison[0] * T || b.x1 > prison[2] * T || b.y0 < prison[1] * T || b.y1 > prison[3] * T) continue;
+                if (b.kind == JAIL) {
+                    b.name = b.y1 - b.y0 <= 3 * T + 1 ? "Prison Admin" : "Cell Block " + letter++;
+                    // (Not the county jail's look, with its sign on the roof.)
+                    b.variant = -1;
+                }
+                b.capacity = 0;
+                b.residents = 0;
+            }
+        }
         // (A city built before 10.20 gets its police and rescue helipads too, on open ground as it is,
         // without touching a tile, so it still rebuilds exactly as it was.)
         if (!cfg.servicePads()) {
@@ -2452,6 +2466,8 @@ final class City {
         industryAngle = rnd.nextFloat() * (float) Math.PI * 2;
         waterKind = cfg.water();
         if (waterKind == CityConfig.W_HARBOUR) seaY = h - Math.max(24, (int) (h * 0.18f));
+        // ((15.6) A wider bay on the Prison Island, with room for the island out in it.)
+        if (cfg.prisonIsland()) seaY = h - Math.max(48, (int) (h * 0.3f));
         // ((11.0) The four new water maps have the sea along the bottom too, a little narrower.)
         if (waterKind == CityConfig.W_ISLANDS) islandLayout();
         // Where the town is: the whole map, or a core surrounded by countryside.
@@ -2543,6 +2559,7 @@ final class City {
         // ((11.1) Not since the thin band of country: whole corners of town left as fields undid it.)
         if (organic && cfg.civic < 27) erodeTown(bx0, by0, bx1, by1);
         if (seaY > 0) coast();
+        if (cfg.prisonIsland()) prisonIsland();
 
         // Out in the country, a highway runs past the town.
         if (m >= 16) highway(bx0, by0, bx1, by1);
@@ -4210,6 +4227,16 @@ final class City {
         int shore = seaY + 2;
         fill(0, shore, w, h - shore, WATER);
         double ph = rnd.nextDouble() * 10;
+        // ((15.6) The Prison Island's bay: a promenade along the water and a few boats, no docks.)
+        if (cfg.prisonIsland()) {
+            fill(0, shore, w, 2, PLAZA);
+            for (int k = 0; k < w / 60; k++) {
+                float bx = (4 + rnd.nextInt(w - 10)) * T, by = (shore + 6 + rnd.nextInt(Math.max(1, h - shore - 10))) * T;
+                if (by / T >= h - 1 || tiles[(int) (by / T) * w + (int) (bx / T)] != WATER) continue;
+                addDecor(D_BOAT, bx, by, bx + 30, by + 10, 1);
+            }
+            return;
+        }
         {
             // The quay, and docks reaching out into the harbour.
             int quay = 4;
@@ -4289,6 +4316,121 @@ final class City {
      * Lakeside: a big lake in the middle of town, with avenues running along its shores and right across
      * town, and the rest of the town laid out around them.
      */
+    /**
+     * ((15.6) The Prison Island: the prison compound inside its walls (tiles: x0, y0, x1, y1), the gate in its wall
+     * (tiles: x0, y0, x1, y1), and the ferry's two landings (world: x0, y0, x1, y1).)
+     */
+    int[] prison, prisonGate;
+    float[] ferry;
+
+    /**
+     * (15.6) The island out in the bay, the prison on it: a high wall all round (rock-solid: nobody climbs it), a gate
+     * facing the causeway that runs across the water to the seafront, cell blocks, an admin block and watchtowers in a
+     * concrete yard, and a ferry landing on the island and one on the mainland.
+     */
+    private void prisonIsland() {
+        int shore = seaY + 2;
+        int sea = h - shore;
+        int iw = Math.min(70, Math.max(34, (int) (w * 0.3f))), ih = Math.min(38, Math.max(22, sea - 16));
+        int ix0 = w / 2 - iw / 2 - iw / 3, iy0 = shore + Math.max(9, (sea - ih) / 2);
+        if (iy0 + ih > h - 3) ih = h - 3 - iy0;
+        int ix1 = ix0 + iw, iy1 = iy0 + ih;
+        fill(ix0, iy0, iw, ih, GRASS);
+        // The compound: three tiles in from the shore, inside a wall.
+        int cx0 = ix0 + 3, cy0 = iy0 + 3, cx1 = ix1 - 3, cy1 = iy1 - 3;
+        fill(cx0, cy0, cx1 - cx0, cy1 - cy0, LOT);
+        for (int x = cx0; x < cx1; x++) {
+            tiles[cy0 * w + x] = ROCK;
+            tiles[(cy1 - 1) * w + x] = ROCK;
+        }
+        for (int y = cy0; y < cy1; y++) {
+            tiles[y * w + cx0] = ROCK;
+            tiles[y * w + cx1 - 1] = ROCK;
+        }
+        prison = new int[]{cx0, cy0, cx1, cy1};
+        // The causeway: from the seafront road straight across the water to the gate.
+        int gx = (cx0 + cx1) / 2 - 1;
+        if (bridge == null) bridge = new boolean[w * h];
+        for (int y = seaY - 3; y < cy0; y++)
+            for (int x = gx; x < gx + 3; x++) if (tiles[y * w + x] == WATER) bridge[y * w + x] = true;
+        carve(new Street(gx, seaY - 3, gx + 3, cy0, true, false));
+        // The gate: shut (part of the wall) till the prison falls.
+        for (int x = gx; x < gx + 3; x++) tiles[cy0 * w + x] = ROCK;
+        prisonGate = new int[]{gx, cy0, gx + 3, cy0 + 1};
+        // Cell blocks along the yard, the admin block by the gate, a watchtower in two corners.
+        int yx0 = cx0 + 2, yx1 = cx1 - 2, yy0 = cy0 + 3, yy1 = cy1 - 2;
+        int blocks = Math.max(2, Math.min(4, (yx1 - yx0) / 14));
+        int bw = (yx1 - yx0 - (blocks - 1) * 3) / blocks;
+        for (int k = 0; k < blocks; k++) {
+            int bx = yx0 + k * (bw + 3);
+            if (bx + bw > gx - 1 && bx < gx + 4) continue;
+            govLot(bx, yy0 + 3, bw, Math.max(4, (yy1 - yy0) / 3), JAIL);
+        }
+        Building townJail = jail;
+        govLot(gx + 5, yy0, Math.min(10, yx1 - gx - 6), 3, JAIL);
+        addFacilityLot(cx0 + 1, cy0 + 1, 2, 2, TOWER, 3);
+        addFacilityLot(cx1 - 3, cy1 - 3, 2, 2, TOWER, 3);
+        // The ferry: a landing on the island's far side, and one on the seafront across from it.
+        int fy = iy0 + ih / 2;
+        for (int x = ix1; x < ix1 + 4 && x < w; x++) {
+            tiles[fy * w + x] = PIER;
+            tiles[(fy + 1) * w + x] = PIER;
+        }
+        int mx = Math.min(w - 4, ix1 + 18);
+        for (int y = shore; y < shore + 5 && y < h; y++) {
+            tiles[y * w + mx] = PIER;
+            tiles[y * w + mx + 1] = PIER;
+        }
+        ferry = new float[]{(ix1 + 6) * T, (fy + 1) * T, (mx + 1) * T, (shore + 7) * T};
+        jail = townJail;
+    }
+
+    /** (15.6) The prison wall: thick grey concrete with coils of razor wire along the top, and the steel gate. */
+    private void drawPrisonWall(Canvas c, Paint p) {
+        int x0 = prison[0], y0 = prison[1], x1 = prison[2], y1 = prison[3];
+        for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++) {
+                if (x != x0 && x != x1 - 1 && y != y0 && y != y1 - 1) continue;
+                boolean gate = prisonGate != null && x >= prisonGate[0] && x < prisonGate[2] && y >= prisonGate[1] && y < prisonGate[3];
+                if (gate && tiles[y * w + x] != ROCK) continue;
+                float px = x * T, py = y * T;
+                p.setColor(0x50000000);
+                c.drawRect(px + 2, py + 2, px + T + 2, py + T + 2, p);
+                p.setColor(gate ? 0xFF5A6068 : 0xFFB4B2AA);
+                c.drawRect(px, py, px + T, py + T, p);
+                p.setColor(gate ? 0xFF3A3E44 : 0xFF9A988F);
+                c.drawRect(px + 2, py + 2, px + T - 2, py + T - 2, p);
+                if (gate) {
+                    // Steel bars across the gate.
+                    p.setColor(0xFF8A9098);
+                    for (int k = 1; k < 4; k++) c.drawRect(px + k * T / 4f - 0.6f, py + 1, px + k * T / 4f + 0.6f, py + T - 1, p);
+                    continue;
+                }
+                // Razor wire along the top: little loops.
+                p.setColor(0xFFD8DCE0);
+                for (int k = 0; k < 3; k++) {
+                    float lx = px + 3 + k * 5, ly = py + T / 2f;
+                    c.drawCircle(lx, ly, 1.6f, p);
+                }
+                p.setColor(0xFF9A988F);
+                for (int k = 0; k < 3; k++) c.drawCircle(px + 3 + k * 5, py + T / 2f, 0.9f, p);
+            }
+    }
+
+    /** (15.6) The prison has fallen: its gate opens, and the causeway leads in and out. */
+    void openPrisonGate() {
+        if (prisonGate == null) return;
+        for (int y = prisonGate[1]; y < prisonGate[3]; y++)
+            for (int x = prisonGate[0]; x < prisonGate[2]; x++) {
+                tiles[y * w + x] = ROAD;
+                solid[y * w + x] = false;
+                roadDir[y * w + x] = 1;
+            }
+        clear3 = null;
+        stepC = null;
+        if (bitmap != null) redrawArea(prisonGate[0] * T - T, prisonGate[1] * T - T, prisonGate[2] * T + T, prisonGate[3] * T + T);
+    }
+
     /** ((15.5) The Military Town's great base: where it goes (tiles: x0, y0, x1, y1), kept clear of the streets.) */
     private int[] bigBase;
 
@@ -9242,6 +9384,7 @@ final class City {
                 c.drawCircle(cx, cy, 1.6f, p);
             }
         drawBaseDecor(c, p);
+        if (prison != null) drawPrisonWall(c, p);
         // ((14.9) A big white star in a ring painted on each base's parade ground, its name across the ground by it,
         // and the flag: plain to see as the army's from any height.)
         for (Facility f : facilities) {
@@ -11077,6 +11220,18 @@ final class City {
             String sign = country.gunSign();
             float ts = Math.min(9f, bw / (sign.length() * 0.75f));
             sign(sign, (x0 + x1) / 2, (y0 + y1) / 2, ts, 0xFFF2E2B8);
+            return;
+        }
+        if (own != null && own.kind == JAIL && prison != null && own.name != null && (own.name.startsWith("Cell Block") || own.name.equals("Prison Admin"))) {
+            // ((15.6) The island prison's blocks: bare concrete roofs, rows of vents, the block's name painted on.)
+            p.setColor(0xFF8E8C86);
+            c.drawRect(x0, y0, x1, y1, p);
+            p.setColor(0xFFA6A49C);
+            c.drawRect(x0 + 1.5f, y0 + 1.5f, x1 - 1.5f, y1 - 1.5f, p);
+            p.setColor(0xFF6E6C66);
+            for (float vx = x0 + 6; vx < x1 - 6; vx += 10) c.drawRect(vx, y0 + 4, vx + 4, y0 + 7, p);
+            String sign = own.name.toUpperCase();
+            sign(sign, (x0 + x1) / 2, (y0 + y1) / 2 + 2, Math.min(9f, bw / (sign.length() * 0.75f)), 0xFFF2F0E8);
             return;
         }
         if (own != null && own.name != null && (own.name.equals(rangerStationName) || outpostNames.contains(own.name))) {

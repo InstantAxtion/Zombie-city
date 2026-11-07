@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 55;
+    private static final int VERSION = 56;
 
     private SaveGame() {
     }
@@ -356,6 +356,9 @@ final class SaveGame {
             out.writeFloat(w.hospitalY);
             // (Version 55, 15.1: which game this is, for the hall of fame.)
             out.writeLong(w.gameId);
+            // (Version 56, 15.6: the island prison.)
+            out.writeBoolean(w.prisonFallen);
+            out.writeBoolean(w.prisonSeeded);
         } finally {
             moved = null;
             homeIndex = null;
@@ -438,6 +441,8 @@ final class SaveGame {
         out.writeFloat(e.risen);
         // Version 55 (15.1): lives saved, for the hall of fame.
         out.writeInt(e.saved);
+        // Version 56 (15.6): locked up in the island prison.
+        out.writeBoolean(e.inmate);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -810,6 +815,10 @@ final class SaveGame {
                 w.hospitalY = in.readFloat();
             }
             if (version >= 55) w.gameId = in.readLong();
+            if (version >= 56) {
+                w.prisonFallen = in.readBoolean();
+                w.prisonSeeded = in.readBoolean();
+            }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -887,6 +896,7 @@ final class SaveGame {
         if (version >= 54) e.risen = in.readFloat();
         else if (e.isZombie()) e.risen = w.time;
         if (version >= 55) e.saved = in.readInt();
+        if (version >= 56) e.inmate = in.readBoolean();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

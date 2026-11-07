@@ -177,8 +177,9 @@ public final class GameTests {
                 check(old.applyCode("12-44") && old.country() == Country.USA, "codes build American cities");
                 check(!new CityConfig().applyCode("22-77@16"), "a code for another country doesn't load");
                 // ((12.7) The real cities too: Los Angeles, Portland, Seattle and New York, 15 to 18.)
-                // ((15.2) Not 10: its place went to Downtown Towers. (15.5) Nor 11: the Military Town.)
-                for (int p : new int[]{15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
+                // ((15.2) Not 10: its place went to Downtown Towers. (15.5) Nor 11: the Military Town. (15.6) Nor 15:
+                // the Prison Island.)
+                for (int p : new int[]{ 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
                     check(CityConfig.removed(p) && CityConfig.retired(CityConfig.OPT_PRESET, p) && CityConfig.PRESETS[p].isEmpty(), "map " + p + " is gone");
                     check(!new CityConfig().applyCode(String.valueOf("123456789ABCDEFGHIJKLMNOPQRST".charAt(p)) + "3-5"), "and its city code doesn't load");
                     CityConfig c = new CityConfig();
@@ -2416,7 +2417,7 @@ public final class GameTests {
                 check(c.coreFraction() >= 0.85f, "nine tenths town (" + c.coreFraction() + ")");
                 // The new roles.
                 // ((14.0) And the combat engineers and the mortar teams.)
-                check(Entity.ROLE_NAMES.length == 20 && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
+                check(Entity.ROLE_NAMES.length == 21 && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
                         && "Combat engineer".equals(Entity.ROLE_NAMES[Entity.ROLE_ENGINEER]) && "Mortar team".equals(Entity.ROLE_NAMES[Entity.ROLE_MORTAR]), "every role named");
             }
         });
@@ -4153,6 +4154,67 @@ public final class GameTests {
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
+            }
+        });
+        test("15.6: the Prison Island - a walled prison in the bay; the outbreak starts inside; when it falls the gate opens", new Check() {
+            public void run() throws Exception {
+                check(!CityConfig.retired(CityConfig.OPT_PRESET, CityConfig.PRISON_ISLAND) && !CityConfig.removed(CityConfig.PRISON_ISLAND), "offered on the New Game screen");
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.PRISON_ISLAND;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 7;
+                c.normalize();
+                c.seed = 7;
+                World w = new World(c);
+                w.setMaxPopulation(0);
+                w.populate(c);
+                City city = w.city;
+                check(city.prison != null && city.prisonGate != null && city.ferry != null, "a prison, its gate and the ferry");
+                int inmates = 0, guards = 0;
+                Entity anInmate = null;
+                for (Entity e : w.entities) {
+                    if (e.inmate) {
+                        inmates++;
+                        anInmate = e;
+                        check(w.inPrison(e.x, e.y), "every inmate inside the walls");
+                    }
+                    if (e.role == Entity.ROLE_PRISON_GUARD) guards++;
+                }
+                check(inmates >= 30 && guards >= 6, "inmates and guards (" + inmates + ", " + guards + ")");
+                int cells = 0;
+                for (City.Building b : city.buildings) if (b.name != null && b.name.startsWith("Cell Block")) cells++;
+                check(cells >= 2, "cell blocks (" + cells + ")");
+                // Shut in: no way on foot from the yard to the town while the gate is shut.
+                float gx = (city.prisonGate[0] + 1.5f) * City.T, gy = city.prisonGate[1] * City.T;
+                float[] town = city.findWalkable(gx, (city.seaY - 8) * City.T);
+                check(city.findPath(anInmate.x, anInmate.y, town[0], town[1], 60000) == null, "no way out while the gate is shut");
+                // A quiet spell, then the outbreak starts inside the walls.
+                float[] f0 = w.ferryBoat == null ? null : new float[]{w.ferryBoat[0], w.ferryBoat[1]};
+                for (int f = 0; f < 30 * (int) (World.PRISON_QUIET + 4); f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int bitten = 0;
+                for (Entity e : w.entities) if (e.infected && w.inPrison(e.x, e.y)) bitten++;
+                check(w.prisonSeeded && bitten >= 1, "inmates bitten inside (" + bitten + ")");
+                check(f0 != null && Math.hypot(w.ferryBoat[0] - f0[0], w.ferryBoat[1] - f0[1]) > 20, "the ferry under way");
+                for (Entity e : w.entities) if (e.isZombie() && !w.inPrison(e.x, e.y)) check(false, "none of the dead outside yet");
+                // It falls: the gate opens, and there's a way out over the causeway.
+                w.fallPrison();
+                check(w.prisonFallen && !city.solidAt(gx, gy + City.T / 2f), "the gate open");
+                int loose = 0;
+                for (Entity e : w.entities) if (e.inmate) loose++;
+                check(loose == 0, "nobody locked up any more");
+                Entity someone = null;
+                for (Entity e : w.entities) if (!e.dead && !e.isZombie() && w.inPrison(e.x, e.y) && e.type == Entity.CIVILIAN) someone = e;
+                check(city.findPath(someone.x, someone.y, town[0], town[1], 60000) != null, "a way out now");
+                // Kept in a save: still fallen, the gate still open.
+                java.io.File file = java.io.File.createTempFile("zcsb", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.prisonFallen && !l.city.solidAt(gx, gy + City.T / 2f), "still open after a save");
             }
         });
         test("every screen draws", new Check() {

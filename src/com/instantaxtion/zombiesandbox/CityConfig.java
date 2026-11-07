@@ -10,8 +10,8 @@ final class CityConfig implements OptionSet {
     static final String[] PRESETS = {"Classic", "Downtown", "Suburbs", "Industrial", "Parkland", "Old Town",
             "Small Town", "Campus", "Metropolis", "Village", "Downtown Towers", "Military Town", "Lakeside", "Harbour", "Islands",
             // ((12.7) The places of maps taken out of the game, the real cities among them, are kept so the others keep
-            // their numbers: see removed.)
-            "", "", "", "", "", "", "",
+            // their numbers: see removed.) ((15.6) The first of them is the Prison Island now.)
+            "Prison Island", "", "", "", "", "", "",
             "",
             // (10.60)
             "Archipelago", "",
@@ -33,7 +33,8 @@ final class CityConfig implements OptionSet {
             "Homes and parks round a lake in the middle of town, with a jetty, rowing boats and an island.",
             "A working port: quays, docks, cranes, container stacks and ships, with warehouses along the water.",
             "Three island towns in the sea, joined by bridges, with a causeway to the mainland. Always one size: between Large and Massive.",
-            "", "", "", "", "", "", "",
+            "A town on the coast, and out in the bay a walled prison on its own island, joined to the town by a causeway, with a ferry across. The outbreak starts inside the walls.",
+            "", "", "", "", "", "",
             "",
             "One big island city in the middle of the sea, with two to five smaller island towns round it, every one lived in and joined to it by a bridge, and a causeway to the mainland. Always one size.",
             "",
@@ -94,7 +95,7 @@ final class CityConfig implements OptionSet {
             {STYLE_HOUSES, 1, 0, 3, 1, 2, 1, 0},      // Lakeside
             {STYLE_MIXED, 1, 1, 1, 2, 0, 1, 1},       // Harbour
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // Islands
-            {STYLE_MIXED, 2, 3, 1, 2, 0, 3, 1},       // Los Angeles
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 0},       // ((15.6) Prison Island, in the old Los Angeles' place)
             {STYLE_MIXED, 1, 2, 2, 2, 0, 3, 1},       // Portland
             {STYLE_MIXED, 2, 3, 1, 2, 0, 3, 1},       // Seattle
             {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // New York
@@ -260,7 +261,8 @@ final class CityConfig implements OptionSet {
         // ((11.5) Suburbs (2) too.)
         // ((15.2) Not 10 any more: it's Downtown Towers now.)
         // ((15.5) Nor 11: it's the Military Town.)
-        return preset == 2 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((15.6) Nor 15: the Prison Island.)
+        return preset == 2 || (preset >= 16 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -275,6 +277,11 @@ final class CityConfig implements OptionSet {
 
     boolean militaryTown() { return v[OPT_PRESET] == MILITARY_TOWN; }
 
+    /** ((15.6) The Prison Island map: a coastal town, and a walled prison on an island in the bay.) */
+    static final int PRISON_ISLAND = 15;
+
+    boolean prisonIsland() { return v[OPT_PRESET] == PRISON_ISLAND; }
+
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
         // ((13.0) The island maps come at the biggest size: Colossal, 1280 tiles across (640 and 720 before).)
@@ -286,7 +293,7 @@ final class CityConfig implements OptionSet {
     int water() {
         switch (v[OPT_PRESET]) {
             case 12: return W_LAKE;
-            case 13: return W_HARBOUR;
+            case 13: case PRISON_ISLAND: return W_HARBOUR;
             case ISLANDS: case ARCHIPELAGO: return W_ISLANDS;
             default: return W_NONE;
         }

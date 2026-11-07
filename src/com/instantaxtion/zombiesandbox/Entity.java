@@ -46,9 +46,11 @@ final class Entity {
     static final int ROLE_MORTAR = 17;
     /** ((15.0) Police officers on horseback, and traffic officers at the busy junctions.) */
     static final int ROLE_MOUNTED = 18, ROLE_TRAFFIC = 19;
+    /** ((15.6) The guards at the island prison.) */
+    static final int ROLE_PRISON_GUARD = 20;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -162,6 +164,8 @@ final class Entity {
     transient Entity commandedBy;
     /** ((14.9) When a way that couldn't be found is next looked for again.) */
     transient float pathRetry;
+    /** ((15.6) Locked up in the island prison (till it falls).) */
+    boolean inmate;
     /** ((14.9) Flying lessons on the pad so far, for an officer or soldier training to be its pilot.) */
     float trainT;
     /** ((14.9) A mortar team: when it last fired (a new fire mission after a lull is called in), and its restocking.) */

@@ -419,6 +419,10 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The Prison Island map (15.6):** a coastal town with a walled prison on an island in the bay, a causeway and a
+ferry. The outbreak starts in the prison yard; when the guards are overrun the gate opens and everyone inside pours
+over the causeway.
+
 **The Military Town map (15.5):** a great army base in the middle of town with an airfield, a tank park and rows of
 barracks, a garrison of 450 to 700 soldiers, and the town grown up round its gates.
 

@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.5";
-    static final int VERSION_CODE = 145;
+    static final String VERSION = "15.6";
+    static final int VERSION_CODE = 146;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.6  -  The Prison Island map",
+                    "A new map, Prison Island: a town on the coast, and out in the bay a walled prison on its own island, joined to the seafront by a causeway, with a ferry running across. Inside the high wall: cell blocks, the admin block, watchtowers, up to 140 inmates in orange out in the yard and their guards with shotguns.",
+                    "The outbreak starts inside the walls: if nothing has started it elsewhere first, a fight in the yard leaves several inmates bitten. Nobody climbs the wall; the inmates keep to the yard, running from the dead in there with them.",
+                    "When the dead overrun the guards (or the power fails), the prison falls: the gate opens, and inmates and the dead pour over the causeway into town. The police are called to the seafront.",
+            },
             {
                     "15.5  -  The Military Town map",
                     "A new map, Military Town: a great army base fills the middle of town, ringed by main roads, with the town grown up round its gates. Rows of barracks, an airfield with hangars, jets and a runway, a tank park, a gate on every side, and a well-stocked armoury (three times the rounds).",
