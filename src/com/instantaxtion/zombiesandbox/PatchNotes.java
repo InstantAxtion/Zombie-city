@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.5";
-    static final int VERSION_CODE = 135;
+    static final String VERSION = "14.6";
+    static final int VERSION_CODE = 136;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.6  -  The infantry fighting vehicle and the gun truck",
+                    "The infantry fighting vehicle: tracked and heavily armoured, with an autocannon that reaches further than any other vehicle gun and whose rounds burst among the dead, hurting the ones round each hit too. The army sends it to the worst fighting (eighteen or more of the dead).",
+                    "The gun truck: an open army truck with a fast-firing gun that pours twenty-round bursts into a horde. The army sends it to big packs out on the open roads.",
+                    "Both stay at the fight to give the squad covering fire, like the APC, and the army's convoy brings one of each.",
+            },
             {
                     "14.5  -  The dead rot, hordes on the march, the field hospital",
                     "The dead rot: nothing for the first eight minutes after one rises, then over the next twenty it gets slower on its feet and easier to put down (up to 40% of each), so a city that holds out long enough gains the upper hand. Their cards say how far gone they are.",

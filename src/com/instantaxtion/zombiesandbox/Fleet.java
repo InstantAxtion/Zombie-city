@@ -42,6 +42,11 @@ final class Fleet {
     static final int K_BEARCAT = 7;
     /** (14.0) The army engineers' bulldozer: pushes wrecks off the roads in town. */
     static final int K_DOZER = 8;
+    /**
+     * ((14.6) An infantry fighting vehicle: tracked and heavily armoured, with an autocannon whose rounds burst among
+     * the dead; and a gun truck: an open truck with a fast-firing gun that pours long bursts into a horde.)
+     */
+    static final int K_IFV = 9, K_GUNTRUCK = 10;
 
     /** Kinds of everyday car (which ones are about depends on the country). */
     static final int M_SEDAN = 0, M_PICKUP = 1, M_SUV = 2, M_KEI = 3, M_HATCH = 4, M_VAN = 5, M_TAXI = 6, M_BUS = 7,
@@ -322,6 +327,8 @@ final class Fleet {
                 return v.number > 0 ? car + "  -  " + callsign(v) : car;
             case TRUCK:
                 if (v.kind == K_APC) return "Armoured personnel carrier" + (v.guardUnit ? "  -  " + Country.guard()[1] : "");
+                if (v.kind == K_IFV) return "Infantry fighting vehicle";
+                if (v.kind == K_GUNTRUCK) return "Army gun truck";
                 if (v.kind == K_HUMVEE) return (v.guardUnit ? Country.guard()[1] + " " : "") + "Humvee" + (v.loop ? "  -  base patrol" : "");
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
                 if (v.kind == K_BEARCAT) return "Police BearCat";
@@ -581,25 +588,33 @@ final class Fleet {
     void setKind(Vehicle v, int kind) {
         v.kind = kind;
         float hp = kind == K_APC ? 520 : kind == K_HUMVEE ? 220 : kind == K_RIOT_VAN ? 380 : kind == K_BIKE ? 70 : kind == K_BEARCAT ? 600
-                : v.maxHp;
+                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : v.maxHp;
         v.hp = v.maxHp = hp;
     }
 
     /** The roof gun of an APC or a Humvee: short bursts at the nearest of the dead in reach. */
     private void turret(Vehicle v, float dt) {
-        if (v.broken || (v.kind != K_APC && v.kind != K_HUMVEE)) return;
+        if (v.broken || (v.kind != K_APC && v.kind != K_HUMVEE && v.kind != K_IFV && v.kind != K_GUNTRUCK)) return;
         v.gunCd -= dt;
         if (v.gunCd > 0) return;
-        float range = v.kind == K_APC ? 170 : 140;
+        float range = v.kind == K_IFV ? 240 : v.kind == K_GUNTRUCK ? 210 : v.kind == K_APC ? 170 : 140;
         Entity z = w.nearestZombie(v.x, v.y, range);
         if (z == null) {
             v.gunCd = 0.6f;
             return;
         }
         v.turret = (float) Math.atan2(z.y - v.y, z.x - v.x);
-        if (w.turretShot(v.x, v.y, z, v.kind == K_APC ? 24 : 18)) {
+        float dmg = v.kind == K_IFV ? 40 : v.kind == K_GUNTRUCK ? 15 : v.kind == K_APC ? 24 : 18;
+        if (w.turretShot(v.x, v.y, z, dmg)) {
             v.burst++;
-            v.gunCd = v.burst % 5 == 0 ? 1.1f : 0.14f;
+            if (v.kind == K_IFV) {
+                // ((14.6) Each round bursts: the dead round it are hit too. Three at a time, a breath between.)
+                w.cannonSplash(z.x, z.y, 16, 30);
+                v.gunCd = v.burst % 3 == 0 ? 1.4f : 0.45f;
+            } else if (v.kind == K_GUNTRUCK) {
+                // ((14.6) Long bursts, very fast: twenty rounds, then a moment to let the barrels cool.)
+                v.gunCd = v.burst % 20 == 0 ? 1.6f : 0.05f;
+            } else v.gunCd = v.burst % 5 == 0 ? 1.1f : 0.14f;
         } else v.gunCd = 0.4f;
     }
 
@@ -1564,6 +1579,19 @@ final class Fleet {
 
     /** Each army base still standing has its bulldozer, parked in the yard (made again after a game is loaded). */
     void ensureDozers() {
+        ensureDozers0();
+    }
+
+    /** (14.6) On or right beside a road (an open street for the gun truck). */
+    private boolean onRoad(float x, float y) {
+        int tx = (int) (x / City.T), ty = (int) (y / City.T);
+        for (int j = ty - 2; j <= ty + 2; j++)
+            for (int i = tx - 2; i <= tx + 2; i++)
+                if (i >= 0 && j >= 0 && i < city.w && j < city.h && city.tiles[j * city.w + i] == City.ROAD) return true;
+        return false;
+    }
+
+    private void ensureDozers0() {
         for (City.Facility f : city.facilities) {
             if (f.kind != City.FACILITY_BASE || f.fallen) continue;
             boolean has = false;
@@ -3853,7 +3881,7 @@ final class Fleet {
             if (v.state == DRIVE) {
                 unload(v, true);
                 v.passengers = 0;
-                if (v.kind == K_APC && v.supply == 0) {
+                if ((v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK) && v.supply == 0) {
                     // The APC stays to give its squad covering fire.
                     v.state = SCENE;
                     v.timer = 90;
@@ -5678,7 +5706,9 @@ final class Fleet {
         if (city.cfg.nature()) {
             // An APC into a big fight (or from an armoured base), a Humvee for a fast run a long way out.
             float far = (float) World.hypot(inc.x - p[0], inc.y - p[1]);
-            kind = inc.zombiesNear >= 10 || (base.baseType == City.BT_ARMOUR && inc.zombiesNear >= 5) ? K_APC
+            // ((14.6) The worst of it gets the IFV; a big pack out on the roads, the gun truck.)
+            kind = inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && onRoad(inc.x, inc.y) ? K_GUNTRUCK
+                    : inc.zombiesNear >= 10 || (base.baseType == City.BT_ARMOUR && inc.zombiesNear >= 5) ? K_APC
                     : far > 900 && squad.size() <= 4 ? K_HUMVEE : 0;
             if (forceKind >= 0) kind = forceKind;
         }
@@ -5704,7 +5734,8 @@ final class Fleet {
         float[] p = takeStandby(TRUCK, sx, sy, 600);
         if (p == null) p = city.takeParkedTruck(sx, sy, 600);
         if (p == null) return false;
-        int kind = city.cfg.nature() ? (inc.zombiesNear >= 10 ? K_APC : squad.size() <= 4 ? K_HUMVEE : 0) : 0;
+        int kind = city.cfg.nature() ? (inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && onRoad(inc.x, inc.y) ? K_GUNTRUCK
+                : inc.zombiesNear >= 10 ? K_APC : squad.size() <= 4 ? K_HUMVEE : 0) : 0;
         musterTruck(squad, p, inc, kind);
         return true;
     }

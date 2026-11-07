@@ -1825,7 +1825,9 @@ final class Dispatch {
             int n = Math.min(left, k < 2 ? 4 : 8);
             left -= n;
             enqueue(cv, Entity.SOLDIER, n, p, tx, ty, target, null, place);
-            if (city.cfg.nature()) column.get(column.size() - 1).vkind = k < 2 ? Fleet.K_HUMVEE : k % 4 == 3 ? Fleet.K_APC : 0;
+            // ((14.6) And an IFV and a gun truck in it.)
+            if (city.cfg.nature()) column.get(column.size() - 1).vkind = k < 2 ? Fleet.K_HUMVEE : k == 2 ? Fleet.K_IFV : k == 3 ? Fleet.K_GUNTRUCK
+                    : k % 4 == 3 ? Fleet.K_APC : 0;
         }
         int tanks = 2;
         for (int t = 0; t < tanks; t++) {

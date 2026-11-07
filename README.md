@@ -419,6 +419,10 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The infantry fighting vehicle and the gun truck (14.6):** the army sends an IFV (tracked, armoured, an autocannon
+whose rounds burst among the dead) to the worst fighting, and a gun truck (long fast bursts) to big packs out on the
+roads; both stay to give covering fire, and the convoy brings one of each.
+
 **The dead rot, hordes on the march, the field hospital (14.5):** from eight minutes after rising the dead slowly rot,
 slower and easier to put down; big hordes now and then march across the city for the biggest crowd of the living; and
 the army sets up a field hospital where badly hurt police and soldiers are patched up.

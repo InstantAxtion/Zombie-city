@@ -4385,6 +4385,9 @@ final class GameView extends View implements Menu.Host {
         } else if (v.kind == Fleet.K_DOZER) {
             hl = 8.5f;
             hw = 5.4f;
+        } else if (v.kind == Fleet.K_IFV) {
+            hl = 11.5f;
+            hw = 6f;
         }
         int model = v.type == Fleet.CAR ? v.model : -1;
         if (model >= 0) {
@@ -4486,6 +4489,27 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(-hl * 0.75f, -2.2f, -hl * 0.45f, -0.6f, fill);
             c.drawRect(-hl * 0.75f, 0.6f, -hl * 0.45f, 2.2f, fill);
             drawRoofGun(c, v, 0, 3.2f, 7.5f, body);
+        } else if (v.kind == Fleet.K_IFV) {
+            // ((14.6) The infantry fighting vehicle: tracks down each side, a sloped hull and a turret with a long barrel.)
+            fill.setColor(0xFF1C1D1A);
+            c.drawRect(-hl, -hw - 0.6f, hl, -hw + 1.8f, fill);
+            c.drawRect(-hl, hw - 1.8f, hl, hw + 0.6f, fill);
+            fill.setColor(City.darken(body, 0.8f));
+            c.drawRect(-hl + 1, -hw + 1.8f, hl - 1, hw - 1.8f, fill);
+            fill.setColor(City.lighten(body, 0.14f));
+            c.drawRect(hl * 0.55f, -hw + 1.8f, hl - 0.5f, hw - 1.8f, fill);
+            drawRoofGun(c, v, -hl * 0.1f, 3.6f, 11f, body);
+        } else if (v.kind == Fleet.K_GUNTRUCK) {
+            // ((14.6) The gun truck: the cab in front, an open bed behind, and the gun mounted in it.)
+            fill.setColor(City.lighten(body, 0.1f));
+            c.drawRect(hl * 0.35f, -hw + 0.8f, hl - 0.6f, hw - 0.8f, fill);
+            fill.setColor(0xFF1E2A33);
+            c.drawRect(hl * 0.35f, -hw + 1.2f, hl * 0.5f, hw - 1.2f, fill);
+            fill.setColor(City.darken(body, 0.7f));
+            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.3f, hw - 0.8f, fill);
+            fill.setColor(0xFF6A5A3A);
+            c.drawRect(-hl * 0.65f, -hw + 1.4f, -hl * 0.4f, hw - 1.4f, fill);
+            drawRoofGun(c, v, -hl * 0.3f, 2.4f, 8f, body);
         } else if (v.kind == Fleet.K_DOZER) {
             // ((14.0) The engineers' bulldozer: tracks down each side, the cab at the back, the blade across the front.)
             fill.setColor(0xFF1C1D1A);

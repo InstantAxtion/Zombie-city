@@ -13090,6 +13090,30 @@ final class World {
      * A vehicle's roof gun (an APC's, a Humvee's) firing at a zombie, if it has a clear line and nobody living is
      * standing next to it. Returns false if it held fire.
      */
+    /** (14.6) An autocannon round bursting at (x, y): the dead within r of it hurt too (dmg each, less further out). */
+    void cannonSplash(float x, float y, float r, float dmg) {
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
+                    float d = (float) World.hypot(o.x - x, o.y - y);
+                    if (d > r) continue;
+                    o.hp -= dmg * (1 - 0.5f * d / r) * (o.armored ? 0.6f : 1);
+                    o.hurt = 1;
+                    o.killedByZombie = false;
+                }
+            }
+        particle(x, y, 0, 0, 0.1f, 5, 0xFFFFD27A, P_FLASH);
+        for (int i = 0; i < 4; i++) {
+            float a = rnd.nextFloat() * TAU, s = 30 + rnd.nextFloat() * 60;
+            particle(x, y, (float) Math.cos(a) * s, (float) Math.sin(a) * s, 0.4f + rnd.nextFloat() * 0.3f, 0.6f + rnd.nextFloat() * 0.6f, 0xFF4A4640, P_DEBRIS);
+        }
+    }
+
     boolean turretShot(float fx, float fy, Entity t, float dmg) {
         if (!city.los(fx, fy, t.x, t.y) || peopleNear(t.x, t.y, 16)) return false;
         shotsFired++;

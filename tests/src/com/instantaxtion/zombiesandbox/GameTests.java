@@ -2929,6 +2929,11 @@ public final class GameTests {
                         inc.resolved = false;
                         if (!w.dispatch.incidents.contains(inc)) w.dispatch.incidents.add(inc);
                         for (Entity zz : dead) zz.speed = zz.runSpeed = 0;
+                        // (In the first round nobody else armed wanders up to the pack: a passing patrol would - rightly -
+                        // stop the mortar firing.)
+                        if (round == 0)
+                            for (Entity o : w.entities)
+                                if (!o.dead && o.isArmed() && o != mortar && Math.hypot(o.x - pack[0], o.y - pack[1]) < 140) o.dead = o.removed = true;
                         // (The officers stay put beside them: out of rounds, they'd otherwise walk off.)
                         for (Entity cop : cops) {
                             cop.x = cop.postX;
@@ -3407,6 +3412,62 @@ public final class GameTests {
                 World l = SaveGame.load(f);
                 f.delete();
                 check(Math.abs(l.hospitalX - w.hospitalX) < 0.1f, "the field hospital saved");
+            }
+        });
+        test("14.6: the army sends an IFV to the worst of it and a gun truck to a horde on the road, and both cut them down", new Check() {
+            public void run() {
+                for (int round = 0; round < 2; round++) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_PRESET] = 0;
+                    c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                    c.v[CityConfig.OPT_ZOMBIES] = 0;
+                    c.seed = 77;
+                    c.normalize();
+                    c.seed = 77;
+                    World w = new World(c);
+                    w.populate(c);
+                    City.Facility base = w.city.mainBase();
+                    check(base != null, "a base");
+                    java.util.List<Entity> squad = new java.util.ArrayList<Entity>();
+                    for (Entity e : w.entities)
+                        if (squad.size() < 4 && !e.dead && e.type == Entity.SOLDIER && e.rig == null && Math.hypot(e.x - base.x, e.y - base.y) < base.r + 200) squad.add(e);
+                    // A call far off: the worst of it (an IFV), or a pack on an open road (a gun truck).
+                    java.util.Random r = new java.util.Random(3 + round);
+                    float[] at = null;
+                    for (int k = 0; k < 4000 && at == null; k++) {
+                        float[] q = w.city.randomWalkableInTown(r);
+                        int t = w.city.tileIndex(q[0], q[1]);
+                        boolean road = w.city.tiles[t] == City.ROAD;
+                        if (Math.hypot(q[0] - base.x, q[1] - base.y) > 1000 && (round == 1) == road) at = q;
+                    }
+                    Dispatch.Incident inc = new Dispatch.Incident();
+                    inc.x = at[0];
+                    inc.y = at[1];
+                    inc.place = "the test";
+                    inc.zombiesNear = round == 0 ? 20 : 14;
+                    int before = w.fleet.vehicles.size();
+                    check(w.fleet.troopTruck(squad, base, inc), "a vehicle for them");
+                    Fleet.Vehicle v = w.fleet.vehicles.get(w.fleet.vehicles.size() - 1);
+                    check(w.fleet.vehicles.size() > before && v.kind == (round == 0 ? Fleet.K_IFV : Fleet.K_GUNTRUCK),
+                            (round == 0 ? "an IFV" : "a gun truck") + " (kind " + v.kind + ")");
+                    // A pack of the dead in range of it while it waits for its squad.
+                    java.util.List<Entity> dead = new java.util.ArrayList<Entity>();
+                    for (int z = 0; z < 8; z++) {
+                        float[] p = w.city.findWalkable(v.x + 110 + (z % 4) * 6, v.y + (z / 4) * 6);
+                        if (p == null || !w.city.los(v.x, v.y, p[0], p[1])) continue;
+                        Entity zz = w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                        zz.speed = zz.runSpeed = 0;
+                        dead.add(zz);
+                    }
+                    for (int f = 0; f < 30 * 12; f++) {
+                        for (Entity zz : dead) zz.speed = zz.runSpeed = 0;
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                    }
+                    int down = 0;
+                    for (Entity zz : dead) if (zz.dead || zz.hp <= 0) down++;
+                    check(dead.size() >= 4 && down * 2 >= dead.size(), "it cuts them down (" + down + " of " + dead.size() + ")");
+                }
             }
         });
         test("every screen draws", new Check() {
