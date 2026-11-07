@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The Downtown Towers map (15.2):** a new map of skyscrapers on a tight grid of narrow streets, with hardly a park.
+
 **Six save slots and the hall of fame (15.1):** six save slots plus the autosave. Records now keeps a hall of fame of
 the ten best police officers and soldiers across all your games, by kills and lives saved.
 

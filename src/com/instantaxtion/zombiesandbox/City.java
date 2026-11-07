@@ -2353,6 +2353,8 @@ final class City {
         maxLeaf += 3;
         if (rural) maxLeaf += 6;
         if (cfg.density() == 2) maxLeaf -= 2;
+        // ((15.2) Downtown Towers: smaller blocks still, so more and narrower streets between the towers.)
+        if (cfg.towers()) maxLeaf -= 3;
         // Blocks are twice the size they used to be (in tiles): real buildings need room.
         maxLeaf *= 2;
         if (bw <= maxLeaf && bh <= maxLeaf) {
@@ -2365,6 +2367,11 @@ final class City {
         int roadW = big ? 5 : 3, minSide = 16;
         // ((11.1) The great cross-town routes, the first splits of a big town, are boulevards: three lanes each way.)
         if (cfg.civic >= 27 && big && depth <= 1 && Math.max(bw, bh) > 150) roadW = 7;
+        // ((15.2) Downtown Towers: past the first cross-town routes, every street is a narrow one between the towers.)
+        if (cfg.towers() && depth >= 2) {
+            roadW = 3;
+            minSide = 13;
+        }
         boolean vertical;
         if (bw > bh * 1.3f) vertical = true;
         else if (bh > bw * 1.3f) vertical = false;
@@ -5152,7 +5159,7 @@ final class City {
             roof = WAREHOUSE_ROOFS[rnd.nextInt(WAREHOUSE_ROOFS.length)];
             wall = WAREHOUSE_WALLS[rnd.nextInt(WAREHOUSE_WALLS.length)];
         } else if (kind == APARTMENT) {
-            floors = 3 + rnd.nextInt(4) + height * 2;
+            floors = 3 + rnd.nextInt(4) + height * 2 + (cfg.towers() ? 6 : 0);
             roof = darken(ROOFS[rnd.nextInt(ROOFS.length)], 0.9f);
             wall = country.apartmentWalls[rnd.nextInt(country.apartmentWalls.length)];
         } else if (kind == GARAGE) {
@@ -5174,6 +5181,8 @@ final class City {
                 case 2: floors = 3 + rnd.nextInt(4) + (int) (dt * dt * r * 14); break;
                 default: floors = 4 + rnd.nextInt(5) + (int) (dt * r * 18); break;
             }
+            // ((15.2) Downtown Towers: skyscrapers, the tallest at the heart of it.)
+            if (cfg.towers() && lw * lh >= 36) floors = Math.max(floors, 8 + rnd.nextInt(8) + (int) (dt * r * 34));
             int min = Math.min(lw, lh);
             if (min <= 2) floors = Math.min(floors, 4);
             else if (min <= 3) floors = Math.min(floors, 8);

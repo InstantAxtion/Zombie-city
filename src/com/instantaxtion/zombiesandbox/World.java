@@ -8817,7 +8817,7 @@ final class World {
         if (e.role == Entity.ROLE_TRAFFIC && e.task == Dispatch.T_POST) {
             // (Through the emergency itself - that's when the lights and sirens are out - till the dead come near, or
             // the city's being lost.)
-            if ((warBalance < 0.35f && time > 30) || (threat != null && World.hypot(threat.x - e.x, threat.y - e.y) < 140)) {
+            if ((warBalance < 0.35f && time > 30) || countZombiesNear(e.x, e.y, 140) > 0) {
                 e.task = Dispatch.T_NONE;
                 return false;
             }
@@ -8826,10 +8826,6 @@ final class World {
             return true;
         }
         if (e.role != Entity.ROLE_MOUNTED) return false;
-        if ((e.lookT -= dt) <= 0) {
-            e.lookT = 1;
-            markSpotted(e.x, e.y, MOUNT_SEE);
-        }
         if (e.task != Dispatch.T_NONE || threat != null || e.leader != null) return false;
         if (e.patrolX == 0 || World.hypot(e.patrolX - e.x, e.patrolY - e.y) < 20 || e.blocked && rnd.nextFloat() < 0.02f) {
             // Somewhere green or open not far off: a park, a trail, a square.
@@ -9043,6 +9039,12 @@ final class World {
             case Entity.W_DMR: range = Math.max(range, 300); break;
         }
         if (e.role == Entity.ROLE_COMMANDER && soldier) command(e, dt);
+        // ((15.0) Up on a horse, a mounted officer sees the dead round them - whatever they're doing - and marks them
+        // for the units nearby.)
+        if (!soldier && e.role == Entity.ROLE_MOUNTED && (e.lookT -= dt) <= 0) {
+            e.lookT = 1;
+            markSpotted(e.x, e.y, MOUNT_SEE);
+        }
         // The rescue team brings people in to the helicopter.
         if (e.role == Entity.ROLE_SAR && e.task == Dispatch.T_RESCUE && rescuer(e, dt)) return;
         if (e.meleeCd <= 0) {

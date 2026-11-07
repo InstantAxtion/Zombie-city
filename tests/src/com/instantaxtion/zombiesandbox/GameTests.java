@@ -177,7 +177,8 @@ public final class GameTests {
                 check(old.applyCode("12-44") && old.country() == Country.USA, "codes build American cities");
                 check(!new CityConfig().applyCode("22-77@16"), "a code for another country doesn't load");
                 // ((12.7) The real cities too: Los Angeles, Portland, Seattle and New York, 15 to 18.)
-                for (int p : new int[]{10, 11, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
+                // ((15.2) Not 10: its place went to Downtown Towers.)
+                for (int p : new int[]{11, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
                     check(CityConfig.removed(p) && CityConfig.retired(CityConfig.OPT_PRESET, p) && CityConfig.PRESETS[p].isEmpty(), "map " + p + " is gone");
                     check(!new CityConfig().applyCode(String.valueOf("123456789ABCDEFGHIJKLMNOPQRST".charAt(p)) + "3-5"), "and its city code doesn't load");
                     CityConfig c = new CityConfig();
@@ -3853,27 +3854,46 @@ public final class GameTests {
                 for (Entity h : horses) if (!h.dead && h.patrolX != 0) riding++;
                 check(riding >= 1, "out riding the parks (" + riding + ")");
                 // Up on a horse they see the dead round them and mark them for the others.
+                for (Entity hh : horses) if (!hh.dead && !hh.removed && hh.ride == null) m = hh;
                 float[] p = w.city.findWalkable(m.x + 90, m.y);
                 Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
                 z.speed = z.runSpeed = 0;
                 boolean marked = false;
                 for (int f = 0; f < 30 * 2 && !marked; f++) {
+                    // (Tough enough not to be shot down before the next look round.)
+                    z.hp = z.maxHp = 100000;
                     w.update(1 / 30f);
                     w.evCount = 0;
                     marked = z.spottedUntil > w.time;
                 }
                 check(marked, "the dead nearby marked for the others");
                 // The dead come near: the traffic officers leave their junctions and join in.
+                java.util.List<Entity> near = new java.util.ArrayList<Entity>(), threatened = new java.util.ArrayList<Entity>();
                 for (Entity t : traffic) {
-                    float[] q = w.city.findWalkable(t.x + 60, t.y);
-                    if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                    // (Where they can see it: along the street from their corner.)
+                    float[] q = null;
+                    for (int k = 0; k < 8 && q == null; k++) {
+                        float ang = k * (float) Math.PI / 4;
+                        float[] p2 = w.city.findWalkable(t.x + (float) Math.cos(ang) * 60, t.y + (float) Math.sin(ang) * 60);
+                        if (p2 != null && w.city.los(t.x, t.y, p2[0], p2[1])) q = p2;
+                    }
+                    if (q != null) {
+                        near.add(w.spawn(Entity.ZOMBIE, q[0], q[1]));
+                        threatened.add(t);
+                    }
                 }
-                for (int f = 0; f < 30 * 2; f++) {
+                for (int f = 0; f < 30 * 3; f++) {
+                    for (Entity zz : near) {
+                        zz.hp = zz.maxHp = 100000;
+                        zz.speed = zz.runSpeed = 0;
+                    }
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
                 int still = 0;
-                for (Entity t : traffic) if (!t.dead && t.task == Dispatch.T_POST) still++;
+                // (Those with one of the dead still within reach of them: one put down by someone else doesn't count.)
+                for (Entity t : threatened) if (!t.dead && t.task == Dispatch.T_POST && w.countZombiesNear(t.x, t.y, 140) > 0) still++;
+                check(threatened.size() >= 1, "the dead near some of them");
                 check(still == 0, "off their junctions with the dead near (" + still + " still there)");
             }
         });
@@ -3973,6 +3993,39 @@ public final class GameTests {
                 check(saved6, "saved to slot 6");
                 check(gv.loadSlot(6), "and loaded from it");
                 gv.deleteSlot(6);
+            }
+        });
+        test("15.2: the Downtown Towers map - offered, taller, denser, more and narrower streets, hardly a park", new Check() {
+            public void run() {
+                check(!CityConfig.retired(CityConfig.OPT_PRESET, CityConfig.TOWERS) && !CityConfig.removed(CityConfig.TOWERS), "offered on the New Game screen");
+                World[] ws = new World[2];
+                int[] presets = {CityConfig.TOWERS, CityConfig.METROPOLIS};
+                for (int k = 0; k < 2; k++) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_PRESET] = presets[k];
+                    c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                    c.v[CityConfig.OPT_ZOMBIES] = 0;
+                    c.seed = 5;
+                    c.normalize();
+                    c.seed = 5;
+                    check(c.v[CityConfig.OPT_PRESET] == presets[k], "kept as chosen");
+                    ws[k] = new World(c);
+                    ws[k].populate(c);
+                }
+                long[] h = new long[2];
+                int[] n = new int[2], tall = new int[2];
+                for (int k = 0; k < 2; k++)
+                    for (City.Building b : ws[k].city.buildings) {
+                        if (b.height <= 0) continue;
+                        n[k]++;
+                        h[k] += (long) b.height;
+                        if (b.height > 200) tall[k]++;
+                    }
+                check(tall[0] >= 10 && tall[0] > tall[1] * 2 && h[0] / n[0] > h[1] / n[1], "skyscrapers (" + tall[0] + " very tall, against " + tall[1] + ")");
+                check(ws[0].city.junctions.size() > ws[1].city.junctions.size() * 1.2f, "more streets (" + ws[0].city.junctions.size() + " junctions, against " + ws[1].city.junctions.size() + ")");
+                int stations = 0;
+                for (City.Facility f : ws[0].city.facilities) if (f.kind == City.FACILITY_POLICE) stations++;
+                check(ws[0].humans > 1000 && stations >= 2, "people and police (" + ws[0].humans + ", " + stations + " stations)");
             }
         });
         test("every screen draws", new Check() {

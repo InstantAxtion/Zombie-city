@@ -1358,6 +1358,12 @@ final class Menu {
             if (i == CityConfig.ISLANDS || i == CityConfig.ARCHIPELAGO) {
                 c.drawCircle(ex - u * 1.2f, ey, u * 0.9f, fill);
                 c.drawCircle(ex + u * 1.1f, ey + u * 0.4f, u * 0.65f, fill);
+            } else if (i == CityConfig.TOWERS) {
+                // ((15.2) Skyscrapers, packed close.)
+                c.drawRect(ex - u * 1.8f, ey - u * 0.9f, ex - u * 1.05f, ey + u, fill);
+                c.drawRect(ex - u * 0.9f, ey - u * 2.1f, ex - u * 0.15f, ey + u, fill);
+                c.drawRect(ex, ey - u * 1.5f, ex + u * 0.7f, ey + u, fill);
+                c.drawRect(ex + u * 0.85f, ey - u * 2.5f, ex + u * 1.75f, ey + u, fill);
             } else {
                 c.drawRect(ex - u * 1.6f, ey - u * 0.4f, ex - u * 0.8f, ey + u, fill);
                 c.drawRect(ex - u * 0.6f, ey - u * 1.4f, ex + u * 0.3f, ey + u, fill);

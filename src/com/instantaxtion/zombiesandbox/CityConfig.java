@@ -8,7 +8,7 @@ import java.util.Random;
  */
 final class CityConfig implements OptionSet {
     static final String[] PRESETS = {"Classic", "Downtown", "Suburbs", "Industrial", "Parkland", "Old Town",
-            "Small Town", "Campus", "Metropolis", "Village", "", "", "Lakeside", "Harbour", "Islands",
+            "Small Town", "Campus", "Metropolis", "Village", "Downtown Towers", "", "Lakeside", "Harbour", "Islands",
             // ((12.7) The places of maps taken out of the game, the real cities among them, are kept so the others keep
             // their numbers: see removed.)
             "", "", "", "", "", "", "",
@@ -28,7 +28,7 @@ final class CityConfig implements OptionSet {
             "Schools, sports fields, courts and student apartments.",
             "A huge, dense skyline: towers, apartments, garages, three precincts and a base.",
             "A few lanes of cottages among fields and gardens. Help is far away.",
-            "",
+            "A dense centre of skyscrapers on narrow streets, with hardly a park: towers, apartments, garages, three precincts and a base.",
             "",
             "Homes and parks round a lake in the middle of town, with a jetty, rowing boats and an island.",
             "A working port: quays, docks, cranes, container stacks and ships, with warehouses along the water.",
@@ -89,7 +89,7 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 1, 3, 1, 2, 1, 0},       // Campus
             {STYLE_OFFICES, 2, 3, 1, 2, 1, 3, 1},     // Metropolis
             {STYLE_HOUSES, 0, 0, 3, 1, 2, 1, 0},      // Village
-            {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 0},       // Seaside
+            {STYLE_OFFICES, 2, 3, 0, 2, 0, 3, 1},     // ((15.2) Downtown Towers, in the old Seaside's place)
             {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // River City
             {STYLE_HOUSES, 1, 0, 3, 1, 2, 1, 0},      // Lakeside
             {STYLE_MIXED, 1, 1, 1, 2, 0, 1, 1},       // Harbour
@@ -123,7 +123,7 @@ final class CityConfig implements OptionSet {
             {1, 3, 1, 1, 1, 0, 20},   // Campus
             {2, 2, 2, 2, 1, 0, 50},   // Metropolis
             {1, 1, 1, 1, 1, 1, 20},   // Village
-            {1, 1, 1, 1, 1, 0, 40},   // Seaside
+            {1, 1, 2, 2, 1, 0, 12},   // Downtown Towers (few shopping rows: the blocks are towers)
             {1, 1, 1, 1, 1, 1, 30},   // River City
             {1, 1, 1, 1, 1, 1, 15},   // Lakeside
             {1, 1, 1, 1, 2, 0, 20},   // Harbour
@@ -141,7 +141,7 @@ final class CityConfig implements OptionSet {
     // Share of office lots that become apartment blocks, parking garages and pharmacies (percent).
     private static final int[][] BUILDING_MIX = {
             {15, 6, 5}, {15, 15, 5}, {20, 0, 6}, {5, 8, 2}, {15, 3, 6}, {10, 0, 8}, {10, 2, 8}, {20, 5, 6},
-            {25, 15, 4}, {0, 0, 10}, {25, 3, 6}, {20, 8, 5}, {15, 2, 6}, {10, 6, 3}, {20, 8, 5},
+            {25, 15, 4}, {0, 0, 10}, {30, 18, 4}, {20, 8, 5}, {15, 2, 6}, {10, 6, 3}, {20, 8, 5},
             {20, 12, 5}, {20, 6, 5}, {25, 10, 5}, {35, 12, 4}, {25, 8, 5}, {35, 12, 5}, {35, 4, 6},
             {30, 8, 4},
             {20, 8, 5}, {12, 3, 6},
@@ -258,10 +258,16 @@ final class CityConfig implements OptionSet {
      */
     static boolean removed(int preset) {
         // ((11.5) Suburbs (2) too.)
-        return preset == 2 || preset == 10 || preset == 11 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((15.2) Not 10 any more: it's Downtown Towers now.)
+        return preset == 2 || preset == 11 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
+
+    /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
+    static final int TOWERS = 10;
+
+    boolean towers() { return v[OPT_PRESET] == TOWERS; }
 
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
@@ -542,7 +548,7 @@ final class CityConfig implements OptionSet {
 
     // Which maps have a railway line (with a station and passing trains).
     // Which maps have a railway line: 0 never, 1 about half the time (it depends on the city), 2 always.
-    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
+    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
 
     boolean hasRail() {
         int r = RAIL[v[OPT_PRESET]];
@@ -562,7 +568,7 @@ final class CityConfig implements OptionSet {
             {0, 2, 1, 3, 0, 6, 2, 5},   // Campus
             {6, 5, 1, 1, 3, 0, 1, 0},   // Metropolis
             {0, 0, 3, 6, 0, 0, 3, 2},   // Village
-            {2, 4, 2, 4, 0, 0, 3, 1},   // Seaside
+            {9, 4, 1, 0, 1, 0, 0, 0},   // Downtown Towers
             {4, 4, 2, 3, 2, 1, 1, 0},   // River City
             {1, 2, 1, 6, 0, 1, 4, 6},   // Lakeside
             {2, 3, 1, 2, 5, 0, 0, 1},   // Harbour
