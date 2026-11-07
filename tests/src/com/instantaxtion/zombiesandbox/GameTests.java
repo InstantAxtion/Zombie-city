@@ -177,8 +177,8 @@ public final class GameTests {
                 check(old.applyCode("12-44") && old.country() == Country.USA, "codes build American cities");
                 check(!new CityConfig().applyCode("22-77@16"), "a code for another country doesn't load");
                 // ((12.7) The real cities too: Los Angeles, Portland, Seattle and New York, 15 to 18.)
-                // ((15.2) Not 10: its place went to Downtown Towers.)
-                for (int p : new int[]{11, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
+                // ((15.2) Not 10: its place went to Downtown Towers. (15.5) Nor 11: the Military Town.)
+                for (int p : new int[]{15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28}) {
                     check(CityConfig.removed(p) && CityConfig.retired(CityConfig.OPT_PRESET, p) && CityConfig.PRESETS[p].isEmpty(), "map " + p + " is gone");
                     check(!new CityConfig().applyCode(String.valueOf("123456789ABCDEFGHIJKLMNOPQRST".charAt(p)) + "3-5"), "and its city code doesn't load");
                     CityConfig c = new CityConfig();
@@ -4104,6 +4104,55 @@ public final class GameTests {
                 check(a.grenades == 5, "no more rounds from the base (" + a.grenades + ")");
                 check(a.task == Dispatch.T_POST, "one with rounds left stays in its pit");
                 check(b.task != Dispatch.T_POST, "one with none left has gone to fight (task " + b.task + ")");
+            }
+        });
+        test("15.5: the Military Town map - a great base in the middle, the town round its gates, far more soldiers", new Check() {
+            public void run() {
+                check(!CityConfig.retired(CityConfig.OPT_PRESET, CityConfig.MILITARY_TOWN) && !CityConfig.removed(CityConfig.MILITARY_TOWN), "offered on the New Game screen");
+                World[] ws = new World[2];
+                int[] presets = {CityConfig.MILITARY_TOWN, CityConfig.METROPOLIS};
+                for (int k = 0; k < 2; k++) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_PRESET] = presets[k];
+                    c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                    c.v[CityConfig.OPT_ZOMBIES] = 0;
+                    c.seed = 6;
+                    c.normalize();
+                    c.seed = 6;
+                    ws[k] = new World(c);
+                    ws[k].setMaxPopulation(0);
+                    ws[k].populate(c);
+                }
+                World w = ws[0];
+                City.Facility base = w.city.mainBase();
+                check(base != null && base.r > ws[1].city.mainBase().r * 2, "a great base (" + (base == null ? 0 : base.r) + " across, against " + ws[1].city.mainBase().r + ")");
+                float mid = (float) Math.hypot(base.x - w.city.worldW() / 2f, base.y - w.city.worldH() / 2f);
+                check(mid < w.city.worldW() * 0.15f, "in the middle of town (" + (int) mid + " from it)");
+                int[] soldiers = new int[2];
+                for (int k = 0; k < 2; k++) for (Entity e : ws[k].entities) if (e.type == Entity.SOLDIER) soldiers[k]++;
+                check(soldiers[0] >= 450 && soldiers[0] > soldiers[1] * 1.3f, "far more soldiers (" + soldiers[0] + " against " + soldiers[1] + ")");
+                check(base.ammo > ws[1].city.mainBase().ammo * 2, "a well-stocked armoury");
+                int bases = 0;
+                for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_BASE) bases++;
+                check(bases == 1, "the one great base (" + bases + ")");
+                // Out through the gates into town, on foot.
+                java.util.Random r = new java.util.Random(2);
+                int out = 0;
+                for (int k = 0; k < 6; k++) {
+                    float[] q = null;
+                    for (int t = 0; t < 400 && q == null; t++) {
+                        float[] p = w.city.randomWalkableInTown(r);
+                        if (Math.hypot(p[0] - base.x, p[1] - base.y) > base.r * 1.6f) q = p;
+                    }
+                    int[] path = w.city.findPath(base.x, base.y, q[0], q[1], 60000);
+                    if (path != null && path.length > 0) out++;
+                }
+                check(out == 6, "out of the base into town on foot (" + out + " of 6)");
+                // And a garrison that rolls out when the dead come.
+                for (int f = 0; f < 30 * 20; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
             }
         });
         test("every screen draws", new Check() {

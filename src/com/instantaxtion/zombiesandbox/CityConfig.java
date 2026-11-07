@@ -8,7 +8,7 @@ import java.util.Random;
  */
 final class CityConfig implements OptionSet {
     static final String[] PRESETS = {"Classic", "Downtown", "Suburbs", "Industrial", "Parkland", "Old Town",
-            "Small Town", "Campus", "Metropolis", "Village", "Downtown Towers", "", "Lakeside", "Harbour", "Islands",
+            "Small Town", "Campus", "Metropolis", "Village", "Downtown Towers", "Military Town", "Lakeside", "Harbour", "Islands",
             // ((12.7) The places of maps taken out of the game, the real cities among them, are kept so the others keep
             // their numbers: see removed.)
             "", "", "", "", "", "", "",
@@ -29,7 +29,7 @@ final class CityConfig implements OptionSet {
             "A huge, dense skyline: towers, apartments, garages, three precincts and a base.",
             "A few lanes of cottages among fields and gardens. Help is far away.",
             "A dense centre of skyscrapers on narrow streets, with hardly a park: towers, apartments, garages, three precincts and a base.",
-            "",
+            "A huge army base in the middle, with the town grown up round its gates: far more soldiers, a runway, a well-stocked armoury and a small police force.",
             "Homes and parks round a lake in the middle of town, with a jetty, rowing boats and an island.",
             "A working port: quays, docks, cranes, container stacks and ships, with warehouses along the water.",
             "Three island towns in the sea, joined by bridges, with a causeway to the mainland. Always one size: between Large and Massive.",
@@ -90,7 +90,7 @@ final class CityConfig implements OptionSet {
             {STYLE_OFFICES, 2, 3, 1, 2, 1, 3, 1},     // Metropolis
             {STYLE_HOUSES, 0, 0, 3, 1, 2, 1, 0},      // Village
             {STYLE_OFFICES, 2, 3, 0, 2, 0, 3, 1},     // ((15.2) Downtown Towers, in the old Seaside's place)
-            {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // River City
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 1},       // ((15.5) Military Town, in the old River City's place)
             {STYLE_HOUSES, 1, 0, 3, 1, 2, 1, 0},      // Lakeside
             {STYLE_MIXED, 1, 1, 1, 2, 0, 1, 1},       // Harbour
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // Islands
@@ -124,7 +124,7 @@ final class CityConfig implements OptionSet {
             {2, 2, 2, 2, 1, 0, 50},   // Metropolis
             {1, 1, 1, 1, 1, 1, 20},   // Village
             {1, 1, 2, 2, 1, 0, 12},   // Downtown Towers (few shopping rows: the blocks are towers)
-            {1, 1, 1, 1, 1, 1, 30},   // River City
+            {1, 1, 1, 1, 2, 1, 30},   // Military Town
             {1, 1, 1, 1, 1, 1, 15},   // Lakeside
             {1, 1, 1, 1, 2, 0, 20},   // Harbour
             {2, 2, 2, 2, 2, 1, 30},   // Islands
@@ -259,7 +259,8 @@ final class CityConfig implements OptionSet {
     static boolean removed(int preset) {
         // ((11.5) Suburbs (2) too.)
         // ((15.2) Not 10 any more: it's Downtown Towers now.)
-        return preset == 2 || preset == 11 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((15.5) Nor 11: it's the Military Town.)
+        return preset == 2 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -268,6 +269,11 @@ final class CityConfig implements OptionSet {
     static final int TOWERS = 10;
 
     boolean towers() { return v[OPT_PRESET] == TOWERS; }
+
+    /** ((15.5) The Military Town map: a huge base in the middle, the town round its gates.) */
+    static final int MILITARY_TOWN = 11;
+
+    boolean militaryTown() { return v[OPT_PRESET] == MILITARY_TOWN; }
 
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
@@ -465,7 +471,9 @@ final class CityConfig implements OptionSet {
         // (10.33: bigger garrisons.)
         // ((12.2) Bigger again: one in 40 and twelve more, up to 160 (one in 50 up to 120 to 12.0, one in 70 in 12.1).)
         // ((13.0) Up to 300 with the more bases: 160 before.)
-        return Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
+        int n = Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
+        // ((15.5) The Military Town's great base: three times the garrison, and never fewer than 450.)
+        return militaryTown() ? Math.min(700, Math.max(450, n * 3)) : n;
     }
 
 
@@ -521,7 +529,7 @@ final class CityConfig implements OptionSet {
 
     /** (13.0) Army bases in town besides the main one: one on the Default and Large maps, up to four on the Colossal. */
     int extraBases() {
-        if (!militaryBase()) return 0;
+        if (!militaryBase() || militaryTown()) return 0;
         int s = v[OPT_SIZE];
         return s < LARGE ? 0 : s <= MASSIVE ? 1 : s == HUGE ? 2 : s == GIGANTIC ? 3 : 4;
     }
@@ -569,7 +577,7 @@ final class CityConfig implements OptionSet {
             {6, 5, 1, 1, 3, 0, 1, 0},   // Metropolis
             {0, 0, 3, 6, 0, 0, 3, 2},   // Village
             {9, 4, 1, 0, 1, 0, 0, 0},   // Downtown Towers
-            {4, 4, 2, 3, 2, 1, 1, 0},   // River City
+            {1, 3, 1, 6, 2, 0, 2, 3},   // Military Town
             {1, 2, 1, 6, 0, 1, 4, 6},   // Lakeside
             {2, 3, 1, 2, 5, 0, 0, 1},   // Harbour
             {3, 4, 2, 4, 1, 1, 2, 0},   // Islands

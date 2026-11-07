@@ -2535,6 +2535,8 @@ final class City {
             lakeTown(bx0, by0, bx1, by1, in);
         } else if (village && m > 0) {
             villageCore(bx0, by0, bx1, by1);
+        } else if (cfg.militaryTown()) {
+            militaryTown(bx0, by0, bx1, by1, in);
         } else {
             split(bx0 + in, by0 + in, bx1 - in, by1 - in, 0, -1, -1);
         }
@@ -2612,7 +2614,10 @@ final class City {
         boolean[] used = new boolean[blocks.size()];
         // Hamlets out in the country are just homes, farms and the odd shop.
         for (int k = 0; k < blocks.size(); k++) if (blocks.get(k).length > 4 && blocks.get(k)[4] >= 2) used[k] = true;
-        if (cfg.militaryBase()) {
+        // ((15.5) The Military Town's great base, in the middle where the streets were kept clear of it.)
+        if (bigBase != null) {
+            militaryBase(bigBase[0] + 1, bigBase[1] + 1, bigBase[2] - bigBase[0] - 2, bigBase[3] - bigBase[1] - 2);
+        } else if (cfg.militaryBase()) {
             int best = -1, bestArea = 0;
             for (int k = 0; k < blocks.size(); k++) {
                 int[] b = blocks.get(k);
@@ -3055,6 +3060,11 @@ final class City {
         return false;
     }
 
+    /** ((15.5) The row the side gates of a base bh high from y open on: the middle three.) */
+    private static int gy0(int bh, int y) {
+        return y + bh / 2 - 1;
+    }
+
     /** A fenced compound with gates, barracks, a helipad, tents, a watchtower and army trucks. */
     private void militaryBase(int x, int y, int bw, int bh) {
         militaryBase(x, y, bw, bh, 13);
@@ -3079,10 +3089,13 @@ final class City {
         for (int j = gy; j < gy + 3; j++) tiles[j * w + x + bw - 1] = BASE;
 
         int ax = x + 1, ay = y + 1, aw = bw - 2, ah = bh - 2;
+        // ((15.5) The Military Town's great base: rows and rows of barracks, an airfield, and a gate on every side.)
+        boolean great = bigBase != null && x == bigBase[0] + 1 && y == bigBase[1] + 1;
+        if (great) for (int j = gy0(bh, y); j < gy0(bh, y) + 3; j++) tiles[j * w + x] = BASE;
         // Barracks along the top, leaving a lane by the fence and around the gate.
         int left = ax + 2, right = ax + aw - 2;
         if (aw >= 16) {
-            for (int row = 0; row < 2 && ay + 1 + row * 6 + 4 <= ay + ah / 2; row++) {
+            for (int row = 0; row < (great ? 6 : 2) && ay + 1 + row * 6 + 4 <= ay + ah / 2; row++) {
                 int by = ay + 2 + row * 6;
                 int mid = gx - 2;
                 if (mid - left >= 5) addFacilityLot(left, by, mid - left, 4, BARRACKS, 1);
@@ -3099,14 +3112,19 @@ final class City {
         // The open lower half depends on what kind of base it is (trucks are parked along the bottom right).
         Random bt = new Random(cfg.seed * 977L + salt);
         // ((10.52) Never the same kind twice on one map.)
-        int type = bt.nextInt(BASE_TYPES.length);
-        for (int k = 0; k < 8 && cfg.civic >= 23; k++) {
+        int type = great ? BT_AIR : bt.nextInt(BASE_TYPES.length);
+        for (int k = 0; k < 8 && cfg.civic >= 23 && !great; k++) {
             boolean dup = false;
             for (Facility f : facilities) if (f.kind == FACILITY_BASE && f.baseType == type) dup = true;
             if (!dup) break;
             type = (type + 1) % BASE_TYPES.length;
         }
-        baseLayout(type, ax, ay, aw, ah, bt);
+        // ((15.5) The great base: the airfield on the one side, an armoured vehicle park on the other.)
+        if (great) {
+            int split = aw * 3 / 5;
+            baseLayout(BT_AIR, ax, ay, split, ah, bt);
+            baseLayout(BT_ARMOUR, ax + split, ay, aw - split, ah, bt);
+        } else baseLayout(type, ax, ay, aw, ah, bt);
         for (int i = ax + aw / 2 + 2; i < ax + aw - 1; i++) {
             int ty = ay + ah - 2;
             if (rnd.nextFloat() < 0.75f && tiles[ty * w + i] == BASE && !hasNeighbor(i, ty, CAR)) {
@@ -3117,7 +3135,7 @@ final class City {
         float cx = (ax + aw / 2f) * T, cy = (ay + ah * 0.62f) * T;
         float[] c = findWalkable(cx, cy);
         if (c == null) c = new float[]{cx, cy};
-        float r = Math.min(110, Math.min(aw, ah) * T * 0.42f);
+        float r = Math.min(great ? 320 : 110, Math.min(aw, ah) * T * 0.42f);
         String bn = country.bases[rnd.nextInt(country.bases.length)];
         // (Two bases on a map since 10.30: never the same name.)
         for (int k = 0; k < 12 && cfg.civic >= 14; k++) {
@@ -4271,6 +4289,32 @@ final class City {
      * Lakeside: a big lake in the middle of town, with avenues running along its shores and right across
      * town, and the rest of the town laid out around them.
      */
+    /** ((15.5) The Military Town's great base: where it goes (tiles: x0, y0, x1, y1), kept clear of the streets.) */
+    private int[] bigBase;
+
+    /**
+     * (15.5) The Military Town: a great base in the middle (see militaryBase), a ring of main roads round it, and the
+     * town's streets laid out in the eight pieces round that (as round the lake on Lakeside).
+     */
+    private void militaryTown(int bx0, int by0, int bx1, int by1, int in) {
+        int lw = Math.min(110, (int) ((bx1 - bx0) * 0.4f)), lh = Math.min(90, (int) ((by1 - by0) * 0.36f));
+        int lx0 = (bx0 + bx1) / 2 - lw / 2, ly0 = (by0 + by1) / 2 - lh / 2;
+        int lx1 = lx0 + lw, ly1 = ly0 + lh;
+        carve(new Street(bx0, ly0 - 3, bx1, ly0, false, true));
+        carve(new Street(bx0, ly1, bx1, ly1 + 3, false, true));
+        carve(new Street(lx0 - 3, by0, lx0, by1, true, true));
+        carve(new Street(lx1, by0, lx1 + 3, by1, true, true));
+        int[] xs = {bx0 + in, lx0 - 3, lx0, lx1, lx1 + 3, bx1 - in}, ys = {by0 + in, ly0 - 3, ly0, ly1, ly1 + 3, by1 - in};
+        for (int j = 0; j < 3; j++)
+            for (int i = 0; i < 3; i++) {
+                if (i == 1 && j == 1) continue;
+                if (xs[i * 2 + 1] - xs[i * 2] < 6 || ys[j * 2 + 1] - ys[j * 2] < 6) continue;
+                split(xs[i * 2], ys[j * 2], xs[i * 2 + 1], ys[j * 2 + 1], 1, -1, -1);
+            }
+        fill(lx0, ly0, lw, lh, SIDEWALK);
+        bigBase = new int[]{lx0, ly0, lx1, ly1};
+    }
+
     private void lakeTown(int bx0, int by0, int bx1, int by1, int in) {
         int lw = (int) ((bx1 - bx0) * 0.36f), lh = (int) ((by1 - by0) * 0.3f);
         int lx0 = (bx0 + bx1) / 2 - lw / 2 + rnd.nextInt(9) - 4, ly0 = (by0 + by1) / 2 - lh / 2 + rnd.nextInt(9) - 4;

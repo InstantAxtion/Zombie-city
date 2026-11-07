@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.4";
-    static final int VERSION_CODE = 144;
+    static final String VERSION = "15.5";
+    static final int VERSION_CODE = 145;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.5  -  The Military Town map",
+                    "A new map, Military Town: a great army base fills the middle of town, ringed by main roads, with the town grown up round its gates. Rows of barracks, an airfield with hangars, jets and a runway, a tank park, a gate on every side, and a well-stocked armoury (three times the rounds).",
+                    "A garrison of 450 to 700 soldiers, the army far outnumbering the town's small police force.",
+            },
             {
                     "15.4  -  Mortars run out",
                     "Mortar teams have only the 16 rounds they carry: the base no longer hands them more. Once the last is fired they leave the pit, say so on the radio, and go to fight with their carbines like any other soldier.",
