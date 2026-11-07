@@ -14,15 +14,17 @@ final class Sfx {
             SHOTGUN = 29, REVOLVER = 30, GLASS = 31, POUND = 32, HUNTING = 33,
             // ((13.4) A sound of its own for each gun, and for what goes with them.)
             SMG = 34, CARBINE = 35, DMR = 36, RELOAD = 37, DRY_FIRE = 38, RICOCHET = 39, MELEE = 40, LAUNCHER = 41,
-            CLIMB = 42;
-    static final int COUNT = 43;
+            CLIMB = 42,
+            // ((14.4) The tension under the music as things get worse: a heartbeat over a low drone.)
+            HEART = 43;
+    static final int COUNT = 44;
 
     /** Shortest gap between two plays of the same sound, in seconds, so crowds don't turn into noise. */
     static final float[] MIN_GAP = {0.05f, 0.04f, 0.08f, 0.09f, 0.9f, 1.4f, 0.8f, 0f, 2f, 2f, 2f, 0.1f, 4f, 1.2f, 0.8f,
             4f, 0.3f, 0.06f, 0.3f, 1f, 0.2f, 1.5f, 4f, 2.5f,
             4f, 0.3f, 0.2f, 8f, 0.15f,
             0.08f, 0.06f, 0.6f, 0.9f, 0.2f,
-            0.05f, 0.05f, 0.12f, 0.25f, 0.3f, 0.12f, 0.1f, 0.3f, 0.5f};
+            0.05f, 0.05f, 0.12f, 0.25f, 0.3f, 0.12f, 0.1f, 0.3f, 0.5f, 1.6f};
     /** Background sounds that get on the nerves when they loop; these fade and space out with repetition. */
     static final boolean[] REPEATS = new boolean[COUNT];
 
@@ -83,6 +85,10 @@ final class Sfx {
         PRIORITY[RICOCHET] = 2;
         MAX_VOICES[RICOCHET] = 2;
         MAX_VOICES[CLIMB] = 2;
+        VARIANTS[HEART] = 1;
+        PRIORITY[HEART] = 1;
+        MAX_VOICES[HEART] = 1;
+        ECHO[HEART] = 0;
         PRIORITY[LAUNCHER] = 7;
         ECHO[LAUNCHER] = 0.35f;
         PRIORITY[SCREAM] = 5;

@@ -83,6 +83,7 @@ final class Synth {
             case Sfx.MELEE: out = melee(r); break;
             case Sfx.LAUNCHER: out = launcher(r); break;
             case Sfx.CLIMB: out = climb(r); break;
+            case Sfx.HEART: out = heart(); break;
             default: out = click(); break;
         }
         if (variant > 0) out = vary(out, 1 + (r.nextFloat() - 0.5f) * (Sfx.gun(id) ? 0.12f : 0.18f));
@@ -233,6 +234,25 @@ final class Synth {
     }
 
     /** ((13.4) One of the dead scrabbling up and over a barricade or a fence: scraping, the rattle, the drop. */
+    /**
+     * (14.4) Two seconds of dread: a slow heartbeat (lub-dub) over a low, beating drone that swells and fades, played
+     * under the music, louder the worse it's getting.
+     */
+    private static float[] heart() {
+        int n = (int) (2.0f * RATE);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float swell = (float) Math.sin(Math.PI * t / 2.0f);
+            float drone = ((float) Math.sin(TAU * 41 * t) + (float) Math.sin(TAU * 42.3f * t) * 0.8f + (float) Math.sin(TAU * 61.5f * t) * 0.25f) * 0.18f * swell;
+            float lub = t < 0.25f ? (float) Math.sin(TAU * 52 * t) * (float) Math.exp(-t * 18) * (float) Math.min(1, t * 200) : 0;
+            float t2 = t - 0.3f;
+            float dub = t2 > 0 && t2 < 0.25f ? (float) Math.sin(TAU * 64 * t2) * (float) Math.exp(-t2 * 22) * (float) Math.min(1, t2 * 200) * 0.7f : 0;
+            o[i] = drone + (lub + dub) * 0.9f;
+        }
+        return o;
+    }
+
     private static float[] climb(Random r) {
         int n = (int) (0.9f * RATE);
         float[] o = new float[n];

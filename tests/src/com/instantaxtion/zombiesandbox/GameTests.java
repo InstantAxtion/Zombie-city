@@ -1,6 +1,7 @@
 package com.instantaxtion.zombiesandbox;
 
 import android.graphics.Canvas;
+import android.graphics.RectF;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -3260,6 +3261,57 @@ public final class GameTests {
                     for (Entity e : below) if (e.task == Dispatch.T_SEEK && e.heardZone) seeking++;
                     check(seeking >= 3, "people below told to make for the safe zone (" + seeking + ")");
                 }
+            }
+        });
+        test("14.4: the timeline shows the moments and takes you where they happened; the sounds of the city", new Check() {
+            public void run() throws Exception {
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2400};
+                v.layout(size[0], size[1]);
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 3;
+                v.startGame(c);
+                v.awaitLoad();
+                ((Menu) field(v, "menu")).screen = Menu.NONE;
+                // (The first frame takes in the city that's been built.)
+                for (int k = 0; k < 3; k++) draw(v, size);
+                ((Menu) field(v, "menu")).screen = Menu.NONE;
+                World w = (World) field(v, "world");
+                float mx = w.city.worldW() * 0.3f, my = w.city.worldH() * 0.7f;
+                w.timeline("Something happened everywhere");
+                w.timeline("Something happened here", mx, my);
+                // Saved with where.
+                java.io.File f = java.io.File.createTempFile("zcst", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                World.Moment lm = l.timeline.get(l.timeline.size() - 1);
+                check(Math.abs(lm.x - mx) < 0.1f && Math.abs(lm.y - my) < 0.1f && Float.isNaN(l.timeline.get(l.timeline.size() - 2).x), "moments saved with where they happened");
+                // The panel draws, and tapping the newest (top) row goes there.
+                for (int k = 0; k < 3; k++) draw(v, size);
+                ((Menu) field(v, "menu")).screen = Menu.NONE;
+                Field open = GameView.class.getDeclaredField("timeOpen");
+                open.setAccessible(true);
+                open.setBoolean(v, true);
+                draw(v, size);
+                check(v.drawErrors == 0, "the timeline draws");
+                @SuppressWarnings("unchecked")
+                java.util.List<RectF> rows = (java.util.List<RectF>) field(v, "timeRows");
+                check(rows.size() >= 2, "both moments listed (" + rows.size() + ")");
+                java.lang.reflect.Method tap = GameView.class.getDeclaredMethod("timelineTap", float.class, float.class);
+                tap.setAccessible(true);
+                tap.invoke(v, rows.get(0).centerX(), rows.get(0).centerY());
+                Field camX = GameView.class.getDeclaredField("camX"), scale = GameView.class.getDeclaredField("scale");
+                camX.setAccessible(true);
+                scale.setAccessible(true);
+                float centre = camX.getFloat(v) + size[0] / scale.getFloat(v) / 2;
+                check(Math.abs(centre - mx) < 60 && !open.getBoolean(v), "tapping it goes there (" + (int) centre + " vs " + (int) mx + ")");
+                // The city's sounds: the heartbeat is made like any other.
+                check(Synth.effect(Sfx.HEART).length > Synth.RATE, "the heartbeat sound made");
+                for (int k = 0; k < 5; k++) draw(v, size);
+                check(v.drawErrors == 0, "frames with the new effects draw");
             }
         });
         test("every screen draws", new Check() {

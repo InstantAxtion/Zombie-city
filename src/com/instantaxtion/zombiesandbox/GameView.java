@@ -852,6 +852,11 @@ final class GameView extends View implements Menu.Host {
             click();
             return true;
         }
+        if (timeOpen && !menu.isOpen()) {
+            timeOpen = false;
+            click();
+            return true;
+        }
         // ((12.0) Back shuts whatever is open over the city first - a picker, the Clear menu, a card, being someone -
         // as on any other app, instead of going straight to the pause menu.)
         if (!menu.isOpen() && hasGame) {
@@ -1250,6 +1255,10 @@ final class GameView extends View implements Menu.Host {
         sound.playTrack(inGame || menu.screen == Menu.PAUSE ? mood : Synth.TRACK_MENU);
         if (world.alarmTime > 0) sound.play(Sfx.ALARM, 0.7f, 0);
         playSounds(inGame ? 1f : 0.35f);
+        if (inGame) {
+            heartbeat(dt, 1f);
+            distantSounds(dt, 1f);
+        }
         if (world.dispatch.messageCount != lastMessageCount) {
             if (inGame && settings.radio()) sound.play(Sfx.RADIO, 0.5f, 0);
             lastMessageCount = world.dispatch.messageCount;
@@ -1265,6 +1274,7 @@ final class GameView extends View implements Menu.Host {
                 drawUi(c);
                 if (tactical) drawTactical(c);
                 else if (hotOpen) drawHot(c);
+                else if (timeOpen) drawTimeline(c);
             }
         } catch (OutOfMemoryError oom) {
             c.restoreToCount(saves);
@@ -1370,6 +1380,17 @@ final class GameView extends View implements Menu.Host {
 
     private int mood = Synth.TRACK_GAME, lastShots;
     private float moodTimer, moodHold;
+    /** (14.4) How tense things are now, 0 to 1 (see updateMood), and the time to the next heartbeat under the music. */
+    float intensity;
+    private float heartCd;
+
+    /** (14.4) The heartbeat under the music, once things are tense, louder and quicker the worse it gets. */
+    private void heartbeat(float dt, float master) {
+        heartCd -= dt;
+        if (heartCd > 0 || intensity < 0.35f || master <= 0) return;
+        heartCd = 2.6f - 0.8f * intensity;
+        sound.play(Sfx.HEART, master * (intensity - 0.3f) * 0.9f, 0, 0);
+    }
 
     /** Music follows the action: calm when it's quiet, intense in a big fight. */
     private void updateMood(float dt) {
@@ -1385,8 +1406,16 @@ final class GameView extends View implements Menu.Host {
             Entity e = world.entities.get(i);
             if (e.isZombie() && e.x > vx0 && e.x < vx1 && e.y > vy0 && e.y < vy1) onScreen++;
         }
-        int want = world.zombieCount() == 0 ? Synth.TRACK_CALM
-                : shots >= 12 || onScreen >= 25 || !world.explosions.isEmpty() ? Synth.TRACK_ACTION : Synth.TRACK_GAME;
+        // ((14.4) How tense it is, 0 to 1: how far the dead have spread through the city sets the floor, the fighting in
+        // view the rest. The music follows it - calm, the tension, the fight - and sits louder the higher it is.)
+        int zs = world.zombieCount();
+        float spread = zs == 0 ? 0 : Math.min(1, 3f * zs / Math.max(1, zs + world.humans));
+        float local = Math.min(1, shots / 18f + onScreen / 36f + (world.explosions.isEmpty() ? 0 : 0.35f));
+        float target = zs == 0 ? 0 : Math.max(local, 0.2f + 0.45f * spread);
+        intensity += (target - intensity) * (target > intensity ? 0.5f : 0.15f);
+        sound.setIntensity(intensity);
+        int want = zs == 0 || intensity < 0.15f ? Synth.TRACK_CALM
+                : intensity >= 0.6f || shots >= 12 || onScreen >= 25 || !world.explosions.isEmpty() ? Synth.TRACK_ACTION : Synth.TRACK_GAME;
         // (10.52) Each mood has three pieces: a new one, picked at random, every couple of minutes and whenever
         // the mood changes.
         moodPlayed += 1;
@@ -1426,6 +1455,8 @@ final class GameView extends View implements Menu.Host {
         tacBtn.setEmpty();
         hotBtn.setEmpty();
         hotChip.setEmpty();
+        timeBtn.setEmpty();
+        timeChip.setEmpty();
         if (!settings.minimap() || world.controlled != null || miniClosed) {
             miniRect.setEmpty();
         } else {
@@ -1589,6 +1620,9 @@ final class GameView extends View implements Menu.Host {
             // ((13.8) And one in the corner below it opens the hot spots list.)
             hotBtn.set(miniRect.left - 2 * dp, miniRect.bottom - 16 * dp, miniRect.left + 16 * dp, miniRect.bottom + 2 * dp);
             drawHotIcon(c, hotBtn.centerX(), hotBtn.centerY());
+            // ((14.4) And the last corner, the timeline: a little clock.)
+            timeBtn.set(miniRect.right - 16 * dp, miniRect.bottom - 16 * dp, miniRect.right + 2 * dp, miniRect.bottom + 2 * dp);
+            drawClockIcon(c, timeBtn.centerX(), timeBtn.centerY());
             // A little x in the corner closes it.
             miniX.set(miniRect.right - 16 * dp, miniRect.top - 2 * dp, miniRect.right + 2 * dp, miniRect.top + 16 * dp);
             fill.setColor(0xE0101216);
@@ -1618,6 +1652,12 @@ final class GameView extends View implements Menu.Host {
             c.drawRoundRect(hotChip, 9 * dp, 9 * dp, fill);
             text.setColor(0xFFFFB0A0);
             c.drawText("Hot spots", hotChip.centerX(), hotChip.centerY() + 4 * dp, text);
+            float tw = text.measureText("Timeline") + 20 * dp;
+            timeChip.set(hotChip.left - 8 * dp - tw, top, hotChip.left - 8 * dp, top + 28 * dp);
+            fill.setColor(0xE0202227);
+            c.drawRoundRect(timeChip, 9 * dp, 9 * dp, fill);
+            text.setColor(0xFFC8D8F0);
+            c.drawText("Timeline", timeChip.centerX(), timeChip.centerY() + 4 * dp, text);
         }
     }
 
@@ -1719,6 +1759,102 @@ final class GameView extends View implements Menu.Host {
             break;
         }
         hotOpen = false;
+    }
+
+    // ------------------------------------------------------------------ (14.4) the outbreak's timeline
+
+    /** The key moments of this outbreak, newest first, with when; tap one that happened somewhere to go there. */
+    private boolean timeOpen, timeDown;
+    private final RectF timeBtn = new RectF(), timeChip = new RectF(), timeClose = new RectF();
+    private final java.util.ArrayList<RectF> timeRows = new java.util.ArrayList<RectF>();
+    private final java.util.ArrayList<World.Moment> timeShown = new java.util.ArrayList<World.Moment>();
+
+    private void openTimeline() {
+        click();
+        timeOpen = true;
+        timeDown = false;
+        hotOpen = false;
+        tactical = false;
+    }
+
+    private void drawClockIcon(Canvas c, float x, float y) {
+        fill.setColor(0xE0101216);
+        c.drawCircle(x, y, 8 * dp, fill);
+        stroke.setColor(0xFFC8D8F0);
+        stroke.setStrokeWidth(1.4f * dp);
+        c.drawCircle(x, y, 5.2f * dp, stroke);
+        c.drawLine(x, y, x, y - 3.4f * dp, stroke);
+        c.drawLine(x, y, x + 2.6f * dp, y, stroke);
+    }
+
+    private void drawTimeline(Canvas c) {
+        fill.setColor(0xF0101216);
+        c.drawRect(0, 0, getWidth(), getHeight(), fill);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(16 * dp);
+        text.setColor(0xFFF2F2F2);
+        c.drawText("Timeline", getWidth() / 2f, 30 * dp, text);
+        timeRows.clear();
+        timeShown.clear();
+        java.util.List<World.Moment> all = world.timeline;
+        float left = 16 * dp, right = getWidth() - 16 * dp, y = 52 * dp, rowH = 40 * dp;
+        if (all.isEmpty()) {
+            text.setTextSize(12.5f * dp);
+            text.setColor(0xFFB8BCC4);
+            c.drawText("Nothing has happened yet.", getWidth() / 2f, y + 30 * dp, text);
+        }
+        for (int i = all.size() - 1; i >= 0 && y + rowH < getHeight() - 8 * dp; i--) {
+            World.Moment m = all.get(i);
+            boolean there = !Float.isNaN(m.x);
+            RectF r = new RectF(left, y, right, y + rowH - 5 * dp);
+            timeRows.add(r);
+            timeShown.add(m);
+            fill.setColor(there ? 0xE0262A30 : 0xC01C1F24);
+            c.drawRoundRect(r, 8 * dp, 8 * dp, fill);
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(11.5f * dp);
+            text.setColor(0xFF9AA4B4);
+            String when = World.clock((int) m.time);
+            c.drawText(when, r.left + 10 * dp, r.centerY() + 4 * dp, text);
+            float tx = r.left + 10 * dp + text.measureText("00:00:00") + 8 * dp;
+            text.setTextSize(12.5f * dp);
+            text.setColor(there ? 0xFFF2F2F2 : 0xFFC8CCD2);
+            c.drawText(fitText(m.text, r.right - tx - (there ? 24 : 10) * dp), tx, r.centerY() + 4 * dp, text);
+            if (there) {
+                // (A little arrow: this one can be gone to.)
+                stroke.setColor(0xFF8CA8D8);
+                stroke.setStrokeWidth(1.6f * dp);
+                float ax = r.right - 14 * dp, ay = r.centerY();
+                c.drawLine(ax - 4 * dp, ay - 4 * dp, ax, ay, stroke);
+                c.drawLine(ax - 4 * dp, ay + 4 * dp, ax, ay, stroke);
+            }
+            y += rowH;
+        }
+        text.setTextAlign(Paint.Align.CENTER);
+        timeClose.set(getWidth() - 44 * dp, 8 * dp, getWidth() - 8 * dp, 40 * dp);
+        fill.setColor(0xE0303238);
+        c.drawRoundRect(timeClose, 9 * dp, 9 * dp, fill);
+        stroke.setColor(0xFFE0E0E0);
+        stroke.setStrokeWidth(2 * dp);
+        float mx = timeClose.centerX(), my = timeClose.centerY(), u = 6 * dp;
+        c.drawLine(mx - u, my - u, mx + u, my + u, stroke);
+        c.drawLine(mx - u, my + u, mx + u, my - u, stroke);
+    }
+
+    private void timelineTap(float x, float y) {
+        click();
+        for (int i = 0; i < timeRows.size() && i < timeShown.size(); i++) {
+            if (!timeRows.get(i).contains(x, y)) continue;
+            World.Moment m = timeShown.get(i);
+            if (Float.isNaN(m.x)) return;
+            follow = null;
+            followV = null;
+            camX = m.x - getWidth() / scale / 2;
+            camY = m.y - barTop / scale / 2;
+            clampCamera();
+            break;
+        }
+        timeOpen = false;
     }
 
     // ------------------------------------------------------------------ (10.32) tactical map
@@ -2132,6 +2268,32 @@ final class GameView extends View implements Menu.Host {
                 : android.view.HapticFeedbackConstants.LONG_PRESS);
     }
 
+    /** (14.4) Gunfire, blasts and sirens too far off to hear as they are, gathered: how many, and which way (sum of x). */
+    private final int[] farCount = new int[3];
+    private final float[] farX = new float[3];
+    private final float[] farCd = new float[3];
+    private int farGun = Sfx.RIFLE;
+
+    /**
+     * (14.4) The city in the distance: gunfire, explosions and sirens from fights off screen, too far off to hear as
+     * they happen, come through faint and muffled from their side of the screen, a little at a time.
+     */
+    private void distantSounds(float dt, float master) {
+        for (int k = 0; k < 3; k++) {
+            farCd[k] -= dt;
+            if (farCd[k] > 0 || farCount[k] == 0) continue;
+            int n = farCount[k];
+            float pan = Math.max(-1, Math.min(1, farX[k] / n)) * 0.7f;
+            float vol = master * Math.min(k == 0 ? 0.3f : 0.35f, (k == 2 ? 0.12f : 0.1f) + 0.03f * (float) (Math.log(n) / Math.log(2)));
+            int id = k == 0 ? farGun : k == 1 ? Sfx.EXPLOSION : Sfx.SIREN;
+            sound.play(id, vol, pan, 1);
+            // (Gunfire every second or so while it lasts; blasts now and then; a siren seldom.)
+            farCd[k] = k == 0 ? 0.8f + rnd.nextFloat() * 1.2f : k == 1 ? 3 + rnd.nextFloat() * 3 : 9 + rnd.nextFloat() * 6;
+            farCount[k] = 0;
+            farX[k] = 0;
+        }
+    }
+
     private void playSounds(float master) {
         haptics();
         float vw = getWidth() / scale, vh = getHeight() / scale;
@@ -2143,7 +2305,17 @@ final class GameView extends View implements Menu.Host {
             // (10.32) Loud things carry: a battle, an explosion or a helicopter is heard a long way off, faintly;
             // a groan only close by.
             float r = reach * Sfx.carry(type);
-            if (d > r) continue;
+            if (d > r) {
+                // ((14.4) Too far off to hear as it is: counted for the distant sound of the city (see distantSounds).
+                int k = Sfx.gun(type) ? 0 : type == Sfx.EXPLOSION || type == Sfx.CANNON || type == Sfx.COLLAPSE ? 1
+                        : type == Sfx.SIREN || type == Sfx.AMB_SIREN ? 2 : -1;
+                if (k >= 0) {
+                    farCount[k]++;
+                    farX[k] += ddx / Math.max(1, d);
+                    if (k == 0) farGun = type;
+                }
+                continue;
+            }
             float f = d / r;
             float vol = master * (1 - 0.85f * f) * (1 - 0.15f * f * f);
             if (type == Sfx.GROAN || type == Sfx.GROAN_DEEP || type == Sfx.SCREAM) vol *= 0.6f;
@@ -2787,13 +2959,18 @@ final class GameView extends View implements Menu.Host {
                     break;
                 case World.P_FLASH:
                     // The flash lights up the ground around the muzzle.
-                    fill.setColor(0x1CFFD27A);
-                    c.drawCircle(x, y, size * 3, fill);
-                    fill.setColor(alpha(col, 0.9f));
+                    // ((14.4) Brighter and wider, with a white-hot core.)
+                    fill.setColor(alpha(0xFFFFD27A, 0.2f * f + 0.06f));
+                    c.drawCircle(x, y, size * 4.2f, fill);
+                    fill.setColor(alpha(col, 0.95f));
+                    c.drawCircle(x, y, size * 1.15f, fill);
+                    fill.setColor(alpha(0xFFFFFFFF, 0.9f * f));
+                    size *= 0.5f;
                     break;
                 case World.P_CASING:
-                    fill.setColor(alpha(col, Math.min(1, f * 3)));
-                    c.drawRect(x - 0.45f, y - 0.25f, x + 0.45f, y + 0.25f, fill);
+                    // ((14.4) A little bigger, catching the light as it tumbles.)
+                    fill.setColor(alpha((int) (life * 40) % 2 == 0 ? col : 0xFFFFE8A0, Math.min(1, f * 3)));
+                    c.drawRect(x - 0.65f, y - 0.32f, x + 0.65f, y + 0.32f, fill);
                     continue;
                 case World.P_DEBRIS:
                     fill.setColor(alpha(col, Math.min(1, f * 2)));
@@ -2806,12 +2983,21 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(x, y, size, fill);
         }
 
-        stroke.setStrokeWidth(0.9f);
+        // ((14.4) A tracer: a faint glow along the shot and a bright streak racing from the muzzle to where it hits.)
         for (int i = 0; i < World.MAXT; i++) {
             float life = world.tlife[i];
             if (life <= 0) continue;
-            stroke.setColor(alpha(0xFFFFE08A, life / 0.08f));
-            c.drawLine(world.tx0[i], world.ty0[i], world.tx1[i], world.ty1[i], stroke);
+            float f = life / World.TRACER_LIFE, p = 1 - f;
+            float x0 = world.tx0[i], y0 = world.ty0[i], x1 = world.tx1[i], y1 = world.ty1[i];
+            stroke.setStrokeWidth(1.6f);
+            stroke.setColor(alpha(0xFFFFC860, 0.22f * f));
+            c.drawLine(x0, y0, x1, y1, stroke);
+            float hx = x0 + (x1 - x0) * Math.min(1, p * 1.4f), hy = y0 + (y1 - y0) * Math.min(1, p * 1.4f);
+            float tl = Math.max(0, Math.min(1, p * 1.4f) - 0.35f);
+            float sx = x0 + (x1 - x0) * tl, sy = y0 + (y1 - y0) * tl;
+            stroke.setStrokeWidth(1.2f);
+            stroke.setColor(alpha(0xFFFFF0B0, Math.min(1, f * 1.6f)));
+            c.drawLine(sx, sy, hx, hy, stroke);
         }
 
         drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
@@ -2995,6 +3181,12 @@ final class GameView extends View implements Menu.Host {
             World.Explosion ex = world.explosions.get(i);
             float t = 1 - ex.life / ex.max;
             float r = ex.r * (0.3f + 0.9f * t);
+            // ((14.4) The first instant: a white flash lighting up the street well beyond the blast.)
+            if (t < 0.35f) {
+                float ft = 1 - t / 0.35f;
+                fill.setColor(alpha(0xFFFFF6D8, 0.3f * ft));
+                c.drawCircle(ex.x, ex.y, ex.r * 2.4f, fill);
+            }
             fill.setColor(alpha(0xFFFF8A20, (1 - t) * 0.8f));
             c.drawCircle(ex.x, ex.y, r, fill);
             fill.setColor(alpha(0xFFFFF2B0, (1 - t)));
@@ -8130,6 +8322,7 @@ final class GameView extends View implements Menu.Host {
         if (world.controlled != null) {
             tactical = false;
             hotOpen = false;
+            timeOpen = false;
             return controlTouch(ev);
         }
         if (hotOpen) {
@@ -8138,6 +8331,15 @@ final class GameView extends View implements Menu.Host {
             else if (ev.getActionMasked() == MotionEvent.ACTION_UP && hotDown) {
                 hotDown = false;
                 hotTap(ev.getX(), ev.getY());
+            }
+            return true;
+        }
+        if (timeOpen) {
+            mode = MODE_NONE;
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) timeDown = true;
+            else if (ev.getActionMasked() == MotionEvent.ACTION_UP && timeDown) {
+                timeDown = false;
+                timelineTap(ev.getX(), ev.getY());
             }
             return true;
         }
@@ -8313,6 +8515,10 @@ final class GameView extends View implements Menu.Host {
         }
         if (!hotBtn.isEmpty() && hotBtn.contains(x, y) || !hotChip.isEmpty() && hotChip.contains(x, y)) {
             openHot();
+            return true;
+        }
+        if (!timeBtn.isEmpty() && timeBtn.contains(x, y) || !timeChip.isEmpty() && timeChip.contains(x, y)) {
+            openTimeline();
             return true;
         }
         if (!tacBtn.isEmpty() && tacBtn.contains(x, y)) {

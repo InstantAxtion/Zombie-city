@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 52;
+    private static final int VERSION = 53;
 
     private SaveGame() {
     }
@@ -345,6 +345,12 @@ final class SaveGame {
             out.writeBoolean(w.quarantined);
             out.writeInt(w.strikes);
             out.writeFloat(w.strikeCd);
+            // (Version 53, 14.4: where each moment on the timeline happened.)
+            out.writeInt(w.timeline.size());
+            for (World.Moment m : w.timeline) {
+                out.writeFloat(m.x);
+                out.writeFloat(m.y);
+            }
         } finally {
             moved = null;
             homeIndex = null;
@@ -779,6 +785,16 @@ final class SaveGame {
                 // (Saved before 14.2, after the one air strike there used to be.)
                 w.strikes = 1;
                 w.strikeCd = 120;
+            }
+            if (version >= 53) {
+                int nm = in.readInt();
+                for (int i = 0; i < nm; i++) {
+                    float mx = in.readFloat(), my = in.readFloat();
+                    if (i < w.timeline.size()) {
+                        w.timeline.get(i).x = mx;
+                        w.timeline.get(i).y = my;
+                    }
+                }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;

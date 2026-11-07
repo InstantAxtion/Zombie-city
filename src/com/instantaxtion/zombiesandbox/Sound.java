@@ -43,6 +43,8 @@ final class Sound {
     private MediaPlayer player, fading;
     private int playingTrack = -1, wantTrack = -1;
     private float musicVol = 0.5f, sfxVol = 0.75f, fadeIn = 1, fadeOut = 0, duck = 1;
+    /** ((14.4) How loud the music sits for how tense things are: soft when it's calm, full in a fight.) */
+    private float intensityGain = 1;
     private volatile boolean paused, released;
 
     Sound(Context context) {
@@ -299,6 +301,11 @@ final class Sound {
         updateMusic();
     }
 
+    /** (14.4) Music volume for how tense things are, 0 (calm) to 1 (a big fight). */
+    void setIntensity(float i) {
+        intensityGain = 0.55f + 0.45f * Math.max(0, Math.min(1, i));
+    }
+
     /** Selects the music track to loop (Synth.TRACK_MENU or Synth.TRACK_GAME). */
     void playTrack(int track) {
         if (track == wantTrack) return;
@@ -339,14 +346,14 @@ final class Sound {
     /** Sets the players' volumes for the fades and the ducking, and starts or pauses them. */
     private void applyMusic() {
         if (player != null) {
-            float v = musicVol * fadeIn * duck;
+            float v = musicVol * fadeIn * duck * intensityGain;
             player.setVolume(v, v);
             if (paused) {
                 if (player.isPlaying()) player.pause();
             } else if (!player.isPlaying()) player.start();
         }
         if (fading != null) {
-            float v = musicVol * fadeOut * duck;
+            float v = musicVol * fadeOut * duck * intensityGain;
             fading.setVolume(v, v);
             if (paused && fading.isPlaying()) fading.pause();
             if (fadeOut <= 0) {

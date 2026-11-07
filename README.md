@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The sound of the city, stronger effects, the timeline (14.4):** the music follows how tense things are (quiet when
+calm, tense as the dead spread, the fight music in a battle near you), with a heartbeat under it once things are bad;
+distant gunfire, blasts and sirens from fights off screen come through faintly; tracers, muzzle flashes, shell casings
+and explosions are stronger; and a Timeline (the clock on the minimap's corner) lists the outbreak's key moments - tap
+one to go there.
+
 **The crash on starting, backup calls, better drones (14.3):** a crash running out of memory on starting or on Continue
 with a big game is fixed (the menu's background city is Tiny now). Police and soldiers call for backup whenever they're
 outnumbered or badly hurt, out of rounds or falling back included, and every call is on the radio. Police drones mark the
@@ -870,7 +876,7 @@ a Guard Headquarters (the National Guard comes sooner).
   map: people in blue, the dead in green, and a red mark wherever someone turned. Drag the timeline to
   scrub. Saved games keep their replay.
 - Tap anyone with **Move** to follow them and see who they are. The **minimap** (the part of the city round you, on the
-  bigger maps) jumps the camera; the button in its corner opens the **tactical map**. The red button on its other corner opens **Hot spots**: the busiest fights right now, the worst first (tap one to go there). Take a **screenshot** from the pause menu.
+  bigger maps) jumps the camera; the button in its corner opens the **tactical map**. The red button on its other corner opens **Hot spots**: the busiest fights right now, the worst first (tap one to go there). The clock on the last corner opens the **Timeline**: the outbreak's key moments, newest first (tap one to go where it happened). Take a **screenshot** from the pause menu.
 - Zoom right in and roofs turn see-through, so you can see who is hiding inside.
 
 A person killed by a zombie gets up again as a zombie a few seconds later. Bites can also infect: an

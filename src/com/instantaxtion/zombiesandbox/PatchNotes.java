@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.3";
-    static final int VERSION_CODE = 133;
+    static final String VERSION = "14.4";
+    static final int VERSION_CODE = 134;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.4  -  The sound of the city, stronger effects, the timeline",
+                    "The music follows how tense things are: how far the dead have spread through the city, and the fighting in view. It's quiet and calm when nothing's happening, tense as the dead spread, and the fight music in a big battle near you, sitting louder the worse it gets. Under it, once things are tense, a slow heartbeat over a low drone, louder and quicker the worse it is.",
+                    "The city in the distance: gunfire, explosions and sirens from fights too far off to hear as they happen now come through faint and muffled, from their side of the screen.",
+                    "Stronger effects: tracers are a bright streak flying from the gun to where it hits, over a faint glow along the shot; muzzle flashes are brighter and light up more of the ground; shell casings are bigger and glint as they tumble; explosions open with a white flash lighting up the street, and throw out more debris, embers among it.",
+                    "The timeline: the outbreak's key moments (the first 911 call and the first bite, safe zones opening, districts sealed off, help called in, looters, air strikes, a base overrun...), newest first. Open it from the clock on the minimap's corner, or the Timeline chip when the minimap is closed; tap a moment to go where it happened.",
+            },
             {
                     "14.3  -  The crash on starting, backup calls, better drones",
                     "Fixed: the game could close as it started or on Continue, out of memory, with a big game in the phone's memory. The city behind the main menu is now a Tiny one (it was a Large city of 20,000 people, about 120 MB, built as the app opened); the game is no longer restarted from scratch when the phone's theme, text size or language changes; and a game being let go of no longer holds on to what it was loading.",

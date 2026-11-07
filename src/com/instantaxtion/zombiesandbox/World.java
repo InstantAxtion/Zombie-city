@@ -6062,7 +6062,7 @@ final class World {
         patientZero = e;
         patientZeroSeed = e.nameSeed;
         outbreakPlace = city.placeName(e.x, e.y);
-        timeline("First infection: " + Names.person(e.nameSeed) + " at " + outbreakPlace);
+        timeline("First infection: " + Names.person(e.nameSeed) + " at " + outbreakPlace, e.x, e.y);
         highlight("Patient zero: " + Names.person(e.nameSeed), e.x, e.y);
     }
 
@@ -7802,16 +7802,25 @@ final class World {
     static final class Moment {
         float time;
         String text;
+        /** ((14.4) Where it happened, to go and look from the timeline; NaN for what happened everywhere.) */
+        float x = Float.NaN, y = Float.NaN;
     }
 
     /** The outbreak as it happened, for the summary. */
     final ArrayList<Moment> timeline = new ArrayList<Moment>();
 
     void timeline(String text) {
+        timeline(text, Float.NaN, Float.NaN);
+    }
+
+    /** (14.4) A moment that happened somewhere: the timeline can take you there. */
+    void timeline(String text, float x, float y) {
         if (timeline.size() >= 40) return;
         Moment m = new Moment();
         m.time = time;
         m.text = text;
+        m.x = x;
+        m.y = y;
         timeline.add(m);
     }
 
@@ -7833,7 +7842,7 @@ final class World {
             City.Facility next = city.mainBase();
             dispatch.say(Dispatch.WHO_MILITARY, null, "Military: " + f.name + " has been overrun."
                     + (next != null && next != f && !next.fallen ? " Command moves to " + next.name + "." : " There's nowhere left to fall back to."), f.x, f.y);
-            timeline("Army base overrun: " + f.name);
+            timeline("Army base overrun: " + f.name, f.x, f.y);
         }
     }
 
@@ -8099,7 +8108,7 @@ final class World {
         gangsFormed++;
         String where = city.placeName(boss.x, boss.y);
         dispatch.say(Dispatch.WHO_INFO, null, "Info: An armed gang is looting the shops near " + where + ". Keep away from them.", boss.x, boss.y);
-        timeline("Looters on " + where);
+        timeline("Looters on " + where, boss.x, boss.y);
     }
 
     /** Could join a raider gang: an armed civilian on their own, out on the street, with nothing else on. */
@@ -10034,7 +10043,7 @@ final class World {
         banner(first ? "AIR STRIKE IN 60 SECONDS" : "ANOTHER AIR STRIKE IN 60 SECONDS", "The army is going to bomb " + firebombPlace + ". Get everyone out!");
         dispatch.say(Dispatch.WHO_MILITARY, null, (first ? "Military: We're losing the city. In 60 seconds we bomb " : "Military: Another strike. In 60 seconds we bomb ")
                 + firebombPlace + ". Anyone still there, get out now!", bx, by);
-        timeline("Air strike called on " + firebombPlace);
+        timeline("Air strike called on " + firebombPlace, bx, by);
         return true;
     }
 
@@ -10134,6 +10143,7 @@ final class World {
         if (placed > 0) {
             City.District dd = city.districts.get(d);
             banner("QUARANTINE", "The army has sealed off " + dd.name + ".");
+            timeline("District sealed off: " + dd.name, dd.cx, dd.cy);
             dispatch.say(Dispatch.WHO_MILITARY, null, "Military: We're sealing off " + dd.name + ". Every road out is blocked. "
                     + "Nobody in or out.", dd.cx, dd.cy);
         }
@@ -13033,11 +13043,12 @@ final class World {
             particle(x, y, (float) Math.cos(a) * s, (float) Math.sin(a) * s, 0.3f + rnd.nextFloat() * 0.4f,
                     2 + rnd.nextFloat() * 3, rnd.nextBoolean() ? 0xFFFFB030 : 0xFFFF6A1A, P_FIRE);
         }
-        // Chunks of debris thrown out.
-        for (int i = 0; i < 18; i++) {
-            float a = rnd.nextFloat() * TAU, s = 60 + rnd.nextFloat() * radius * 2.5f;
-            particle(x, y, (float) Math.cos(a) * s, (float) Math.sin(a) * s, 0.8f + rnd.nextFloat() * 0.6f,
-                    0.8f + rnd.nextFloat() * 1.2f, rnd.nextBoolean() ? 0xFF3A3632 : 0xFF6A645C, P_DEBRIS);
+        // Chunks of debris thrown out. ((14.4) More of them, some bigger, and glowing embers among them.)
+        for (int i = 0; i < 30; i++) {
+            float a = rnd.nextFloat() * TAU, s = 60 + rnd.nextFloat() * radius * 2.8f;
+            boolean ember = i % 5 == 0;
+            particle(x, y, (float) Math.cos(a) * s, (float) Math.sin(a) * s, 0.8f + rnd.nextFloat() * 0.8f,
+                    (ember ? 0.6f : 0.8f) + rnd.nextFloat() * (i % 4 == 0 ? 2.2f : 1.2f), ember ? 0xFFFF9A30 : rnd.nextBoolean() ? 0xFF3A3632 : 0xFF6A645C, P_DEBRIS);
         }
         for (int i = 0; i < 22; i++) {
             float a = rnd.nextFloat() * TAU, s = 5 + rnd.nextFloat() * radius * 0.8f;
@@ -13184,6 +13195,9 @@ final class World {
                     1.6f + rnd.nextFloat(), color, P_SMOKE);
     }
 
+    /** ((14.4) How long a tracer shows: long enough for its streak to be seen flying.) */
+    static final float TRACER_LIFE = 0.13f;
+
     private void tracer(float x0, float y0, float x1, float y1) {
         int i = tnext;
         tnext = (tnext + 1) % MAXT;
@@ -13191,7 +13205,7 @@ final class World {
         ty0[i] = y0;
         tx1[i] = x1;
         ty1[i] = y1;
-        tlife[i] = 0.08f;
+        tlife[i] = TRACER_LIFE;
     }
 
     private void decal(float x, float y, float r, int color) {

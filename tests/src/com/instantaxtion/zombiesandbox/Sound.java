@@ -17,6 +17,9 @@ final class Sound {
     void playTrack(int track) {
     }
 
+    void setIntensity(float i) {
+    }
+
     void pause() {
     }
 

@@ -566,7 +566,7 @@ final class Dispatch {
     /** A civilian who saw a zombie calls 911. */
     void call(Entity caller, Entity zombie) {
         calls++;
-        if (calls == 1) w.timeline("First 911 call, from " + city.placeName(caller.x, caller.y));
+        if (calls == 1) w.timeline("First 911 call, from " + city.placeName(caller.x, caller.y), caller.x, caller.y);
         caller.phoneTimer = 3f;
         w.emit(Sfx.PHONE, caller.x, caller.y);
         // With the call centre overrun, most calls just ring out.
@@ -2077,7 +2077,7 @@ final class Dispatch {
         a.y = inc.y;
         a.place = inc.place;
         arrivals.add(a);
-        w.timeline("Outside police called in: " + a.label);
+        w.timeline("Outside police called in: " + a.label, inc.x, inc.y);
         say(WHO_POLICE, null, "Dispatch: " + (pressure >= 2 ? "We're losing ground. " : "All our units are committed. ") + "Requesting outside help for " + inc.place + ". "
                 + String.format(java.util.Locale.US, sentence, a.count) + ", about half a minute out." + (policeReserve == 0 ? " That's the last of the help from outside." : ""), inc.x, inc.y);
         callout(inc.x, inc.y, "OUTSIDE BACKUP", WHO_COLORS[WHO_POLICE]);
@@ -2441,6 +2441,7 @@ final class Dispatch {
                     say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military: " : "Police Command: ")
                             + "The safe zone at " + z.place + " is open: walled in, room for " + z.capacity
                             + ". Civilians, come to the gates!", z.x, z.y);
+                    w.timeline("Safe zone opened: " + z.place, z.x, z.y);
                 }
                 if (z.guards < z.wantGuards) assignGuards(z, z.wantGuards - z.guards, 900, z.military ? Entity.SOLDIER : Entity.COP);
                 continue;
