@@ -3701,6 +3701,114 @@ public final class GameTests {
                 check(Math.hypot(h.tx - (f0[0] + 120), h.ty - f0[1]) < 60, "and moved its hover over the crowd");
             }
         });
+        test("14.9: someone in the nook where two buildings meet gets out and round, not into the wall; a pad helicopter puts everyone down", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 79;
+                c.normalize();
+                c.seed = 79;
+                World w = new World(c);
+                w.populate(c);
+                City city = w.city;
+                java.lang.reflect.Method walk = World.class.getDeclaredMethod("walkToSpot", Entity.class, float.class, float.class, float.class);
+                walk.setAccessible(true);
+                java.lang.reflect.Method move = World.class.getDeclaredMethod("move", Entity.class, float.class);
+                move.setAccessible(true);
+                java.lang.reflect.Field budget = World.class.getDeclaredField("pathBudget");
+                budget.setAccessible(true);
+                // Nooks: open ground walled in on two sides by building (west and south), open to the north, with
+                // open ground past the building to the west - where they're trying to get to.
+                int tried = 0, out = 0;
+                for (int ty = 4; ty < city.h - 4 && tried < 12; ty++)
+                    for (int tx = 8; tx < city.w - 4 && tried < 12; tx++) {
+                        if (city.solidTile(tx, ty) || !city.solidTile(tx - 1, ty) || !city.solidTile(tx, ty + 1) || city.solidTile(tx, ty - 1)
+                                || city.solidTile(tx + 1, ty) || city.tiles[(ty) * city.w + tx - 1] != City.BUILDING) continue;
+                        int gx = tx - 2;
+                        while (gx > 1 && city.solidTile(gx, ty)) gx--;
+                        if (tx - gx < 3 || tx - gx > 8 || city.solidTile(gx, ty)) continue;
+                        // (Its nearest open ground somewhere other than this very nook.)
+                        float[] q = city.findWalkable((tx - 1.5f) * City.T, (ty + 0.5f) * City.T);
+                        if (q == null || Math.hypot(q[0] - (tx + 0.5f) * City.T, q[1] - (ty + 0.5f) * City.T) < 20) continue;
+                        tried++;
+                        // Where they're making for is inside the building itself (a door, a spot by the wall): no way
+                        // there as it stands. They used to walk straight at it, into the wall, for good.
+                        float sx = (tx + 0.3f) * City.T, sy = (ty + 0.7f) * City.T, dx = (tx - 1.5f) * City.T, dy = (ty + 0.5f) * City.T;
+                        float[] near = city.findWalkable(dx, dy);
+                        Entity e = w.spawn(Entity.CIVILIAN, sx, sy);
+                        float best = 999;
+                        for (int f = 0; f < 30 * 12; f++) {
+                            budget.setFloat(w, 3);
+                            walk.invoke(w, e, dx, dy, e.speed);
+                            move.invoke(w, e, 1 / 30f);
+                            best = Math.min(best, (float) Math.hypot(e.x - near[0], e.y - near[1]));
+                        }
+                        if (best < 12) out++;
+                        e.dead = true;
+                        e.removed = true;
+                    }
+                check(tried >= 3 && out * 3 >= tried * 2, "out of the nook and round to open ground by where they were going (" + out + " of " + tried + ")");
+                // Mortar teams dug into pits at the base, kept there rather than sent out with the squads.
+                int pits = 0;
+                for (Entity e : w.entities) if (!e.dead && e.role == Entity.ROLE_MORTAR && e.task == Dispatch.T_POST) pits++;
+                check(pits >= 1, "mortar teams in their pits at the base (" + pits + ")");
+                // An army helicopter off its pad with a squad: all of them go down at the landing zone, not all but two.
+                Fleet.Vehicle heli = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    if (v.type == Fleet.HELI && v.state == Fleet.IDLE && v.kind != Fleet.K_POLICE_HELI && v.kind != Fleet.K_RESCUE_HELI) heli = v;
+                check(heli != null, "an army helicopter on its pad");
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                java.util.Random r = new java.util.Random(2);
+                float[] at = null;
+                for (int k = 0; k < 4000 && at == null; k++) {
+                    float[] q = city.randomWalkableInTown(r);
+                    if (Math.hypot(q[0] - heli.x, q[1] - heli.y) > 900) at = q;
+                }
+                // (The dead there, so the call stays live till they're down.)
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 5; k++) {
+                    float[] p = city.findWalkable(at[0] + k * 6, at[1]);
+                    if (p != null) pack.add(w.spawn(Entity.ZOMBIE, p[0], p[1]));
+                }
+                check(w.fleet.launchHeli(heli, at[0], at[1], "the test", null, 6), "launched");
+                int aboard = 0, dropped = -1;
+                for (int f = 0; f < 30 * 120 && dropped < 0; f++) {
+                    // (Tough enough that the door gunner can't finish them off and send it home before it lands.)
+                    for (Entity zz : pack) {
+                        zz.speed = zz.runSpeed = 0;
+                        zz.hp = zz.maxHp = 5000;
+                        zz.dead = false;
+                    }
+                    int before = heli.crew.size();
+                    if (heli.state == Fleet.SPOOL) aboard = Math.max(aboard, heli.crew.size() - 1);
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (heli.state == Fleet.CIRCLE && before > heli.crew.size()) dropped = before - heli.crew.size();
+                }
+                check(aboard >= 3 && dropped == aboard, "everyone aboard but the pilot went down (" + dropped + " of " + aboard + ")");
+                // The police helicopter's pilot is lost: an officer puts in to fly it, trains on the pad, and is its pilot.
+                Fleet.Vehicle ph = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.HELI && v.kind == Fleet.K_POLICE_HELI && v.state == Fleet.IDLE) ph = v;
+                check(ph != null, "a police helicopter on its pad");
+                Entity old = w.fleet.livePilot(ph);
+                check(old != null, "with its pilot");
+                old.hp = 0;
+                old.dead = true;
+                Entity trainee = null, flier = null;
+                for (int f = 0; f < 30 * 150 && flier == null; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (trainee == null)
+                        for (Entity e : w.entities) if (!e.dead && e.task == Dispatch.T_TRAIN && e.pilotFor == ph) trainee = e;
+                    Entity p = w.fleet.livePilot(ph);
+                    if (p != null && p != old) flier = p;
+                }
+                check(trainee != null && trainee.type == Entity.COP, "an officer put in to fly it");
+                check(flier == trainee && flier.role == Entity.ROLE_PILOT, "and once trained, is its pilot (" + (flier == null ? "none" : flier == trainee ? "them" : "someone else") + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

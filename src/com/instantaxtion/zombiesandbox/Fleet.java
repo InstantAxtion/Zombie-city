@@ -6571,7 +6571,9 @@ final class Fleet {
                         e.rig = null;
                     }
                 }
-                if (v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI) v.troops = Math.max(0, v.crew.size() - 3);
+                // ((14.9) Everyone aboard but the pilot goes down: it used to keep two of the squad back as door
+                // gunners, so a helicopter with seven aboard put only four down.)
+                if (v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI) v.troops = Math.max(0, v.crew.size() - 1);
                 v.state = SPOOL;
                 v.spoolTime = v.timer = 4.5f;
             }
@@ -6922,10 +6924,11 @@ final class Fleet {
         return null;
     }
 
-    /** The troops jump down: everyone aboard but the pilot and two door gunners, off to the fighting. */
+    /** The troops jump down: everyone aboard but the pilot (and a reinforcement's two door gunners), off to the fighting. */
     private void unloadTroops(Vehicle v) {
         Entity pilot = livePilot(v);
-        int keep = 2;
+        // ((14.9) Only reinforcements flown in from outside bring door gunners of their own, who stay aboard.)
+        int keep = v.reinforcement ? 2 : 0;
         Entity first = null;
         for (int i = v.crew.size() - 1; i >= 0; i--) {
             Entity e = v.crew.get(i);

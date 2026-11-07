@@ -49,6 +49,8 @@ final class World {
         float sx, sy, tx, ty, t, dur;
         /** ((14.0) A mortar shell: high and slow, and a bigger blast.) */
         boolean shell;
+        /** ((14.9) Where a shell was aimed (marked on the ground while it's in the air).) */
+        float aimX, aimY;
     }
 
     static final class Explosion {
@@ -882,12 +884,30 @@ final class World {
                 applyRole(e, Entity.ROLE_ENGINEER);
                 engineers++;
             }
-            // ((14.0) And one with the base's mortar.)
+            // ((14.0) And mortars. (14.9) Two or three of them, each dug into a sandbagged pit in the base and kept there,
+            // not sent out with the squads: the one there was left with the riflemen, went off on the first truck and
+            // never fired.)
+            int here = 0;
             for (int i = firstSoldier, n = entities.size(); i < n; i++) {
                 Entity e = entities.get(i);
+                if (e.type == Entity.SOLDIER && World.hypot(e.x - f.x, e.y - f.y) < f.r + 300) here++;
+            }
+            int teams = Math.max(1, Math.min(3, 1 + here / 80));
+            float toTown = (float) Math.atan2(city.worldH() / 2f - f.y, city.worldW() / 2f - f.x);
+            for (int i = firstSoldier, n = entities.size(), dug = 0; i < n && dug < teams; i++) {
+                Entity e = entities.get(i);
                 if (e.type != Entity.SOLDIER || e.role != Entity.ROLE_RIFLE || World.hypot(e.x - f.x, e.y - f.y) > f.r + 300) continue;
+                float a = toTown + (dug - (teams - 1) / 2f) * 0.45f;
+                // (Out towards the edge on the town side, away from the crowd round the middle of the base.)
+                float[] pit = city.findWalkable(f.x + (float) Math.cos(a) * f.r * 0.8f, f.y + (float) Math.sin(a) * f.r * 0.8f);
+                if (pit == null) continue;
                 applyRole(e, Entity.ROLE_MORTAR);
-                break;
+                e.x = pit[0];
+                e.y = pit[1];
+                e.task = Dispatch.T_POST;
+                e.postX = pit[0];
+                e.postY = pit[1];
+                dug++;
             }
         }
         if (soldiers >= 5) {
@@ -2650,6 +2670,24 @@ final class World {
             e.stuckTime = 0;
             float heading = fastAtan2(e.my, e.mx);
             e.unstickAngle = heading + (rnd.nextBoolean() ? 1 : -1) * (1.6f + rnd.nextFloat() * 1f);
+            // ((14.9) Off a way that's actually open: a random one could be straight back into the corner of the
+            // nook where two buildings meet, and they stood there pushing at the wall time after time.)
+            float reach = e.radius + 8;
+            if (city.circleBlocked(e.x + (float) Math.cos(e.unstickAngle) * reach, e.y + (float) Math.sin(e.unstickAngle) * reach, e.radius)) {
+                float bestA = e.unstickAngle, best = -9;
+                for (int k = 0; k < 12; k++) {
+                    float a = heading + k * TAU / 12;
+                    float ux = (float) Math.cos(a), uy = (float) Math.sin(a);
+                    if (city.circleBlocked(e.x + ux * reach, e.y + uy * reach, e.radius)) continue;
+                    // (Sideways round it before back the way they came.)
+                    float score = 1 - Math.abs(Math.abs(((a - heading) % TAU + TAU) % TAU - (float) Math.PI) - (float) Math.PI / 2) / (float) Math.PI + rnd.nextFloat() * 0.2f;
+                    if (score > best) {
+                        best = score;
+                        bestA = a;
+                    }
+                }
+                e.unstickAngle = bestA;
+            }
             e.unstick = 0.6f + rnd.nextFloat() * 0.6f;
             e.blocked = false;
         }
@@ -7111,9 +7149,48 @@ final class World {
                     + got + " have.", city.worldW() / 2, city.worldH() / 2);
     }
 
+    /** (14.9) How long an officer or soldier trains on the pad before they can fly its helicopter. */
+    static final float PILOT_TRAINING = 40;
+
+    /**
+     * (14.9) An officer or soldier from the station or base whose helicopter has lost its pilot puts in to fly it:
+     * the nearest one free (not its commander, a guard or anyone special), who goes to the pad and trains there.
+     */
+    private Entity pilotApplicant(Fleet.Vehicle v) {
+        boolean army = v.kind != Fleet.K_POLICE_HELI && v.kind != Fleet.K_RESCUE_HELI;
+        int type = army ? Entity.SOLDIER : Entity.COP;
+        Entity best = null;
+        float bd = 1600;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != type || e.infected || e.pilotFor != null || e == controlled || e.rig != null || e.ride != null) continue;
+            if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_POST) continue;
+            if (e.role != Entity.ROLE_RIFLE || e.agency != 0 || e.scout || e.hp < e.maxHp * 0.5f) continue;
+            float d = (float) World.hypot(e.x - v.padAt[0], e.y - v.padAt[1]);
+            if (d < bd) {
+                bd = d;
+                best = e;
+            }
+        }
+        return best;
+    }
+
     /** (11.0) The nearest reserve pilot still alive, called up to fly v (no pilot left); null if there are none. */
     Entity callReservePilot(Fleet.Vehicle v) {
         if (v.padAt == null) return null;
+        // ((14.9) First, one of its own officers or soldiers puts in for it.)
+        Entity own = pilotApplicant(v);
+        if (own != null) {
+            dispatch.releaseForResupply(own);
+            own.pilotFor = v;
+            own.task = Dispatch.T_TRAIN;
+            own.trainT = 0;
+            boolean army = own.type == Entity.SOLDIER;
+            String air = v.kind == Fleet.K_RESCUE_HELI ? "the rescue helicopter" : v.kind == Fleet.K_POLICE_HELI ? "the police helicopter" : "Air " + Math.max(1, v.number);
+            dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, own, (army ? "Private " : "Officer ") + Names.person(own.nameSeed)
+                    + " has put in to fly " + air + ". Heading to the pad to train.", v.padAt[0], v.padAt[1]);
+            return own;
+        }
         Entity best = null;
         float bd = Float.MAX_VALUE;
         for (int i = 0, n = entities.size(); i < n; i++) {
@@ -7134,6 +7211,42 @@ final class World {
         dispatch.say(v.kind == Fleet.K_POLICE_HELI || v.kind == Fleet.K_RESCUE_HELI ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, null,
                 "We've lost the pilot for " + air + ". Calling up reserve pilot " + Names.person(best.nameSeed) + ".", v.padAt[0], v.padAt[1]);
         return best;
+    }
+
+    /**
+     * (14.9) An officer or soldier training to fly their station's helicopter: to the pad, then lessons there for a
+     * while (they'll still shoot at the dead that come close), and then they're its pilot. False if it's off - the
+     * helicopter's gone, or someone else has turned up to fly it - and they go back to their duties.
+     */
+    private boolean trainStep(Entity e, float dt) {
+        Fleet.Vehicle v = e.pilotFor;
+        if (v == null || v.padAt == null || !fleet.vehicles.contains(v) || fleet.livePilot(v) != null) {
+            e.pilotFor = null;
+            e.task = Dispatch.T_NONE;
+            return false;
+        }
+        Entity z = pickTarget(e, 120);
+        if (z != null && (e.ammo > 0 || e.reserve > 0)) return false;
+        float px = v.padAt[0] + 22, py = v.padAt[1] + 6;
+        if (World.hypot(px - e.x, py - e.y) > 16) {
+            walkToSpot(e, px, py, e.runSpeed * 0.8f);
+            return true;
+        }
+        steer(e, 0, 0, 0);
+        e.angle = turn(e.angle, (float) Math.atan2(v.y - e.y, v.x - e.x), dt * 3);
+        e.trainT += dt;
+        if (e.trainT < PILOT_TRAINING) return true;
+        e.role = Entity.ROLE_PILOT;
+        e.callsign = v.number;
+        e.task = Dispatch.T_NONE;
+        e.pilotFor = null;
+        e.trainT = 0;
+        v.flight.add(0, e);
+        v.pilotComing = null;
+        boolean army = e.type == Entity.SOLDIER;
+        dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, (army ? "Private " : "Officer ") + Names.person(e.nameSeed)
+                + ": Checked out on the helicopter. Ready to fly.", e.x, e.y);
+        return true;
     }
 
     /** (11.0) A reserve pilot on the way to the pad; there, they're sworn in and become its pilot. False if it's off. */
@@ -8511,42 +8624,69 @@ final class World {
         return true;
     }
 
+    /** (14.9) Mortar shells fired so far. */
+    int mortarShots;
+
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
     static final int MORTAR_ROUNDS = 16;
-    static final float MORTAR_MIN = 150, MORTAR_MAX = 650, MORTAR_EVERY = 7, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
+    static final float MORTAR_MIN = 150, MORTAR_MAX = 1100, MORTAR_EVERY = 6, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
+    /** (14.9) The fewest of the dead together worth a shell, and how often a team in its pit gets another round. */
+    static final int MORTAR_PACK = 5;
+    static final float MORTAR_RESTOCK = 12;
 
     /**
-     * (14.0) A mortar team: with none of the dead close, at the biggest pack of them at a call a few streets off (six or
-     * more together), a shell every few seconds. Never with police or soldiers near where it lands; near civilians only
-     * when the dead there far outnumber them - and a shell can land a little off. True when it fired.
+     * (14.0) A mortar team: with none of the dead close, at the biggest pack of them at a call a few streets off, a
+     * shell every few seconds. Never with police or soldiers near where it lands; near civilians only when the dead
+     * there far outnumber them - and a shell can land a little off. True when it fired.
+     * ((14.9) From its pit at the base, out to further; at the thickest of the dead round a call that's clear of our
+     * own people (the middle of the pack used to be ruled out whenever a soldier was anywhere near it, which at a
+     * call was nearly always); restocked from the base while in its pit; and each new fire mission called in.)
      */
-    private boolean mortarStep(Entity e) {
+    private boolean mortarStep(Entity e, float dt) {
+        boolean inPit = e.task == Dispatch.T_POST && World.hypot(e.x - e.postX, e.y - e.postY) < 12;
+        if (inPit && e.grenades < MORTAR_ROUNDS && (e.restockT += dt) >= MORTAR_RESTOCK) {
+            e.restockT = 0;
+            e.grenades++;
+        }
         if (e.grenades <= 0 || e.grenadeCd > 0 || nearest(e, 90, true, false) != null) return false;
         float bestX = 0, bestY = 0;
-        int best = 5;
+        int best = MORTAR_PACK - 1;
+        Dispatch.Incident at = null;
         for (int i = 0; i < dispatch.incidents.size(); i++) {
             Dispatch.Incident inc = dispatch.incidents.get(i);
             if (inc.resolved) continue;
             float d = (float) World.hypot(inc.x - e.x, inc.y - e.y);
-            if (d < MORTAR_MIN - 60 || d > MORTAR_MAX + 60) continue;
-            // (Where they're thickest round the call: the middle of them.)
-            float[] at = packNear(inc.x, inc.y, 120);
-            if (at == null) continue;
-            float ad = (float) World.hypot(at[0] - e.x, at[1] - e.y);
-            int n = countZombiesNear(at[0], at[1], MORTAR_BLAST);
-            if (ad < MORTAR_MIN || ad > MORTAR_MAX || n <= best) continue;
-            if (armedNear(at[0], at[1], MORTAR_BLAST + 25) > 0) continue;
-            if (countCiviliansNear(at[0], at[1], MORTAR_BLAST + 10) * 3 > n) continue;
-            best = n;
-            bestX = at[0];
-            bestY = at[1];
+            if (d < MORTAR_MIN - 200 || d > MORTAR_MAX + 200) continue;
+            // (Where they're thickest round the call: the middle of them, and a few of them looked at too.)
+            float[] mid = packNear(inc.x, inc.y, 160);
+            if (mid == null) continue;
+            for (int k = 0; k < 6; k++) {
+                float cx = mid[0], cy = mid[1];
+                if (k > 0) {
+                    Entity z = nearestZombie(mid[0] + (rnd.nextFloat() * 2 - 1) * 140, mid[1] + (rnd.nextFloat() * 2 - 1) * 140, 60);
+                    if (z == null) continue;
+                    cx = z.x;
+                    cy = z.y;
+                }
+                float ad = (float) World.hypot(cx - e.x, cy - e.y);
+                if (ad < MORTAR_MIN || ad > MORTAR_MAX) continue;
+                int n = countZombiesNear(cx, cy, MORTAR_BLAST);
+                if (n <= best) continue;
+                if (armedNear(cx, cy, MORTAR_BLAST + 15) > 0) continue;
+                if (countCiviliansNear(cx, cy, MORTAR_BLAST + 10) * 3 > n) continue;
+                best = n;
+                bestX = cx;
+                bestY = cy;
+                at = inc;
+            }
         }
         e.grenadeCd = 1.5f;
-        if (best <= 5) return false;
+        if (at == null) return false;
         steer(e, 0, 0, 0);
         e.aiming = false;
         e.angle = (float) Math.atan2(bestY - e.y, bestX - e.x);
         e.grenades--;
+        mortarShots++;
         e.grenadeCd = MORTAR_EVERY;
         float d = (float) World.hypot(bestX - e.x, bestY - e.y);
         Grenade g = new Grenade();
@@ -8558,10 +8698,23 @@ final class World {
         g.ty = bestY + (rnd.nextFloat() * 2 - 1) * spread;
         g.dur = 2.2f + d / 450;
         g.shell = true;
+        g.aimX = bestX;
+        g.aimY = bestY;
         grenades.add(g);
         emit(Sfx.LAUNCHER, e.x, e.y);
         noise(e.x, e.y, 160);
-        dispatch.chatter(Dispatch.WHO_MILITARY, e, "Shot out! " + e.grenades + " rounds left.", e.x, e.y);
+        // ((14.9) Plain to see where it's fired from: a flash at the tube and a cloud of smoke going up.)
+        float fx = e.x + (float) Math.cos(e.angle) * 4, fy = e.y + (float) Math.sin(e.angle) * 4;
+        particle(fx, fy, 0, 0, 0.14f, 6, 0xFFFFE9A0, P_FLASH);
+        for (int k = 0; k < 7; k++)
+            particle(fx + (rnd.nextFloat() - 0.5f) * 4, fy + (rnd.nextFloat() - 0.5f) * 4, (rnd.nextFloat() - 0.5f) * 10, -6 - rnd.nextFloat() * 10,
+                    1.6f + rnd.nextFloat(), 4 + rnd.nextFloat() * 3, 0xFFB8B4AA, P_SMOKE);
+        String place = city.placeName(bestX, bestY);
+        if (time - e.lastShot > 30) {
+            dispatch.say(Dispatch.WHO_MILITARY, e, "Mortars: Fire mission, " + best + " of the dead on " + place + ". Rounds on the way.", e.x, e.y);
+            timeline("Mortars fired on " + place, bestX, bestY);
+        } else dispatch.chatter(Dispatch.WHO_MILITARY, e, "Shot out! " + e.grenades + " rounds left.", e.x, e.y);
+        e.lastShot = time;
         return true;
     }
 
@@ -8674,12 +8827,14 @@ final class World {
         if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
         // ((14.7) In the squad of the one you're playing: with them, and shooting at what they shoot at.)
         if (e.task == Dispatch.T_SQUAD && squadStep(e, dt)) return;
+        // ((14.9) Put in to fly the station's helicopter: to the pad, and training there.)
+        if (e.task == Dispatch.T_TRAIN && trainStep(e, dt)) return;
         // ((14.2) In over their heads: radio for backup - out of rounds, falling back or hurt included.)
         maybeCallBackup(e);
         // ((14.5) Badly hurt and out of the fight: to the field hospital.)
         if (hospitalStep(e, dt)) return;
         // ((14.0) A mortar team shells a pack of the dead a few streets off.)
-        if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e)) return;
+        if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e, dt)) return;
         // ((11.0) On foot to a call a long way off, with nothing to fight here: a car or truck to take them, if
         // there's one (with whoever else nearby is going there too).)
         if (e.task == Dispatch.T_RESPOND && e.incident != null && !e.incident.resolved && !e.onScene && e.rig == null
@@ -12451,7 +12606,7 @@ final class World {
         if (time >= e.fieldOffUntil && followField(e, field, speed)) return;
         if (field != null && time >= e.fieldOffUntil) e.fieldOffUntil = time + 4;
         if (d > 60) walkToSpot(e, x, y, speed);
-        else steer(e, (x - e.x) / d, (y - e.y) / d, speed);
+        else steerClear(e, (x - e.x) / d, (y - e.y) / d, speed);
     }
 
     private boolean followField(Entity e, int[] field, float speed) {
@@ -13853,21 +14008,63 @@ final class World {
         // (10.49) A spot that's crept a little (a cordon post as the zone shifts) keeps the way already planned
         // while it's still far off: replanned as it gets near.
         float slack = Math.max(1, d * 0.12f);
-        if (e.path == null || e.pathDest != null || Math.abs(e.planX - x) > slack || Math.abs(e.planY - y) > slack) {
+        // ((14.9) A way that couldn't be found is looked for again every few seconds: it used to be left empty for
+        // good, and they walked straight at the spot - into the wall of whatever building was in the way - for ever.)
+        boolean retry = e.path != null && e.path.length == 0 && time >= e.pathRetry;
+        if (e.path == null || retry || e.pathDest != null || Math.abs(e.planX - x) > slack || Math.abs(e.planY - y) > slack) {
             if (pathBudget < 0.25f) {
-                steer(e, dx / d, dy / d, speed * 0.7f);
+                steerClear(e, dx / d, dy / d, speed * 0.7f);
                 return;
             }
             pathBudget -= 0.25f;
             e.path = city.findPath(e.x, e.y, x, y, 9000);
-            if (e.path == null) e.path = new int[0];
+            // ((14.9) A spot inside a building or a wall: the nearest open ground to it instead.)
+            if (e.path == null && city.solidAt(x, y)) {
+                float[] p = city.findWalkable(x, y);
+                if (p != null) e.path = city.findPath(e.x, e.y, p[0], p[1], 9000);
+            }
+            if (e.path == null) {
+                e.path = new int[0];
+                e.pathRetry = time + 3 + rnd.nextFloat() * 2;
+            }
             e.pathIdx = 0;
             e.pathDest = null;
             e.planX = x;
             e.planY = y;
         }
         e.blocked = false;
-        if (!followPath(e, speed)) steer(e, dx / d, dy / d, speed);
+        if (!followPath(e, speed)) steerClear(e, dx / d, dy / d, speed);
+    }
+
+    /**
+     * (14.9) Straight that way (dx, dy) - or, with a building or a wall just ahead, along it whichever way is nearest
+     * to the right one (and keeps on the way they were already sliding), instead of pushing into it. People caught
+     * in the seam where two buildings meet used to stand there running into the wall.
+     */
+    private void steerClear(Entity e, float dx, float dy, float speed) {
+        float ahead = e.radius + 5;
+        if (!city.solidAt(e.x + dx * ahead, e.y + dy * ahead)) {
+            steer(e, dx, dy, speed);
+            return;
+        }
+        int tx = City.fl(e.x / City.T), ty = City.fl(e.y / City.T);
+        float best = -9, bx = dx, by = dy;
+        for (int oy = -1; oy <= 1; oy++)
+            for (int ox = -1; ox <= 1; ox++) {
+                if (ox == 0 && oy == 0 || city.solidTile(tx + ox, ty + oy)) continue;
+                if (ox != 0 && oy != 0 && (city.solidTile(tx + ox, ty) || city.solidTile(tx, ty + oy))) continue;
+                float gx = (tx + ox + 0.5f) * City.T - e.x, gy = (ty + oy + 0.5f) * City.T - e.y;
+                float gl = (float) Math.sqrt(gx * gx + gy * gy) + 0.001f;
+                gx /= gl;
+                gy /= gl;
+                float score = gx * dx + gy * dy + 0.45f * (gx * e.mx + gy * e.my);
+                if (score > best) {
+                    best = score;
+                    bx = gx;
+                    by = gy;
+                }
+            }
+        steer(e, bx, by, speed);
     }
 
     /** A spot on a lake shore near home to fish from: {x, y, facing}. */

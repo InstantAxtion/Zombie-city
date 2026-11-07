@@ -2751,6 +2751,14 @@ final class GameView extends View implements Menu.Host {
             if (dotSeen == null || dotSeen.length < pw * ph) dotSeen = new int[pw * ph];
             dotFrame++;
         }
+        // ((14.9) Mortar pits under their teams.)
+        if (detailed)
+            for (int i = 0, n = onScreen.size(); i < n; i++) {
+                Entity e = onScreen.get(i);
+                if (e.role != Entity.ROLE_MORTAR || e.type != Entity.SOLDIER || e.task != Dispatch.T_POST) continue;
+                if (e.postX < vx0 - 20 || e.postX > vx1 + 20 || e.postY < vy0 - 20 || e.postY > vy1 + 20) continue;
+                drawMortarPit(c, e);
+            }
         for (int i = 0, n = onScreen.size(); i < n; i++) {
             Entity e = onScreen.get(i);
             if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
@@ -2948,10 +2956,28 @@ final class GameView extends View implements Menu.Host {
             float t = g.t / g.dur;
             float x = g.sx + (g.tx - g.sx) * t, y = g.sy + (g.ty - g.sy) * t;
             float hgt = (float) Math.sin(t * Math.PI) * (g.shell ? 90 : 22);
+            if (g.shell) {
+                // ((14.9) Where a mortar shell will come down, marked while it's in the air: a red ring closing in
+                // and cross hairs, and the shell's trail behind it.)
+                float left = 1 - t, pulse = 0.5f + 0.5f * (float) Math.sin(t * 40);
+                stroke.setStrokeWidth(1.4f);
+                stroke.setColor(alpha(0xFFE8392C, 0.5f + 0.35f * pulse));
+                c.drawCircle(g.aimX, g.aimY, World.MORTAR_BLAST * (0.35f + 0.65f * left), stroke);
+                stroke.setStrokeWidth(0.9f);
+                stroke.setColor(alpha(0xFFE8392C, 0.75f));
+                c.drawLine(g.aimX - 7, g.aimY, g.aimX + 7, g.aimY, stroke);
+                c.drawLine(g.aimX, g.aimY - 7, g.aimX, g.aimY + 7, stroke);
+                for (int k = 1; k <= 5; k++) {
+                    float tt = Math.max(0, t - k * 0.025f);
+                    float tx = g.sx + (g.tx - g.sx) * tt, ty = g.sy + (g.ty - g.sy) * tt - (float) Math.sin(tt * Math.PI) * 90;
+                    fill.setColor(alpha(0xFFDDD8CC, 0.35f - k * 0.06f));
+                    c.drawCircle(tx, ty, 1.6f + k * 0.4f, fill);
+                }
+            }
             fill.setColor(0x55000000);
-            c.drawCircle(x, y, 1.6f, fill);
+            c.drawCircle(x, y, g.shell ? 2.4f : 1.6f, fill);
             fill.setColor(0xFF2F3A1E);
-            c.drawCircle(x, y - hgt, 1.9f, fill);
+            c.drawCircle(x, y - hgt, g.shell ? 2.6f : 1.9f, fill);
         }
 
 
@@ -7807,6 +7833,31 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** What someone is up to, in plain words. */
+    /** (14.9) A mortar pit: a ring of sandbags round the post, the tube on its baseplate in the middle, pointing where it last fired. */
+    private void drawMortarPit(Canvas c, Entity e) {
+        float x = e.postX, y = e.postY;
+        fill.setColor(0x40000000);
+        c.drawCircle(x + 1.2f, y + 1.8f, 19, fill);
+        fill.setColor(0xFF5E573E);
+        c.drawCircle(x, y, 13, fill);
+        for (int k = 0; k < 16; k++) {
+            float a = k * (float) Math.PI * 2 / 16;
+            float bx = x + (float) Math.cos(a) * 16, by = y + (float) Math.sin(a) * 16;
+            fill.setColor(k % 2 == 0 ? 0xFFC2B07C : 0xFFAA9A6C);
+            c.drawCircle(bx, by, 3.4f, fill);
+        }
+        // Rounds stacked by the wall of the pit.
+        fill.setColor(0xFF3E4430);
+        for (int k = 0; k < Math.min(6, (e.grenades + 2) / 3); k++) c.drawRect(x - 9 + k * 2.4f, y + 7, x - 7.4f + k * 2.4f, y + 10.5f, fill);
+        // The tube, angled up the way it fires, beside where the team stands.
+        float a = e.angle, tx = x + (float) Math.cos(a + 1.9f) * 5, ty = y + (float) Math.sin(a + 1.9f) * 5;
+        fill.setColor(0xFF2A2E22);
+        c.drawCircle(tx, ty, 2.2f, fill);
+        stroke.setStrokeWidth(2f);
+        stroke.setColor(0xFF2A2E22);
+        c.drawLine(tx, ty, tx + (float) Math.cos(a) * 6, ty + (float) Math.sin(a) * 6, stroke);
+    }
+
     /**
      * (14.8) A roadblock's crowd barriers: steel panels end to end across the road and pavements, each on its two
      * feet - or, once the dead have pushed them over, lying flat and skewed where they fell.
@@ -7911,6 +7962,7 @@ final class GameView extends View implements Menu.Host {
             case Dispatch.T_LEAVE: return "Fleeing the city";
             case Dispatch.T_HOMECOMING: return "Coming home";
             case Dispatch.T_SQUAD: return "Following you";
+            case Dispatch.T_TRAIN: return e.trainT > 0 ? "Training to fly the helicopter (" + Math.min(99, (int) (e.trainT * 100 / World.PILOT_TRAINING)) + "%)" : "Going to train as a pilot";
             case Dispatch.T_BORROW: return "Borrowing ammo";
             case Dispatch.T_MOVE: return "Following orders";
             case Dispatch.T_HOLD: return "Holding position";

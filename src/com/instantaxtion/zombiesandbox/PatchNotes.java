@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.8";
-    static final int VERSION_CODE = 138;
+    static final String VERSION = "14.9";
+    static final int VERSION_CODE = 139;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.9  -  Mortars that fire, pilots from the ranks, stations and bases told apart",
+                    "Fixed: mortar teams never fired. The base's one mortar was picked like any rifleman and went off on the first truck. Each base now has two or three mortar teams dug into sandbagged pits on the town side, and they stay there. They reach further, find a spot in the pack clear of our own people instead of giving up when a soldier is anywhere near, and are restocked from the base.",
+                    "Easy to see where mortars fire from and where the rounds will land: a flash and a cloud of smoke at the pit, the shell's trail through the air, and a red ring and cross hairs on the ground where it's coming down. Each new fire mission is called in on the radio and goes on the timeline.",
+                    "Fixed: an army helicopter with seven aboard put only four down. It kept two of the squad back as door gunners; now everyone but the pilot goes down.",
+                    "An officer or soldier can now put in to fly their station's or base's helicopter when its pilot is lost: they go to the pad, train there for a while, and become its pilot. Civilian reserve pilots are called only when none of them can.",
+                    "Police stations look like the police from above: a navy roof with a blue and white chequered band, a gold badge, and the blue lamp over the door. Army bases have a big white star painted on the parade ground and a flag.",
+                    "People less often stand pushing into a wall in the corner where two buildings meet: with a wall ahead they now slide along it, a step aside picks a way that's actually open, and a way that couldn't be found is looked for again every few seconds.",
+            },
             {
                     "14.8  -  Civilians fight back, crowd barriers, the police helicopter spots",
                     "Civilians fight back more often: cornered, or standing together in threes or more, they grab whatever's to hand (a bat, a length of pipe, an axe from the shed) and wade in, and others nearby join them. The timid still run, and nobody takes on a crowd alone or fights on badly hurt. Their wild swings are weaker than a trained hand's.",

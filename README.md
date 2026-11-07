@@ -419,6 +419,13 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Mortars that fire, pilots from the ranks, stations and bases told apart (14.9):** each army base keeps two or
+three mortar teams in sandbagged pits; they shell packs of the dead at calls in range, with smoke at the pit and a red
+target ring where each round will land. Army helicopters put down everyone aboard but the pilot. When a station's or
+base's helicopter loses its pilot, one of its own officers or soldiers trains on the pad to fly it. Police stations
+have a chequered navy roof and badge, bases a white star. People caught in the corner where two buildings meet find
+their way out.
+
 **Civilians fight back, crowd barriers, the police helicopter spots (14.8):** cornered civilians, or three or more
 standing together, grab whatever's to hand and fight the dead (the timid still run). Police roadblocks put up steel
 crowd barriers that hold the dead back until they push them over. The police helicopter marks the dead below for units

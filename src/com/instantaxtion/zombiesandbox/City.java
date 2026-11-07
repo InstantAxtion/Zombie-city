@@ -9189,6 +9189,62 @@ final class City {
                 c.drawCircle(cx, cy, 1.6f, p);
             }
         drawBaseDecor(c, p);
+        // ((14.9) A big white star in a ring painted on each base's parade ground, its name across the ground by it,
+        // and the flag: plain to see as the army's from any height.)
+        for (Facility f : facilities) {
+            if (f.kind != FACILITY_BASE) continue;
+            float sr = Math.min(30, f.r * 0.24f);
+            // (On open concrete clear of the buildings.)
+            float sx = f.x, sy = f.y;
+            // (The side away from town: the mortar pits are on the town side, and the garrison mills round the middle.)
+            float away = (float) Math.atan2(f.y - worldH() / 2f, f.x - worldW() / 2f);
+            search:
+            for (float dist = f.r; dist < f.r * 2.4f; dist += 8)
+                for (int k = 0; k < 16; k++) {
+                    float a = away + ((k + 1) / 2) * (k % 2 == 0 ? 1 : -1) * (float) Math.PI / 8;
+                    float qx = f.x + (float) Math.cos(a) * dist, qy = f.y + (float) Math.sin(a) * dist;
+                    boolean open = true;
+                    for (float ox = -sr - 8; ox <= sr + 8 && open; ox += T / 2f)
+                        for (float oy = -sr - 14; oy <= sr + 18 && open; oy += T / 2f) {
+                            int tx = fl((qx + ox) / T), ty = fl((qy + oy) / T);
+                            if (tx < 0 || ty < 0 || tx >= w || ty >= h || tiles[ty * w + tx] != BASE) open = false;
+                        }
+                    // (Clear of the base's own things - domes, tanks, the runway - and its helicopter pads.)
+                    for (float[] d : baseDecor)
+                        if (qx + sr + 6 > d[1] && qx - sr - 6 < d[3] && qy + sr + 18 > d[2] && qy - sr - 6 < d[4]) open = false;
+                    for (float[] hp : helipads) if (World.hypot(hp[0] - qx, hp[1] - qy) < sr + 30) open = false;
+                    if (open) {
+                        sx = qx;
+                        sy = qy;
+                        break search;
+                    }
+                }
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2.2f);
+            p.setColor(0xD8E8E6DA);
+            c.drawCircle(sx, sy, sr, p);
+            p.setStyle(Paint.Style.FILL);
+            android.graphics.Path star = new android.graphics.Path();
+            for (int k = 0; k < 10; k++) {
+                float a = (float) (-Math.PI / 2 + k * Math.PI / 5), rr = k % 2 == 0 ? sr * 0.88f : sr * 0.36f;
+                if (k == 0) star.moveTo(sx + (float) Math.cos(a) * rr, sy + (float) Math.sin(a) * rr);
+                else star.lineTo(sx + (float) Math.cos(a) * rr, sy + (float) Math.sin(a) * rr);
+            }
+            star.close();
+            p.setColor(0xD8E8E6DA);
+            c.drawPath(star, p);
+            sign(country.sign("ARMY"), sx, sy + sr + 9, 8, 0xFFE8E6DA);
+            // The flagpole by the star, and the flag.
+            float fx = sx + sr + 8, fy = sy - sr * 0.4f;
+            p.setColor(0x55000000);
+            c.drawCircle(fx + 0.8f, fy + 0.8f, 1.8f, p);
+            p.setColor(0xFFD8D8D8);
+            c.drawCircle(fx, fy, 1.5f, p);
+            p.setColor(0xFF3E5A2A);
+            c.drawRect(fx + 1, fy - 1.5f, fx + 9, fy + 3.5f, p);
+            p.setColor(0xFFE8C547);
+            c.drawCircle(fx + 5, fy + 1, 1.2f, p);
+        }
         for (float[] hp : helipads) {
             p.setColor(0xFF4A4E46);
             c.drawCircle(hp[0], hp[1], 22, p);
@@ -11023,18 +11079,53 @@ final class City {
             return;
         }
         if (kind == STATION) {
+            // ((14.9) Unmistakably the police from above: a deep navy roof, a band of blue and white checks round
+            // the parapet, a big gold badge painted on it, and the blue lamp over the door. It used to be a plain blue
+            // roof much like a shop's.)
             p.setColor(0xFFE8EAEE);
             c.drawRect(x0, y0, x1, y1, p);
-            p.setColor(roof);
-            c.drawRect(x0 + 2, y0 + 2, x1 - 2, y1 - 2, p);
-            p.setColor(lighten(roof, 0.1f));
-            c.drawRect(x0 + 5, y0 + 5, x1 - 5, y1 - 5, p);
-            p.setColor(0xFFFFFFFF);
-            p.setTextAlign(Paint.Align.CENTER);
-            p.setTextSize(Math.min(10f, bw / 5.2f));
-            sign(country.sign("POLICE"), (x0 + x1) / 2, (y0 + y1) / 2, Math.min(10f, bw / 5.2f), 0xFFFFFFFF);
+            float band = Math.max(3, Math.min(5, Math.min(bw, bh) / 12));
+            int cols = Math.max(4, Math.round(bw / band)), rows = Math.max(4, Math.round(bh / band));
+            float cw = bw / cols, ch = bh / rows;
+            for (int i = 0; i < cols; i++) {
+                p.setColor(i % 2 == 0 ? 0xFF1E4FA8 : 0xFFF4F6F8);
+                c.drawRect(x0 + i * cw, y0, x0 + (i + 1) * cw, y0 + band, p);
+                p.setColor(i % 2 == 1 ? 0xFF1E4FA8 : 0xFFF4F6F8);
+                c.drawRect(x0 + i * cw, y1 - band, x0 + (i + 1) * cw, y1, p);
+            }
+            for (int j = 0; j < rows; j++) {
+                p.setColor(j % 2 == 0 ? 0xFF1E4FA8 : 0xFFF4F6F8);
+                c.drawRect(x0, y0 + j * ch, x0 + band, y0 + (j + 1) * ch, p);
+                p.setColor(j % 2 == 1 ? 0xFF1E4FA8 : 0xFFF4F6F8);
+                c.drawRect(x1 - band, y0 + j * ch, x1, y0 + (j + 1) * ch, p);
+            }
+            p.setColor(0xFF1A2B4E);
+            c.drawRect(x0 + band, y0 + band, x1 - band, y1 - band, p);
+            p.setColor(0xFF22365F);
+            c.drawRect(x0 + band + 3, y0 + band + 3, x1 - band - 3, y1 - band - 3, p);
+            // The badge: a gold star in a ring.
+            float bx = (x0 + x1) / 2, by = (y0 + y1) / 2, br = Math.min(16, Math.min(bw, bh) * 0.22f);
+            if (bh > 34) by -= br * 0.55f;
             p.setColor(0xFFE8C547);
-            c.drawCircle((x0 + x1) / 2, y0 + Math.min(bh * 0.25f, 12), 3.2f, p);
+            c.drawCircle(bx, by, br, p);
+            p.setColor(0xFF22365F);
+            c.drawCircle(bx, by, br * 0.8f, p);
+            android.graphics.Path star = new android.graphics.Path();
+            for (int k = 0; k < 12; k++) {
+                float a = (float) (-Math.PI / 2 + k * Math.PI / 6), rr = k % 2 == 0 ? br * 0.72f : br * 0.36f;
+                if (k == 0) star.moveTo(bx + (float) Math.cos(a) * rr, by + (float) Math.sin(a) * rr);
+                else star.lineTo(bx + (float) Math.cos(a) * rr, by + (float) Math.sin(a) * rr);
+            }
+            star.close();
+            p.setColor(0xFFE8C547);
+            c.drawPath(star, p);
+            float signY = bh > 34 ? by + br + Math.min(10f, bw / 5.2f) * 0.9f : (y0 + y1) / 2;
+            sign(country.sign("POLICE"), bx, signY, Math.min(10f, bw / 5.2f), 0xFFFFFFFF);
+            // The blue lamp over the door (on the side facing down the map).
+            p.setColor(0x553D8BFF);
+            c.drawCircle(bx, y1 + 1, 6, p);
+            p.setColor(0xFF3D8BFF);
+            c.drawCircle(bx, y1 + 1, 2.6f, p);
             return;
         }
         if (kind == FIRE_STATION || kind == MARKET || kind == SCHOOL || kind == KIOSK) {

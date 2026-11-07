@@ -158,6 +158,12 @@ final class Entity {
     transient float hospitalT;
     /** ((14.7) In the squad of the one you're playing: who, and their place in the line behind them.) */
     transient Entity commandedBy;
+    /** ((14.9) When a way that couldn't be found is next looked for again.) */
+    transient float pathRetry;
+    /** ((14.9) Flying lessons on the pad so far, for an officer or soldier training to be its pilot.) */
+    float trainT;
+    /** ((14.9) A mortar team: when it last fired (a new fire mission after a lull is called in), and its restocking.) */
+    transient float lastShot = -999, restockT;
     transient int squadSlot;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;

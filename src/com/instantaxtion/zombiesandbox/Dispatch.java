@@ -14,7 +14,9 @@ final class Dispatch {
             T_CLEANUP = 14, T_LOOT = 15, T_PATROL = 16, T_BOARD = 17, T_RESCUE = 18, T_BORROW = 19, T_CORDON = 20, T_EVACUATE = 21,
             T_LEAVE = 22, T_HOMECOMING = 23,
             // ((14.7) In the squad of the officer or soldier you're playing.)
-            T_SQUAD = 24;
+            T_SQUAD = 24,
+            // ((14.9) An officer or soldier who's put in to fly their station's helicopter, training on its pad.)
+            T_TRAIN = 25;
     static final int WHO_911 = 0, WHO_POLICE = 1, WHO_MILITARY = 2, WHO_INFO = 3;
     static final int[] WHO_COLORS = {0xFFFFA64D, 0xFF7FB0FF, 0xFFA6DC72, 0xFFBDBDBD};
     static final String[] SQUADS = {"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"};
