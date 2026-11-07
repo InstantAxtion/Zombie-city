@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.6";
-    static final int VERSION_CODE = 146;
+    static final String VERSION = "15.7";
+    static final int VERSION_CODE = 147;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.7  -  The prison looks like a prison",
+                    "The island prison's wall is twice as thick and stands high, throwing a shadow, with razor wire all along the top and watchtowers on it: one at each corner and two along the far side.",
+                    "A gatehouse either side of the gate, and the gate itself a heavy steel door in yellow and black - its leaves swung back once the prison falls. A red and white barrier and a guard booth where the causeway meets the seafront.",
+                    "The guards in khaki with brown hats, not police blue: two inside the gate, one at the foot of each watchtower, two at the seafront barrier, and a few out in the yard. The outbreak in the yard starts with more bitten, and the prison falls once the dead outnumber the guards inside two to one.",
+            },
             {
                     "15.6  -  The Prison Island map",
                     "A new map, Prison Island: a town on the coast, and out in the bay a walled prison on its own island, joined to the seafront by a causeway, with a ferry running across. Inside the high wall: cell blocks, the admin block, watchtowers, up to 140 inmates in orange out in the yard and their guards with shotguns.",

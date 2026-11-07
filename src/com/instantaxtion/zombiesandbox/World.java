@@ -8893,7 +8893,7 @@ final class World {
     private void populatePrison() {
         int[] p = city.prison;
         int area = (p[2] - p[0]) * (p[3] - p[1]);
-        int inmates = Math.max(30, Math.min(140, area / 8)), guards = Math.max(6, Math.min(10, inmates / 14));
+        int inmates = Math.max(30, Math.min(140, area / 8)), guards = Math.max(3, Math.min(5, inmates / 30));
         for (int i = 0; i < inmates; i++) {
             float[] q = prisonYardSpot();
             if (q == null) break;
@@ -8906,13 +8906,18 @@ final class World {
             e.ammo = e.reserve = 0;
             e.melee = 0;
         }
-        for (int i = 0; i < guards; i++) {
-            float[] q = prisonYardSpot();
-            if (q == null) break;
+        // ((15.6) The guards: one on each of their posts (the gate, each watchtower, the barrier on the seafront), the
+        // rest out in the yard.)
+        java.util.List<float[]> posts = city.prisonPosts;
+        for (int i = 0; i < guards + posts.size(); i++) {
+            float[] q = i < posts.size() ? city.findWalkable(posts.get(i)[0], posts.get(i)[1]) : prisonYardSpot();
+            if (q == null) continue;
             Entity g = spawn(Entity.COP, q[0], q[1]);
             if (g == null) break;
             g.role = Entity.ROLE_PRISON_GUARD;
-            g.body = 0xFF4A5560;
+            // (Khaki and a brown hat, not police blue.)
+            g.body = 0xFF8A7448;
+            g.head = 0xFF5A4630;
             setGun(g, Entity.W_SHOTGUN, 40);
             g.task = Dispatch.T_POST;
             g.postX = q[0];
@@ -8941,10 +8946,10 @@ final class World {
             // (A fight in the yard: several bitten, turning one after another all over the yard, too many at once
             // for the guards to put down one by one.)
             java.util.Collections.shuffle(in, rnd);
-            for (int k = 0; k < Math.min(5, in.size()); k++) {
+            for (int k = 0; k < Math.min(8, in.size()); k++) {
                 Entity e = in.get(k);
                 e.infected = true;
-                e.infectTimer = 10 + k * 6 + rnd.nextFloat() * 6;
+                e.infectTimer = 10 + k * 4 + rnd.nextFloat() * 6;
                 if (patientZero == null) markPatientZero(e);
                 if (k == 0) timeline("A fight in the prison yard: inmates bitten", e.x, e.y);
             }
@@ -8956,7 +8961,7 @@ final class World {
             if (e.isZombie()) dead++;
             else if (e.role == Entity.ROLE_PRISON_GUARD) guards++;
         }
-        if ((dead >= 6 && (guards <= 1 || dead > guards * 4)) || (blackout && dead > 0)) fallPrison();
+        if ((dead >= 6 && (guards <= 1 || dead > guards * 2)) || (blackout && dead > 0)) fallPrison();
     }
 
     /** (15.6) How long the Prison Island stays quiet before the outbreak starts inside the walls. */

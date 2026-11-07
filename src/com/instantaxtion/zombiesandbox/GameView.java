@@ -7287,7 +7287,8 @@ final class GameView extends View implements Menu.Host {
                 : e.agency == 3 ? "Park ranger " : e.agency == 4 ? Dispatch.federal(world.city.country) + " agent " : e.role == Entity.ROLE_PILOT ? "Pilot "
                 // ((12.0) The specialists say what they are.)
                 : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman "
-                : e.role == Entity.ROLE_MOUNTED ? "Mounted officer " : e.role == Entity.ROLE_TRAFFIC ? "Traffic officer " : "Officer ")
+                : e.role == Entity.ROLE_MOUNTED ? "Mounted officer " : e.role == Entity.ROLE_TRAFFIC ? "Traffic officer "
+                : e.role == Entity.ROLE_PRISON_GUARD ? "Prison guard " : "Officer ")
                 + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.SOLDIER) title = Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
         else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
