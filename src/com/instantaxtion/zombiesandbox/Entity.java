@@ -44,6 +44,8 @@ final class Entity {
     static final int ROLE_ENGINEER = 16;
     /** (14.0) An army mortar team: shells packs of the dead a few streets off (its rounds are kept as grenades). */
     static final int ROLE_MORTAR = 17;
+    /** ((15.0) Police officers on horseback, and traffic officers at the busy junctions.) */
+    static final int ROLE_MOUNTED = 18, ROLE_TRAFFIC = 19;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
             "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team"};
@@ -164,6 +166,8 @@ final class Entity {
     float trainT;
     /** ((14.9) A mortar team: when it last fired (a new fire mission after a lull is called in), and its restocking.) */
     transient float lastShot = -999, restockT;
+    /** ((15.0) A traffic officer waving an emergency vehicle through; a mounted officer's next look round, and patrol spot.) */
+    transient float waveUntil, lookT, patrolX, patrolY;
     transient int squadSlot;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;

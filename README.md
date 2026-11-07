@@ -419,6 +419,10 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Mounted police and traffic police (15.0):** officers on horseback ride the parks, move fast (and through crowds),
+and mark the dead they see for the units round them. Traffic officers at busy junctions hold the traffic and wave
+lights and sirens straight through, until the dead reach them.
+
 **Mortars that fire, pilots from the ranks, stations and bases told apart (14.9):** each army base keeps two or
 three mortar teams in sandbagged pits; they shell packs of the dead at calls in range, with smoke at the pit and a red
 target ring where each round will land. Army helicopters put down everyone aboard but the pilot. When a station's or

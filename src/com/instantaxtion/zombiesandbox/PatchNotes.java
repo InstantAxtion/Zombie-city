@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.9";
-    static final int VERSION_CODE = 139;
+    static final String VERSION = "15.0";
+    static final int VERSION_CODE = 140;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.0  -  Mounted police and traffic police",
+                    "Mounted police: two to four officers on horseback from the main precinct. Quicker than on foot (quicker still across grass and trails), harder to bring down, and a crowd gives way to a horse. From up high they see the dead round them and mark them for the units nearby, and with nothing doing they ride round the parks and squares.",
+                    "Traffic police: officers in hi-vis at the busiest junctions with lights near each precinct. When lights and sirens come up to their junction they hold the other traffic and wave it straight through. They stay on through the emergency, leaving their junctions to join the fight only when the dead come near or the city is being lost.",
+            },
             {
                     "14.9  -  Mortars that fire, pilots from the ranks, stations and bases told apart",
                     "Fixed: mortar teams never fired. The base's one mortar was picked like any rifleman and went off on the first truck. Each base now has two or three mortar teams dug into sandbagged pits on the town side, and they stay there. They reach further, find a spot in the pack clear of our own people instead of giving up when a soldier is anywhere near, and are restocked from the base.",

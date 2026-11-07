@@ -2530,6 +2530,18 @@ final class Fleet {
             else if (v.type == CAR) done = v.evacStop >= 0 ? updateEvacBus(v, vdt) : updateTraffic(v, vdt);
             else if (v.patrol) done = updatePatrol(v, vdt);
             else done = updateCar(v, vdt);
+            // ((15.0) Lights and sirens coming up to a junction with a traffic officer on it: the officer holds the
+            // rest of the traffic and waves it through.)
+            if (!done && w.trafficPost != null && v.speed > 8 && !offRoad(v) && v.lightsOn() && ((i + (int) (w.time * 30)) & 7) == 0) {
+                float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
+                for (int k = 1; k <= 4; k++) {
+                    int jid = city.junctionIdAt(v.x + ca * k * City.T, v.y + sa * k * City.T);
+                    if (jid >= 0) {
+                        if (w.trafficOfficer(jid) != null) w.holdJunction(jid, v);
+                        break;
+                    }
+                }
+            }
             if (done) {
                 // ((12.0) One of the city's own officers or soldiers at the wheel gets out, rather vanishing.)
                 if (v.driver != null && v.realDriver) driverOut(v, false);
@@ -2872,6 +2884,19 @@ final class Fleet {
         }
         if (id == v.clearedJ) return Float.MAX_VALUE;
         int[] j = city.junctions.get(id);
+        // ((15.0) A traffic officer on the junction: lights and sirens are waved straight through, and the rest held
+        // at the line while they go.)
+        if (dist < 90 && w.trafficOfficer(id) != null) {
+            if (emergency) {
+                w.holdJunction(id, v);
+                return Float.MAX_VALUE;
+            }
+            float stopLine = dist - City.T - v.length() - 1;
+            if (w.junctionHeldFor(id) && stopLine > -6 && v.player == null) {
+                v.held = stopLine < 6;
+                return Math.max(0, stopLine) * 1.8f;
+            }
+        }
         // Stop with the front bumper at the line, before the zebra crossing.
         float stopAt = dist - City.T - v.length() - 1;
         float approach = Math.max(0, stopAt) * 1.8f;

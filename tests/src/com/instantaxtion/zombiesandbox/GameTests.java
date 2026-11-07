@@ -3809,6 +3809,73 @@ public final class GameTests {
                 check(flier == trainee && flier.role == Entity.ROLE_PILOT, "and once trained, is its pilot (" + (flier == null ? "none" : flier == trainee ? "them" : "someone else") + ")");
             }
         });
+        test("15.0: mounted police - quicker, seeing further, riding the parks; traffic police hold junctions for lights and sirens", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 80;
+                c.normalize();
+                c.seed = 80;
+                World w = new World(c);
+                w.populate(c);
+                java.util.List<Entity> horses = new java.util.ArrayList<Entity>(), traffic = new java.util.ArrayList<Entity>();
+                Entity plain = null;
+                for (Entity e : w.entities) {
+                    if (e.type != Entity.COP) continue;
+                    if (e.role == Entity.ROLE_MOUNTED) horses.add(e);
+                    else if (e.role == Entity.ROLE_TRAFFIC) traffic.add(e);
+                    else if (e.role == Entity.ROLE_RIFLE && plain == null) plain = e;
+                }
+                check(horses.size() >= 2, "mounted officers (" + horses.size() + ")");
+                check(traffic.size() >= 2, "traffic officers (" + traffic.size() + ")");
+                Entity m = horses.get(0);
+                check(m.speed > plain.speed * 1.3f && m.runSpeed > plain.runSpeed * 1.3f && m.mass > 2, "a horse is quicker and a crowd gives way to it");
+                // Traffic officers on their junctions, holding them for lights and sirens.
+                int on = 0, held = -1;
+                for (int id = 0; id < w.city.junctions.size(); id++) if (w.trafficOfficer(id) != null) {
+                    on++;
+                    held = id;
+                }
+                check(on >= 2, "traffic officers on junctions (" + on + ")");
+                Fleet.Vehicle v = w.fleet.placeTank(w.city.worldW() / 2f, w.city.worldH() / 2f);
+                w.fleet.vehicles.remove(v);
+                w.holdJunction(held, v);
+                check(w.junctionHeldFor(held) && w.trafficOfficer(held).waveUntil > w.time, "the junction held, the officer waving it through");
+                // Out riding: a mounted officer with nothing doing heads for open ground.
+                for (int f = 0; f < 30 * 20; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int riding = 0;
+                for (Entity h : horses) if (!h.dead && h.patrolX != 0) riding++;
+                check(riding >= 1, "out riding the parks (" + riding + ")");
+                // Up on a horse they see the dead round them and mark them for the others.
+                float[] p = w.city.findWalkable(m.x + 90, m.y);
+                Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                z.speed = z.runSpeed = 0;
+                boolean marked = false;
+                for (int f = 0; f < 30 * 2 && !marked; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    marked = z.spottedUntil > w.time;
+                }
+                check(marked, "the dead nearby marked for the others");
+                // The dead come near: the traffic officers leave their junctions and join in.
+                for (Entity t : traffic) {
+                    float[] q = w.city.findWalkable(t.x + 60, t.y);
+                    if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                }
+                for (int f = 0; f < 30 * 2; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int still = 0;
+                for (Entity t : traffic) if (!t.dead && t.task == Dispatch.T_POST) still++;
+                check(still == 0, "off their junctions with the dead near (" + still + " still there)");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

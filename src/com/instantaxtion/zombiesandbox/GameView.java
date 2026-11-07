@@ -2777,8 +2777,10 @@ final class GameView extends View implements Menu.Host {
                 fill.setColor(0xFFE83A2A);
                 c.drawCircle(fx, fy, 1.1f, fill);
             }
-            if (detailed) drawEntity(c, e, settings.healthBars());
-            else {
+            if (detailed) {
+                drawEntity(c, e, settings.healthBars());
+                if (e.type == Entity.COP && e.role == Entity.ROLE_TRAFFIC) drawTrafficKit(c, e);
+            } else {
                 // Zoomed out: a dot in the colour of their side (the same colours as the counts), outlined so it
                 // stands out on any ground, and never smaller than a few pixels.
                 int side = e.isZombie() ? 3 : e.type == Entity.COP ? 1 : e.type == Entity.SOLDIER ? 2 : 0;
@@ -6326,6 +6328,8 @@ final class GameView extends View implements Menu.Host {
             drawDog(c, e, healthBar);
             return;
         }
+        // ((15.0) A mounted officer: the horse under them.)
+        if (e.type == Entity.COP && e.role == Entity.ROLE_MOUNTED) drawHorse(c, e);
         float r = e.radius;
         // ((11.5) Small on screen - a dozen pixels across - just the body, the head and any gun drawn (see below), and
         // no separate shadow: the dark outline does that job at this size.)
@@ -7279,7 +7283,8 @@ final class GameView extends View implements Menu.Host {
         else if (e.type == Entity.COP) title = (e.agency == 1 ? world.city.country.hpName + " " : e.agency == 2 ? world.city.country.ruralName + "'s deputy "
                 : e.agency == 3 ? "Park ranger " : e.agency == 4 ? Dispatch.federal(world.city.country) + " agent " : e.role == Entity.ROLE_PILOT ? "Pilot "
                 // ((12.0) The specialists say what they are.)
-                : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman " : "Officer ")
+                : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman "
+                : e.role == Entity.ROLE_MOUNTED ? "Mounted officer " : e.role == Entity.ROLE_TRAFFIC ? "Traffic officer " : "Officer ")
                 + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.SOLDIER) title = Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
         else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
@@ -7833,6 +7838,66 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** What someone is up to, in plain words. */
+    /** (15.0) A police horse, seen from above: body, neck and head out in front, legs going, a tail swishing. */
+    private void drawHorse(Canvas c, Entity e) {
+        int[] coats = {0xFF6B4226, 0xFF8A4F2A, 0xFF2E2420, 0xFFB8B0A6};
+        int coat = coats[(e.nameSeed & 0x7FFFFFFF) % coats.length];
+        float r = e.radius, spd = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+        float gait = spd > 3 ? (float) Math.sin(e.phase * 1.4f) : 0;
+        c.save();
+        c.translate(e.x, e.y);
+        c.rotate((float) Math.toDegrees(e.angle));
+        // Shadow.
+        fill.setColor(0x30000000);
+        oval.set(-r * 2.4f + r * 0.4f, -r * 1.0f + r * 0.5f, r * 2.0f + r * 0.4f, r * 1.0f + r * 0.5f);
+        c.drawOval(oval, fill);
+        // Legs, out from under the body as they go.
+        fill.setColor(City.darken(coat, 0.6f));
+        float lg = gait * r * 0.5f;
+        c.drawCircle(r * 1.2f + lg, -r * 0.75f, r * 0.28f, fill);
+        c.drawCircle(r * 1.2f - lg, r * 0.75f, r * 0.28f, fill);
+        c.drawCircle(-r * 1.5f - lg, -r * 0.75f, r * 0.28f, fill);
+        c.drawCircle(-r * 1.5f + lg, r * 0.75f, r * 0.28f, fill);
+        // Tail.
+        stroke.setColor(City.darken(coat, 0.5f));
+        stroke.setStrokeWidth(r * 0.35f);
+        c.drawLine(-r * 2.2f, 0, -r * 3.0f, gait * r * 0.4f, stroke);
+        // Body, neck and head.
+        fill.setColor(coat);
+        oval.set(-r * 2.3f, -r * 0.95f, r * 1.7f, r * 0.95f);
+        c.drawOval(oval, fill);
+        oval.set(r * 1.2f, -r * 0.45f, r * 2.6f, r * 0.45f);
+        c.drawOval(oval, fill);
+        fill.setColor(City.darken(coat, 0.85f));
+        oval.set(r * 2.3f, -r * 0.38f, r * 3.4f, r * 0.38f);
+        c.drawOval(oval, fill);
+        // The saddlecloth, in police blue with a white edge.
+        fill.setColor(0xFFF2F2F2);
+        c.drawRect(-r * 1.15f, -r * 1.0f, r * 0.55f, r * 1.0f, fill);
+        fill.setColor(0xFF1E3E8A);
+        c.drawRect(-r * 1.0f, -r * 0.92f, r * 0.4f, r * 0.92f, fill);
+        c.restore();
+    }
+
+    /** (15.0) A traffic officer: a hi-vis vest and white cap, and an arm out waving traffic through. */
+    private void drawTrafficKit(Canvas c, Entity e) {
+        float r = e.radius;
+        stroke.setColor(0xFFC8E83A);
+        stroke.setStrokeWidth(r * 0.3f);
+        c.drawCircle(e.x, e.y, r * 0.78f, stroke);
+        fill.setColor(0xFFF4F4F4);
+        c.drawCircle(e.x, e.y, r * 0.36f, fill);
+        if (e.waveUntil > world.time) {
+            float sw = (float) Math.sin(world.time * 12) * 0.5f;
+            float a = e.angle + 1.57f + sw;
+            stroke.setColor(0xFFD8F23A);
+            stroke.setStrokeWidth(r * 0.38f);
+            c.drawLine(e.x, e.y, e.x + (float) Math.cos(a) * r * 2.2f, e.y + (float) Math.sin(a) * r * 2.2f, stroke);
+            fill.setColor(0xFFFFFFFF);
+            c.drawCircle(e.x + (float) Math.cos(a) * r * 2.3f, e.y + (float) Math.sin(a) * r * 2.3f, r * 0.32f, fill);
+        }
+    }
+
     /** (14.9) A mortar pit: a ring of sandbags round the post, the tube on its baseplate in the middle, pointing where it last fired. */
     private void drawMortarPit(Canvas c, Entity e) {
         float x = e.postX, y = e.postY;

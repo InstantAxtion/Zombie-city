@@ -823,6 +823,17 @@ final class World {
         if (cfg.nature())
             for (City.Facility f : city.facilities)
                 if (f.kind == City.FACILITY_POLICE) spawnCop(Entity.ROLE_MARKSMAN, f.x + rnd.nextFloat() * 20 - 10, f.y + rnd.nextFloat() * 20 - 10);
+        // ((15.0) Mounted police out of the main precinct, and traffic officers at the busy junctions near each one.)
+        if (cfg.nature() && stations > 0) {
+            City.Facility hq = null;
+            for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE && (hq == null || f.r > hq.r)) hq = f;
+            int horses = Math.max(2, Math.min(4, stations + 1));
+            for (int i = 0; i < horses; i++) {
+                Entity m = spawn(Entity.COP, hq.x + rnd.nextFloat() * 30 - 15, hq.y + rnd.nextFloat() * 30 - 15);
+                if (m != null) applyRole(m, Entity.ROLE_MOUNTED);
+            }
+            postTrafficOfficers();
+        }
         dispatch.riotVans = cfg.nature() ? Math.min(3, stations) : 0;
         dispatch.bearcats = cfg.nature() ? Math.min(3, stations) : 0;
         dispatch.policeAir = cfg.nature() && stations > 0 ? 2 : 0;
@@ -1579,6 +1590,16 @@ final class World {
     void applyRole(Entity e, int role) {
         e.role = role;
         switch (role) {
+            case Entity.ROLE_MOUNTED:
+                // ((15.0) On horseback: quicker, harder to bring down (the horse takes some of it), and a crowd
+                // gives way to a horse rather than the other way round.)
+                e.hp = e.maxHp = 160;
+                e.speed *= 1.45f;
+                e.runSpeed *= 1.55f;
+                e.mass = 3.5f;
+                break;
+            case Entity.ROLE_TRAFFIC:
+                break;
             case Entity.ROLE_MORTAR:
                 // ((14.0) A carbine for close in, and the tube and its rounds on their back.)
                 e.hp = e.maxHp = 100;
@@ -8627,6 +8648,183 @@ final class World {
     /** (14.9) Mortar shells fired so far. */
     int mortarShots;
 
+    // ------------------------------------------------------------------ (15.0) mounted and traffic police
+
+    /** (15.0) The traffic officer on each junction (by its id), if any, and until when they're holding traffic for one coming through. */
+    Entity[] trafficPost;
+    float[] junctionHeld;
+    /** (15.0) How far a mounted officer sees from up on a horse (marking the dead for the units round them). */
+    static final float MOUNT_SEE = 150;
+
+    /** (15.0) Two traffic officers at the busiest junctions with lights near each precinct (three at the main one). */
+    private void postTrafficOfficers() {
+        int nj = city.junctions.size();
+        trafficPost = new Entity[nj];
+        junctionHeld = new float[nj];
+        boolean first = true;
+        for (City.Facility f : city.facilities) {
+            if (f.kind != City.FACILITY_POLICE || f.satellite) continue;
+            int want = first ? 3 : 2;
+            first = false;
+            for (int k = 0; k < want; k++) {
+                int best = -1;
+                float bd = 900;
+                for (int id = 0; id < nj; id++) {
+                    int[] j = city.junctions.get(id);
+                    if (j[4] != City.J_LIGHTS || trafficPost[id] != null) continue;
+                    float cx = (j[0] + j[2] + 1) / 2f * City.T, cy = (j[1] + j[3] + 1) / 2f * City.T;
+                    float d = (float) World.hypot(cx - f.x, cy - f.y);
+                    if (d < bd) {
+                        bd = d;
+                        best = id;
+                    }
+                }
+                if (best < 0) break;
+                int[] j = city.junctions.get(best);
+                // On a corner of it, on the pavement.
+                float[] spot = null;
+                int[][] corners = {{j[0] - 1, j[1] - 1}, {j[2] + 1, j[3] + 1}, {j[2] + 1, j[1] - 1}, {j[0] - 1, j[3] + 1}};
+                for (int[] q : corners) {
+                    if (q[0] < 0 || q[1] < 0 || q[0] >= city.w || q[1] >= city.h || city.solidTile(q[0], q[1])) continue;
+                    if (city.tiles[q[1] * city.w + q[0]] == City.ROAD) continue;
+                    spot = new float[]{(q[0] + 0.5f) * City.T, (q[1] + 0.5f) * City.T};
+                    break;
+                }
+                if (spot == null) {
+                    trafficPost[best] = controlled; // (taken: no corner to stand on)
+                    continue;
+                }
+                Entity t = spawn(Entity.COP, spot[0], spot[1]);
+                if (t == null) break;
+                applyRole(t, Entity.ROLE_TRAFFIC);
+                t.task = Dispatch.T_POST;
+                t.postX = spot[0];
+                t.postY = spot[1];
+                trafficPost[best] = t;
+            }
+        }
+        for (int id = 0; id < nj; id++) if (trafficPost[id] != null && trafficPost[id].type != Entity.COP) trafficPost[id] = null;
+    }
+
+    /**
+     * (15.0) The traffic officer working junction id, there and on duty, or null. They hold the other traffic for
+     * anything with its lights on, so it goes straight through.
+     */
+    Entity trafficOfficer(int id) {
+        if (trafficPost == null && !trafficLooked) relinkTraffic();
+        if (trafficPost == null || id < 0 || id >= trafficPost.length) return null;
+        Entity t = trafficPost[id];
+        if (t == null) return null;
+        if (t.dead || t.task != Dispatch.T_POST || World.hypot(t.x - t.postX, t.y - t.postY) > 20) {
+            if (t.dead || t.task != Dispatch.T_POST) trafficPost[id] = null;
+            return null;
+        }
+        return t;
+    }
+
+    private boolean trafficLooked;
+
+    /** (15.0) After loading a game: each traffic officer still on a corner back on the junction beside it. */
+    private void relinkTraffic() {
+        trafficLooked = true;
+        int nj = city.junctions.size();
+        Entity[] posts = new Entity[nj];
+        boolean any = false;
+        for (Entity e : entities) {
+            if (e.dead || e.type != Entity.COP || e.role != Entity.ROLE_TRAFFIC || e.task != Dispatch.T_POST) continue;
+            int best = -1;
+            float bd = City.T * 4;
+            for (int id = 0; id < nj; id++) {
+                int[] j = city.junctions.get(id);
+                float d = (float) World.hypot((j[0] + j[2] + 1) / 2f * City.T - e.postX, (j[1] + j[3] + 1) / 2f * City.T - e.postY);
+                if (d < bd) {
+                    bd = d;
+                    best = id;
+                }
+            }
+            if (best >= 0) {
+                posts[best] = e;
+                any = true;
+            }
+        }
+        if (any) {
+            trafficPost = posts;
+            junctionHeld = new float[nj];
+        }
+    }
+
+    /** (15.0) A traffic officer at junction id waves something with its lights on through: the rest wait. */
+    void holdJunction(int id, Fleet.Vehicle v) {
+        Entity t = trafficOfficer(id);
+        if (t == null) return;
+        junctionHeld[id] = time + 2.5f;
+        t.waveUntil = time + 1.5f;
+        t.angle = (float) Math.atan2(v.y - t.y, v.x - t.x);
+    }
+
+    /** (15.0) Is junction id being held for something coming through by its traffic officer? */
+    boolean junctionHeldFor(int id) {
+        return junctionHeld != null && id >= 0 && id < junctionHeld.length && junctionHeld[id] > time && trafficOfficer(id) != null;
+    }
+
+    /** (15.0) Marks the dead within r of (x, y) for the units nearby (as a drone or the police helicopter does). */
+    private void markSpotted(float x, float y, float r) {
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (!o.dead && (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) < r * r) o.spottedUntil = time + 1.6f;
+                }
+            }
+    }
+
+    /**
+     * (15.0) The mounted and traffic police: a traffic officer stays on their junction till the dead come near or
+     * the city's being lost, then joins in like anyone; a mounted officer looks round from up on the horse
+     * (marking the dead for those round them) and, with nothing doing, rides round the parks and open ground near
+     * them. True while busy with that.
+     */
+    private boolean specialPolice(Entity e, Entity threat, float dt) {
+        if (e.role == Entity.ROLE_TRAFFIC && e.task == Dispatch.T_POST) {
+            // (Through the emergency itself - that's when the lights and sirens are out - till the dead come near, or
+            // the city's being lost.)
+            if ((warBalance < 0.35f && time > 30) || (threat != null && World.hypot(threat.x - e.x, threat.y - e.y) < 140)) {
+                e.task = Dispatch.T_NONE;
+                return false;
+            }
+            if (World.hypot(e.postX - e.x, e.postY - e.y) > 4) walkToSpot(e, e.postX, e.postY, e.speed);
+            else steer(e, 0, 0, 0);
+            return true;
+        }
+        if (e.role != Entity.ROLE_MOUNTED) return false;
+        if ((e.lookT -= dt) <= 0) {
+            e.lookT = 1;
+            markSpotted(e.x, e.y, MOUNT_SEE);
+        }
+        if (e.task != Dispatch.T_NONE || threat != null || e.leader != null) return false;
+        if (e.patrolX == 0 || World.hypot(e.patrolX - e.x, e.patrolY - e.y) < 20 || e.blocked && rnd.nextFloat() < 0.02f) {
+            // Somewhere green or open not far off: a park, a trail, a square.
+            for (int k = 0; k < 40; k++) {
+                float a = rnd.nextFloat() * TAU, d = 150 + rnd.nextFloat() * 550;
+                float px = e.x + (float) Math.cos(a) * d, py = e.y + (float) Math.sin(a) * d;
+                int t = city.tileIndex(px, py);
+                if (t < 0 || city.solid[t]) continue;
+                byte tile = city.tiles[t];
+                // (Never the rubble of a fallen building: it's a building site once the rebuilding starts.)
+                if (tile != City.GRASS && tile != City.TRAIL && tile != City.PLAZA) continue;
+                e.patrolX = px;
+                e.patrolY = py;
+                break;
+            }
+        }
+        if (e.patrolX == 0) return false;
+        walkToSpot(e, e.patrolX, e.patrolY, e.speed);
+        return true;
+    }
+
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
     static final int MORTAR_ROUNDS = 16;
     static final float MORTAR_MIN = 150, MORTAR_MAX = 1100, MORTAR_EVERY = 6, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
@@ -8807,7 +9005,7 @@ final class World {
         boolean soldier = e.type == Entity.SOLDIER;
         float range = soldier ? (e.role == Entity.ROLE_SNIPER ? 380 : e.role == Entity.ROLE_COMMANDER ? 180
                 : e.role == Entity.ROLE_CORPSMAN ? 200 : 230)
-                : e.role == Entity.ROLE_SWAT ? 210 : e.role == Entity.ROLE_MARKSMAN ? 320 : 160;
+                : e.role == Entity.ROLE_SWAT ? 210 : e.role == Entity.ROLE_MARKSMAN ? 320 : e.role == Entity.ROLE_MOUNTED ? 200 : 160;
         // ((11.4) How far they'll take a shot depends on the gun too.)
         switch (e.weapon) {
             case Entity.W_SHOTGUN: range = Math.min(range, 130); break;
@@ -8835,6 +9033,9 @@ final class World {
         if (hospitalStep(e, dt)) return;
         // ((14.0) A mortar team shells a pack of the dead a few streets off.)
         if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e, dt)) return;
+        // ((15.0) Traffic officers on their junctions; mounted officers looking round and riding the parks.)
+        if (!soldier && (e.role == Entity.ROLE_MOUNTED || e.role == Entity.ROLE_TRAFFIC) && e != controlled
+                && specialPolice(e, nearest(e, 150, true, false), dt)) return;
         // ((11.0) On foot to a call a long way off, with nothing to fight here: a car or truck to take them, if
         // there's one (with whoever else nearby is going there too).)
         if (e.task == Dispatch.T_RESPOND && e.incident != null && !e.incident.resolved && !e.onScene && e.rig == null
@@ -12730,6 +12931,11 @@ final class World {
         }
         // ((14.5) The long dead have rotted: slower on their feet.)
         if (e.isZombie() && e.want > 0) e.want *= 1 - rot(e);
+        // ((15.0) A horse is quickest on grass, trails and open ground.)
+        if (e.role == Entity.ROLE_MOUNTED && e.type == Entity.COP && e.want > 0) {
+            int t = city.tileIndex(e.x, e.y);
+            if (t >= 0 && (city.tiles[t] == City.GRASS || city.tiles[t] == City.TRAIL || city.tiles[t] == City.DIRT)) e.want *= 1.15f;
+        }
         if (e.want > 1 && (e.mx != 0 || e.my != 0)) lookAhead(e);
         // ((11.6) A long step - the phone catching up after a slow frame, or the faster speeds - is walked as several
         // ordinary ones for anyone being worked out every frame (everyone on screen): in one long step the easing
