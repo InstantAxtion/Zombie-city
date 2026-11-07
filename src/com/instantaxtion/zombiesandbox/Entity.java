@@ -165,7 +165,7 @@ final class Entity {
     /** ((14.9) Flying lessons on the pad so far, for an officer or soldier training to be its pilot.) */
     float trainT;
     /** ((14.9) A mortar team: when it last fired (a new fire mission after a lull is called in), and its restocking.) */
-    transient float lastShot = -999, restockT;
+    transient float lastShot = -999;
     /** ((15.0) A traffic officer waving an emergency vehicle through; a mounted officer's next look round, and patrol spot.) */
     transient float waveUntil, lookT, patrolX, patrolY;
     transient int squadSlot;

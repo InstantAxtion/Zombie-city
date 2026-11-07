@@ -4079,6 +4079,33 @@ public final class GameTests {
                 check(soldier.kills - before == down, "every one of them the thrower's kill (" + (soldier.kills - before) + " of " + down + ")");
             }
         });
+        test("15.4: mortar teams have only the rounds they carry, and once out they go and fight", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 83;
+                c.normalize();
+                c.seed = 83;
+                World w = new World(c);
+                w.populate(c);
+                java.util.List<Entity> teams = new java.util.ArrayList<Entity>();
+                for (Entity e : w.entities) if (!e.dead && e.role == Entity.ROLE_MORTAR && e.task == Dispatch.T_POST) teams.add(e);
+                check(teams.size() >= 2, "mortar teams in their pits (" + teams.size() + ")");
+                Entity a = teams.get(0), b = teams.get(1);
+                check(a.grenades == World.MORTAR_ROUNDS, "a full load to start with");
+                a.grenades = 5;
+                b.grenades = 0;
+                for (int f = 0; f < 30 * 40; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(a.grenades == 5, "no more rounds from the base (" + a.grenades + ")");
+                check(a.task == Dispatch.T_POST, "one with rounds left stays in its pit");
+                check(b.task != Dispatch.T_POST, "one with none left has gone to fight (task " + b.task + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

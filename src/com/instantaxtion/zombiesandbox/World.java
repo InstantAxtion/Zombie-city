@@ -8852,9 +8852,8 @@ final class World {
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
     static final int MORTAR_ROUNDS = 16;
     static final float MORTAR_MIN = 150, MORTAR_MAX = 1100, MORTAR_EVERY = 6, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
-    /** (14.9) The fewest of the dead together worth a shell, and how often a team in its pit gets another round. */
+    /** (14.9) The fewest of the dead together worth a shell. */
     static final int MORTAR_PACK = 5;
-    static final float MORTAR_RESTOCK = 12;
 
     /**
      * (14.0) A mortar team: with none of the dead close, at the biggest pack of them at a call a few streets off, a
@@ -8862,15 +8861,20 @@ final class World {
      * there far outnumber them - and a shell can land a little off. True when it fired.
      * ((14.9) From its pit at the base, out to further; at the thickest of the dead round a call that's clear of our
      * own people (the middle of the pack used to be ruled out whenever a soldier was anywhere near it, which at a
-     * call was nearly always); restocked from the base while in its pit; and each new fire mission called in.)
+     * call was nearly always); and each new fire mission called in.)
+     * ((15.4) Only the rounds they carry, no more from the base: once they're all fired, the team leaves its pit
+     * and goes to fight with the rest.)
      */
     private boolean mortarStep(Entity e, float dt) {
-        boolean inPit = e.task == Dispatch.T_POST && World.hypot(e.x - e.postX, e.y - e.postY) < 12;
-        if (inPit && e.grenades < MORTAR_ROUNDS && (e.restockT += dt) >= MORTAR_RESTOCK) {
-            e.restockT = 0;
-            e.grenades++;
+        if (e.grenades <= 0) {
+            if (e.task == Dispatch.T_POST) {
+                e.task = Dispatch.T_NONE;
+                dispatch.chatter(Dispatch.WHO_MILITARY, e, "Mortars: That's our last round. Leaving the tube, joining the fight.", e.x, e.y);
+                timeline("A mortar team fired its last round and joined the fight", e.x, e.y);
+            }
+            return false;
         }
-        if (e.grenades <= 0 || e.grenadeCd > 0 || nearest(e, 90, true, false) != null) return false;
+        if (e.grenadeCd > 0 || nearest(e, 90, true, false) != null) return false;
         float bestX = 0, bestY = 0;
         int best = MORTAR_PACK - 1;
         Dispatch.Incident at = null;
