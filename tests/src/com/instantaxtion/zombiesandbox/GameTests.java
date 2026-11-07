@@ -2415,7 +2415,7 @@ public final class GameTests {
                 check(c.coreFraction() >= 0.85f, "nine tenths town (" + c.coreFraction() + ")");
                 // The new roles.
                 // ((14.0) And the combat engineers and the mortar teams.)
-                check(Entity.ROLE_NAMES.length == 18 && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
+                check(Entity.ROLE_NAMES.length == 20 && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
                         && "Combat engineer".equals(Entity.ROLE_NAMES[Entity.ROLE_ENGINEER]) && "Mortar team".equals(Entity.ROLE_NAMES[Entity.ROLE_MORTAR]), "every role named");
             }
         });
@@ -3161,7 +3161,8 @@ public final class GameTests {
                 sa.setAccessible(true);
                 sa.invoke(w, World.AFTER_RECOVERY);
                 boolean site = false, early = false;
-                for (int f = 0; f < 30 * 200 && b.collapsed; f++) {
+                // ((15.1) Time enough after they step off: anyone walking across the site holds the work up too.)
+                for (int f = 0; f < 30 * 320 && b.collapsed; f++) {
                     stander.x = (b.x0 + b.x1) / 2;
                     stander.y = (b.y0 + b.y1) / 2;
                     if (f > 30 * 175) stander.dead = stander.removed = true;
@@ -3874,6 +3875,104 @@ public final class GameTests {
                 int still = 0;
                 for (Entity t : traffic) if (!t.dead && t.task == Dispatch.T_POST) still++;
                 check(still == 0, "off their junctions with the dead near (" + still + " still there)");
+            }
+        });
+        test("15.1: six save slots; lives saved counted; the best police and soldiers go into the hall of fame", new Check() {
+            public void run() throws Exception {
+                // A soldier puts down one of the dead right on a civilian: a life saved.
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 81;
+                c.normalize();
+                c.seed = 81;
+                World w = new World(c);
+                w.populate(c);
+                java.util.Random r = new java.util.Random(3);
+                float[] at = null;
+                for (int k = 0; k < 4000 && at == null; k++) {
+                    float[] q = w.city.randomWalkableInTown(r);
+                    if (w.city.findWalkable(q[0] + 60, q[1]) != null && w.city.los(q[0], q[1], q[0] + 60, q[1])) at = q;
+                }
+                // (Nobody else about to put it down first.)
+                for (Entity o : w.entities) if (!o.dead && Math.hypot(o.x - at[0], o.y - at[1]) < 400) { o.dead = true; o.removed = true; }
+                Entity soldier = w.spawn(Entity.SOLDIER, at[0], at[1]);
+                float[] cp = w.city.findWalkable(at[0] + 60, at[1]);
+                Entity civ = w.spawn(Entity.CIVILIAN, cp[0], cp[1]);
+                // (The dead between them, so the soldier has a clear shot past nobody.)
+                Entity z = w.spawn(Entity.ZOMBIE, cp[0] - 7, cp[1]);
+                for (int f = 0; f < 30 * 10 && !(z.dead || z.hp <= 0); f++) {
+                    civ.x = cp[0];
+                    civ.y = cp[1];
+                    civ.hp = civ.maxHp;
+                    civ.infected = false;
+                    civ.stun = 1;
+                    z.speed = z.runSpeed = 0;
+                    z.x = cp[0] - 7;
+                    z.y = cp[1];
+                    // (Facing it: one of the dead standing still behind someone's back isn't noticed.)
+                    if (f < 5) soldier.angle = (float) Math.atan2(z.y - soldier.y, z.x - soldier.x);
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(z.dead || z.hp <= 0, "put down");
+                // (Whoever got it - the soldier, or a patrol passing - has a life saved to their name.)
+                int savedAll = 0;
+                for (Entity o : w.entities) savedAll += o.saved;
+                for (Fleet.Vehicle v : w.fleet.vehicles) {
+                    for (Entity o : v.crew) savedAll += o.saved;
+                    for (Entity o : v.riders) savedAll += o.saved;
+                }
+                check(savedAll >= 1, "a life saved (" + savedAll + "; soldier kills " + soldier.kills + ", civ " + (int) Math.hypot(civ.x - z.x, civ.y - z.y) + " from it, civ dead " + civ.dead + " infected " + civ.infected + ")");
+                // The hall of fame: the best kept, best first, and the same person not twice.
+                Records rec = new Records(new android.app.Activity());
+                soldier.kills = 30;
+                Entity cop = null;
+                for (Entity o : w.entities) if (!o.dead && o.type == Entity.COP && cop == null) cop = o;
+                cop.kills = 12;
+                cop.saved = 4;
+                rec.check(w);
+                rec.check(w);
+                java.util.List<Records.Hero> hall = rec.hall();
+                int mine = 0;
+                for (Records.Hero h : hall) if (h.game == w.gameId) mine++;
+                check(mine == 2, "both in the hall of fame, once each (" + mine + ")");
+                check(hall.get(0).score() >= hall.get(hall.size() - 1).score(), "best first");
+                soldier.kills = 40;
+                rec.check(w);
+                boolean up = false;
+                for (Records.Hero h : rec.hall()) if (h.game == w.gameId && h.seed == soldier.nameSeed && h.kills == 40) up = true;
+                check(up, "moving up as they go");
+                // Kept in a save.
+                java.io.File f = java.io.File.createTempFile("zcsb", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                check(l.gameId == w.gameId, "the game told apart after loading");
+                Entity ls = null;
+                for (Entity o : l.entities) if (o.nameSeed == soldier.nameSeed && o.type == Entity.SOLDIER) ls = o;
+                check(ls != null && ls.saved == soldier.saved, "lives saved kept in the save");
+                // Six slots, and a game saved to the last of them and loaded back.
+                check(Menu.SLOTS == 6, "six slots");
+                GameView gv = new GameView(new android.app.Activity());
+                gv.layout(1080, 2400);
+                CityConfig gc = new CityConfig();
+                gc.v[CityConfig.OPT_ZOMBIES] = 0;
+                gv.startGame(gc);
+                gv.awaitLoad();
+                for (int k = 0; k < 3; k++) draw(gv, new int[]{1080, 2400});
+                gv.deleteSlot(6);
+                check(gv.slotInfo(6) == null, "slot 6 empty");
+                // (Tried again if another copy of these tests running alongside had the same file open.)
+                boolean saved6 = false;
+                for (int k = 0; k < 5 && !saved6; k++) {
+                    saved6 = gv.saveSlot(6) && gv.slotInfo(6) != null;
+                    if (!saved6) Thread.sleep(200);
+                }
+                check(saved6, "saved to slot 6");
+                check(gv.loadSlot(6), "and loaded from it");
+                gv.deleteSlot(6);
             }
         });
         test("every screen draws", new Check() {

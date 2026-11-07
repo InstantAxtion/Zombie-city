@@ -419,6 +419,9 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Six save slots and the hall of fame (15.1):** six save slots plus the autosave. Records now keeps a hall of fame of
+the ten best police officers and soldiers across all your games, by kills and lives saved.
+
 **Mounted police and traffic police (15.0):** officers on horseback ride the parks, move fast (and through crowds),
 and mark the dead they see for the units round them. Traffic officers at busy junctions hold the traffic and wave
 lights and sirens straight through, until the dead reach them.

@@ -547,8 +547,9 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** ((12.0) What's in each save slot, read once rather than off the storage every frame the menu is up.) */
-    private final String[] slotText = new String[4];
-    private final boolean[] slotKnown = new boolean[4];
+    // ((15.1) Six slots now, and the autosave.)
+    private final String[] slotText = new String[Menu.SLOTS + 1];
+    private final boolean[] slotKnown = new boolean[Menu.SLOTS + 1];
 
     @Override
     public String slotInfo(int slot) {

@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 54;
+    private static final int VERSION = 55;
 
     private SaveGame() {
     }
@@ -354,6 +354,8 @@ final class SaveGame {
             // (Version 54, 14.5: the field hospital.)
             out.writeFloat(w.hospitalX);
             out.writeFloat(w.hospitalY);
+            // (Version 55, 15.1: which game this is, for the hall of fame.)
+            out.writeLong(w.gameId);
         } finally {
             moved = null;
             homeIndex = null;
@@ -434,6 +436,8 @@ final class SaveGame {
         out.writeBoolean(e.raider);
         // Version 54 (14.5): when one of the dead rose, for how rotten it is.
         out.writeFloat(e.risen);
+        // Version 55 (15.1): lives saved, for the hall of fame.
+        out.writeInt(e.saved);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -805,6 +809,7 @@ final class SaveGame {
                 w.hospitalX = in.readFloat();
                 w.hospitalY = in.readFloat();
             }
+            if (version >= 55) w.gameId = in.readLong();
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -881,6 +886,7 @@ final class SaveGame {
         if (version >= 52) e.raider = in.readBoolean();
         if (version >= 54) e.risen = in.readFloat();
         else if (e.isZombie()) e.risen = w.time;
+        if (version >= 55) e.saved = in.readInt();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

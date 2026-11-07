@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.0";
-    static final int VERSION_CODE = 140;
+    static final String VERSION = "15.1";
+    static final int VERSION_CODE = 141;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.1  -  Six save slots and the hall of fame",
+                    "Six save slots instead of three, as well as the autosave.",
+                    "Lives saved are counted for each person: putting down one of the dead that's on someone, or a medic patching up someone wounded.",
+                    "The hall of fame, on the Records screen: the ten best police officers and soldiers across every game you've played, by kills and lives saved (each life saved counts as three kills), with their rank, what they were and the city they fought in.",
+            },
             {
                     "15.0  -  Mounted police and traffic police",
                     "Mounted police: two to four officers on horseback from the main precinct. Quicker than on foot (quicker still across grass and trails), harder to bring down, and a crowd gives way to a horse. From up high they see the dead round them and mark them for the units nearby, and with nothing doing they ride round the parks and squares.",

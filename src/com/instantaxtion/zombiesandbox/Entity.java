@@ -48,7 +48,7 @@ final class Entity {
     static final int ROLE_MOUNTED = 18, ROLE_TRAFFIC = 19;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -189,6 +189,8 @@ final class Entity {
     // (nameSeed, at the top: picks this person's name, see Names.)
     /** Zombies shot or run down by this person. */
     int kills;
+    /** ((15.1) Lives saved: one of the dead put down right on someone, or a wounded officer or soldier patched up.) */
+    int saved;
     /** Newly turned zombies are quicker for a while. */
     float fresh;
     /** How long someone remembers where they last saw a zombie (threatX/threatY). */

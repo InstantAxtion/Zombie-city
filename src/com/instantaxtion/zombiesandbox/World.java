@@ -126,6 +126,8 @@ final class World {
      * person), 2 everyone knows (emergency broadcast). Anyone who hears gunfire or sees one knows anyway.
      */
     int alert;
+    /** ((15.1) This game, told apart from every other (for the hall of fame), and kept in its saves.) */
+    long gameId = new java.util.Random().nextLong();
     boolean recovering;
     private float lifeTimer;
     private float recruitTimer, lastRecruitSay = -100;
@@ -2883,6 +2885,30 @@ final class World {
     }
 
     /** (10.59) A kill made: up a rank at the thresholds, a little tougher, and it gets said. */
+    /**
+     * ((15.1) A kill that saved a life: one of the dead put down with someone else alive right beside it, who it was
+     * about to bite.)
+     */
+    private void killMade(Entity e, Entity z) {
+        killMade(e);
+        if (e.isZombie() || z == null) return;
+        // (Its own look at the grid, not gatherLiving's list: a kill can come in the middle of a loop over that.)
+        int cx0 = Math.max(0, (int) ((z.x - 24) / CELL)), cx1 = Math.min(gw - 1, (int) ((z.x + 24) / CELL));
+        int cy0 = Math.max(0, (int) ((z.y - 24) / CELL)), cy1 = Math.min(gh - 1, (int) ((z.y + 24) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o == e || o == z || o.dead || o.isZombie() || o.type == Entity.DOG) continue;
+                    float reach = z.radius + o.radius + 14; // (in reach of it, or just shoved off by it)
+                    if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > reach * reach) continue;
+                    e.saved++;
+                    return;
+                }
+            }
+    }
+
     private void killMade(Entity e) {
         int before = rank(e);
         e.kills++;
@@ -4067,7 +4093,7 @@ final class World {
         tryMove(z, ddx / d * (axe ? 5 : 9) / z.mass, ddy / d * (axe ? 5 : 9) / z.mass);
         bloodBurst(z.x, z.y, 3, ddx / d, ddy / d);
         emit(Sfx.MELEE, z.x, z.y);
-        if (wasUp && z.hp <= 0 && z.isZombie()) killMade(e);
+        if (wasUp && z.hp <= 0 && z.isZombie()) killMade(e, z);
     }
 
     /** Shotgun pellets catch whoever is standing next to the target too. */
@@ -4085,7 +4111,7 @@ final class World {
                     o.hurt = 1;
                     if (o.hp <= 0) {
                         o.bodyShot = true;
-                        killMade(e);
+                        killMade(e, o);
                     }
                 }
             }
@@ -8971,6 +8997,8 @@ final class World {
         e.treatT += dt;
         if (e.treatT >= MEDIC_TIME) {
             p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.5f);
+            // ((15.1) Someone else patched up counts as a life saved.)
+            if (p != e) e.saved++;
             dispatch.chatter(Dispatch.WHO_MILITARY, e, p == e ? "Patching myself up." : "Medic here. " + Dispatch.name(p) + ", you're good to go.", e.x, e.y);
             e.patient = null;
             e.treatT = 0;
@@ -11822,7 +11850,7 @@ final class World {
             }
             t.hurt = 1;
             if (wasUp && t.hp <= 0 && t.isZombie()) {
-                killMade(e);
+                killMade(e, t);
                 if (e.kills == 10 || e.kills == 25 || e.kills == 50 || e.kills == 100) killStreak(e);
             }
             t.killedByZombie = false;
@@ -12262,7 +12290,7 @@ final class World {
                 z.hp -= head ? z.hp : 20 * GUN_DAMAGE * (z.armored ? 0.5f : 1);
                 if (!head && z.hp <= 0) z.bodyShot = true;
                 z.hurt = 1;
-                if (z.hp <= 0) killMade(o);
+                if (z.hp <= 0) killMade(o, z);
                 bloodBurst(z.x, z.y, 3, 0, 0);
             }
             tracer(Math.max(b.x0, Math.min(b.x1, z.x)), Math.max(b.y0, Math.min(b.y1, z.y)), z.x, z.y);

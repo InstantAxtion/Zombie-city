@@ -39,7 +39,7 @@ final class Menu {
         /** Saves a picture of the city and offers to share it. */
         void screenshot();
 
-        /** Save slots 1-3 (0 is the autosave): save, load, and a short description (null if empty). */
+        /** Save slots 1-6 (0 is the autosave): save, load, and a short description (null if empty). */
         boolean saveSlot(int slot);
 
         boolean loadSlot(int slot);
@@ -67,6 +67,9 @@ final class Menu {
 
     static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
             SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12;
+    /** ((15.1) How many save slots there are (the autosave besides): six, up from three.) */
+    static final int SLOTS = 6;
+
     /** The save slot screen: saving (from the pause menu) or loading (from the main menu). */
     private boolean savingMode;
     Records records;
@@ -456,7 +459,8 @@ final class Menu {
         backdrop(c, w, h, 0.82f);
         boolean landscape = w > h;
         boolean game = host.canContinue();
-        boolean slots = host.slotInfo(1) != null || host.slotInfo(2) != null || host.slotInfo(3) != null;
+        boolean slots = false;
+        for (int s = 1; s <= SLOTS; s++) slots |= host.slotInfo(s) != null;
         float colW, x0, y;
         if (landscape) {
             drawTitle(c, w * 0.3f, h * 0.5f, w * 0.48f);
@@ -560,14 +564,14 @@ final class Menu {
         }
     }
 
-    /** The three save slots (and the autosave when loading). */
+    /** The six save slots (and the autosave when loading). */
     private void drawSaves(Canvas c, int w, int h) {
         float top = header(c, w, h, savingMode ? "Save Game" : "Load Game");
         listArea.set(0, top, w, h - 12 * dp);
         float side = 20 * dp, maxW = Math.min(w - side * 2, 560 * dp), x0 = (w - maxW) / 2;
         float y = top + 10 * dp - scroll;
         int first = savingMode ? 1 : 0;
-        for (int slot = first; slot <= 3; slot++) {
+        for (int slot = first; slot <= SLOTS; slot++) {
             String info = host.slotInfo(slot);
             if (slot == 0 && info == null) continue;
             tmp.set(x0, y, x0 + maxW, y + 86 * dp);
@@ -1214,6 +1218,42 @@ final class Menu {
             c.drawText(fit(plain, Records.RECORD_NAMES[i], room), x0, y + 14 * dp, plain);
             c.drawText(val, x0 + maxW, y + 14 * dp, text);
             y += 26 * dp;
+        }
+        // ((15.1) The hall of fame: the best police officers and soldiers ever, by kills and lives saved.)
+        y += 14 * dp;
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(17 * dp);
+        text.setColor(ACCENT);
+        c.drawText("Hall of fame", x0, y + 18 * dp, text);
+        y += 34 * dp;
+        java.util.List<Records.Hero> hall = records.hall();
+        if (hall.isEmpty()) {
+            plain.setTextAlign(Paint.Align.LEFT);
+            plain.setTextSize(13.5f * dp);
+            plain.setColor(0xFF8A9099);
+            c.drawText(fit(plain, "Police and soldiers with " + Records.HALL_MIN + " kills or more (a life saved counts as three) go here.", maxW), x0, y + 12 * dp, plain);
+            y += 26 * dp;
+        }
+        for (int i = 0; i < hall.size(); i++) {
+            Records.Hero hr = hall.get(i);
+            int rank = 0;
+            while (rank + 1 < World.RANK_KILLS.length && hr.kills >= World.RANK_KILLS[rank + 1]) rank++;
+            String who = (i + 1) + ".  " + (rank > 0 ? World.RANK_NAMES[rank] + " " : "") + Names.person(hr.seed);
+            String kind = hr.role > 0 && hr.role < Entity.ROLE_NAMES.length ? Entity.ROLE_NAMES[hr.role] : hr.type == Entity.COP ? "Police officer" : "Soldier";
+            String val = hr.kills + (hr.kills == 1 ? " kill" : " kills") + (hr.saved > 0 ? "  -  " + hr.saved + " saved" : "");
+            text.setTextAlign(Paint.Align.RIGHT);
+            text.setTextSize(14 * dp);
+            text.setColor(0xFFFFFFFF);
+            float room = maxW - text.measureText(val) - 12 * dp;
+            plain.setTextAlign(Paint.Align.LEFT);
+            plain.setTextSize(14.5f * dp);
+            plain.setColor(hr.type == Entity.COP ? 0xFF8FB8FF : 0xFFB8D08A);
+            c.drawText(fit(plain, who, room), x0, y + 14 * dp, plain);
+            c.drawText(val, x0 + maxW, y + 14 * dp, text);
+            plain.setTextSize(12 * dp);
+            plain.setColor(0xFF8A9099);
+            c.drawText(fit(plain, kind + ", " + hr.city, maxW), x0 + 22 * dp, y + 30 * dp, plain);
+            y += 42 * dp;
         }
         c.restore();
         contentHeight = y + scroll - top;

@@ -55,5 +55,90 @@ final class Records {
         best(3, w.recruits);
         best(6, w.bestKills());
         if (w.warResult == 1) best(7, w.humans);
+        checkHall(w);
+    }
+
+    // ------------------------------------------------------------------ (15.1) the unit hall of fame
+
+    /** (15.1) How many make the hall of fame, and the least it takes (kills, and three for each life saved). */
+    static final int HALL_SIZE = 10, HALL_MIN = 8;
+
+    /** (15.1) One of the best police officers or soldiers ever. */
+    static final class Hero {
+        long game;
+        int seed, type, role, kills, saved;
+        String city;
+
+        int score() {
+            return kills + saved * 3;
+        }
+
+        String line() {
+            return game + "|" + seed + "|" + type + "|" + role + "|" + kills + "|" + saved + "|" + city.replace('|', ' ').replace('\n', ' ');
+        }
+    }
+
+    /** (15.1) The hall of fame, best first. */
+    java.util.List<Hero> hall() {
+        java.util.ArrayList<Hero> out = new java.util.ArrayList<Hero>();
+        String s = prefs.getString("hall", "");
+        if (s == null || s.isEmpty()) return out;
+        for (String l : s.split("\n")) {
+            String[] f = l.split("\\|", 7);
+            if (f.length < 7) continue;
+            try {
+                Hero h = new Hero();
+                h.game = Long.parseLong(f[0]);
+                h.seed = Integer.parseInt(f[1]);
+                h.type = Integer.parseInt(f[2]);
+                h.role = Integer.parseInt(f[3]);
+                h.kills = Integer.parseInt(f[4]);
+                h.saved = Integer.parseInt(f[5]);
+                h.city = f[6];
+                out.add(h);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    private String hallText;
+
+    /**
+     * (15.1) The police officers and soldiers in this game who've done enough to be among the best ever (by kills
+     * and lives saved) go into the hall of fame, or move up it.
+     */
+    private void checkHall(World w) {
+        java.util.List<Hero> list = hall();
+        int least = list.size() >= HALL_SIZE ? list.get(list.size() - 1).score() : HALL_MIN;
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
+            Entity e = w.entities.get(i);
+            if ((e.type != Entity.COP && e.type != Entity.SOLDIER) || e.kills + e.saved * 3 < Math.max(HALL_MIN, least)) continue;
+            Hero h = null;
+            for (Hero o : list) if (o.game == w.gameId && o.seed == e.nameSeed && o.type == e.type) h = o;
+            if (h == null) {
+                h = new Hero();
+                h.game = w.gameId;
+                h.seed = e.nameSeed;
+                h.type = e.type;
+                h.city = w.city.name;
+                list.add(h);
+            }
+            h.role = e.role;
+            h.kills = Math.max(h.kills, e.kills);
+            h.saved = Math.max(h.saved, e.saved);
+        }
+        java.util.Collections.sort(list, new java.util.Comparator<Hero>() {
+            @Override
+            public int compare(Hero a, Hero b) {
+                return b.score() - a.score();
+            }
+        });
+        while (list.size() > HALL_SIZE) list.remove(list.size() - 1);
+        StringBuilder sb = new StringBuilder();
+        for (Hero h : list) sb.append(sb.length() > 0 ? "\n" : "").append(h.line());
+        String text = sb.toString();
+        if (!text.equals(hallText == null ? prefs.getString("hall", "") : hallText)) prefs.edit().putString("hall", text).apply();
+        hallText = text;
     }
 }
