@@ -8893,7 +8893,8 @@ final class World {
     private void populatePrison() {
         int[] p = city.prison;
         int area = (p[2] - p[0]) * (p[3] - p[1]);
-        int inmates = Math.max(30, Math.min(140, area / 8)), guards = Math.max(3, Math.min(5, inmates / 30));
+        // ((15.8) Up to 350 in the bigger prison.)
+        int inmates = Math.max(30, Math.min(350, area / 9)), guards = Math.max(3, Math.min(10, inmates / 35));
         for (int i = 0; i < inmates; i++) {
             float[] q = prisonYardSpot();
             if (q == null) break;
@@ -8946,7 +8947,7 @@ final class World {
             // (A fight in the yard: several bitten, turning one after another all over the yard, too many at once
             // for the guards to put down one by one.)
             java.util.Collections.shuffle(in, rnd);
-            for (int k = 0; k < Math.min(8, in.size()); k++) {
+            for (int k = 0; k < Math.min(8 + in.size() / 50, in.size()); k++) {
                 Entity e = in.get(k);
                 e.infected = true;
                 e.infectTimer = 10 + k * 4 + rnd.nextFloat() * 6;

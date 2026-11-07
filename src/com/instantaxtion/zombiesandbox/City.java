@@ -2467,7 +2467,8 @@ final class City {
         waterKind = cfg.water();
         if (waterKind == CityConfig.W_HARBOUR) seaY = h - Math.max(24, (int) (h * 0.18f));
         // ((15.6) A wider bay on the Prison Island, with room for the island out in it.)
-        if (cfg.prisonIsland()) seaY = h - Math.max(48, (int) (h * 0.3f));
+        // ((15.8) Wider again, for a far bigger prison.)
+        if (cfg.prisonIsland()) seaY = h - Math.max(70, (int) (h * 0.4f));
         // ((11.0) The four new water maps have the sea along the bottom too, a little narrower.)
         if (waterKind == CityConfig.W_ISLANDS) islandLayout();
         // Where the town is: the whole map, or a core surrounded by countryside.
@@ -4336,8 +4337,9 @@ final class City {
     private void prisonIsland() {
         int shore = seaY + 2;
         int sea = h - shore;
-        int iw = Math.min(70, Math.max(34, (int) (w * 0.3f))), ih = Math.min(38, Math.max(22, sea - 16));
-        int ix0 = w / 2 - iw / 2 - iw / 3, iy0 = shore + Math.max(9, (sea - ih) / 2);
+        // ((15.8) Far bigger: half the width of the map, and most of the depth of the bay.)
+        int iw = Math.min(150, Math.max(50, (int) (w * 0.5f))), ih = Math.min(80, Math.max(30, sea - 18));
+        int ix0 = Math.max(4, w / 2 - iw / 2 - iw / 5), iy0 = shore + Math.max(9, (sea - ih) / 2);
         if (iy0 + ih > h - 3) ih = h - 3 - iy0;
         int ix1 = ix0 + iw, iy1 = iy0 + ih;
         fill(ix0, iy0, iw, ih, GRASS);
@@ -4373,8 +4375,25 @@ final class City {
         // Watchtowers on the wall: the four corners, and halfway along the long sides.
         prisonTowers.clear();
         float m = PRISON_WALL * T / 2f;
-        float[][] tw = {{cx0 * T + m, cy0 * T + m}, {cx1 * T - m, cy0 * T + m}, {cx0 * T + m, cy1 * T - m}, {cx1 * T - m, cy1 * T - m},
-                {(cx0 + cx1) / 2f * T - 7 * T, cy1 * T - m}, {(cx0 + cx1) / 2f * T + 7 * T, cy1 * T - m}};
+        java.util.List<float[]> twl = new ArrayList<float[]>();
+        twl.add(new float[]{cx0 * T + m, cy0 * T + m});
+        twl.add(new float[]{cx1 * T - m, cy0 * T + m});
+        twl.add(new float[]{cx0 * T + m, cy1 * T - m});
+        twl.add(new float[]{cx1 * T - m, cy1 * T - m});
+        // ((15.8) And more along every side of the bigger wall, every 30 tiles or so (not over the gate).)
+        int along = Math.max(1, (cx1 - cx0) / 30);
+        for (int k = 1; k < along; k++) {
+            float x = (cx0 + (cx1 - cx0) * k / (float) along) * T;
+            twl.add(new float[]{x, cy1 * T - m});
+            if (Math.abs(x - (gx + 1.5f) * T) > 8 * T) twl.add(new float[]{x, cy0 * T + m});
+        }
+        int down = Math.max(1, (cy1 - cy0) / 30);
+        for (int k = 1; k < down; k++) {
+            float y = (cy0 + (cy1 - cy0) * k / (float) down) * T;
+            twl.add(new float[]{cx0 * T + m, y});
+            twl.add(new float[]{cx1 * T - m, y});
+        }
+        float[][] tw = twl.toArray(new float[0][]);
         for (float[] t : tw) prisonTowers.add(t);
         // Where the guards stand: inside the gate, at the foot of each tower, and at the barrier where the causeway
         // meets the seafront.
@@ -4383,7 +4402,8 @@ final class City {
         prisonPosts.add(new float[]{(gx + 2.5f) * T, (gh0 + 1.5f) * T});
         for (float[] t : tw) {
             float px = t[0] + (t[0] < (cx0 + cx1) / 2f * T ? 2.5f : -2.5f) * T, py = t[1] + (t[1] < (cy0 + cy1) / 2f * T ? 2.5f : -2.5f) * T;
-            if (t[1] > cy0 * T + T && t[1] < cy1 * T - 3 * T) py = t[1];
+            if (t[1] > cy0 * T + 3 * T && t[1] < cy1 * T - 3 * T) py = t[1];
+            if (t[0] > cx0 * T + 3 * T && t[0] < cx1 * T - 3 * T) px = t[0];
             prisonPosts.add(new float[]{px, py});
         }
         prisonPosts.add(new float[]{(gx - 0.8f) * T, (shore + 0.5f) * T});
@@ -4391,13 +4411,16 @@ final class City {
         prisonBarrier = new float[]{gx * T, (shore + 1) * T, (gx + 3) * T};
         // Cell blocks along the yard, the admin block by the gate.
         int yx0 = cx0 + 3, yx1 = cx1 - 3, yy0 = cy0 + 4, yy1 = cy1 - 3;
-        int blocks = Math.max(2, Math.min(4, (yx1 - yx0) / 14));
-        int bw = (yx1 - yx0 - (blocks - 1) * 3) / blocks;
-        for (int k = 0; k < blocks; k++) {
-            int bx = yx0 + k * (bw + 3);
-            if (bx + bw > gx - 5 && bx < gx + 8) continue;
-            govLot(bx, yy0 + 3, bw, Math.max(4, (yy1 - yy0) / 3), JAIL);
-        }
+        int blocks = Math.max(2, Math.min(6, (yx1 - yx0) / 18));
+        int bw = Math.min(16, (yx1 - yx0 - (blocks - 1) * 6) / blocks), gap = (yx1 - yx0 - blocks * bw) / Math.max(1, blocks - 1);
+        // ((15.8) Two rows of cell blocks on the bigger yard, with the exercise yard between them.)
+        int rows = yy1 - yy0 >= 40 ? 2 : 1, bh = Math.max(5, Math.min(10, (yy1 - yy0) / (rows == 2 ? 5 : 3)));
+        for (int row = 0; row < rows; row++)
+            for (int k = 0; k < blocks; k++) {
+                int bx = yx0 + k * (bw + gap), by = row == 0 ? yy0 + 5 : yy1 - bh - 2;
+                if (row == 0 && bx + bw > gx - 5 && bx < gx + 8) continue;
+                govLot(bx, by, bw, bh, JAIL);
+            }
         Building townJail = jail;
         govLot(gx + 9, yy0, Math.max(4, Math.min(10, yx1 - gx - 10)), 3, JAIL);
         // The ferry: a landing on the island's far side, and one on the seafront across from it.

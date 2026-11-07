@@ -95,7 +95,7 @@ final class CityConfig implements OptionSet {
             {STYLE_HOUSES, 1, 0, 3, 1, 2, 1, 0},      // Lakeside
             {STYLE_MIXED, 1, 1, 1, 2, 0, 1, 1},       // Harbour
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // Islands
-            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 0},       // ((15.6) Prison Island, in the old Los Angeles' place)
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((15.6) Prison Island, in the old Los Angeles' place; (15.8) with a base)
             {STYLE_MIXED, 1, 2, 2, 2, 0, 3, 1},       // Portland
             {STYLE_MIXED, 2, 3, 1, 2, 0, 3, 1},       // Seattle
             {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // New York

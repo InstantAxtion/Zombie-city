@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.7";
-    static final int VERSION_CODE = 147;
+    static final String VERSION = "15.8";
+    static final int VERSION_CODE = 148;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.8  -  A far bigger prison, and the army",
+                    "The island prison is far bigger: half the width of the map and most of the bay, with two rows of cell blocks round the exercise yard, watchtowers every thirty tiles or so all round the wall, up to 350 inmates and the guards to match.",
+                    "The Prison Island now has an army base in town, like the other maps.",
+            },
             {
                     "15.7  -  The prison looks like a prison",
                     "The island prison's wall is twice as thick and stands high, throwing a shadow, with razor wire all along the top and watchtowers on it: one at each corner and two along the far side.",

@@ -4171,6 +4171,9 @@ public final class GameTests {
                 w.populate(c);
                 City city = w.city;
                 check(city.prison != null && city.prisonGate != null && city.ferry != null, "a prison, its gate and the ferry");
+                // ((15.8) A big one, and an army base in town.)
+                check(city.prison[2] - city.prison[0] >= 60 && city.prison[3] - city.prison[1] >= 30, "a big prison (" + (city.prison[2] - city.prison[0]) + " by " + (city.prison[3] - city.prison[1]) + ")");
+                check(city.mainBase() != null, "an army base");
                 int inmates = 0, guards = 0;
                 Entity anInmate = null;
                 for (Entity e : w.entities) {

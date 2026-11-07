@@ -419,6 +419,9 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**A far bigger prison, and the army (15.8):** the island prison is now huge (up to 350 inmates, two rows of cell
+blocks, towers all round the wall), and the Prison Island map has an army base.
+
 **The Prison Island map (15.6):** a coastal town with a walled prison on an island in the bay, a causeway and a
 ferry. The outbreak starts in the prison yard; when the guards are overrun the gate opens and everyone inside pours
 over the causeway.
