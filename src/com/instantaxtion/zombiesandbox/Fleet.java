@@ -275,6 +275,16 @@ final class Fleet {
         int blockDir;
         boolean cones;
         Entity guard;
+        /**
+         * ((14.8) The crowd barriers put up across the road and pavements beside a roadblock: where the line runs,
+         * which side is the zone's, and how much more pushing it'll take before the dead have it down.)
+         */
+        float barX0, barY0, barX1, barY1, barNx, barNy;
+        int barIn;
+        float barHp;
+        boolean barDown;
+        /** ((14.8) A police helicopter spotting from above: when it next looks, moves on to the worst of it, and calls it in.) */
+        float heliLook, spotMove, spotSaid;
         /** A supply truck: rounds of ammunition it's carrying to a safe zone. */
         int supply;
         /**
@@ -1919,9 +1929,37 @@ final class Fleet {
             }
         }
         v.passengers = 0;
+        if (v.block != null) putUpBarrier(v, v.block.x, v.block.y);
     }
 
-    /** A tank parked here that holds the area for a few minutes. */
+    /** (14.8) How much pushing (the dead's seconds against it) a line of crowd barriers takes before it goes over. */
+    static final float BARRIER_HP = 45;
+
+    /**
+     * (14.8) Crowd barriers: a line of them across the road and the pavements either side, a little way out from the
+     * roadblock car on the side away from the zone (zx, zy), out to the buildings or fences each side.
+     */
+    void putUpBarrier(Vehicle v, float zx, float zy) {
+        boolean ns = v.blockDir == 1;
+        // The road runs north-south (ns) or east-west; the line goes across it.
+        float ax = ns ? 0 : 1, ay = ns ? 1 : 0;
+        float side = ((zx - v.x) * ax + (zy - v.y) * ay) >= 0 ? 1 : -1;
+        float cx = v.x - ax * side * 16, cy = v.y - ay * side * 16;
+        float px = ay, py = ax;
+        float lo = 0, hi = 0;
+        while (lo > -70 && !city.solidAt(cx + px * (lo - 4), cy + py * (lo - 4))) lo -= 4;
+        while (hi < 70 && !city.solidAt(cx + px * (hi + 4), cy + py * (hi + 4))) hi += 4;
+        if (hi - lo < 12) return;
+        v.barX0 = cx + px * lo;
+        v.barY0 = cy + py * lo;
+        v.barX1 = cx + px * hi;
+        v.barY1 = cy + py * hi;
+        v.barNx = ax;
+        v.barNy = ay;
+        v.barIn = (int) side;
+        v.barHp = BARRIER_HP;
+        v.barDown = false;
+    }
     Vehicle placeTank(float x, float y) {
         float[] p = city.nearestDrivable(x, y);
         if (p == null) return null;
@@ -3520,6 +3558,8 @@ final class Fleet {
             // The zone has closed: the officer gets back in, the cones come in and the car drives off.
             v.block = null;
             v.cones = false;
+            v.barHp = 0;
+            v.barX0 = v.barX1 = v.barY0 = v.barY1 = 0;
             if (v.guard != null && !v.guard.dead && World.hypot(v.guard.x - v.x, v.guard.y - v.y) < 80) {
                 v.guard.dead = true;
                 v.guard.removed = true;
@@ -3530,6 +3570,8 @@ final class Fleet {
             float[] home = randomRoad();
             return home == null || !route(v, home[0], home[1]);
         }
+        // ((14.8) Its crowd barriers holding the dead back.)
+        if (v.block != null && v.barHp > 0) w.barrierHold(v, dt);
         // ((11.3) A car left parked out in the road - stopped where it was, its driver gone - is put by the kerb
         // first, out of the lanes.)
         if (v.type == CAR && !v.broken && !v.pulling && !v.pullTried && v.player == null) {
@@ -6721,6 +6763,8 @@ final class Fleet {
             // Door gunners (the police helicopter's marksman takes careful single shots).
             v.gunCd -= dt;
             if (v.kind == K_POLICE_HELI) {
+                // ((14.8) Spotting from above for the units on the ground.)
+                if (v.escort == null) w.heliSpot(v, dt);
                 if (v.gunCd <= 0) {
                     Entity z = w.nearestZombie(v.x, v.y, 220);
                     v.gunCd = z != null ? 1.3f : 0.5f;

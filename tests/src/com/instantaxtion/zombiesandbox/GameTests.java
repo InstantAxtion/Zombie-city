@@ -1618,12 +1618,13 @@ public final class GameTests {
                         if (shot && e.ammo + e.reserve < ammo) fought++;
                     } else {
                         tried++;
-                        if (ran) reacted++;
+                        // ((14.8) Or stand and fight it with whatever's to hand, if brave enough or cornered.)
+                        if (ran || shot) reacted++;
                     }
                     w.clearZombies();
                     for (int f = 0; f < 30 * 2; f++) w.update(1 / 30f);
                 }
-                check(tried >= 4 && reacted == tried, "the unarmed run or hide from the dead (" + reacted + " of " + tried + ")");
+                check(tried >= 4 && reacted == tried, "the unarmed run, hide or fight back (" + reacted + " of " + tried + ")");
                 check(armedTried >= 2 && fought * 2 >= armedTried, "the brave with a gun stand and shoot (" + fought + " of " + armedTried + ")");
                 // With no guns lying about, nobody sets off to pick one up.
                 w.pickups.clear();
@@ -3575,6 +3576,129 @@ public final class GameTests {
                 for (int f = 0; f < 30 * 40; f++) { w.update(1 / 30f); w.evCount = 0; }
                 float home = (float) Math.hypot(heli.x - hx, heli.y - hy);
                 check(home < flown / 2, "it flew itself back home (" + (int) home + " from the pad, state " + heli.state + ")");
+            }
+        });
+        test("14.8: civilians fight back together with what's to hand; roadblock barriers hold the dead; the police helicopter marks them", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 78;
+                c.normalize();
+                c.seed = 78;
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 30; f++) w.update(1 / 30f);
+                // Three civilians out in a street, one of the dead in front of them.
+                java.util.Random r = new java.util.Random(5);
+                float[] at = null;
+                for (int k = 0; k < 4000 && at == null; k++) {
+                    float[] q = w.city.randomWalkableInTown(r);
+                    if (w.city.findWalkable(q[0] + 30, q[1]) != null && w.city.los(q[0], q[1], q[0] + 30, q[1]) && w.city.findWalkable(q[0], q[1] + 12) != null) at = q;
+                }
+                java.util.List<Entity> folk = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 3; k++) {
+                    float[] p = w.city.findWalkable(at[0], at[1] + k * 6);
+                    Entity e = w.spawn(Entity.CIVILIAN, p[0], p[1]);
+                    e.melee = Entity.M_BAT;
+                    // (Not the timid: they'd run, as they should.)
+                    while (World.bravery(e) < 0.5f) e.nameSeed++;
+                    e.hasGun = false;
+                    e.ammo = e.reserve = 0;
+                    folk.add(e);
+                }
+                float[] zp = w.city.findWalkable(at[0] + 24, at[1] + 6);
+                Entity z = w.spawn(Entity.ZOMBIE, zp[0], zp[1]);
+                float hp0 = z.hp;
+                int fought = 0;
+                for (int f = 0; f < 30 * 10 && !(z.dead || z.hp <= 0); f++) {
+                    z.speed = z.runSpeed = 0;
+                    for (Entity e : folk) if (e.goal == World.G_FIGHT) fought++;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(fought > 0 && (z.dead || z.hp < hp0), "they stood and fought it (" + fought + " frames fighting, hp " + z.hp + " of " + hp0 + ")");
+
+                // A roadblock's barriers across a road: the dead are held at them till they push them over.
+                float[] road = null;
+                int dir = 0;
+                for (int k = 0; k < 20000 && road == null; k++) {
+                    float[] q = w.city.randomWalkableInTown(r);
+                    int tx = (int) (q[0] / City.T), ty = (int) (q[1] / City.T);
+                    int d = w.city.roadDirAt(tx, ty);
+                    if (d == 1 || d == 2) {
+                        road = new float[]{tx * City.T + City.T / 2f, ty * City.T + City.T / 2f};
+                        dir = d;
+                    }
+                }
+                check(road != null, "a straight road");
+                Fleet.Vehicle v = w.fleet.placeTank(road[0], road[1]);
+                w.fleet.vehicles.remove(v);
+                v.x = road[0];
+                v.y = road[1];
+                v.blockDir = dir;
+                float ax = dir == 1 ? 0 : 1, ay = dir == 1 ? 1 : 0;
+                // The zone lies one way along the road; the dead come from the other.
+                w.fleet.putUpBarrier(v, v.x + ax * 300, v.y + ay * 300);
+                check(v.barHp > 0 && Math.hypot(v.barX1 - v.barX0, v.barY1 - v.barY0) >= 12, "barriers up across the road");
+                float bx = (v.barX0 + v.barX1) / 2, by = (v.barY0 + v.barY1) / 2;
+                // (Nobody else about: no one to shoot the dead before they reach it, or to draw them off elsewhere.)
+                for (Entity o : w.entities)
+                    if (!o.dead && !o.isZombie() && Math.hypot(o.x - bx, o.y - by) < 500) {
+                        o.dead = true;
+                        o.removed = true;
+                    }
+                float[] bait = w.city.findWalkable(bx + ax * 30, by + ay * 30);
+                Entity held = w.spawn(Entity.CIVILIAN, bait[0], bait[1]);
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 8; k++) {
+                    float[] p = w.city.findWalkable(bx - ax * (30 + k * 4) + ay * (k % 3 - 1) * 5, by - ay * (30 + k * 4) + ax * (k % 3 - 1) * 5);
+                    if (p != null) pack.add(w.spawn(Entity.ZOMBIE, p[0], p[1]));
+                }
+                int crossedEarly = 0;
+                boolean wentDown = false;
+                for (int f = 0; f < 30 * 40 && !wentDown; f++) {
+                    held.speed = held.runSpeed = 0;
+                    held.x = bait[0];
+                    held.y = bait[1];
+                    held.hp = held.maxHp;
+                    w.update(1 / 30f);
+                    // (They head for the one beyond, whatever else catches their eye.)
+                    for (Entity zz : pack) {
+                        if (zz.dead) continue;
+                        float ddx = bait[0] - zz.x, ddy = bait[1] - zz.y, dd = (float) Math.hypot(ddx, ddy) + 0.001f;
+                        zz.x += ddx / dd * 0.7f;
+                        zz.y += ddy / dd * 0.7f;
+                    }
+                    w.barrierHold(v, 1 / 30f);
+                    w.evCount = 0;
+                    if (f == 30 * 6)
+                        for (Entity zz : pack) if (!zz.dead && ((zz.x - bx) * ax + (zz.y - by) * ay) > 6) crossedEarly++;
+                    wentDown = v.barDown;
+                }
+                check(crossedEarly == 0, "none of them through while the barriers stood (" + crossedEarly + ")");
+                check(wentDown, "in the end they pushed them over (" + v.barHp + " left)");
+
+                // A police helicopter over a fight: it marks the dead below and moves over to where they're thickest.
+                float[] f0 = w.city.findWalkable(at[0], at[1]);
+                java.util.List<Entity> crowd = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 10; k++) {
+                    float[] p = w.city.findWalkable(f0[0] + 120 + (k % 4) * 5, f0[1] + (k / 4) * 5);
+                    if (p != null) crowd.add(w.spawn(Entity.ZOMBIE, p[0], p[1]));
+                }
+                for (int f = 0; f < 3; f++) w.update(1 / 30f);
+                Fleet.Vehicle h = w.fleet.placeTank(f0[0], f0[1]);
+                w.fleet.vehicles.remove(h);
+                h.x = f0[0] + 60;
+                h.y = f0[1];
+                h.tx = f0[0];
+                h.ty = f0[1];
+                w.heliSpot(h, 1f);
+                int marked = 0;
+                for (Entity zz : crowd) if (zz.spottedUntil > w.time) marked++;
+                check(marked * 2 >= crowd.size(), "it marked the dead below (" + marked + " of " + crowd.size() + ")");
+                check(Math.hypot(h.tx - (f0[0] + 120), h.ty - f0[1]) < 60, "and moved its hover over the crowd");
             }
         });
         test("every screen draws", new Check() {

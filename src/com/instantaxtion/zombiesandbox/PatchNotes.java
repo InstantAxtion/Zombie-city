@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.7";
-    static final int VERSION_CODE = 137;
+    static final String VERSION = "14.8";
+    static final int VERSION_CODE = 138;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.8  -  Civilians fight back, crowd barriers, the police helicopter spots",
+                    "Civilians fight back more often: cornered, or standing together in threes or more, they grab whatever's to hand (a bat, a length of pipe, an axe from the shed) and wade in, and others nearby join them. The timid still run, and nobody takes on a crowd alone or fights on badly hurt. Their wild swings are weaker than a trained hand's.",
+                    "Police roadblocks put up a line of steel crowd barriers across the road and pavements. The dead pile up against them while the officers shoot, until enough have pushed for long enough to send them over.",
+                    "The police helicopter spots from above: it marks the dead it can see for units on the ground (noticed sooner, fired on from further, hit in the head more often), moves its hover over to where they're thickest, and calls in any not yet reported.",
+            },
             {
                     "14.7  -  Lead a squad, fly a helicopter",
                     "Playing a police officer or soldier, the Squad button gathers up to six of your own kind nearby. They follow you in a wedge, fire at whatever you fire at, and look after themselves against the dead coming at them. Press it again to send them back to their orders.",

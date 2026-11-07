@@ -419,6 +419,11 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Civilians fight back, crowd barriers, the police helicopter spots (14.8):** cornered civilians, or three or more
+standing together, grab whatever's to hand and fight the dead (the timid still run). Police roadblocks put up steel
+crowd barriers that hold the dead back until they push them over. The police helicopter marks the dead below for units
+on the ground, moves over to the thickest of them and calls in new sightings.
+
 **Lead a squad, fly a helicopter (14.7):** playing a police officer or soldier, the Squad button gathers up to six
 of your own kind nearby. They follow you in a wedge, fire at what you fire at and defend themselves, and ride in a
 vehicle with you. Press it again to dismiss them. You can also climb into a helicopter waiting on its pad: it lifts

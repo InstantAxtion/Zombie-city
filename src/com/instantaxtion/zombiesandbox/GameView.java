@@ -2929,6 +2929,7 @@ final class GameView extends View implements Menu.Host {
                     c.drawCircle(cx, cy, 0.6f, fill);
                 }
             }
+            if (v.barX0 != v.barX1 || v.barY0 != v.barY1) drawBarriers(c, v);
         }
         drawRailBridge(c, vx0, vx1, vy0, vy1);
         drawOverpasses(c, vx0, vx1, vy0, vy1);
@@ -7806,6 +7807,48 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** What someone is up to, in plain words. */
+    /**
+     * (14.8) A roadblock's crowd barriers: steel panels end to end across the road and pavements, each on its two
+     * feet - or, once the dead have pushed them over, lying flat and skewed where they fell.
+     */
+    private void drawBarriers(Canvas c, Fleet.Vehicle v) {
+        float dx = v.barX1 - v.barX0, dy = v.barY1 - v.barY0, len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 1) return;
+        int panels = Math.max(2, Math.round(len / 9));
+        float ux = dx / len, uy = dy / len;
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        for (int k = 0; k < panels; k++) {
+            float a0 = k * len / panels + 0.6f, a1 = (k + 1) * len / panels - 0.6f;
+            float x0 = v.barX0 + ux * a0, y0 = v.barY0 + uy * a0, x1 = v.barX0 + ux * a1, y1 = v.barY0 + uy * a1;
+            if (v.barDown) {
+                // Knocked flat, each panel skewed a different way, pushed in towards the zone.
+                float sk = ((k * 37) % 7 - 3) * 0.12f, push = 3 + (k % 3) * 2;
+                float ox = v.barNx * v.barIn * push, oy = v.barNy * v.barIn * push;
+                float mx = (x0 + x1) / 2 + ox, my = (y0 + y1) / 2 + oy, hl = (a1 - a0) / 2;
+                float cs = (float) Math.cos(sk), sn = (float) Math.sin(sk);
+                float rx = ux * cs - uy * sn, ry = ux * sn + uy * cs;
+                stroke.setStrokeWidth(2.6f);
+                stroke.setColor(0xFF8C9298);
+                c.drawLine(mx - rx * hl, my - ry * hl, mx + rx * hl, my + ry * hl, stroke);
+                continue;
+            }
+            stroke.setStrokeWidth(2.2f);
+            stroke.setColor(0x55000000);
+            c.drawLine(x0 + 0.7f, y0 + 0.9f, x1 + 0.7f, y1 + 0.9f, stroke);
+            stroke.setColor(0xFFB8BEC4);
+            c.drawLine(x0, y0, x1, y1, stroke);
+            stroke.setStrokeWidth(0.8f);
+            stroke.setColor(0xFF5A6066);
+            c.drawLine(x0, y0, x1, y1, stroke);
+            // The feet.
+            fill.setColor(0xFF4A4F55);
+            for (int f = 0; f < 2; f++) {
+                float fx = f == 0 ? x0 : x1, fy = f == 0 ? y0 : y1;
+                c.drawRect(fx - v.barNx * 1.8f - 0.6f, fy - v.barNy * 1.8f - 0.6f, fx + v.barNx * 1.8f + 0.6f, fy + v.barNy * 1.8f + 0.6f, fill);
+            }
+        }
+    }
+
     private String doing(Entity e) {
         if (e.isZombie()) {
             // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)

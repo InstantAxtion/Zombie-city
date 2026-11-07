@@ -3985,6 +3985,9 @@ final class World {
         e.reload = 0;
     }
 
+    /** (14.8) The swing being made is a civilian's, fighting back with what was to hand (see brawlStep). */
+    private boolean wildSwing;
+
     /** A bat or an axe: a hard blow that stuns, and sometimes splits a skull. */
     private void swing(Entity e, Entity z) {
         // (A machete cuts like an axe; a crowbar hits like a bat, only harder.)
@@ -3995,8 +3998,11 @@ final class World {
         float ddx = z.x - e.x, ddy = z.y - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
         e.angle = (float) Math.atan2(ddy, ddx);
         boolean wasUp = z.hp > 0;
-        if (z.isZombie() && z.type != Entity.BRUTE && rnd.nextFloat() < (axe ? 0.25f : 0.1f)) z.hp = 0;
-        else z.hp -= axe ? 36 : 22;
+        // ((14.8) A civilian wading in with something they've just picked up lands weaker blows, further apart.)
+        boolean wild = wildSwing;
+        if (wild) e.meleeCd += 0.6f;
+        if (z.isZombie() && z.type != Entity.BRUTE && rnd.nextFloat() < (wild ? 0.03f : axe ? 0.25f : 0.1f)) z.hp = 0;
+        else z.hp -= (axe ? 36 : 22) * (wild ? 0.55f : 1);
         z.hurt = 1;
         z.stun = Math.max(z.stun, z.type == Entity.BRUTE ? 0.2f : axe ? 0.4f : 0.8f);
         tryMove(z, ddx / d * (axe ? 5 : 9) / z.mass, ddy / d * (axe ? 5 : 9) / z.mass);
@@ -4574,7 +4580,11 @@ final class World {
         if (goal != G_FIGHT) e.aiming = false;
         switch (goal) {
             case G_FIGHT:
-                if (threat == null || !e.hasGun) break;
+                if (threat == null) break;
+                if (!e.hasGun || e.ammo + e.reserve <= 0) {
+                    brawlStep(e, threat, threatDist, dt);
+                    return;
+                }
                 fightStep(e, threat, threatDist, dt);
                 return;
             case G_FLEE:
@@ -4683,6 +4693,20 @@ final class World {
         // Fight: armed, a target in range, and not right on top of them.
         if (armed && threat != null && threatDist > 14 && threatDist < 90 && e.task != Dispatch.T_SHELTER)
             goalScore[G_FIGHT] = 0.55f + 0.35f * brave + 0.15f * near;
+        // ((14.8) Or fight back with whatever's to hand: someone with a bat or a crowbar already, the brave with
+        // others round them doing the same, or anyone cornered with nowhere left to run. Not on their own against
+        // a crowd, nor when badly hurt.)
+        else if (!armed && threat != null && threatDist < 70 && e.task != Dispatch.T_SHELTER && e.type == Entity.CIVILIAN) {
+            int mates = brawlersNear(e);
+            int fighting = mates >> 8, with = mates & 0xFF;
+            int pack = countZombiesNear(threat.x, threat.y, 40);
+            boolean cornered = threatDist < 26 && (e.stamina < 0.3f || pack >= 2 && threatDist < 16);
+            if (e.melee > 0 || with >= 3 || fighting > 0 || cornered || brave > BRAWL_BRAVE) {
+                float s = 0.2f + 0.55f * brave + 0.12f * Math.min(3, with) + 0.12f * Math.min(3, fighting) + (e.melee > 0 ? 0.2f : 0)
+                        + (cornered ? 0.35f : 0) + 0.15f * near - 0.14f * Math.max(0, pack - 1 - with) - (e.hp < e.maxHp * 0.4f ? 0.5f : 0);
+                goalScore[G_FIGHT] = s;
+            }
+        }
         // Flee: from the dead in sight, or still shaken from the last one.
         if (threat != null) goalScore[G_FLEE] = 0.3f + 0.65f * near + (armed ? 0 : 0.15f) + 0.1f * (1 - brave);
         else if (e.fleeTimer > 0) goalScore[G_FLEE] = 0.25f + 0.3f * Math.min(1, e.fleeTimer / 7f);
@@ -4842,6 +4866,55 @@ final class World {
                 && countZombiesNear(home.doorX, home.doorY, 35) == 0) return home;
         return shelterNear(e);
     }
+
+    /** (14.8) How brave someone must be to take on the dead with what's to hand all by themselves. */
+    static final float BRAWL_BRAVE = 0.8f;
+
+    /**
+     * (14.8) Other civilians close by: those already fighting the dead (in the high byte) and all of them standing
+     * with this one (in the low byte, the fighting ones included).
+     */
+    private int brawlersNear(Entity e) {
+        int fighting = 0, with = 0;
+        for (int i = 0, m = gatherLiving(e.x, e.y, 45); i < m && with < 6; i++) {
+            Entity o = gathered[i];
+            if (o == e || o.dead || o.type != Entity.CIVILIAN) continue;
+            if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > 45 * 45) continue;
+            with++;
+            if (o.goal == G_FIGHT) fighting++;
+        }
+        return fighting << 8 | with;
+    }
+
+    /**
+     * (14.8) Fighting back hand to hand: grab whatever's lying about (a bat, a length of pipe, a tool from the shed),
+     * close in and swing; anyone near enough joins in (see brawlersNear). Each swing is the usual one (see swing).
+     */
+    private void brawlStep(Entity e, Entity t, float d, float dt) {
+        if (e.melee == 0) {
+            float m = rnd.nextFloat();
+            e.melee = m < 0.45f ? Entity.M_BAT : m < 0.85f ? Entity.M_CROWBAR : Entity.M_AXE;
+            civBrawls++;
+        }
+        float reach = e.radius + t.radius + 4;
+        float dx = t.x - e.x, dy = t.y - e.y, dd = d + 0.001f;
+        e.aiming = false;
+        e.angle = (float) Math.atan2(dy, dx);
+        if (d > reach) steer(e, dx / dd, dy / dd, e.runSpeed * 0.9f);
+        else {
+            steer(e, 0, 0, 0);
+            if (e.meleeCd <= 0) {
+                boolean up = t.hp > 0;
+                wildSwing = true;
+                swing(e, t);
+                wildSwing = false;
+                if (up && t.hp <= 0) civBrawlKills++;
+            }
+        }
+    }
+
+    /** (14.8) How often civilians have taken up something to fight with, and the dead they've put down with it. */
+    int civBrawls, civBrawlKills;
 
     private void fightStep(Entity e, Entity threat, float threatDist, float dt) {
         // Armed civilians shoot, backing off if the zombie gets too close.
@@ -15274,6 +15347,115 @@ final class World {
             dispatch.say(Dispatch.WHO_POLICE, null, "Drone " + d.number + ": " + (found != null ? "Movement inside " + (found.name != null ? found.name : "a building")
                     + " on " + city.placeName(sx, sy) + ", " + found.lurkers + " of them." : seen + (seen == 1 ? " hostile" : " hostiles")
                     + " on " + city.placeName(sx, sy) + ". Calling it in."), sx, sy);
+        }
+    }
+
+    /** (14.8) How far a police helicopter sees from its hover, marking the dead for the units below. */
+    static final float HELI_SEE = 210;
+
+    /**
+     * (14.8) A police helicopter at a fight: it marks the dead it can see for the units on the ground (as a drone does,
+     * from further), moves its hover over to the worst of them, and calls in any not yet reported.
+     */
+    void heliSpot(Fleet.Vehicle v, float dt) {
+        v.heliLook -= dt;
+        v.spotMove -= dt;
+        if (v.heliLook > 0) return;
+        v.heliLook = 0.5f;
+        int seen = 0;
+        int cx0 = Math.max(0, (int) ((v.x - HELI_SEE) / CELL)), cx1 = Math.min(gw - 1, (int) ((v.x + HELI_SEE) / CELL));
+        int cy0 = Math.max(0, (int) ((v.y - HELI_SEE) / CELL)), cy1 = Math.min(gh - 1, (int) ((v.y + HELI_SEE) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (!o.dead && (o.x - v.x) * (o.x - v.x) + (o.y - v.y) * (o.y - v.y) < HELI_SEE * HELI_SEE) {
+                        o.spottedUntil = time + 1.6f;
+                        seen++;
+                    }
+                }
+            }
+        // Over to where they're thickest, now and then: a few of them round the fight looked at.
+        if (v.spotMove <= 0) {
+            v.spotMove = 8;
+            float bx = v.tx, by = v.ty;
+            int best = countZombiesNear(v.tx, v.ty, 50) + 2;
+            float r = 300;
+            int dx0 = Math.max(0, (int) ((v.tx - r) / CELL)), dx1 = Math.min(gw - 1, (int) ((v.tx + r) / CELL));
+            int dy0 = Math.max(0, (int) ((v.ty - r) / CELL)), dy1 = Math.min(gh - 1, (int) ((v.ty + r) / CELL));
+            int looked = 0;
+            for (int cy = dy0; cy <= dy1 && looked < 24; cy++)
+                for (int cx = dx0; cx <= dx1 && looked < 24; cx++) {
+                    int c = cy * gw + cx;
+                    if (zCount[c] == 0) continue;
+                    Entity o = sorted[cellStart[c]];
+                    if (o.dead || (o.x - v.tx) * (o.x - v.tx) + (o.y - v.ty) * (o.y - v.ty) > r * r) continue;
+                    looked++;
+                    int n = countZombiesNear(o.x, o.y, 50);
+                    if (n > best) {
+                        best = n;
+                        bx = o.x;
+                        by = o.y;
+                    }
+                }
+            v.tx = bx;
+            v.ty = by;
+        }
+        if (seen == 0) return;
+        boolean covered = false;
+        for (int i = 0; i < dispatch.incidents.size() && !covered; i++) {
+            Dispatch.Incident inc = dispatch.incidents.get(i);
+            if (!inc.resolved && World.hypot(inc.x - v.x, inc.y - v.y) < 250) covered = true;
+        }
+        Entity z = nearestZombie(v.x, v.y, HELI_SEE);
+        if (!covered && z != null) dispatch.sighting(z.x, z.y, null);
+        if (time - v.spotSaid > 25 && z != null) {
+            v.spotSaid = time;
+            dispatch.say(Dispatch.WHO_POLICE, null, "Police helicopter: Eyes on " + seen + (seen == 1 ? " of the dead" : " of the dead") + " round "
+                    + city.placeName(z.x, z.y) + ". Marking them for units on the ground.", z.x, z.y);
+        }
+    }
+
+    /**
+     * (14.8) A roadblock's crowd barriers: the dead that reach the line are held there, pushing, until enough of
+     * them have pushed for long enough to send it over. The living get through (officers open a gap for them).
+     */
+    void barrierHold(Fleet.Vehicle v, float dt) {
+        if (v.barHp <= 0) return;
+        float mx = (v.barX0 + v.barX1) / 2, my = (v.barY0 + v.barY1) / 2;
+        float half = (float) World.hypot(v.barX1 - v.barX0, v.barY1 - v.barY0) / 2 + 4;
+        float tx = (v.barX1 - v.barX0) / (2 * half - 8 + 0.001f), ty = (v.barY1 - v.barY0) / (2 * half - 8 + 0.001f);
+        int cx0 = Math.max(0, (int) ((mx - half) / CELL)), cx1 = Math.min(gw - 1, (int) ((mx + half) / CELL));
+        int cy0 = Math.max(0, (int) ((my - half) / CELL)), cy1 = Math.min(gh - 1, (int) ((my + half) / CELL));
+        int pushing = 0;
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity z = sorted[k];
+                    if (z.dead || z.hp <= 0) continue;
+                    float rx = z.x - mx, ry = z.y - my;
+                    if (Math.abs(rx * tx + ry * ty) > half) continue;
+                    // Which side, along the road: the zone's side is "in". Held on the line's outer edge.
+                    float s = (rx * v.barNx + ry * v.barNy) * v.barIn;
+                    float hold = -(z.radius + 2);
+                    if (s > hold && s < 6) {
+                        float push = hold - s;
+                        z.x += v.barNx * v.barIn * push;
+                        z.y += v.barNy * v.barIn * push;
+                        z.vx = z.vy = 0;
+                        pushing++;
+                    }
+                }
+            }
+        if (pushing == 0) return;
+        v.barHp -= dt * pushing * (pushing > 6 ? 1.4f : 1);
+        if (v.barHp <= 0) {
+            v.barHp = 0;
+            v.barDown = true;
+            emit(Sfx.THUD, mx, my);
+            dispatch.say(Dispatch.WHO_POLICE, null, "Roadblock on " + city.placeName(mx, my) + ": They've pushed the barriers over!", mx, my);
         }
     }
 
