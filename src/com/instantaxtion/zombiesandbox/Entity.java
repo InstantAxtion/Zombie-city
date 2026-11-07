@@ -150,6 +150,12 @@ final class Entity {
     transient Fleet.Vehicle supplyTruck;
     /** ((14.3) Until when a police drone overhead has this one of the dead marked for the units on the ground.) */
     transient float spottedUntil;
+    /** ((14.5) The dead: when this one rose (game time), for how far it's rotted.) */
+    float risen;
+    /** ((14.5) A horde leader on a long march across the city to the biggest crowd of the living.) */
+    transient boolean migrating;
+    /** ((14.5) Time spent being treated at the field hospital so far.) */
+    transient float hospitalT;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;
     /** ((14.2) A raider who's opened fire on people lately: police, soldiers and armed survivors shoot back while this lasts.) */

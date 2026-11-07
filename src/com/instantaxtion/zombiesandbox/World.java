@@ -1314,6 +1314,7 @@ final class World {
         e.origin = origin;
         e.nameSeed = rnd.nextInt();
         e.skin = SKINS[rnd.nextInt(SKINS.length)];
+        e.risen = time;
         if (type == Entity.COP) e.callsign = 11 + dispatch.copCount++;
         if (type == Entity.SOLDIER) {
             e.squad = dispatch.soldierCount / 4;
@@ -3627,6 +3628,22 @@ final class World {
     }
 
     private void pickRoam(Entity z) {
+        z.migrating = false;
+        // ((14.5) A big horde, now and then: off across the whole city to the biggest crowd of the living.)
+        float[] m = migrationTarget(z);
+        if (m != null) {
+            z.roamX = m[0];
+            z.roamY = m[1];
+            z.migrating = true;
+            if (time - migrationSaid > 90) {
+                migrationSaid = time;
+                String where = city.placeName(m[0], m[1]);
+                dispatch.say(Dispatch.WHO_INFO, null, "News: A horde of about " + Math.max(15, z.hordeSize / 5 * 5) + " is on the move across the city from "
+                        + city.placeName(z.x, z.y) + ", heading for " + where + "!", z.x, z.y);
+                timeline("A horde on the march towards " + where, z.x, z.y);
+            }
+            return;
+        }
         // (10.32) A horde hears a big fight a long way off, and goes to it.
         if (z.leadsHorde && rnd.nextFloat() < 0.6f) {
             float[] f = loudestFight(z.x, z.y, 3200);
@@ -3708,7 +3725,8 @@ final class World {
         }
         // ((10.32) A horde on the move goes round things, by the streets and lanes, not straight into them.)
         // ((10.59) A sleepy drift, until something wakes them: see surge.)
-        float pace = z.speed * (z.hordeWait ? 0.22f : 0.38f);
+        // ((14.5) On a march across the city, a steadier pace.)
+        float pace = z.speed * (z.hordeWait ? 0.22f : z.migrating ? 0.55f : 0.38f);
         if (z.leadsHorde && d > 150) zombieWalkTo(z, z.roamX, z.roamY, pace);
         else steer(z, ddx / d, ddy / d, pace);
     }
@@ -6523,6 +6541,7 @@ final class World {
         supplies();
         fieldSupplies();
         raiders();
+        fieldHospital();
         militias();
         if (outbreak) updateWar();
         int z = zombieCount();
@@ -8222,6 +8241,121 @@ final class World {
         dispatch.unitBackup(e, near);
     }
 
+    // ------------------------------------------------------------------ (14.5) rot, migrations, the field hospital
+
+    /** When the dead start to rot (seconds after rising), how long until they're as rotten as they get, and how much. */
+    static final float ROT_START = 480, ROT_SPAN = 1200, ROT_MAX = 0.4f;
+
+    /**
+     * (14.5) How far one of the dead has rotted, 0 to ROT_MAX: nothing for the first eight minutes after it rose, then
+     * slowly more over the next twenty. That much slower on its feet, and that much more to each hit - a city that holds
+     * out long enough gains the upper hand.
+     */
+    float rot(Entity z) {
+        if (!z.isZombie()) return 0;
+        float age = time - z.risen - ROT_START;
+        return age <= 0 ? 0 : Math.min(1, age / ROT_SPAN) * ROT_MAX;
+    }
+
+    private float migrationSaid = -999;
+
+    /**
+     * (14.5) A big horde (fifteen or more) now and then sets off across the whole city for the biggest crowd of the
+     * living - a safe zone full of people, as often as not. Announced on the news. The target, or null.
+     */
+    private float[] migrationTarget(Entity z) {
+        if (!z.leadsHorde || z.hordeSize < 15 || rnd.nextFloat() > 0.25f) return null;
+        float bx = 0, by = 0, best = 0;
+        for (int i = 0; i < dispatch.zones.size(); i++) {
+            Dispatch.SafeZone s = dispatch.zones.get(i);
+            if (s.removed || !s.open) continue;
+            float d = (float) World.hypot(s.x - z.x, s.y - z.y);
+            if (d > 1500 && s.sheltered > best) {
+                best = s.sheltered;
+                bx = s.x;
+                by = s.y;
+            }
+        }
+        // (Or the thickest crowd of people out on the streets, from a sample of them.)
+        for (int k = 0, n = entities.size(); k < 40 && n > 0; k++) {
+            Entity e = entities.get(rnd.nextInt(n));
+            if (e.dead || e.isZombie() || World.hypot(e.x - z.x, e.y - z.y) < 1500) continue;
+            int c = gatherLiving(e.x, e.y, 150);
+            if (c > best) {
+                best = c;
+                bx = e.x;
+                by = e.y;
+            }
+        }
+        if (best < 12) return null;
+        return city.findWalkable(bx, by);
+    }
+
+    /** (14.5) The field hospital: where it is (NaN until the army sets it up), and the time each patient has had there. */
+    float hospitalX = Float.NaN, hospitalY = Float.NaN;
+    static final float HOSPITAL_REACH = 1800, HOSPITAL_TIME = 8;
+
+    /**
+     * (14.5) Once the outbreak is on the news and the army is in it, it sets up a tent hospital behind the lines: by
+     * the base (or else the police headquarters), where wounded police and soldiers go to be patched up. Never the
+     * bitten.
+     */
+    private void fieldHospital() {
+        if (!Float.isNaN(hospitalX) || alert < 2 || !outbreak) return;
+        City.Facility f = city.mainBase();
+        if (f == null || f.fallen) f = city.nearestFacility(City.FACILITY_POLICE, city.worldW() / 2, city.worldH() / 2);
+        if (f == null) return;
+        float[] p = city.findWalkable(f.gateX > 0 ? f.gateX + (f.x - f.gateX) * 0.4f : f.x, f.gateY > 0 ? f.gateY + (f.y - f.gateY) * 0.4f : f.y + f.r);
+        if (p == null) return;
+        hospitalX = p[0];
+        hospitalY = p[1];
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: A field hospital is up at " + f.name + ". Wounded units, fall back there to be patched up.", p[0], p[1]);
+        timeline("Field hospital set up at " + f.name, p[0], p[1]);
+    }
+
+    /**
+     * (14.5) Badly hurt and out of the fight: back to the field hospital (if it's in reach), a few seconds there, and
+     * out good as new. True while busy with it.
+     */
+    private boolean hospitalStep(Entity e, float dt) {
+        if (Float.isNaN(hospitalX) || e.infected || e == controlled || e.rig != null) {
+            if (e.task == Dispatch.T_HEAL) e.task = Dispatch.T_NONE;
+            return false;
+        }
+        if (e.task != Dispatch.T_HEAL) {
+            if (e.hp >= e.maxHp * 0.35f || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_RESPOND && e.task != Dispatch.T_POST)
+                    || World.hypot(hospitalX - e.x, hospitalY - e.y) > HOSPITAL_REACH || nearest(e, 90, true, false) != null) return false;
+            dispatch.releaseForResupply(e);
+            e.task = Dispatch.T_HEAL;
+            e.hospitalT = 0;
+            dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm hit bad. Falling back to the field hospital.", e.x, e.y);
+        }
+        if (nearest(e, 50, true, false) != null) return false;
+        // (Patched up on the way by a medic: back to it.)
+        if (e.hp >= e.maxHp * 0.95f) {
+            e.task = Dispatch.T_NONE;
+            return false;
+        }
+        float dx = hospitalX - e.x, dy = hospitalY - e.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        if (d > 40 && !(e.blocked && d < 60)) {
+            e.aiming = false;
+            walkToSpot(e, hospitalX, hospitalY, e.runSpeed * 0.8f);
+            return true;
+        }
+        steer(e, 0, 0, 0);
+        e.hospitalT += dt;
+        if (e.hospitalT >= HOSPITAL_TIME) {
+            e.hp = e.maxHp;
+            e.task = Dispatch.T_NONE;
+            e.hospitalT = 0;
+            treated++;
+        }
+        return true;
+    }
+
+    /** Police and soldiers patched up at the field hospital this game. */
+    int treated;
+
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
     static final int MORTAR_ROUNDS = 16;
     static final float MORTAR_MIN = 150, MORTAR_MAX = 650, MORTAR_EVERY = 7, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
@@ -8385,6 +8519,8 @@ final class World {
         if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
         // ((14.2) In over their heads: radio for backup - out of rounds, falling back or hurt included.)
         maybeCallBackup(e);
+        // ((14.5) Badly hurt and out of the fight: to the field hospital.)
+        if (hospitalStep(e, dt)) return;
         // ((14.0) A mortar team shells a pack of the dead a few streets off.)
         if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e)) return;
         // ((11.0) On foot to a call a long way off, with nothing to fight here: a car or truck to take them, if
@@ -11168,7 +11304,7 @@ final class World {
                 if (gore) decal(t.x + rnd.nextFloat() * 6 - 3, t.y + rnd.nextFloat() * 6 - 3, 2.5f + rnd.nextFloat() * 2, 0xAA5A0808);
             } else {
                 // ((10.32) Body armour on one of the dead takes most of a body shot.)
-                t.hp -= t.isZombie() ? dmg * GUN_DAMAGE * (t.armored ? 0.5f : 1) : dmg;
+                t.hp -= t.isZombie() ? dmg * GUN_DAMAGE * (t.armored ? 0.5f : 1) * (1 + rot(t)) : dmg;
                 if (wasUp && t.hp <= 0) t.bodyShot = true;
             }
             t.hurt = 1;
@@ -12280,6 +12416,8 @@ final class World {
             }
             if (e.stamina < 0) e.stamina = 0;
         }
+        // ((14.5) The long dead have rotted: slower on their feet.)
+        if (e.isZombie() && e.want > 0) e.want *= 1 - rot(e);
         if (e.want > 1 && (e.mx != 0 || e.my != 0)) lookAhead(e);
         // ((11.6) A long step - the phone catching up after a slow frame, or the faster speeds - is walked as several
         // ordinary ones for anyone being worked out every frame (everyone on screen): in one long step the easing

@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.4";
-    static final int VERSION_CODE = 134;
+    static final String VERSION = "14.5";
+    static final int VERSION_CODE = 135;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.5  -  The dead rot, hordes on the march, the field hospital",
+                    "The dead rot: nothing for the first eight minutes after one rises, then over the next twenty it gets slower on its feet and easier to put down (up to 40% of each), so a city that holds out long enough gains the upper hand. Their cards say how far gone they are.",
+                    "Hordes on the march: now and then a big horde (fifteen or more) sets off across the whole city for the biggest crowd of the living - a full safe zone, often - at a steadier pace than their usual drift. It's on the news and the timeline.",
+                    "The field hospital: once the outbreak is on the news, the army puts up a tent hospital at the base (or the police headquarters, with no base). Badly hurt police and soldiers out of the fight fall back to it, and a few seconds there puts them right. Never the bitten. (Their squad's medic still patches them up where they are when one's about.)",
+            },
             {
                     "14.4  -  The sound of the city, stronger effects, the timeline",
                     "The music follows how tense things are: how far the dead have spread through the city, and the fighting in view. It's quiet and calm when nothing's happening, tense as the dead spread, and the fight music in a big battle near you, sitting louder the worse it gets. Under it, once things are tense, a slow heartbeat over a low drone, louder and quicker the worse it is.",

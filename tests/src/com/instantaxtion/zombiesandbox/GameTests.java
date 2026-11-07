@@ -3314,6 +3314,101 @@ public final class GameTests {
                 check(v.drawErrors == 0, "frames with the new effects draw");
             }
         });
+        test("14.5: the dead rot, big hordes march across the city, and the wounded go to a field hospital", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                java.util.Random r = new java.util.Random(2);
+                // Rot: nothing for the first minutes, then slower and frailer.
+                float[] q = w.city.randomWalkableInTown(r);
+                Entity fresh = w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                Entity old = w.spawn(Entity.ZOMBIE, q[0] + 20, q[1]);
+                w.time = 5000;
+                fresh.risen = 5000 - 120;
+                old.risen = 5000 - 2400;
+                check(w.rot(fresh) == 0 && Math.abs(w.rot(old) - World.ROT_MAX) < 0.001f, "rot: none at first, then up to the most (" + w.rot(old) + ")");
+                old.want = fresh.want = 20;
+                old.mx = fresh.mx = 1;
+                java.lang.reflect.Method mv = World.class.getDeclaredMethod("move", Entity.class, float.class);
+                mv.setAccessible(true);
+                float ox = old.x, fx = fresh.x;
+                for (int k = 0; k < 30; k++) {
+                    old.want = fresh.want = 20;
+                    old.mx = fresh.mx = 1;
+                    old.my = fresh.my = 0;
+                    mv.invoke(w, old, 1 / 30f);
+                    mv.invoke(w, fresh, 1 / 30f);
+                }
+                check(old.x - ox < (fresh.x - fx) * 0.8f, "the rotted one slower (" + (int) (old.x - ox) + " vs " + (int) (fresh.x - fx) + ")");
+                w.clearZombies();
+                // A big horde marches across the city for a crowd of people far off.
+                float[] h = w.city.randomWalkableInTown(r);
+                float[] crowd = null;
+                for (int k = 0; k < 4000 && crowd == null; k++) {
+                    float[] p = w.city.randomWalkableInTown(r);
+                    if (Math.hypot(p[0] - h[0], p[1] - h[1]) > 2200) crowd = p;
+                }
+                check(crowd != null, "somewhere far off for a crowd");
+                for (int k = 0; k < 25; k++) {
+                    float[] p = w.city.findWalkable(crowd[0] + (k % 5) * 8, crowd[1] + (k / 5) * 8);
+                    w.spawn(Entity.CIVILIAN, p[0], p[1]);
+                }
+                Entity lead = w.spawn(Entity.ZOMBIE, h[0], h[1]);
+                lead.leadsHorde = true;
+                lead.hordeSize = 20;
+                w.update(1 / 30f);
+                java.lang.reflect.Method pr = World.class.getDeclaredMethod("pickRoam", Entity.class);
+                pr.setAccessible(true);
+                boolean marched = false;
+                for (int k = 0; k < 60 && !marched; k++) {
+                    lead.leadsHorde = true;
+                    lead.hordeSize = 20;
+                    pr.invoke(w, lead);
+                    // (For the biggest crowd it finds: in a town that's often somewhere else busy, but always a long way.)
+                    marched = lead.migrating && Math.hypot(lead.roamX - lead.x, lead.roamY - lead.y) > 1400;
+                }
+                check(marched, "the horde sets off on a march across the city");
+                // The field hospital: set up once the army's in it; a badly hurt soldier goes there and is patched up.
+                w.clearZombies();
+                float[] far = w.city.randomWalkable(r);
+                w.alert = 2;
+                Field ob = World.class.getDeclaredField("outbreak");
+                ob.setAccessible(true);
+                java.lang.reflect.Method fh = World.class.getDeclaredMethod("fieldHospital");
+                fh.setAccessible(true);
+                w.spawn(Entity.ZOMBIE, far[0], far[1]);
+                w.update(1 / 30f);
+                ob.setBoolean(w, true);
+                fh.invoke(w);
+                check(!Float.isNaN(w.hospitalX), "a field hospital set up");
+                float[] sp = w.city.findWalkable(w.hospitalX + 300, w.hospitalY);
+                Entity hurt = w.spawnSoldier(Entity.ROLE_RIFLE, sp[0], sp[1]);
+                hurt.hp = hurt.maxHp * 0.2f;
+                // (No medics about: it's the hospital being tried.)
+                for (Entity e : w.entities) if (e.role == Entity.ROLE_CORPSMAN) e.role = Entity.ROLE_RIFLE;
+                boolean healed = false;
+                for (int f = 0; f < 30 * 60 && !healed; f++) {
+                    if (w.zombies < 1) w.spawn(Entity.ZOMBIE, far[0], far[1]);
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    healed = hurt.hp >= hurt.maxHp;
+                }
+                check(healed && w.treated >= 1, "the wounded soldier patched up at the field hospital");
+                // Saved.
+                java.io.File f = java.io.File.createTempFile("zcsh", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                check(Math.abs(l.hospitalX - w.hospitalX) < 0.1f, "the field hospital saved");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

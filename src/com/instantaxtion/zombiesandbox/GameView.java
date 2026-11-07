@@ -2836,6 +2836,19 @@ final class GameView extends View implements Menu.Host {
             stroke.setColor(alpha(0xFFFFE8B0, 0.35f * (1 - t)));
             c.drawCircle(r[0], r[1], rad, stroke);
         }
+        if (!Float.isNaN(world.hospitalX) && world.hospitalX > vx0 - 30 && world.hospitalX < vx1 + 30 && world.hospitalY > vy0 - 30 && world.hospitalY < vy1 + 30) {
+            // ((14.5) The field hospital: a big white tent with a red cross on the roof.)
+            float hx = world.hospitalX, hy = world.hospitalY;
+            fill.setColor(0x50000000);
+            c.drawRect(hx - 13, hy - 8, hx + 15, hy + 11, fill);
+            fill.setColor(0xFFEDEDE6);
+            c.drawRect(hx - 14, hy - 10, hx + 14, hy + 9, fill);
+            fill.setColor(0xFFD2D2CA);
+            c.drawRect(hx - 14, hy - 10, hx + 14, hy - 7, fill);
+            fill.setColor(0xFFD83A3A);
+            c.drawRect(hx - 5, hy - 1.5f, hx + 5, hy + 1.5f, fill);
+            c.drawRect(hx - 1.5f, hy - 5, hx + 1.5f, hy + 5, fill);
+        }
         if (world.aftermath == World.AFTER_RECOVERY) {
             // ((14.2) A fallen building being rebuilt: the site fenced off, scaffolding going up.)
             for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
@@ -7233,6 +7246,10 @@ final class GameView extends View implements Menu.Host {
         // ((12.0) What one of the dead was in life.)
         if (e.isZombie() && e.origin >= 0 && e.origin != Entity.CIVILIAN)
             lines.add(e.origin == Entity.COP ? "Was a police officer" : e.origin == Entity.SOLDIER ? "Was a soldier" : "Was a " + Entity.NAMES[e.origin].toLowerCase());
+        // ((14.5) How far gone it is.)
+        float rot = world.rot(e);
+        if (rot > 0.02f) lines.add((rot > World.ROT_MAX * 0.75f ? "Badly rotted" : "Rotting") + ": slower, and goes down easier");
+        if (e.migrating) lines.add("Leading a horde across the city");
         // ((12.0) The gun by name, and a bat or axe if they carry one.)
         if (e.canShoot()) lines.add(e.gunName() + " " + e.ammo + " + " + e.reserve + (e.grenades > 0 ? "   Grenades " + e.grenades : "")
                 + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "")

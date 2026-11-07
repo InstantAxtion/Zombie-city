@@ -419,6 +419,10 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The dead rot, hordes on the march, the field hospital (14.5):** from eight minutes after rising the dead slowly rot,
+slower and easier to put down; big hordes now and then march across the city for the biggest crowd of the living; and
+the army sets up a field hospital where badly hurt police and soldiers are patched up.
+
 **The sound of the city, stronger effects, the timeline (14.4):** the music follows how tense things are (quiet when
 calm, tense as the dead spread, the fight music in a battle near you), with a heartbeat under it once things are bad;
 distant gunfire, blasts and sirens from fights off screen come through faintly; tracers, muzzle flashes, shell casings
