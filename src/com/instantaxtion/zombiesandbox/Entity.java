@@ -156,6 +156,9 @@ final class Entity {
     transient boolean migrating;
     /** ((14.5) Time spent being treated at the field hospital so far.) */
     transient float hospitalT;
+    /** ((14.7) In the squad of the one you're playing: who, and their place in the line behind them.) */
+    transient Entity commandedBy;
+    transient int squadSlot;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;
     /** ((14.2) A raider who's opened fire on people lately: police, soldiers and armed survivors shoot back while this lasts.) */

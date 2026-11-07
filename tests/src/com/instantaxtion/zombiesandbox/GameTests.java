@@ -3470,6 +3470,113 @@ public final class GameTests {
                 }
             }
         });
+        test("14.7: a squad follows the soldier you play and shoots what they shoot; you fly a helicopter and it flies home", new Check() {
+            public void run() {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 30; f++) w.update(1 / 30f);
+                // The soldier with the most of their own kind round them, out in the open.
+                Entity me = null;
+                int best = 0;
+                for (Entity e : w.entities) {
+                    if (e.dead || e.type != Entity.SOLDIER || e.rig != null || e.ride != null) continue;
+                    int n = 0;
+                    for (Entity o : w.entities)
+                        if (o != e && !o.dead && o.type == Entity.SOLDIER && o.rig == null && o.ride == null && Math.hypot(o.x - e.x, o.y - e.y) < World.SQUAD_REACH
+                                && (o.task == Dispatch.T_NONE || o.task == Dispatch.T_POST || o.task == Dispatch.T_RESPOND || o.task == Dispatch.T_HOLD)) n++;
+                    if (n > best) { best = n; me = e; }
+                }
+                check(me != null && best >= 2, "a soldier with others near (" + best + ")");
+                w.controlled = me;
+                w.ctrlAction(World.CA_SQUAD);
+                java.util.List<Entity> squad = new java.util.ArrayList<Entity>();
+                for (Entity o : w.entities) if (o.commandedBy == me && o.task == Dispatch.T_SQUAD) squad.add(o);
+                check(squad.size() >= 2 && squad.size() <= World.SQUAD_MAX, "a squad gathered (" + squad.size() + ")");
+                // You walk off; they keep with you.
+                float[] dir = {1, 0};
+                for (int f = 0; f < 30 * 14; f++) {
+                    if (f % 60 == 0) {
+                        float a = (f / 60) * 1.3f;
+                        dir[0] = (float) Math.cos(a);
+                        dir[1] = (float) Math.sin(a);
+                    }
+                    w.joyX = dir[0] * 0.6f;
+                    w.joyY = dir[1] * 0.6f;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                w.joyX = w.joyY = 0;
+                for (int f = 0; f < 30 * 4; f++) { w.update(1 / 30f); w.evCount = 0; }
+                int near = 0, still = 0;
+                for (Entity o : squad) {
+                    if (o.task == Dispatch.T_SQUAD) still++;
+                    if (!o.dead && Math.hypot(o.x - me.x, o.y - me.y) < 70) near++;
+                }
+                check(still == squad.size() && near * 3 >= squad.size() * 2, "they kept with you (" + near + " of " + squad.size() + " near, " + still + " still yours)");
+                // Dead ahead: you open fire and so do they.
+                java.util.List<Entity> dead = new java.util.ArrayList<Entity>();
+                for (int z = 0; z < 6; z++) {
+                    float[] p = w.city.findWalkable(me.x + 90 + (z % 3) * 7, me.y + (z / 3) * 7);
+                    if (p == null || !w.city.los(me.x, me.y, p[0], p[1])) continue;
+                    Entity zz = w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                    dead.add(zz);
+                }
+                int[] fired = new int[squad.size()];
+                w.ctrlAttack = true;
+                for (int f = 0; f < 30 * 8; f++) {
+                    for (Entity zz : dead) zz.speed = zz.runSpeed = 0;
+                    for (int i = 0; i < squad.size(); i++) if (squad.get(i).aiming) fired[i]++;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                w.ctrlAttack = false;
+                int shooters = 0, down = 0;
+                for (int k : fired) if (k > 0) shooters++;
+                for (Entity zz : dead) if (zz.dead || zz.hp <= 0) down++;
+                check(dead.size() >= 3 && shooters >= 1 && down * 2 >= dead.size(), "the squad fired with you (" + shooters + " shooting, " + down + " of " + dead.size() + " down)");
+                w.ctrlAction(World.CA_SQUAD);
+                int left = 0;
+                for (Entity o : w.entities) if (o.commandedBy == me || o.task == Dispatch.T_SQUAD) left++;
+                check(left == 0, "dismissed, they go back to their orders (" + left + " left)");
+                // A helicopter on its pad: in, up, away, out - and it flies home.
+                Fleet.Vehicle heli = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.HELI && v.state == Fleet.IDLE && !v.broken && v.player == null) heli = v;
+                check(heli != null, "a helicopter waiting on a pad");
+                float[] by = w.city.findWalkable(heli.x + 8, heli.y);
+                me.x = by[0];
+                me.y = by[1];
+                int[] opts = new int[8];
+                int n = w.ctrlOptions(opts);
+                boolean canBoard = false;
+                for (int i = 0; i < n; i++) if (opts[i] == World.CA_ENTER_CAR) canBoard = true;
+                check(canBoard, "you can climb in");
+                w.ctrlAction(World.CA_ENTER_CAR);
+                check(heli.player == me, "you're flying it");
+                float hx = heli.x, hy = heli.y;
+                float mx = hx < w.city.worldW() / 2f ? 1 : -1;
+                for (int f = 0; f < 30 * 10; f++) {
+                    w.joyX = mx;
+                    w.joyY = 0;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                w.joyX = 0;
+                float flown = (float) Math.hypot(heli.x - hx, heli.y - hy);
+                check(heli.alt > 0.4f && flown > 400, "it took off and flew where you pointed (" + (int) flown + " away, alt " + heli.alt + ")");
+                w.ctrlAction(World.CA_EXIT_CAR);
+                check(!me.dead && heli.player == null && Math.hypot(me.x - heli.x, me.y - heli.y) < 40, "you're down on the ground by it");
+                for (int f = 0; f < 30 * 40; f++) { w.update(1 / 30f); w.evCount = 0; }
+                float home = (float) Math.hypot(heli.x - hx, heli.y - hy);
+                check(home < flown / 2, "it flew itself back home (" + (int) home + " from the pad, state " + heli.state + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

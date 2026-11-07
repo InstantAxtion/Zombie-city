@@ -7867,6 +7867,7 @@ final class GameView extends View implements Menu.Host {
             case Dispatch.T_EVACUATE: return "Getting out of the danger zone";
             case Dispatch.T_LEAVE: return "Fleeing the city";
             case Dispatch.T_HOMECOMING: return "Coming home";
+            case Dispatch.T_SQUAD: return "Following you";
             case Dispatch.T_BORROW: return "Borrowing ammo";
             case Dispatch.T_MOVE: return "Following orders";
             case Dispatch.T_HOLD: return "Holding position";

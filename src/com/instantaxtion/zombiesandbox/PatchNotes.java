@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.6";
-    static final int VERSION_CODE = 136;
+    static final String VERSION = "14.7";
+    static final int VERSION_CODE = 137;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.7  -  Lead a squad, fly a helicopter",
+                    "Playing a police officer or soldier, the Squad button gathers up to six of your own kind nearby. They follow you in a wedge, fire at whatever you fire at, and look after themselves against the dead coming at them. Press it again to send them back to their orders.",
+                    "Your squad piles into a vehicle with you and follows you again when you all get out.",
+                    "Fly a helicopter: walk up to one waiting on its pad and get in. It lifts off and goes where you point the stick, over the rooftops, and hovers when you let go. The door gunner fires at the dead below, faster while you hold the fire button.",
+                    "Get out and you come down the rope where you are, and the helicopter flies itself back to its pad.",
+            },
             {
                     "14.6  -  The infantry fighting vehicle and the gun truck",
                     "The infantry fighting vehicle: tracked and heavily armoured, with an autocannon that reaches further than any other vehicle gun and whose rounds burst among the dead, hurting the ones round each hit too. The army sends it to the worst fighting (eighteen or more of the dead).",

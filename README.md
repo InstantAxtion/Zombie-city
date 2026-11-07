@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Lead a squad, fly a helicopter (14.7):** playing a police officer or soldier, the Squad button gathers up to six
+of your own kind nearby. They follow you in a wedge, fire at what you fire at and defend themselves, and ride in a
+vehicle with you. Press it again to dismiss them. You can also climb into a helicopter waiting on its pad: it lifts
+off and flies where the stick points, hovering when you let go, while the door gunner fires at the dead below (faster
+with the fire button held). Get out and you come down the rope; it flies itself home.
+
 **The infantry fighting vehicle and the gun truck (14.6):** the army sends an IFV (tracked, armoured, an autocannon
 whose rounds burst among the dead) to the worst fighting, and a gun truck (long fast bursts) to big packs out on the
 roads; both stay to give covering fire, and the convoy brings one of each.

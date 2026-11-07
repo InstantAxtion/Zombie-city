@@ -3927,6 +3927,7 @@ final class World {
             if (d < e.radius + t.radius + 4 && e.biteCd <= 0) bite(e, t, ddx / d, ddy / d);
         } else if (e.canShoot() && e.ammo + e.reserve > 0) {
             Entity t = aimTarget(e, 210);
+            ctrlTarget = t;
             if (t != null) {
                 float d = (float) World.hypot(t.x - e.x, t.y - e.y);
                 aimAndFire(e, t, d, 210, dt);
@@ -4134,8 +4135,13 @@ final class World {
     /** Search each place once. */
     private final java.util.HashSet<City.Building> searched = new java.util.HashSet<City.Building>();
     static final int CA_ENTER_CAR = 0, CA_EXIT_CAR = 1, CA_ENTER = 2, CA_EXIT = 3, CA_BARRICADE = 4, CA_SEARCH = 5,
-            CA_RALLY = 6, CA_GRENADE = 7;
-    static final String[] CA_NAMES = {"Get in", "Get out", "Go inside", "Go out", "Barricade", "Search", "Rally", "Grenade"};
+            CA_RALLY = 6, CA_GRENADE = 7, CA_SQUAD = 8;
+    static final String[] CA_NAMES = {"Get in", "Get out", "Go inside", "Go out", "Barricade", "Search", "Rally", "Grenade", "Squad"};
+    /** ((14.7) What the one you're playing is shooting at, for their squad to shoot at too. */
+    Entity ctrlTarget;
+    /** (14.7) The most a squad you lead can have, and how far round you they're gathered from. */
+    static final int SQUAD_MAX = 6;
+    static final float SQUAD_REACH = 180;
 
     /** What the player can do right now, besides moving and attacking. */
     int ctrlOptions(int[] out) {
@@ -4155,7 +4161,8 @@ final class World {
         if (e.isZombie() || e.type == Entity.DOG) return 0;
         if (carToEnter(e) != null) out[n++] = CA_ENTER_CAR;
         if (doorToEnter(e) != null) out[n++] = CA_ENTER;
-        out[n++] = CA_RALLY;
+        // ((14.7) An officer or soldier leads a squad of their own; anyone else rallies people.)
+        out[n++] = e.isArmed() ? CA_SQUAD : CA_RALLY;
         if (e.grenades > 0 && e.grenadeCd <= 0) out[n++] = CA_GRENADE;
         return n;
     }
@@ -4163,7 +4170,9 @@ final class World {
     private Fleet.Vehicle carToEnter(Entity e) {
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = fleet.vehicles.get(i);
-            if (Fleet.offRoad(v) || v.broken || v.player != null || v.block != null) continue;
+            // ((14.7) A helicopter too, sitting on its pad.)
+            boolean heli = v.type == Fleet.HELI && v.state == Fleet.IDLE && v.alt <= 0;
+            if ((Fleet.offRoad(v) && !heli) || v.broken || v.player != null || v.block != null) continue;
             float r = v.length() * 0.7f + 10;
             if ((v.x - e.x) * (v.x - e.x) + (v.y - e.y) * (v.y - e.y) < r * r) return v;
         }
@@ -4193,7 +4202,7 @@ final class World {
                 // The group piles in too.
                 for (int i = 0, n = entities.size(); i < n && v.riders.size() < Fleet.SEATS; i++) {
                     Entity o = entities.get(i);
-                    if (o.dead || o.leader != e || o.type == Entity.DOG) continue;
+                    if (o.dead || (o.leader != e && o.commandedBy != e) || o.type == Entity.DOG) continue;
                     if ((o.x - v.x) * (o.x - v.x) + (o.y - v.y) * (o.y - v.y) > 60 * 60) continue;
                     o.dead = true;
                     o.removed = true;
@@ -4273,6 +4282,33 @@ final class World {
                 }
                 say(got == 0 ? (have > 0 ? have + " with you" : "Nobody near enough to join you")
                         : (have + got) + (have + got == 1 ? " person is" : " people are") + " with you");
+                break;
+            }
+            case CA_SQUAD: {
+                // ((14.7) Gather a squad (officers or soldiers, whichever you are) - or, with one, send them back.)
+                int had = 0;
+                for (int i = 0, n = entities.size(); i < n; i++) {
+                    Entity o = entities.get(i);
+                    if (o.commandedBy != e) continue;
+                    o.commandedBy = null;
+                    if (o.task == Dispatch.T_SQUAD) o.task = Dispatch.T_NONE;
+                    had++;
+                }
+                if (had > 0) {
+                    say("Squad dismissed: back to their orders");
+                    break;
+                }
+                int got = 0;
+                for (int i = 0, n = gatherLiving(e.x, e.y, SQUAD_REACH); i < n && got < SQUAD_MAX; i++) {
+                    Entity o = gathered[i];
+                    if (o == e || o.dead || o.type != e.type || o.rig != null || o.ride != null || o.role == Entity.ROLE_PILOT) continue;
+                    if (o.task != Dispatch.T_NONE && o.task != Dispatch.T_RESPOND && o.task != Dispatch.T_POST && o.task != Dispatch.T_HOLD) continue;
+                    dispatch.releaseForResupply(o);
+                    o.task = Dispatch.T_SQUAD;
+                    o.commandedBy = e;
+                    o.squadSlot = got++;
+                }
+                say(got == 0 ? "Nobody near enough to follow you" : got + (got == 1 ? " follows you" : " follow you") + ": they shoot at what you shoot at");
                 break;
             }
             case CA_GRENADE: {
@@ -8356,6 +8392,52 @@ final class World {
     /** Police and soldiers patched up at the field hospital this game. */
     int treated;
 
+    /**
+     * (14.7) One of your squad: in a wedge behind you as you move, firing at whatever you're firing at, or at any of
+     * the dead coming at them. Let go (back to their own orders) once you stop playing that officer or soldier.
+     */
+    private boolean squadStep(Entity e, float dt) {
+        Entity c = e.commandedBy;
+        if (c == null || c != controlled || (c.dead && controlledCar == null && controlledIn == null)) {
+            e.commandedBy = null;
+            e.task = Dispatch.T_NONE;
+            return false;
+        }
+        // (You've driven off without them, or gone indoors: they look after themselves till you're back.)
+        if (controlledCar != null || controlledIn != null) return false;
+        Entity t = null;
+        if (ctrlAttack && ctrlTarget != null && !ctrlTarget.dead && ctrlTarget.hp > 0
+                && World.hypot(ctrlTarget.x - e.x, ctrlTarget.y - e.y) < 230 && city.los(e.x, e.y, ctrlTarget.x, ctrlTarget.y)) t = ctrlTarget;
+        if (t == null && (e.ammo > 0 || e.reserve > 0)) {
+            Entity z = pickTarget(e, 200);
+            if (z != null && (ctrlAttack || World.hypot(z.x - e.x, z.y - e.y) < 140)) t = z;
+        }
+        // Their place: a wedge behind you, the way you're facing.
+        float hx = (float) Math.cos(c.angle), hy = (float) Math.sin(c.angle);
+        int m = e.squadSlot + 1;
+        float back = 14 + (m / 2) * 12, side = (m % 2 == 0 ? 1 : -1) * (9 + (m / 2) * 8);
+        float sx = c.x - hx * back - hy * side, sy = c.y - hy * back + hx * side;
+        float dx = sx - e.x, dy = sy - e.y, sd = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        if (t != null) {
+            float d = (float) World.hypot(t.x - e.x, t.y - e.y);
+            aimAndFire(e, t, d, 230, dt);
+            // (Keeping up while they shoot, if you've moved off.)
+            if (sd > 50) steer(e, dx / sd, dy / sd, e.speed);
+            else steer(e, 0, 0, 0);
+            return true;
+        }
+        e.aiming = false;
+        if (sd > 6 && !city.solidAt(sx, sy)) {
+            float pace = Math.min(e.runSpeed, c.want + sd * 0.9f);
+            if (e.blocked || (sd > 40 && !city.los(e.x, e.y, sx, sy))) walkToSpot(e, sx, sy, pace);
+            else steer(e, dx / sd, dy / sd, pace);
+        } else {
+            steer(e, 0, 0, 0);
+            e.angle = turn(e.angle, c.angle, dt * 3);
+        }
+        return true;
+    }
+
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
     static final int MORTAR_ROUNDS = 16;
     static final float MORTAR_MIN = 150, MORTAR_MAX = 650, MORTAR_EVERY = 7, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
@@ -8517,6 +8599,8 @@ final class World {
         }
         // ((13.9) A combat medic with nothing to shoot at patches up the wounded nearby.)
         if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
+        // ((14.7) In the squad of the one you're playing: with them, and shooting at what they shoot at.)
+        if (e.task == Dispatch.T_SQUAD && squadStep(e, dt)) return;
         // ((14.2) In over their heads: radio for backup - out of rounds, falling back or hurt included.)
         maybeCallBackup(e);
         // ((14.5) Badly hurt and out of the fight: to the field hospital.)
@@ -12977,7 +13061,8 @@ final class World {
         o.dead = false;
         o.removed = false;
         o.ride = null;
-        o.task = Dispatch.T_NONE;
+        // ((14.7) Your squad, out with you, carries on following you.)
+        o.task = o.commandedBy != null && o.commandedBy == controlled ? Dispatch.T_SQUAD : Dispatch.T_NONE;
         o.taskTimer = 3;
         entities.add(o);
         return true;

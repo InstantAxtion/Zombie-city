@@ -4696,7 +4696,8 @@ final class Fleet {
         v.parked = false;
         v.pulling = false;
         v.rescue = false;
-        v.state = DRIVE;
+        // ((14.7) A helicopter: lifting off from its pad, yours to fly.)
+        v.state = v.type == HELI ? HOVER : DRIVE;
         v.field = null;
         v.alarm = 0;
         e.ride = v;
@@ -4708,8 +4709,15 @@ final class Fleet {
     void leaveWheel(Vehicle v, Entity e) {
         v.player = null;
         v.speed = 0;
-        v.parked = true;
-        v.state = ABANDONED;
+        if (v.type == HELI) {
+            // ((14.7) Down the rope where you are; it flies itself back to its pad.)
+            v.state = FLY_OUT;
+            v.homeX = v.baseX;
+            v.homeY = v.baseY;
+        } else {
+            v.parked = true;
+            v.state = ABANDONED;
+        }
         v.riders.remove(e);
         float sx = v.x + (float) Math.cos(v.angle + 1.57f) * 10, sy = v.y + (float) Math.sin(v.angle + 1.57f) * 10;
         float[] p = city.findWalkable(sx, sy);
@@ -4725,9 +4733,48 @@ final class Fleet {
         v.riders.clear();
     }
 
+    /**
+     * (14.7) Flying a helicopter: it lifts off, then goes wherever the stick points (over anything: it's in the air),
+     * nose first, and hovers when you let go. The door gunner fires at the dead below - faster with the button held.
+     */
+    private boolean playerHeli(Vehicle v, float dt) {
+        Entity e = v.player;
+        v.alt += (0.8f - v.alt) * Math.min(1, dt * 0.8f);
+        float jx = w.joyX, jy = w.joyY, mag = Math.min(1, (float) Math.sqrt(jx * jx + jy * jy));
+        float gx = v.x, gy = v.y, speed = 0, face = v.angle;
+        if (v.alt > 0.4f && mag > 0.15f) {
+            face = (float) Math.atan2(jy, jx);
+            gx = v.x + jx / mag * 220;
+            gy = v.y + jy / mag * 220;
+            speed = 135 * mag;
+        }
+        gx = Math.max(10, Math.min(city.worldW() - 10, gx));
+        gy = Math.max(10, Math.min(city.worldH() - 10, gy));
+        flyTo(v, gx, gy, Math.max(speed, 1), face, dt);
+        v.x = Math.max(5, Math.min(city.worldW() - 5, v.x));
+        v.y = Math.max(5, Math.min(city.worldH() - 5, v.y));
+        e.x = v.x;
+        e.y = v.y;
+        if (v.soundCd <= 0) {
+            v.soundCd = 0.6f;
+            w.emit(Sfx.ROTOR, v.x, v.y);
+        }
+        v.gunCd -= dt;
+        if (v.alt > 0.4f && v.gunCd <= 0) {
+            Entity z = w.nearestZombie(v.x, v.y, 210);
+            if (z != null) {
+                v.burst++;
+                v.gunCd = w.ctrlAttack ? (v.burst % 10 == 0 ? 0.6f : 0.08f) : (v.burst % 6 == 0 ? 1.4f : 0.13f);
+                w.airShot(v.x, v.y, z);
+            } else v.gunCd = 0.4f;
+        }
+        return false;
+    }
+
     /** Driving: the stick says where to go (pull back to reverse); the button sounds the horn, or fires the cannon. */
     private boolean updatePlayerVehicle(Vehicle v, float dt) {
         Entity e = v.player;
+        if (v.type == HELI && !v.broken) return playerHeli(v, dt);
         if (v.broken) {
             // Wrecked: out you get.
             if (v.riders.contains(e)) leaveWheel(v, e);
