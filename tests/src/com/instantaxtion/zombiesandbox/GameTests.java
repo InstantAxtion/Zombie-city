@@ -4028,6 +4028,57 @@ public final class GameTests {
                 check(ws[0].humans > 1000 && stations >= 2, "people and police (" + ws[0].humans + ", " + stations + " stations)");
             }
         });
+        test("15.3: the dead a grenade kills count as the thrower's kills", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 0;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 82;
+                c.normalize();
+                c.seed = 82;
+                World w = new World(c);
+                w.populate(c);
+                java.util.Random r = new java.util.Random(4);
+                float[] at = null;
+                for (int k = 0; k < 4000 && at == null; k++) {
+                    float[] q = w.city.randomWalkableInTown(r);
+                    if (w.city.findWalkable(q[0] + 70, q[1]) != null && w.city.los(q[0], q[1], q[0] + 70, q[1])) at = q;
+                }
+                // (Nobody else about to shoot them first.)
+                for (Entity o : w.entities) if (!o.dead && Math.hypot(o.x - at[0], o.y - at[1]) < 500) { o.dead = true; o.removed = true; }
+                Entity soldier = w.spawn(Entity.SOLDIER, at[0], at[1]);
+                soldier.ammo = soldier.reserve = 0;
+                float[] p = w.city.findWalkable(at[0] + 70, at[1]);
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 4; k++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, p[0] + (k % 2) * 4, p[1] + (k / 2) * 4);
+                    // (Already hurt: a grenade doesn't always finish off a fresh one.)
+                    z.hp = 50;
+                    z.armored = false;
+                    pack.add(z);
+                }
+                for (int f = 0; f < 3; f++) w.update(1 / 30f);
+                java.lang.reflect.Method tg = World.class.getDeclaredMethod("throwGrenade", Entity.class, float.class, float.class);
+                tg.setAccessible(true);
+                // (Straight onto them: no scatter.)
+                tg.invoke(w, soldier, p[0] + 2, p[1] + 2);
+                World.Grenade g = w.grenades.get(w.grenades.size() - 1);
+                g.tx = p[0] + 2;
+                g.ty = p[1] + 2;
+                int before = soldier.kills;
+                for (int f = 0; f < 45; f++) {
+                    for (Entity z : pack) z.speed = z.runSpeed = 0;
+                    soldier.ammo = soldier.reserve = 0;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int down = 0;
+                for (Entity z : pack) if (z.dead || z.hp <= 0) down++;
+                check(down >= 2, "the grenade killed some (" + down + ")");
+                check(soldier.kills - before == down, "every one of them the thrower's kill (" + (soldier.kills - before) + " of " + down + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

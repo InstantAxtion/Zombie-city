@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.2";
-    static final int VERSION_CODE = 142;
+    static final String VERSION = "15.3";
+    static final int VERSION_CODE = 143;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.3  -  Grenade kills count",
+                    "The dead killed by a grenade now count as kills for whoever threw it, and those killed by a mortar shell for the mortar team: towards their rank, the Top Fighters list and the hall of fame. A grenade that kills one of the dead on someone counts as a life saved too.",
+            },
             {
                     "15.2  -  The Downtown Towers map",
                     "A new map, Downtown Towers: a dense centre of skyscrapers on a tight grid of narrow streets, with hardly a park. Smaller blocks and many more junctions than Metropolis, towers far taller (the tallest at the heart of it), tall apartment blocks and parking garages, a railway through it, three precincts and a base.",

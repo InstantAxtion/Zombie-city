@@ -51,6 +51,8 @@ final class World {
         boolean shell;
         /** ((14.9) Where a shell was aimed (marked on the ground while it's in the air).) */
         float aimX, aimY;
+        /** ((15.3) Who threw it (or fired the mortar): the dead it kills are theirs.) */
+        Entity owner;
     }
 
     static final class Explosion {
@@ -8918,6 +8920,7 @@ final class World {
         g.ty = bestY + (rnd.nextFloat() * 2 - 1) * spread;
         g.dur = 2.2f + d / 450;
         g.shell = true;
+        g.owner = e;
         g.aimX = bestX;
         g.aimY = bestY;
         grenades.add(g);
@@ -12670,6 +12673,7 @@ final class World {
         g.tx = x + rnd.nextFloat() * 16 - 8;
         g.ty = y + rnd.nextFloat() * 16 - 8;
         g.dur = 0.9f;
+        g.owner = e;
         grenades.add(g);
     }
 
@@ -13134,13 +13138,18 @@ final class World {
     }
 
     /** ((13.5) One caught by a blast at (x, y): hurt, thrown and frightened, the more the closer. */
+    /** ((15.3) Whose grenade or mortar shell is going off now, if anyone's: the dead it kills are theirs.) */
+    private Entity blastBy;
+
     private void blast(Entity o, float x, float y, float radius, float damage) {
         if (o.dead) return;
         float ddx = o.x - x, ddy = o.y - y;
         float d = (float) Math.sqrt(ddx * ddx + ddy * ddy);
         if (d > radius) return;
         float f = 1 - d / radius;
+        boolean wasUp = o.hp > 0;
         o.hp -= damage * (0.25f + 0.75f * f);
+        if (wasUp && o.hp <= 0 && o.isZombie() && blastBy != null && !blastBy.isZombie()) killMade(blastBy, o);
         o.hurt = 1;
         o.killedByZombie = false;
         if (o.hp <= 0 && f > 0.4f) o.gibbed = true;
@@ -13863,8 +13872,11 @@ final class World {
                 // ((10.62) Smaller and weaker than before (48 across, 140): it kills what's right on it and hurts
                 // the rest, rather than clearing a street.)
                 // ((14.0) A mortar shell: a little bigger.)
+                // ((15.3) The dead it kills count as the thrower's kills.)
+                blastBy = g.owner;
                 if (g.shell) explode(g.tx, g.ty, MORTAR_BLAST, MORTAR_DAMAGE);
                 else explode(g.tx, g.ty, 36, 110);
+                blastBy = null;
             }
         }
     }

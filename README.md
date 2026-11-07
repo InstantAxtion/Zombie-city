@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Grenade kills count (15.3):** the dead a grenade or mortar shell kills are counted as the thrower's kills.
+
 **The Downtown Towers map (15.2):** a new map of skyscrapers on a tight grid of narrow streets, with hardly a park.
 
 **Six save slots and the hall of fame (15.1):** six save slots plus the autosave. Records now keeps a hall of fame of
