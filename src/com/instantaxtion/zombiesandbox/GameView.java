@@ -273,7 +273,18 @@ final class GameView extends View implements Menu.Host {
         while (CityConfig.retired(CityConfig.OPT_PRESET, demo.v[CityConfig.OPT_PRESET]));
         demo.v[CityConfig.OPT_MILITARY] = 1;
         demo.v[CityConfig.OPT_ZOMBIES] = 2;
-        loadWorld(demo);
+        // ((14.3) A Tiny one: it was a Large city of 20,000 people (120 MB, and seconds of building as the app opened),
+        // which sat in memory alongside a big saved game while it loaded - and a Colossal game on top of it ran the
+        // phone out of memory.)
+        demo.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+        try {
+            loadWorld(demo);
+        } catch (OutOfMemoryError oom) {
+            // ((14.3) Short of memory even so (another game of ours still being let go of): once more, after a clear-out.)
+            world = null;
+            System.gc();
+            loadWorld(demo);
+        }
         applySettings();
         // ((12.0) For a keyboard and mouse: a Chromebook, or a phone with a keyboard plugged in.)
         setFocusable(true);
@@ -736,6 +747,7 @@ final class GameView extends View implements Menu.Host {
             public void run() {
                 try {
                     job.run();
+                    if (released) built = null;
                 } catch (Throwable e) {
                     buildError = e;
                 }
@@ -864,8 +876,14 @@ final class GameView extends View implements Menu.Host {
         return handled;
     }
 
+    /** (14.3) This screen's gone: anything still loading is dropped when it's done, not kept. */
+    private volatile boolean released;
+
     void release() {
+        released = true;
         sound.release();
+        chunks.clear();
+        if (world != null) world.freeMemory();
     }
 
     private void centerCamera() {

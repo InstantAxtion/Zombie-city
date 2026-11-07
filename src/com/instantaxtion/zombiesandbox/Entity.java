@@ -148,6 +148,8 @@ final class Entity {
     transient float treatT, medicCd;
     /** ((13.9) The army truck with spare rounds they're on their way to, instead of the base.) */
     transient Fleet.Vehicle supplyTruck;
+    /** ((14.3) Until when a police drone overhead has this one of the dead marked for the units on the ground.) */
+    transient float spottedUntil;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;
     /** ((14.2) A raider who's opened fire on people lately: police, soldiers and armed survivors shoot back while this lasts.) */

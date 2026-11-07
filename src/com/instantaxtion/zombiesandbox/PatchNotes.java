@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.2";
-    static final int VERSION_CODE = 132;
+    static final String VERSION = "14.3";
+    static final int VERSION_CODE = 133;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.3  -  The crash on starting, backup calls, better drones",
+                    "Fixed: the game could close as it started or on Continue, out of memory, with a big game in the phone's memory. The city behind the main menu is now a Tiny one (it was a Large city of 20,000 people, about 120 MB, built as the app opened); the game is no longer restarted from scratch when the phone's theme, text size or language changes; and a game being let go of no longer holds on to what it was loading.",
+                    "Police and soldiers call for backup whenever they're outnumbered (four or more of the dead, more than two and a half to each gun there) or badly hurt with the dead on them, whatever they're doing. Before, they only called with rounds in the gun and one of the dead in their sights, and only with six or more round them - so those out of rounds, falling back, or alone against four or five never did. In a test outbreak, a call had gone out for over 90% of the time units spent in that kind of trouble.",
+                    "Every call for backup goes out on the radio: since 13.8 a second one within 15 seconds was taken for the same news and left off.",
+                    "Police drones: the dead a drone can see are marked for the police and soldiers below, who notice them even behind them, open fire from further off and hit them in the head more often. A drone's loudspeaker tells the people below to make for the nearest safe zone with room. Up to eight drones (one at each police station, from four), with longer flights and quicker charging.",
+            },
             {
                     "14.2  -  Quarantine, air strikes, looters, hidden bites and rebuilding",
                     "Quarantine: when the city is being lost (after the army has sealed off the worst district), it closes every road out of the city. Nobody leaves, infected or not: anyone on their way out is turned back and the evacuation buses and trains stop. The closed checkpoints show on the map. The quarantine is lifted once the outbreak is over.",

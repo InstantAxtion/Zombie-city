@@ -3176,6 +3176,92 @@ public final class GameTests {
                 check(!lb.collapsed, "still standing after a save");
             }
         });
+        test("14.3: units call for backup when outnumbered, out of rounds too; drones mark the dead and send people to safety", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 73;
+                c.normalize();
+                c.seed = 73;
+                World w = new World(c);
+                w.populate(c);
+                java.util.Random r = new java.util.Random(7);
+                for (int round = 0; round < 2; round++) {
+                    // A lone officer and four of the dead on them (out of rounds, the second time).
+                    w.clearZombies();
+                    w.dispatch.incidents.clear();
+                    float[] q = null;
+                    for (int k = 0; k < 2000 && q == null; k++) {
+                        float[] p = w.city.randomWalkableInTown(r);
+                        if (w.armedNear(p[0], p[1], 400) == 0) q = p;
+                    }
+                    check(q != null, "somewhere with no police about");
+                    Entity cop = w.spawn(Entity.COP, q[0], q[1]);
+                    cop.hp = cop.maxHp = 10000;
+                    if (round == 1) cop.ammo = cop.reserve = 0;
+                    for (int z = 0; z < 4; z++) {
+                        float[] p = w.city.findWalkable(q[0] + 30 + z * 6, q[1] + 10);
+                        w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                    }
+                    boolean called = false;
+                    for (int f = 0; f < 30 * 6 && !called; f++) {
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                        for (Dispatch.Incident inc : w.dispatch.incidents)
+                            if (inc.backupNeed > 0 && inc.backupBy != null && Math.hypot(inc.x - cop.x, inc.y - cop.y) < 250) called = true;
+                    }
+                    check(called, (round == 0 ? "a lone officer against four" : "an officer out of rounds") + " calls for backup");
+                    cop.dead = cop.removed = true;
+                }
+                // A drone: more of them now, and over a pack of the dead it marks them.
+                w.clearZombies();
+                w.alert = 2;
+                float[] pack = w.city.randomWalkableInTown(r);
+                for (int z = 0; z < 6; z++) w.spawn(Entity.ZOMBIE, pack[0] + z * 5, pack[1]);
+                w.update(1 / 30f);
+                check(!w.drones.isEmpty(), "drones up (" + w.drones.size() + ")");
+                World.Drone d = w.drones.get(0);
+                d.state = World.DRONE_OUT;
+                d.x = d.tx = pack[0];
+                d.y = d.ty = pack[1];
+                d.spotCd = 0;
+                d.sweepCd = 99;
+                w.update(1 / 30f);
+                int marked = 0;
+                for (Entity e : w.entities) if (!e.dead && e.isZombie() && e.spottedUntil > w.time) marked++;
+                check(marked >= 5, "the dead below it marked (" + marked + ")");
+                // And with a safe zone open, its loudspeaker sends the people below there.
+                w.clearZombies();
+                for (float[] a : w.city.openAreas) {
+                    if (!w.dispatch.zones.isEmpty()) break;
+                    if (w.city.inTown(a[0], a[1])) w.dispatch.orderZone(a[0], a[1]);
+                }
+                if (!w.dispatch.zones.isEmpty()) {
+                    Dispatch.SafeZone z = w.dispatch.zones.get(0);
+                    z.open = true;
+                    z.built = 1;
+                    java.util.List<Entity> below = new java.util.ArrayList<Entity>();
+                    for (int k = 0; k < 5; k++) {
+                        float[] p = w.city.findWalkable(d.x + k * 8, d.y + 20);
+                        Entity e = w.spawn(Entity.CIVILIAN, p[0], p[1]);
+                        e.task = Dispatch.T_NONE;
+                        below.add(e);
+                    }
+                    java.lang.reflect.Method sp = World.class.getDeclaredMethod("droneSpeaker", World.Drone.class);
+                    sp.setAccessible(true);
+                    w.update(1 / 30f);
+                    for (Entity e : below) {
+                        e.task = Dispatch.T_NONE;
+                        e.leader = null;
+                    }
+                    sp.invoke(w, d);
+                    int seeking = 0;
+                    for (Entity e : below) if (e.task == Dispatch.T_SEEK && e.heardZone) seeking++;
+                    check(seeking >= 3, "people below told to make for the safe zone (" + seeking + ")");
+                }
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

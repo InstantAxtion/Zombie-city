@@ -449,11 +449,16 @@ final class Dispatch {
     }
 
     void say(int who, Entity speaker, String text, float x, float y) {
+        say(who, speaker, text, x, y, false);
+    }
+
+    /** As above; always set, it goes out even if the same was just said (a call for backup from another fight). */
+    void say(int who, Entity speaker, String text, float x, float y, boolean always) {
         // ((13.8) The same kind of news again within a few seconds (a second "People are turning into monsters", a
         // third officer down in the same fight) is left out: it's on the map already.)
         String kind = kindOf(who, text);
         Float last = lastSaid.get(kind);
-        if (last != null && w.time - last < REPEAT && w.time >= last) {
+        if (!always && last != null && w.time - last < REPEAT && w.time >= last) {
             if (speaker != null) speaker.talkTimer = 2.5f;
             return;
         }
@@ -2110,8 +2115,9 @@ final class Dispatch {
         inc.backupNeed = want;
         inc.backupBy = name(e);
         boolean army = e.type == Entity.SOLDIER;
+        // ((14.2) Always on the radio: a second call from another fight was taken for the same news and left off.)
         say(army ? WHO_MILITARY : WHO_POLICE, e, (army ? "Contact at " : "Shots fired at ") + inc.place + ", " + World.count(hostiles, "hostile", "hostiles")
-                + " on us. Requesting backup!", e.x, e.y);
+                + " on us. Requesting backup!", e.x, e.y, true);
         callout(e.x, e.y, "BACKUP", WHO_COLORS[army ? WHO_MILITARY : WHO_POLICE]);
         if (army) {
             // Soldiers send soldiers.

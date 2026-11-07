@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The crash on starting, backup calls, better drones (14.3):** a crash running out of memory on starting or on Continue
+with a big game is fixed (the menu's background city is Tiny now). Police and soldiers call for backup whenever they're
+outnumbered or badly hurt, out of rounds or falling back included, and every call is on the radio. Police drones mark the
+dead below for the units on the ground (better aim, and they're noticed from behind) and send civilians to the nearest
+safe zone; up to eight of them.
+
 **Quarantine, air strikes, looters, hidden bites and rebuilding (14.2):** a city being lost is quarantined (every road
 out closed, nobody leaves), and the army keeps calling air strikes on the biggest crowds while it gets worse (six at
 most, each with a minute's warning). In a long outbreak armed survivors may form looting gangs that strip the shops and

@@ -2688,6 +2688,8 @@ final class World {
             boolean jumpIn = z != null && e.task == Dispatch.T_BOARD && e.rig != null
                     && World.hypot(e.rig.x - e.x, e.rig.y - e.y) < 16 && World.hypot(z.x - e.x, z.y - e.y) > 10;
             if (z != null && !jumpIn) {
+                // ((14.2) Out of rounds with the dead on them: calling for help as they back off.)
+                if (e.isArmed()) maybeCallBackup(e);
                 float ax = e.x - z.x, ay = e.y - z.y, ad = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
                 e.aiming = false;
                 e.threatX = z.x;
@@ -8191,6 +8193,26 @@ final class World {
         return best;
     }
 
+    /**
+     * (14.2) Radios for backup when outnumbered (four or more of the dead close, over two and a half to each gun there),
+     * or badly hurt with two or more on them. Looked at every few seconds whatever they're doing: before, only while
+     * they had rounds and one of the dead in their sights - so those who'd run dry, were falling back, or had lost
+     * sight of them never called - and only with six or more round them, so an officer on their own against four or
+     * five never did.
+     */
+    private void maybeCallBackup(Entity e) {
+        if (e.callCd > 0 || e.role == Entity.ROLE_PILOT || e.task == Dispatch.T_BOARD || e == controlled || e.rig != null) return;
+        e.callCd = 3;
+        int near = countZombiesNear(e.x, e.y, 110);
+        if (near < 2) return;
+        int guns = Math.max(1, armedNear(e.x, e.y, 130));
+        boolean outnumbered = near >= 4 && near > guns * 2.5f;
+        boolean hurt = e.hp < e.maxHp * 0.4f && near >= 2;
+        if (!outnumbered && !hurt) return;
+        e.callCd = 35;
+        dispatch.unitBackup(e, near);
+    }
+
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
     static final int MORTAR_ROUNDS = 16;
     static final float MORTAR_MIN = 150, MORTAR_MAX = 650, MORTAR_EVERY = 7, MORTAR_BLAST = 48, MORTAR_DAMAGE = 170;
@@ -8352,6 +8374,8 @@ final class World {
         }
         // ((13.9) A combat medic with nothing to shoot at patches up the wounded nearby.)
         if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
+        // ((14.2) In over their heads: radio for backup - out of rounds, falling back or hurt included.)
+        maybeCallBackup(e);
         // ((14.0) A mortar team shells a pack of the dead a few streets off.)
         if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e)) return;
         // ((11.0) On foot to a call a long way off, with nothing to fight here: a car or truck to take them, if
@@ -8627,15 +8651,6 @@ final class World {
 
         Entity t = e.ammo > 0 || e.reserve > 0 ? pickTarget(e, range) : null;
         e.shareCd -= dt;
-        // In over their heads: radio for backup (once in a while, not every second of the fight).
-        if (t != null && t.isZombie() && e.callCd <= 0 && e.role != Entity.ROLE_PILOT && e.task != Dispatch.T_BOARD) {
-            e.callCd = 4;
-            int near = countZombiesNear(e.x, e.y, 110);
-            if (near >= 6 && armedNear(e.x, e.y, 130) * 3 < near) {
-                e.callCd = 40;
-                dispatch.unitBackup(e, near);
-            }
-        }
         if (t != null && t.isZombie()) {
             // Remember where it was, to go and look if it slips out of sight.
             e.threatX = t.x;
@@ -10841,7 +10856,8 @@ final class World {
                     if (o.hidden && score > 22) continue;
                     // The same senses as the dead: they see a long way in front, but only notice what's close behind
                     // them (unless they're already on alert).
-                    if (e.fear <= 0 && score > 60) {
+                    // ((14.3) Unless a drone overhead has it marked: then they know where it is.)
+                    if (e.fear <= 0 && score > 60 && o.spottedUntil <= time) {
                         float facing = ((float) Math.cos(e.angle) * ddx + (float) Math.sin(e.angle) * ddy) / score;
                         if (facing < -0.2f) continue;
                     }
@@ -10915,6 +10931,8 @@ final class World {
         // they shout warnings and hold fire until it's right on them or on someone else.)
         if (alert == 0 && e.type == Entity.COP && e.role != Entity.ROLE_SWAT && d > 34 && !peopleNear(t.x, t.y, 22)) return true;
         float effective = e.type == Entity.COP ? (e.role == Entity.ROLE_SWAT ? 150 : 110) : 165;
+        // ((14.3) Further off on one a drone has marked.)
+        if (t.spottedUntil > time) effective *= 1.3f;
         return d > effective && t.biteCd <= 0 && !peopleNear(t.x, t.y, 45);
     }
 
@@ -11130,7 +11148,8 @@ final class World {
         if (rnd.nextFloat() < hit) {
             boolean wasUp = t.hp > 0;
             // Only a hit to the head really stops a zombie; body shots just wear it down.
-            boolean headshot = t.isZombie() && rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : 1);
+            boolean headshot = t.isZombie() && rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : 1)
+                    * (t.spottedUntil > time && e.isArmed() ? SPOTTED_AIM : 1);
             if (headshot) {
                 t.hp = 0;
                 t.gibbed = rnd.nextFloat() < 0.3f;
@@ -14806,12 +14825,12 @@ final class World {
      * sees, those inside buildings included, as new calls; it comes home to recharge when its battery runs low.
      */
     static final class Drone {
-        float x, y, tx, ty, homeX, homeY, battery = 100, spotCd, sweepCd;
+        float x, y, tx, ty, homeX, homeY, battery = 100, spotCd, sweepCd, speakCd;
         int number, state;
         float saidAt = -99;
     }
 
-    static final int DRONE_DOCKED = 0, DRONE_OUT = 1, DRONE_HOME = 2;
+    static final int DRONE_DOCKED = 0, DRONE_OUT = 1, DRONE_HOME = 2, MAX_DRONES = 8;
     static final float DRONE_SEE = 170;
     final ArrayList<Drone> drones = new ArrayList<Drone>();
     private boolean dronesMade;
@@ -14820,7 +14839,8 @@ final class World {
         if (!dronesMade && alert >= 1) {
             dronesMade = true;
             for (City.Facility f : city.facilities) {
-                if (f.kind != City.FACILITY_POLICE || drones.size() >= 4) continue;
+                // ((14.3) Eight at most, from four.)
+                if (f.kind != City.FACILITY_POLICE || drones.size() >= MAX_DRONES) continue;
                 Drone d = new Drone();
                 d.x = d.homeX = d.tx = f.x;
                 d.y = d.homeY = d.ty = f.y;
@@ -14834,7 +14854,8 @@ final class World {
         for (int i = 0; i < drones.size(); i++) {
             Drone d = drones.get(i);
             if (d.state == DRONE_DOCKED) {
-                d.battery = Math.min(100, d.battery + dt * 3);
+                // ((14.3) Quicker to charge, and longer in the air: 5 and 0.55 a second, from 3 and 0.8.)
+                d.battery = Math.min(100, d.battery + dt * 5);
                 if (d.battery >= 95 && alert >= 1 && zombies > 0 && droneTarget(d)) d.state = DRONE_OUT;
                 continue;
             }
@@ -14844,7 +14865,7 @@ final class World {
                 d.x += dx / dist * step;
                 d.y += dy / dist * step;
             }
-            d.battery -= dt * 0.8f;
+            d.battery -= dt * 0.55f;
             if (d.state == DRONE_HOME) {
                 if (dist < 6) {
                     d.state = DRONE_DOCKED;
@@ -14876,6 +14897,11 @@ final class World {
             if (d.spotCd <= 0) {
                 d.spotCd = 1;
                 droneSpot(d);
+            }
+            d.speakCd -= dt;
+            if (d.speakCd <= 0) {
+                d.speakCd = 5;
+                droneSpeaker(d);
             }
         }
     }
@@ -14911,8 +14937,49 @@ final class World {
         return true;
     }
 
-    /** (11.0) What a drone sees below it: the dead out in the open, and any it can see moving inside buildings. */
+    /**
+     * (14.3) A drone's loudspeaker: civilians below are told where the nearest safe zone with room is, and those with
+     * nowhere better to go make for it.
+     */
+    private void droneSpeaker(Drone d) {
+        if (!dispatch.hasRoom()) return;
+        int sent = 0;
+        for (int i = 0, n = gatherLiving(d.x, d.y, DRONE_SEE); i < n; i++) {
+            Entity e = gathered[i];
+            if (e.dead || e.type != Entity.CIVILIAN || e == controlled || e.raider || e.militia || e.infected) continue;
+            e.heardZone = true;
+            e.aware = true;
+            if (e.task == Dispatch.T_NONE && e.leader == null) {
+                e.task = Dispatch.T_SEEK;
+                sent++;
+            }
+        }
+        if (sent >= 3 && time - d.saidAt > 30) {
+            d.saidAt = time;
+            dispatch.say(Dispatch.WHO_POLICE, null, "Drone " + d.number + " (loudspeaker): Everyone on " + city.placeName(d.x, d.y)
+                    + ", make for the nearest safe zone now!", d.x, d.y);
+        }
+    }
+
+    /** (14.3) How much likelier a hit to the head is on one of the dead a drone has marked. */
+    static final float SPOTTED_AIM = 1.3f;
+
+    /**
+     * (11.0) What a drone sees below it: the dead out in the open, and any it can see moving inside buildings.
+     * ((14.3) And it marks the dead it sees for the units on the ground: they're noticed even behind someone's back,
+     * fired on from further off, and hit in the head more often.)
+     */
     private void droneSpot(Drone d) {
+        int cx0 = Math.max(0, (int) ((d.x - DRONE_SEE) / CELL)), cx1 = Math.min(gw - 1, (int) ((d.x + DRONE_SEE) / CELL));
+        int cy0 = Math.max(0, (int) ((d.y - DRONE_SEE) / CELL)), cy1 = Math.min(gh - 1, (int) ((d.y + DRONE_SEE) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (!o.dead && (o.x - d.x) * (o.x - d.x) + (o.y - d.y) * (o.y - d.y) < DRONE_SEE * DRONE_SEE) o.spottedUntil = time + 1.6f;
+                }
+            }
         int seen = countZombiesNear(d.x, d.y, DRONE_SEE);
         int inside = 0;
         City.Building found = null;
