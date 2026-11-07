@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "14.1";
-    static final int VERSION_CODE = 131;
+    static final String VERSION = "14.2";
+    static final int VERSION_CODE = 132;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "14.2  -  Quarantine, air strikes, looters, hidden bites and rebuilding",
+                    "Quarantine: when the city is being lost (after the army has sealed off the worst district), it closes every road out of the city. Nobody leaves, infected or not: anyone on their way out is turned back and the evacuation buses and trains stop. The closed checkpoints show on the map. The quarantine is lifted once the outbreak is over.",
+                    "Air strikes again: the army no longer stops at one. While it keeps getting worse it calls another every couple of minutes or so (six at most), each on the biggest crowd of the dead, each with a minute's warning.",
+                    "Looters: in a long outbreak (six minutes or more) a few armed survivors may go bad and form a gang (three at most a game) that goes from shop to shop - supermarkets, pharmacies and gun stores - stripping each bare. Anyone else at the shop with a gun, or there for supplies, gets shot at. Once a gang has opened fire, police, soldiers and armed survivors nearby shoot back. Looters wear red bandanas; the gangs break up when the outbreak ends.",
+                    "Hidden bites: a family may hide a bitten relative's bite at a safe zone's gate or a checkpoint (almost half the time), and they're let in. When they turn, it's inside, among everyone sheltering there.",
+                    "Rebuilding: two minutes into the recovery, the buildings that fell go back up one at a time, each a fenced-off building site for a while, then the building as it was, with room for people again (never with anyone on the site).",
+            },
             {
                     "14.1  -  Crash reports",
                     "If the game ever closes unexpectedly, what went wrong is written down, and the next time it starts it shows you (the version, your phone, and where in the game it happened) with a button to copy it, so it can be passed on and fixed.",

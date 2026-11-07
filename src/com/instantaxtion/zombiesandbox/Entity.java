@@ -85,6 +85,8 @@ final class Entity {
 
     /** Safe zone checkpoints: already checked for bites, and turned away. */
     boolean screened, refused;
+    /** (14.2) Bitten, and their family is hiding it: waved through the checks, and nobody's ready when they turn. */
+    transient boolean concealed;
     boolean infected, killedByZombie, gibbed, aiming, blocked, paused;
 
     int body, head, skin;
@@ -146,6 +148,12 @@ final class Entity {
     transient float treatT, medicCd;
     /** ((13.9) The army truck with spare rounds they're on their way to, instead of the base.) */
     transient Fleet.Vehicle supplyTruck;
+    /** (14.2) One of a gang of armed looters (its leader has no leader). */
+    boolean raider;
+    /** ((14.2) A raider who's opened fire on people lately: police, soldiers and armed survivors shoot back while this lasts.) */
+    transient float hostileT;
+    /** ((14.2) The shop a raider gang's leader is on the way to strip.) */
+    transient City.Building raidShop;
     /** (11.0) Signed up as a reserve pilot; and the helicopter they've been called up to fly. */
     transient boolean pilotReserve;
     transient Fleet.Vehicle pilotFor;

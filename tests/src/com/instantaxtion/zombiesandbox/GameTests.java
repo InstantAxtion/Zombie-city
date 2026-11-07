@@ -2946,6 +2946,236 @@ public final class GameTests {
                 }
             }
         });
+        test("14.2: the city quarantined - nobody leaves - and air strikes again while it gets worse", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.exodus = CityConfig.EXODUS_ALL;
+                c.seed = 41;
+                c.normalize();
+                c.seed = 41;
+                World w = new World(c);
+                w.populate(c);
+                // A pack of the dead, an outbreak under way, and people leaving town.
+                java.util.Random r = new java.util.Random(2);
+                float[] q = w.city.randomWalkableInTown(r);
+                for (int z = 0; z < 20; z++) {
+                    float[] p = w.city.findWalkable(q[0] + (z % 5) * 6, q[1] + (z / 5) * 6);
+                    w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                }
+                w.alert = 2;
+                for (int f = 0; f < 30 * 4; f++) w.update(1 / 30f);
+                int leaving = 0;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.type == Entity.CIVILIAN && e.task == Dispatch.T_NONE && leaving < 20) {
+                        e.task = Dispatch.T_LEAVE;
+                        leaving++;
+                    }
+                java.lang.reflect.Method qc = World.class.getDeclaredMethod("quarantineCity");
+                qc.setAccessible(true);
+                qc.invoke(w);
+                check(w.quarantined && !w.exodusOn(), "quarantined: nobody sets off");
+                int still = 0;
+                for (Entity e : w.entities) if (!e.dead && e.task == Dispatch.T_LEAVE) still++;
+                check(still == 0, "those on their way out turned back (" + still + " still leaving)");
+                for (int f = 0; f < 30 * 5; f++) w.update(1 / 30f);
+                still = 0;
+                for (Entity e : w.entities) if (!e.dead && e.task == Dispatch.T_LEAVE) still++;
+                check(still == 0, "and nobody else sets off (" + still + ")");
+                // Air strikes: a first, then another.
+                java.lang.reflect.Method as = World.class.getDeclaredMethod("callAirStrike", int.class, boolean.class);
+                as.setAccessible(true);
+                check((Boolean) as.invoke(w, 8, true) && w.firebombTime > 0, "an air strike called on the pack");
+                w.firebombTime = 0;
+                check((Boolean) as.invoke(w, 8, false) && w.firebombTime > 0, "and another");
+                check(!(Boolean) as.invoke(w, 500, false), "not on a crowd too small");
+                // Kept in a save.
+                w.strikes = 2;
+                w.strikeCd = 33;
+                java.io.File f = java.io.File.createTempFile("zcsq", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                check(l.quarantined && l.strikes == 2 && Math.abs(l.strikeCd - 33) < 0.01f, "the quarantine and strikes saved");
+            }
+        });
+        test("14.2: raider gangs strip the shops and shoot survivors there, and the police shoot back", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 52;
+                c.normalize();
+                c.seed = 52;
+                World w = new World(c);
+                w.populate(c);
+                java.lang.reflect.Method arm = World.class.getDeclaredMethod("armCivilian", Entity.class, int.class);
+                arm.setAccessible(true);
+                // A long outbreak, the dead far away: gangs form among armed survivors.
+                java.util.Random r = new java.util.Random(5);
+                float[] far = w.city.randomWalkable(r);
+                for (int z = 0; z < 3; z++) w.spawn(Entity.ZOMBIE, far[0], far[1]);
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && r.nextFloat() < 0.3f) arm.invoke(w, e, 30);
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                check(w.outbreak, "an outbreak on");
+                w.outbreakTime = 400;
+                java.lang.reflect.Method rd = World.class.getDeclaredMethod("raiders");
+                rd.setAccessible(true);
+                for (int k = 0; k < 3000 && w.gangsFormed == 0; k++) rd.invoke(w);
+                int gang = 0;
+                for (Entity e : w.entities) if (!e.dead && e.raider) gang++;
+                check(w.gangsFormed == 1 && gang >= 3, "a gang formed (" + gang + ")");
+                // A gang of three near a supermarket: they strip it. Then another, with an armed survivor at the shop and a
+                // police officer on the corner: they shoot, and the officer shoots back.
+                City.Building shop = null;
+                for (City.Building b : w.city.buildings)
+                    if (shop == null && !b.collapsed && b.name != null && b.kind == City.MARKET && Math.hypot(b.doorX - far[0], b.doorY - far[1]) > 600) shop = b;
+                check(shop != null, "a supermarket");
+                for (Entity e : w.entities) e.raider = false;
+                Entity boss = null;
+                boolean stripped = false, shotAt = false, shotBack = false;
+                for (int round = 0; round < 2; round++) {
+                    shop.stock = 200;
+                    float[] p0 = w.city.findWalkable(shop.doorX, shop.doorY + 60);
+                    boss = w.spawn(Entity.CIVILIAN, p0[0], p0[1]);
+                    arm.invoke(w, boss, 30);
+                    boss.raider = true;
+                    for (int k = 0; k < 2; k++) {
+                        float[] p = w.city.findWalkable(p0[0] + 8 * (k + 1), p0[1]);
+                        Entity o = w.spawn(Entity.CIVILIAN, p[0], p[1]);
+                        arm.invoke(w, o, 30);
+                        o.raider = true;
+                        o.leader = boss;
+                    }
+                    Entity victim = null, cop = null;
+                    float[] pv = null;
+                    if (round == 1) {
+                        pv = w.city.findWalkable(shop.doorX + 40, shop.doorY);
+                        victim = w.spawn(Entity.CIVILIAN, pv[0], pv[1]);
+                        arm.invoke(w, victim, 30);
+                        victim.hp = victim.maxHp = 400;
+                        float[] pc = w.city.findWalkable(shop.doorX - 70, shop.doorY + 40);
+                        cop = w.spawn(Entity.COP, pc[0], pc[1]);
+                        cop.task = Dispatch.T_HOLD;
+                        cop.postX = pc[0];
+                        cop.postY = pc[1];
+                    }
+                    w.alert = 2;
+                    float bossHp = boss.hp;
+                    for (int f = 0; f < 30 * 40; f++) {
+                        if (victim != null) {
+                            victim.x = pv[0];
+                            victim.y = pv[1];
+                            victim.task = Dispatch.T_NONE;
+                        }
+                        // (The dead kept going far off: with none left the outbreak's over and the gang breaks up.)
+                        if (f % 30 == 0 && w.zombies < 2) w.spawn(Entity.ZOMBIE, far[0], far[1]);
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                        if (round == 0 && shop.stock == 0) stripped = true;
+                        if (victim != null && victim.hp < 400) shotAt = true;
+                        if (round == 1 && (boss.hp < bossHp || boss.dead)) shotBack = true;
+                    }
+                }
+                check(stripped, "the shop stripped bare");
+                check(shotAt, "the armed survivor there shot at");
+                check(shotBack, "the police officer shot back at them");
+                // Kept in a save.
+                Entity alive = boss.dead ? null : boss;
+                for (Entity e : w.entities) if (alive == null && !e.dead && e.raider) alive = e;
+                if (alive != null) {
+                    java.io.File f = java.io.File.createTempFile("zcsr", ".dat");
+                    SaveGame.save(w, f);
+                    World l = SaveGame.load(f);
+                    f.delete();
+                    int kept = 0;
+                    for (Entity e : l.entities) if (e.raider) kept++;
+                    check(kept >= 1, "raiders saved (" + kept + ")");
+                }
+            }
+        });
+        test("14.2: families hide a bitten relative's bite at the safe zone gate", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 9;
+                c.normalize();
+                c.seed = 9;
+                World w = new World(c);
+                w.populate(c);
+                w.setMaxPopulation(100000);
+                java.lang.reflect.Method cp = World.class.getDeclaredMethod("checkpoint", Entity.class, Dispatch.SafeZone.class);
+                cp.setAccessible(true);
+                Dispatch.SafeZone z = new Dispatch.SafeZone();
+                z.place = "the test";
+                float[] p = w.city.randomWalkable(new java.util.Random(1));
+                Entity parent = w.spawn(Entity.CIVILIAN, p[0], p[1]);
+                int[] through = new int[2];
+                for (int k = 0; k < 800; k++) {
+                    boolean family = k % 2 == 1;
+                    Entity e = w.spawn(Entity.CIVILIAN, p[0], p[1]);
+                    e.infected = true;
+                    e.infectTimer = 999;
+                    if (family) e.leader = parent;
+                    boolean turnedAway = (Boolean) cp.invoke(w, e, z);
+                    if (!turnedAway) through[family ? 1 : 0]++;
+                    check(!e.concealed || family, "only a family hides a bite");
+                    e.dead = e.removed = true;
+                }
+                // Loners get through when the bite's missed (40%); a family hides it 45% of the rest (about 67% through).
+                check(through[0] > 120 && through[0] < 200, "loners through only when missed (" + through[0] + " of 400)");
+                check(through[1] > 230 && through[1] > through[0] + 50, "families get more of their bitten through (" + through[1] + " of 400)");
+                check(w.bitesHidden > 50, "bites hidden counted (" + w.bitesHidden + ")");
+            }
+        });
+        test("14.2: after the outbreak, fallen buildings are rebuilt one at a time", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 61;
+                c.normalize();
+                c.seed = 61;
+                World w = new World(c);
+                w.populate(c);
+                City.Building b = null;
+                for (City.Building x : w.city.buildings)
+                    if (b == null && !x.collapsed && x.capacity > 0 && x.height > 0 && x.name != null && x.x1 - x.x0 > 30) b = x;
+                check(b != null, "a building to knock down");
+                float height = b.height;
+                int capacity = b.capacity;
+                w.city.collapse(b);
+                check(b.collapsed && b.height == 0, "it falls");
+                // Someone standing on the rubble: not built over them.
+                Entity stander = w.spawn(Entity.CIVILIAN, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+                java.lang.reflect.Method sa = World.class.getDeclaredMethod("startAftermath", int.class);
+                sa.setAccessible(true);
+                sa.invoke(w, World.AFTER_RECOVERY);
+                boolean site = false, early = false;
+                for (int f = 0; f < 30 * 200 && b.collapsed; f++) {
+                    stander.x = (b.x0 + b.x1) / 2;
+                    stander.y = (b.y0 + b.y1) / 2;
+                    if (f > 30 * 175) stander.dead = stander.removed = true;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (b.rebuildT > 0) site = true;
+                    if (!b.collapsed && f <= 30 * 175) early = true;
+                }
+                check(site, "a building site while the work goes on");
+                check(!early, "not built over someone standing on the site");
+                check(!b.collapsed && b.height == height && b.capacity == capacity, "rebuilt as it was (" + b.height + "/" + height + ", " + b.capacity + "/" + capacity + ")");
+                int tx = (int) ((b.x0 + b.x1) / 2 / City.T), ty = (int) ((b.y0 + b.y1) / 2 / City.T);
+                check(w.city.solid[ty * w.city.w + tx], "solid walls again");
+                java.io.File f = java.io.File.createTempFile("zcsb", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                City.Building lb = l.city.buildings.get(w.city.buildings.indexOf(b));
+                check(!lb.collapsed, "still standing after a save");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

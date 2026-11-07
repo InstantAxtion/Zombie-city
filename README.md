@@ -419,6 +419,12 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Quarantine, air strikes, looters, hidden bites and rebuilding (14.2):** a city being lost is quarantined (every road
+out closed, nobody leaves), and the army keeps calling air strikes on the biggest crowds while it gets worse (six at
+most, each with a minute's warning). In a long outbreak armed survivors may form looting gangs that strip the shops and
+shoot whoever's there; police, soldiers and armed survivors shoot back. Families sometimes hide a bitten relative's
+bite to get them into a safe zone. After the outbreak, fallen buildings are rebuilt one at a time.
+
 **Crash reports (14.1):** if the game closes unexpectedly, the next time it starts it shows what went wrong, with a
 button to copy it.
 

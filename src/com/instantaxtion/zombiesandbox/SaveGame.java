@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 51;
+    private static final int VERSION = 52;
 
     private SaveGame() {
     }
@@ -341,6 +341,10 @@ final class SaveGame {
             // ((12.4) Version 51: the strain's traits added in 12.4.)
             out.writeInt(World.TR_COUNT - World.TR_OLD);
             for (int t = World.TR_OLD; t < World.TR_COUNT; t++) out.writeByte((w.trait[t] ? 1 : 0) | (w.traitKnown[t] ? 2 : 0));
+            // (Version 52, 14.2: the city's quarantine and the air strikes.)
+            out.writeBoolean(w.quarantined);
+            out.writeInt(w.strikes);
+            out.writeFloat(w.strikeCd);
         } finally {
             moved = null;
             homeIndex = null;
@@ -417,6 +421,8 @@ final class SaveGame {
         out.writeBoolean(e.outsider);
         // Version 36: the dead in body armour.
         out.writeBoolean(e.armored);
+        // Version 52 (14.2): a looter in a raider gang.
+        out.writeBoolean(e.raider);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -765,6 +771,15 @@ final class SaveGame {
                 // (A game saved before 12.4: none of the newer traits, not whatever this run happened to roll.)
                 for (int t = World.TR_OLD; t < World.TR_COUNT; t++) w.trait[t] = w.traitKnown[t] = false;
             }
+            if (version >= 52) {
+                w.quarantined = in.readBoolean();
+                w.strikes = in.readInt();
+                w.strikeCd = in.readFloat();
+            } else if (w.escalation >= 2) {
+                // (Saved before 14.2, after the one air strike there used to be.)
+                w.strikes = 1;
+                w.strikeCd = 120;
+            }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -838,6 +853,7 @@ final class SaveGame {
         }
         if (version >= 31) e.outsider = in.readBoolean();
         if (version >= 36) e.armored = in.readBoolean();
+        if (version >= 52) e.raider = in.readBoolean();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

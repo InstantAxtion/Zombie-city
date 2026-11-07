@@ -89,6 +89,10 @@ final class City {
     static final class Building {
         final float x0, y0, x1, y1;
         float height;
+        /** ((14.2) Its height and room before it fell, to build it back to; and seconds left of the work on it.) */
+        float builtHeight;
+        int builtCapacity;
+        transient float rebuildT;
         final int roof, wall, seed, kind;
         /** Civilians can hide inside homes, offices and warehouses: the door, room and barricade. */
         float doorX, doorY, barricade = 100, calmTimer, releaseTimer;
@@ -8008,6 +8012,10 @@ final class City {
 
     /** Knocks a building down: its tiles become a walkable heap of rubble. */
     void collapse(Building b) {
+        if (!b.collapsed) {
+            b.builtHeight = b.height;
+            b.builtCapacity = b.capacity;
+        }
         b.collapsed = true;
         b.height = 0;
         b.occupants.clear();
@@ -8026,6 +8034,58 @@ final class City {
         // ((13.3) The ways on foot still work (a building down only opens new ways): each is worked out again in its
         // turn, not all at once the next moment - which stopped a Colossal game dead every time a building fell.)
         fieldsStale();
+    }
+
+    /**
+     * (14.2) A fallen building put back up: the rubble cleared, the walls and roof as they were, room for as many
+     * inside. False if it isn't down (or anything's still on the ground there - the caller checks for people).
+     */
+    boolean rebuild(Building b) {
+        if (!b.collapsed) return false;
+        int tx0 = (int) (b.x0 / T), ty0 = (int) (b.y0 / T), tx1 = (int) (b.x1 / T), ty1 = (int) (b.y1 / T);
+        for (int j = ty0; j < ty1; j++)
+            for (int i = tx0; i < tx1; i++) {
+                int k = j * w + i;
+                if (tiles[k] != RUBBLE) continue;
+                tiles[k] = BUILDING;
+                solid[k] = true;
+                solidChanged(k);
+                opaque[k] = true;
+            }
+        b.collapsed = false;
+        b.height = b.builtHeight > 0 ? b.builtHeight : FLOOR + 3;
+        b.capacity = b.builtCapacity;
+        b.hp = b.maxHp;
+        b.markCount = 0;
+        b.smashed = false;
+        b.rebuildT = 0;
+        redrawArea(b.x0 - 6, b.y0 - 6, b.x1 + 6, b.y1 + 6);
+        fieldsStale();
+        return true;
+    }
+
+    /** (14.2) Draws this part of the map again, as it is now, into the map picture (a building put back up). */
+    synchronized void redrawArea(float x0, float y0, float x1, float y1) {
+        Canvas c = new Canvas(bitmap);
+        if (detail != 1f) c.scale(detail, detail);
+        c.clipRect(x0, y0, x1, y1);
+        regionOnly = true;
+        rwx0 = x0;
+        rwy0 = y0;
+        rwx1 = x1;
+        rwy1 = y1;
+        rx0 = Math.max(0, (int) (x0 / T) - 3);
+        ry0 = Math.max(0, (int) (y0 / T) - 3);
+        rx1 = Math.min(w, (int) (x1 / T) + 3);
+        ry1 = Math.min(h, (int) (y1 / T) + 3);
+        try {
+            render(c);
+            for (Building b : buildings) if (b.collapsed && !offRegion(b.x0, b.y0, b.x1, b.y1)) drawRubble(c, b);
+            for (int[] t : charred) charTile(c, t[0], t[1]);
+        } finally {
+            regionOnly = false;
+        }
+        changed(x0, y0, x1, y1);
     }
 
     private void drawRubble(Building b) {

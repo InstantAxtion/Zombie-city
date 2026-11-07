@@ -2317,6 +2317,7 @@ final class World {
                         + count(civiliansLost, "civilian", "civilians") + " lost.");
                 startAftermath(AFTER_RECOVERY);
                 calmDown();
+                if (quarantined) liftQuarantine();
             } else if (h == 0 || (h <= startHumans * FALLEN && z > h) || (armed == 0 && h <= Math.max(5, startHumans / 12) && z > h)) {
                 outbreak = false;
                 warResult = 2;
@@ -2613,6 +2614,10 @@ final class World {
             if (e.infectTimer <= 0) {
                 e.hp = 0;
                 e.killedByZombie = true;
+                // ((14.2) A hidden bite, turning among the people sheltering in a safe zone.)
+                if (e.concealed && e.zone != null && !e.zone.removed && e.task == Dispatch.T_SHELTER)
+                    dispatch.say(e.zone.military ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null, (e.zone.military ? "Military: " : "Police: ")
+                            + "Someone has turned inside the " + e.zone.place + " safe zone. Their family had hidden the bite!", e.x, e.y);
                 return;
             }
         }
@@ -4419,6 +4424,8 @@ final class World {
             thinkMilitia(e, dt);
             if (e.militia) return;
         }
+        // ((14.2) A raider gang: out to strip the shops, and they'll shoot whoever's there for the same.)
+        if (e.raider && raiderStep(e, dt)) return;
         // ((10.31) Not even looking when the nearest of the dead is well out of reach: most of a big city, most
         // of the time.)
         boolean zNear = city.fieldAt(city.zombieDist, e.x, e.y) <= 100 / City.T + 6;
@@ -6513,6 +6520,7 @@ final class World {
         leadersDecide(1);
         supplies();
         fieldSupplies();
+        raiders();
         militias();
         if (outbreak) updateWar();
         int z = zombieCount();
@@ -7852,7 +7860,7 @@ final class World {
             Entity e = gathered[i];
             if (e.type != Entity.CIVILIAN || e.dead || !e.infected || e.screened) continue;
             e.screened = true;
-            if (rnd.nextFloat() < 0.25f) continue;
+            if (rnd.nextFloat() < 0.25f || hidesBite(e)) continue;
             turnedAway++;
             e.refused = true;
             e.task = Dispatch.T_NONE;
@@ -7867,11 +7875,30 @@ final class World {
         }
     }
 
+    /** (14.2) How often a family hides a bitten relative's bite at a check. */
+    static final float HIDE_BITE = 0.45f;
+    /** Bites families have hidden this game (and got through the checks). */
+    int bitesHidden;
+
+    /**
+     * (14.2) Someone bitten who's out with their family (with a leader, or leading others): the family may hide it
+     * rather than see them turned away. Then they're through the check, and nobody's watching them when they turn.
+     */
+    private boolean hidesBite(Entity e) {
+        boolean family = (e.leader != null && !e.leader.dead && e.leader.type == Entity.CIVILIAN) || (hashFrame > 0 && e.followerFrame == hashFrame);
+        if (!family || rnd.nextFloat() >= HIDE_BITE) return false;
+        e.concealed = true;
+        bitesHidden++;
+        return true;
+    }
+
     private boolean checkpoint(Entity e, Dispatch.SafeZone z) {
         if (!e.infected || e.screened) return false;
         e.screened = true;
         // The bite was missed (the army's medics miss fewer than the police).
         if (rnd.nextFloat() < (z.military ? 0.2f : 0.4f)) return false;
+        // ((14.2) Or their family hides it: covered up, and they talk their way through.)
+        if (hidesBite(e)) return false;
         String where = z.place;
         turnedAway++;
         e.refused = true;
@@ -8018,6 +8045,150 @@ final class World {
             dispatch.say(Dispatch.WHO_MILITARY, e, inc != null ? "Long walk to " + inc.place + ". Getting a truck." : "Long walk back to base. Getting a truck.", e.x, e.y);
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------ (14.2) raider gangs
+
+    /** Gangs formed this game, and raiders out on the streets right now (counted each second). */
+    int gangsFormed, raidersActive;
+    static final int MAX_GANGS = 3;
+    /** How far a raider shoots at people round a shop, and how long they count as hostile after firing. */
+    static final float RAID_REACH = 100, HOSTILE_TIME = 20;
+
+    /**
+     * (14.2) Once a second: a long outbreak turns some survivors bad. After six minutes, now and then (three at most a
+     * game) an armed civilian and a few armed people near them form a gang that goes from shop to shop taking
+     * everything, and shoots anyone there for the same. They're on their own once it's over.
+     */
+    private void raiders() {
+        int active = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (!e.raider) continue;
+            if (!outbreak || e.isZombie()) {
+                // (It's over, or they've turned: no gang any more.)
+                e.raider = false;
+                e.raidShop = null;
+                e.hostileT = 0;
+                continue;
+            }
+            if (!e.dead) active++;
+        }
+        raidersActive = active;
+        if (!outbreak || outbreakTime < 360 || gangsFormed >= MAX_GANGS || rnd.nextFloat() > 0.012f) return;
+        Entity boss = null;
+        for (int tries = 0; tries < 300 && boss == null; tries++) {
+            Entity e = entities.get(rnd.nextInt(entities.size()));
+            if (mayRaid(e)) boss = e;
+        }
+        if (boss == null) return;
+        java.util.ArrayList<Entity> gang = new java.util.ArrayList<Entity>();
+        for (int i = 0, n = gatherLiving(boss.x, boss.y, 220); i < n && gang.size() < 4; i++) {
+            Entity o = gathered[i];
+            if (o != boss && mayRaid(o)) gang.add(o);
+        }
+        if (gang.size() < 2) return;
+        boss.raider = true;
+        boss.leader = null;
+        for (Entity o : gang) {
+            o.raider = true;
+            o.leader = boss;
+        }
+        gangsFormed++;
+        String where = city.placeName(boss.x, boss.y);
+        dispatch.say(Dispatch.WHO_INFO, null, "Info: An armed gang is looting the shops near " + where + ". Keep away from them.", boss.x, boss.y);
+        timeline("Looters on " + where);
+    }
+
+    /** Could join a raider gang: an armed civilian on their own, out on the street, with nothing else on. */
+    private boolean mayRaid(Entity e) {
+        return !e.dead && e.type == Entity.CIVILIAN && e.hasGun && !e.raider && e.ammo + e.reserve > 0 && e != controlled
+                && (e.leader == null || !e.leader.raider) && e.task == Dispatch.T_NONE && e.zone == null && !e.militia
+                && e.holdout == null && e.building == null && !e.infected;
+    }
+
+    /**
+     * (14.2) A raider's turn: the dead close by come first (the usual way: they're armed survivors too). Otherwise the
+     * leader makes for the nearest shop with anything left and strips it, and the gang follows; at a shop, anyone else
+     * there with a gun or after the same is shot at. True while busy with that.
+     */
+    private boolean raiderStep(Entity e, float dt) {
+        if (e.hostileT > 0) e.hostileT -= dt;
+        if (nearest(e, 80, true, false) != null || e == controlled) return false;
+        Entity boss = e.leader != null && e.leader.raider && !e.leader.dead ? e.leader : e;
+        if (boss != e && e.leader != null && !e.leader.raider) e.leader = null;
+        City.Building shop = boss.raidShop;
+        // Anyone else at the shop, after the same: shot at.
+        if (shop != null && World.hypot(shop.doorX - e.x, shop.doorY - e.y) < 160 && (e.ammo > 0 || e.reserve > 0)) {
+            Entity v = victimNear(e);
+            if (v != null) {
+                float d = (float) World.hypot(v.x - e.x, v.y - e.y);
+                if (e.hostileT <= 0 && boss.hostileT <= 0)
+                    dispatch.say(Dispatch.WHO_911, null, "911: \"There's a gang shooting people at " + shop.name + "! They're taking everything!\"", v.x, v.y);
+                e.hostileT = HOSTILE_TIME;
+                aimAndFire(e, v, d, RAID_REACH + 20, dt);
+                return true;
+            }
+        }
+        if (boss != e) {
+            // Keeping up with the leader.
+            float d = (float) World.hypot(boss.x - e.x, boss.y - e.y);
+            if (d > 28) walkToSpot(e, boss.x + (e.nameSeed % 9), boss.y + (e.nameSeed / 9 % 9), e.runSpeed * 0.9f);
+            else steer(e, 0, 0, 0);
+            return true;
+        }
+        if (shop == null || shop.collapsed || shop.stock <= 0) {
+            shop = e.raidShop = raidTarget(e.x, e.y);
+            if (shop == null) return false;
+        }
+        float dx = shop.doorX - e.x, dy = shop.doorY - e.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        if (d > 12) {
+            walkToSpot(e, shop.doorX, shop.doorY, e.runSpeed * 0.85f);
+            return true;
+        }
+        // Stripped: everything on the shelves, rounds for the whole gang.
+        shop.stock = 0;
+        for (int i = 0, n = gatherLiving(e.x, e.y, 120); i < n; i++) {
+            Entity o = gathered[i];
+            if (o.raider && (o == e || o.leader == e) && o.hasGun) o.reserve = Math.max(o.reserve, 90);
+        }
+        dispatch.say(Dispatch.WHO_INFO, null, "Info: Looters have stripped " + shop.name + " bare.", shop.doorX, shop.doorY);
+        e.raidShop = null;
+        return true;
+    }
+
+    /** The nearest shop with something left to take: a supermarket, a pharmacy or a gun store. */
+    private City.Building raidTarget(float x, float y) {
+        City.Building best = null;
+        float bd = 2200;
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            if (b.collapsed || b.stock <= 0 || b.name == null) continue;
+            if (b.kind != City.MARKET && b.kind != City.PHARMACY && !(b.kind == City.SHOP && b.shopType == 1)) continue;
+            float d = (float) World.hypot(b.doorX - x, b.doorY - y);
+            if (d < bd) {
+                bd = d;
+                best = b;
+            }
+        }
+        return best;
+    }
+
+    /** Someone at the shop a raider would shoot: anyone else armed, or on a supply run, close by and in sight. */
+    private Entity victimNear(Entity e) {
+        Entity best = null;
+        float bd = RAID_REACH;
+        for (int i = 0, n = gatherLiving(e.x, e.y, RAID_REACH); i < n; i++) {
+            Entity o = gathered[i];
+            if (o == e || o.dead || o.raider || o.isZombie() || o.type == Entity.DOG) continue;
+            if (!o.isArmed() && !o.hasGun && o.task != Dispatch.T_LOOT) continue;
+            float d = (float) World.hypot(o.x - e.x, o.y - e.y);
+            if (d < bd && city.los(e.x, e.y, o.x, o.y)) {
+                bd = d;
+                best = o;
+            }
+        }
+        return best;
     }
 
     /** (14.0) Mortars: rounds carried, how near and far they'll fire, how often, and the blast. */
@@ -9789,6 +9960,14 @@ final class World {
     /** The army escalates as the city is lost: first it seals off the worst district, then it bombs it. */
     int escalation;
     float firebombTime, firebombX, firebombY;
+    /**
+     * ((14.2) The whole city sealed: every road out closed by the army, nobody let out, infected or not. And the air
+     * strikes so far, and the time till the army will think about another.)
+     */
+    boolean quarantined;
+    int strikes;
+    float strikeCd;
+    static final int MAX_STRIKES = 6;
     String firebombPlace;
 
     private void escalate() {
@@ -9801,30 +9980,84 @@ final class World {
             int d = worstDistrict();
             if (d >= 0 && sealDistrict(d) > 0) escalation = 1;
             else escalation = 1;
-        } else if (escalation == 1 && outbreakTime > 420 * pace && warBalance < 0.3f + bias) {
-            escalation = 2;
-            // Aim at the thickest crowd of the dead.
-            float bx = 0, by = 0;
-            int best = 0;
-            for (int i = 0, n = entities.size(); i < n; i += Math.max(1, n / 300)) {
-                Entity z = entities.get(i);
-                if (z.dead || !z.isZombie()) continue;
-                int c = countZombiesNear(z.x, z.y, 120);
-                if (c > best) {
-                    best = c;
-                    bx = z.x;
-                    by = z.y;
-                }
-            }
-            if (best < 8) return;
-            firebombX = bx;
-            firebombY = by;
-            firebombTime = 60;
-            firebombPlace = city.placeName(bx, by);
-            banner("AIR STRIKE IN 60 SECONDS", "The army is going to bomb " + firebombPlace + ". Get everyone out!");
-            dispatch.say(Dispatch.WHO_MILITARY, null, "Military: We're losing the city. In 60 seconds we bomb " + firebombPlace
-                    + ". Anyone still there, get out now!", bx, by);
         }
+        // ((14.2) Then the whole city: every road out sealed, nobody leaves.)
+        if (!quarantined && escalation >= 1 && outbreakTime > 330 * pace && warBalance < 0.36f + bias) quarantineCity();
+        if (escalation == 1 && outbreakTime > 420 * pace && warBalance < 0.3f + bias) {
+            escalation = 2;
+            if (callAirStrike(8, true)) strikes = 1;
+            strikeCd = 120 * pace;
+        } else if (escalation >= 2 && firebombTime <= 0 && strikes < MAX_STRIKES && (strikeCd -= 1) <= 0) {
+            // ((14.2) And again, while it keeps getting worse: the biggest crowd of the dead each time.)
+            strikeCd = (90 + rnd.nextFloat() * 60) * pace;
+            if (warBalance < 0.25f + bias && callAirStrike(12, false)) strikes++;
+        }
+    }
+
+    /**
+     * An air strike on the thickest crowd of the dead (at least min of them together), in 60 seconds: everyone there
+     * is warned to get out. False if there's no crowd big enough.
+     */
+    private boolean callAirStrike(int min, boolean first) {
+        float bx = 0, by = 0;
+        int best = 0;
+        for (int i = 0, n = entities.size(); i < n; i += Math.max(1, n / 300)) {
+            Entity z = entities.get(i);
+            if (z.dead || !z.isZombie()) continue;
+            int c = countZombiesNear(z.x, z.y, 120);
+            if (c > best) {
+                best = c;
+                bx = z.x;
+                by = z.y;
+            }
+        }
+        if (best < min) return false;
+        firebombX = bx;
+        firebombY = by;
+        firebombTime = 60;
+        firebombPlace = city.placeName(bx, by);
+        banner(first ? "AIR STRIKE IN 60 SECONDS" : "ANOTHER AIR STRIKE IN 60 SECONDS", "The army is going to bomb " + firebombPlace + ". Get everyone out!");
+        dispatch.say(Dispatch.WHO_MILITARY, null, (first ? "Military: We're losing the city. In 60 seconds we bomb " : "Military: Another strike. In 60 seconds we bomb ")
+                + firebombPlace + ". Anyone still there, get out now!", bx, by);
+        timeline("Air strike called on " + firebombPlace);
+        return true;
+    }
+
+    /** (14.2) The whole city sealed off: nobody leaves - those on their way out are turned back, the buses and trains stop. */
+    private void quarantineCity() {
+        quarantined = true;
+        if (exits == null) findExits();
+        banner("CITY QUARANTINED", "The army has closed every road out. Nobody leaves, infected or not.");
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: The city is under quarantine. Every road out is closed and guarded. "
+                + "Nobody leaves - go to a safe zone.", city.worldW() / 2, city.worldH() / 2);
+        timeline("The city is quarantined");
+        turnBackLeavers();
+        fleet.exodusOver();
+    }
+
+    /** (14.2) The outbreak's over: the roads out open again. */
+    private void liftQuarantine() {
+        quarantined = false;
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: The quarantine is lifted. The roads out of the city are open again.",
+                city.worldW() / 2, city.worldH() / 2);
+    }
+
+    /** Whoever was on their way out of the city turns round (and goes home, if they have one). */
+    private void turnBackLeavers() {
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.task == Dispatch.T_LEAVE) {
+                e.exitStop = -1;
+                e.task = e.home != null ? Dispatch.T_HOMECOMING : Dispatch.T_NONE;
+                e.path = null;
+                e.goalCd = 0;
+            }
+        }
+    }
+
+    /** (14.2) The roads out of the city, for drawing the checkpoints while it's quarantined (null if not known). */
+    float[][] exits() {
+        return exits;
     }
 
     private void updateFirebomb(float dt) {
@@ -10020,6 +10253,7 @@ final class World {
 
     private void startAftermath(int kind) {
         aftermath = kind;
+        rebuildCd = 120;
         afterTime = 0;
         afterTick = 0;
         flareCd = 150 + rnd.nextFloat() * 150;
@@ -10102,8 +10336,67 @@ final class World {
         }
     }
 
+    /** (14.2) How long rebuilding a fallen building takes, and the gap before the next one starts. */
+    static final float REBUILD_TIME = 45, REBUILD_GAP = 20;
+    int rebuilt;
+    private float rebuildCd = 120;
+
+    /**
+     * (14.2) Two minutes into the recovery, the fallen buildings go back up one at a time: a fenced-off site with
+     * the work going on, then the building as it was, with room for people again. Not while anyone's on the site.
+     */
+    private void rebuilding() {
+        City.Building site = null;
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            if (b.rebuildT <= 0) continue;
+            site = b;
+            b.rebuildT -= 1;
+            if (b.rebuildT > 0 || !b.collapsed) break;
+            if (peopleOn(b)) {
+                b.rebuildT = 2;
+                break;
+            }
+            if (city.rebuild(b)) {
+                rebuilt++;
+                // (Any bodies left in the rubble taken away first.)
+                for (int k = corpses.size() - 1; k >= 0; k--) {
+                    Corpse c = corpses.get(k);
+                    if (c.x > b.x0 && c.x < b.x1 && c.y > b.y0 && c.y < b.y1) corpses.remove(k);
+                }
+                collapsedCount = Math.max(0, collapsedCount - 1);
+                if (b.name != null) dispatch.say(Dispatch.WHO_INFO, null, "News: " + b.name + " has been rebuilt.", b.doorX, b.doorY);
+            }
+            break;
+        }
+        if (site != null || (rebuildCd -= 1) > 0) return;
+        rebuildCd = REBUILD_GAP;
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            if (!b.collapsed) continue;
+            b.rebuildT = REBUILD_TIME;
+            if (rebuilt == 0) dispatch.say(Dispatch.WHO_INFO, null, "News: Work has started on rebuilding what fell, beginning on "
+                    + city.placeName(b.doorX, b.doorY) + ".", b.doorX, b.doorY);
+            return;
+        }
+    }
+
+    /** Anyone (or any vehicle) on a building's footprint. */
+    private boolean peopleOn(City.Building b) {
+        for (int i = 0, n = gatherLiving((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, Math.max(b.x1 - b.x0, b.y1 - b.y0)); i < n; i++) {
+            Entity e = gathered[i];
+            if (!e.dead && e.x > b.x0 - e.radius && e.x < b.x1 + e.radius && e.y > b.y0 - e.radius && e.y < b.y1 + e.radius) return true;
+        }
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (!v.removedFromFleet && v.x > b.x0 - 10 && v.x < b.x1 + 10 && v.y > b.y0 - 10 && v.y < b.y1 + 10) return true;
+        }
+        return false;
+    }
+
     private void recoveryRest() {
         int t = (int) afterTime;
+        rebuilding();
         // Survivor groups take their barricades down and go home.
         if (afterTime > 90)
             for (int i = 0; i < holdouts.size(); i++) {
@@ -10565,6 +10858,24 @@ final class World {
                     }
                 }
             }
+        // ((14.2) A raider who's been shooting people: the police, soldiers and other armed survivors shoot back, once
+        // there's none of the dead closer.)
+        if (raidersActive > 0 && !e.raider && (e.isArmed() || e.hasGun))
+            for (int cy = cy0; cy <= cy1; cy++)
+                for (int cx = cx0; cx <= cx1; cx++) {
+                    int c = cy * gw + cx;
+                    for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                        Entity o = sorted[k];
+                        if (!o.raider || o.dead || o.hp <= 0 || o.hostileT <= 0) continue;
+                        float ddx = o.x - e.x, ddy = o.y - e.y, d2 = ddx * ddx + ddy * ddy;
+                        if (d2 > range * range) continue;
+                        float score = (float) Math.sqrt(d2) + 40;
+                        if (score < best && city.los(e.x, e.y, o.x, o.y) && !friendInLine(e, o, (float) Math.sqrt(d2) + 0.001f)) {
+                            best = score;
+                            res = o;
+                        }
+                    }
+                }
         return res;
     }
 
@@ -13475,7 +13786,7 @@ final class World {
 
     /** People are leaving the city right now (and the buses and trains are running). */
     boolean exodusOn() {
-        return city.cfg.exodus() && exodusStarted && outbreak && alert >= 2;
+        return city.cfg.exodus() && exodusStarted && outbreak && alert >= 2 && !quarantined;
     }
 
     /** Leaving by bus and train is one of the ways people go. */
@@ -13498,6 +13809,11 @@ final class World {
         exodusTick = 1;
         if (exits == null) findExits();
         if (exits.length == 0) return;
+        // ((14.2) Quarantined: nobody new sets off, and anyone still on their way is turned back.)
+        if (quarantined && outbreak) {
+            turnBackLeavers();
+            return;
+        }
         if (!outbreak || alert < 2) {
             // (It's over: whoever was still on their way out turns round and goes home.)
             for (int i = 0, m = entities.size(); i < m; i++) {

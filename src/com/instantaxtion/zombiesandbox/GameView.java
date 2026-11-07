@@ -2646,6 +2646,42 @@ final class GameView extends View implements Menu.Host {
             stroke.setColor(alpha(0xFFFFE8B0, 0.35f * (1 - t)));
             c.drawCircle(r[0], r[1], rad, stroke);
         }
+        if (world.aftermath == World.AFTER_RECOVERY) {
+            // ((14.2) A fallen building being rebuilt: the site fenced off, scaffolding going up.)
+            for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
+                City.Building b = world.city.buildings.get(i);
+                if (b.rebuildT <= 0 || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
+                float done = 1 - b.rebuildT / World.REBUILD_TIME;
+                stroke.setStrokeWidth(1.6f);
+                stroke.setColor(0xFF8C6E3A);
+                float sx0 = b.x0 + 2, sy0 = b.y0 + 2, sx1 = b.x1 - 2, sy1 = b.y1 - 2;
+                for (float x = sx0; x <= sx1; x += 8) c.drawLine(x, sy0, x, sy0 + (sy1 - sy0) * done, stroke);
+                c.drawLine(sx0, sy0, sx1, sy0 + (sy1 - sy0) * done, stroke);
+                c.drawLine(sx1, sy0, sx0, sy0 + (sy1 - sy0) * done, stroke);
+                stroke.setStrokeWidth(1.4f);
+                stroke.setColor(0xFFF2C21C);
+                c.drawRect(b.x0 - 1, b.y0 - 1, b.x1 + 1, b.y1 + 1, stroke);
+                stroke.setColor(0xFF1C1C1C);
+                for (float x = b.x0; x < b.x1; x += 6) {
+                    c.drawLine(x, b.y0 - 1, Math.min(b.x1, x + 3), b.y0 - 1, stroke);
+                    c.drawLine(x, b.y1 + 1, Math.min(b.x1, x + 3), b.y1 + 1, stroke);
+                }
+            }
+        }
+        float[][] exits = world.quarantined ? world.exits() : null;
+        if (exits != null) {
+            // ((14.2) The city's quarantine: a red and white barrier across each road out, and a red ring round it.)
+            for (float[] q : exits) {
+                if (q[0] < vx0 - 40 || q[0] > vx1 + 40 || q[1] < vy0 - 40 || q[1] > vy1 + 40) continue;
+                stroke.setColor(0xC0E0302A);
+                stroke.setStrokeWidth(2.5f);
+                c.drawCircle(q[0], q[1], 30, stroke);
+                for (int k = -3; k < 3; k++) {
+                    fill.setColor(k % 2 == 0 ? 0xFFE0302A : 0xFFF2F2F2);
+                    c.drawRect(q[0] + k * 5, q[1] - 2, q[0] + k * 5 + 5, q[1] + 2, fill);
+                }
+            }
+        }
         if (world.firebombTime > 0) {
             // The target area, pulsing.
             float pulse = 0.5f + 0.5f * (float) Math.sin(world.time * 6);
@@ -6305,6 +6341,12 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
             if (scale > 2.5f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
                     || e.type == Entity.RUNNER)) drawHair(c, e, r);
+            if (e.raider) {
+                // ((14.2) A looter: a red bandana over the face.)
+                fill.setColor(0xFFB0221C);
+                oval.set(r * 0.2f, -r * 0.5f, r * 0.66f, r * 0.5f);
+                c.drawOval(oval, fill);
+            }
             if (e.type == Entity.COP) {
                 if (e.agency == 4) {
                     // Federal agents: bareheaded, a dark cap of hair.
@@ -6956,6 +6998,7 @@ final class GameView extends View implements Menu.Host {
         if (e.type == Entity.DOG) title = Names.dog(e.nameSeed) + "  -  Dog";
         else if (e.type == Entity.ZOMBIE_DOG) title = Names.dog(e.nameSeed) + "  -  Zombie dog";
         else if (e.isZombie()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
+        else if (e.raider) title = Names.person(e.nameSeed) + "  -  Looter" + (e.leader == null ? ", gang leader" : "");
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SWAT)
             title = Country.swat()[1] + " " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SAR) title = "Rescue specialist " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
