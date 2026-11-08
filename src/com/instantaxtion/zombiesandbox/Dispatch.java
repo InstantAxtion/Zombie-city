@@ -2290,6 +2290,13 @@ final class Dispatch {
 
     private int arrivedWaves;
 
+    /** (15.9) Police or soldiers (by type) called in from outside and on their way, not yet on the map. */
+    int incoming(int type) {
+        int n = 0;
+        for (int i = 0; i < arrivals.size(); i++) if (arrivals.get(i).type == type) n += arrivals.get(i).count;
+        return n;
+    }
+
     private void arrive(Arrival a) {
         // ((10.60) The call they were sent to is over by the time they get here: on to whichever needs them most.)
         if (a.zone == null && (a.incident == null || a.incident.resolved || a.incident.zombiesNear == 0)) {

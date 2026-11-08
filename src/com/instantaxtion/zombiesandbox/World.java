@@ -5044,6 +5044,14 @@ final class World {
         }
         float ax = e.x - e.threatX, ay = e.y - e.threatY;
         float d = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
+        // ((15.9) Run as far as they can - to the water's edge, the end of a pier - with the dead well behind:
+        // they stop there and get their breath back rather than keep pushing at the water.)
+        if (e.blocked && d > 80 && e.stuckTime > 0.5f) {
+            e.fleeTimer = 0;
+            e.fear = Math.min(e.fear, 10);
+            steer(e, 0, 0, 0);
+            return;
+        }
         // ((12.5) No jumping into an abandoned car and driving off: civilians don't drive.)
         // Run towards a cop or soldier if one is nearby and not back where the zombies are.
         // ((10.34) Looked for every half second or so, not every frame, by everyone running.)
@@ -5770,6 +5778,16 @@ final class World {
             }
         }
         if (best != null && min > 0) e.wanderAngle = (float) Math.atan2(best[1] - y, best[0] - x);
+        // ((15.9) A place of their own a little way from the spot, on open sand: everyone near went for the very same
+        // spot, crowded round it and stood there pushing, never quite getting to it.)
+        if (best != null) {
+            for (int k = 0; k < 6; k++) {
+                float jx = best[0] + (rnd.nextFloat() * 2 - 1) * 14, jy = best[1] + (rnd.nextFloat() * 2 - 1) * 14;
+                int t = city.tileIndex(jx, jy);
+                if (t >= 0 && !city.solid[t] && city.tiles[t] == City.SAND && !city.circleBlocked(jx, jy, e.radius + 1)) return new float[]{jx, jy};
+            }
+            return new float[]{best[0], best[1]};
+        }
         return best;
     }
 
@@ -5857,6 +5875,11 @@ final class World {
                     e.jobStep = (e.nameSeed >> 3) % 3 == 0 ? 1 : 0;
                 }
                 float bx = e.spot[0] - e.x, by = e.spot[1] - e.y;
+                // ((15.9) Near enough, held up by the crowd or the water's edge: here will do.)
+                if (bx * bx + by * by < 40 * 40 && (e.blocked || e.stuckTime > 0.6f)) {
+                    e.spot = new float[]{e.x, e.y};
+                    bx = by = 0;
+                }
                 if (bx * bx + by * by > 12 * 12) {
                     // (Time on the way there counts too, so a beach that can't be reached is given up on.)
                     e.dutyWait += dt;
@@ -13084,7 +13107,11 @@ final class World {
                 }
             }
         }
-        steer(e, bx * 0.7f + ax * 0.3f, by * 0.7f + ay * 0.3f, speed);
+        // ((15.9) Straight away from them only when that's open ground: on a beach or out on a pier it's the water,
+        // and they ran into the sea's edge and stood there pushing at it.)
+        float reach = e.radius + 6;
+        boolean awayOpen = !city.circleBlocked(e.x + ax * reach, e.y + ay * reach, e.radius);
+        steer(e, bx * 0.7f + (awayOpen ? ax * 0.3f : 0), by * 0.7f + (awayOpen ? ay * 0.3f : 0), speed);
         float l = (float) Math.sqrt(e.mx * e.mx + e.my * e.my) + 0.001f;
         e.mx /= l;
         e.my /= l;

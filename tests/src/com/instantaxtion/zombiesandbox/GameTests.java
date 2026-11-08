@@ -4211,13 +4211,77 @@ public final class GameTests {
                 check(loose == 0, "nobody locked up any more");
                 Entity someone = null;
                 for (Entity e : w.entities) if (!e.dead && !e.isZombie() && w.inPrison(e.x, e.y) && e.type == Entity.CIVILIAN) someone = e;
-                check(city.findPath(someone.x, someone.y, town[0], town[1], 60000) != null, "a way out now");
+                // (From open ground where they stand: someone pressed against a wall in the crush starts on its edge.)
+                float[] from = city.findWalkable(someone.x, someone.y);
+                check(city.findPath(from[0], from[1], town[0], town[1], 120000) != null, "a way out now");
                 // Kept in a save: still fallen, the gate still open.
                 java.io.File file = java.io.File.createTempFile("zcsb", ".dat");
                 SaveGame.save(w, file);
                 World l = SaveGame.load(file);
                 file.delete();
                 check(l.prisonFallen && !l.city.solidAt(gx, gy + City.T / 2f), "still open after a save");
+            }
+        });
+        test("15.9: Marines land from just offshore, near the fight, and count at once; people stop at the water's edge", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.PRISON_ISLAND;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 9;
+                c.normalize();
+                c.seed = 9;
+                World w = new World(c);
+                w.setMaxPopulation(0);
+                w.populate(c);
+                City city = w.city;
+                // A call a little way inland from the seafront.
+                java.util.Random r = new java.util.Random(1);
+                float[] at = null;
+                for (int k = 0; k < 5000 && at == null; k++) {
+                    float[] q = city.randomWalkableInTown(r);
+                    if (q[1] > (city.seaY - 30) * City.T && q[1] < (city.seaY - 8) * City.T) at = q;
+                }
+                Dispatch.Incident inc = w.dispatch.sighting(at[0], at[1], null);
+                w.recountLive();
+                int before = w.counts[Entity.SOLDIER];
+                check(w.fleet.marineLanding(16, at[0], at[1], "the test", inc), "Marines sent by boat");
+                w.recountLive();
+                check(w.counts[Entity.SOLDIER] == before + 16, "counted at once, still aboard (" + (w.counts[Entity.SOLDIER] - before) + " of 16)");
+                Fleet.Vehicle boat = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.type == Fleet.BOAT) boat = v;
+                check(boat.boatPath.length <= Fleet.MARINE_RUN, "in from just offshore (" + boat.boatPath.length + " tiles)");
+                int ashore = 0;
+                for (int f = 0; f < 30 * 40 && ashore < 16; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    ashore = 0;
+                    for (Entity e : w.entities) if (!e.dead && e.role == Entity.ROLE_MARINE) ashore++;
+                }
+                check(ashore == 16, "all of them ashore within 40 seconds (" + ashore + ")");
+                float near = Float.MAX_VALUE;
+                for (Entity e : w.entities) if (!e.dead && e.role == Entity.ROLE_MARINE) near = Math.min(near, (float) Math.hypot(e.x - at[0], e.y - at[1]));
+                check(near < 700, "put ashore near the call (" + (int) near + " away)");
+                // Someone who ran from the dead to the water's edge, the dead long behind: they stop there.
+                float[] edge = city.findWalkable(at[0], (city.seaY + 1.5f) * City.T);
+                Entity e = w.spawn(Entity.CIVILIAN, edge[0], edge[1]);
+                e.threatX = edge[0];
+                e.threatY = edge[1] - 200;
+                e.fear = 40;
+                e.fleeTimer = 6;
+                e.aware = true;
+                float px = 0, py = 0;
+                for (int f = 0; f < 30 * 6; f++) {
+                    if (f == 30 * 3) {
+                        px = e.x;
+                        py = e.y;
+                    }
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                // (Off along the shore, or stopped: not standing there pushing at the water.)
+                float moved = (float) Math.hypot(e.x - px, e.y - py);
+                check(e.want < 1 || moved > 20, "not pushing at the water (want " + e.want + ", moved " + moved + " in 3 seconds)");
             }
         });
         test("every screen draws", new Check() {

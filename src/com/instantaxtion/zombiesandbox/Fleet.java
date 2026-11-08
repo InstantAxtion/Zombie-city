@@ -1387,24 +1387,52 @@ final class Fleet {
                     q[tail++] = j;
                 }
         }
-        // The landing: the water beside a bit of open shore nearest the fighting (the nearest within reach).
+        // The landing: the water beside a bit of open shore nearest the fighting.
+        // ((15.9) Looked for further and further out until there's one (a call deep inland on a big island had none
+        // within reach, and no Marines came); never a pier or a jetty, nor the prison island; and only a shore with
+        // a way on foot from it to the fighting - they were put ashore where they couldn't get anywhere.)
         int best = -1, land = -1;
-        float bd = 1600 * 1600;
-        int tx0 = (int) (tx / City.T), ty0 = (int) (ty / City.T), reach = 1600 / City.T;
-        for (int y = Math.max(1, ty0 - reach); y < Math.min(h0 - 1, ty0 + reach); y++)
-            for (int x = Math.max(1, tx0 - reach); x < Math.min(w0 - 1, tx0 + reach); x++) {
-                int t = y * w0 + x;
-                if (dist[t] == Integer.MAX_VALUE || city.tiles[t] != City.WATER) continue;
-                for (int j : new int[]{t - 1, t + 1, t - w0, t + w0}) {
-                    if (city.tiles[j] == City.WATER || city.solidTile(j % w0, j / w0) || (city.bridge != null && city.bridge[j])) continue;
-                    float dx = (j % w0 - tx0) * City.T, dy = (j / w0 - ty0) * City.T, d = dx * dx + dy * dy;
-                    if (d < bd) {
-                        bd = d;
-                        best = t;
-                        land = j;
+        int tx0 = (int) (tx / City.T), ty0 = (int) (ty / City.T);
+        float[] goal = city.findWalkable(tx, ty);
+        for (int reach : new int[]{100, 250, Math.max(w0, h0)}) {
+            java.util.ArrayList<long[]> cands = new java.util.ArrayList<long[]>();
+            for (int y = Math.max(1, ty0 - reach); y < Math.min(h0 - 1, ty0 + reach); y++)
+                for (int x = Math.max(1, tx0 - reach); x < Math.min(w0 - 1, tx0 + reach); x++) {
+                    int t = y * w0 + x;
+                    if (dist[t] == Integer.MAX_VALUE || city.tiles[t] != City.WATER) continue;
+                    for (int j : new int[]{t - 1, t + 1, t - w0, t + w0}) {
+                        byte jt = city.tiles[j];
+                        if (jt == City.WATER || jt == City.PIER || city.solidTile(j % w0, j / w0) || (city.bridge != null && city.bridge[j])) continue;
+                        if (w.inPrison((j % w0 + 0.5f) * City.T, (j / w0 + 0.5f) * City.T)) continue;
+                        long dx = j % w0 - tx0, dy = j / w0 - ty0;
+                        cands.add(new long[]{dx * dx + dy * dy, t, j});
                     }
                 }
+            if (cands.isEmpty()) continue;
+            java.util.Collections.sort(cands, new java.util.Comparator<long[]>() {
+                @Override
+                public int compare(long[] a, long[] b) {
+                    return Long.compare(a[0], b[0]);
+                }
+            });
+            // (The nearest few, until one has a way on foot to the call; spread out so it's not the same bit of
+            // beach tried eight times over.)
+            int tried = 0;
+            long lastD = -1;
+            for (int k = 0; k < cands.size() && tried < 8 && best < 0; k++) {
+                long[] cd = cands.get(k);
+                if (lastD >= 0 && cd[0] - lastD < 36) continue;
+                lastD = cd[0];
+                tried++;
+                int j = (int) cd[2];
+                float lx = (j % w0 + 0.5f) * City.T, ly = (j / w0 + 0.5f) * City.T;
+                if (goal == null || city.findPath(lx, ly, goal[0], goal[1], 60000) != null) {
+                    best = (int) cd[1];
+                    land = j;
+                }
             }
+            if (best >= 0) break;
+        }
         if (best < 0) return false;
         // The way in: from the shore back out along the falling distances, then turned round.
         java.util.ArrayList<Integer> path = new java.util.ArrayList<Integer>();
@@ -1418,8 +1446,11 @@ final class Fleet {
             c = next;
         }
         java.util.Collections.reverse(path);
-        int[] route = new int[path.size()];
-        for (int k = 0; k < route.length; k++) route[k] = path.get(k);
+        // ((15.9) In from just offshore, not from the far edge of the map: on the big maps the boats were minutes
+        // out at sea before they got anywhere near.)
+        int skip = Math.max(0, path.size() - MARINE_RUN);
+        int[] route = new int[path.size() - skip];
+        for (int k = 0; k < route.length; k++) route[k] = path.get(k + skip);
         int boats = (count + 7) / 8;
         for (int b = 0; b < boats; b++) {
             Vehicle v = make(BOAT);
@@ -1441,6 +1472,9 @@ final class Fleet {
         }
         return true;
     }
+
+    /** (15.9) How far out (tiles of water) the landing craft start their run in to the shore. */
+    static final int MARINE_RUN = 70;
 
     /** (11.0) A landing boat: in along its way over the water, Marines ashore, a while covering them, then gone. */
     private boolean updateBoat(Vehicle v, float dt) {
@@ -1465,7 +1499,7 @@ final class Fleet {
             int t = v.boatPath[v.boatAt];
             float gx = (t % w0 + 0.5f) * City.T, gy = (t / w0 + 0.5f) * City.T;
             float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-            v.speed = Math.min(v.speed + dt * 50, 120);
+            v.speed = Math.min(v.speed + dt * 60, 160);
             if (d < 4) v.boatAt++;
             else {
                 float step = Math.min(d, v.speed * dt);
@@ -5528,8 +5562,17 @@ final class Fleet {
     /** People aboard vehicles, by type (they still count). */
     void countCrews(int[] counts) {
         for (int i = 0, n = vehicles.size(); i < n; i++) {
-            ArrayList<Entity> c = vehicles.get(i).crew;
+            Vehicle v = vehicles.get(i);
+            ArrayList<Entity> c = v.crew;
             for (int k = 0; k < c.size(); k++) counts[c.get(k).type]++;
+            // ((15.9) And the police and soldiers riding along, and reinforcements still aboard the trucks, cars,
+            // boats and helicopters bringing them in: they weren't counted till they climbed out.)
+            for (int k = 0; k < v.riders.size(); k++) {
+                int t = v.riders.get(k).type;
+                if (t == Entity.COP || t == Entity.SOLDIER) counts[t]++;
+            }
+            if (v.passengers > 0 && (v.passengerType == Entity.COP || v.passengerType == Entity.SOLDIER) && !v.removedFromFleet)
+                counts[v.passengerType] += v.passengers;
         }
     }
 

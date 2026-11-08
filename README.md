@@ -419,6 +419,10 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Marines that arrive, reinforcements counted, nobody stuck at the water (15.9):** the Marines land from just offshore,
+near the fight, wherever it is; reinforcements on their way in count with the police and military (and +N for those
+still coming); people no longer get stuck at the water's edge, on piers or in crowds on the beach.
+
 **A far bigger prison, and the army (15.8):** the island prison is now huge (up to 350 inmates, two rows of cell
 blocks, towers all round the wall), and the Prison Island map has an army base.
 

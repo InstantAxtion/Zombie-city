@@ -6984,6 +6984,9 @@ final class GameView extends View implements Menu.Host {
                 text.setTextAlign(Paint.Align.LEFT);
                 // Label and number never run into each other: shrink the row if the column is narrow.
                 String num = String.valueOf(rows[t]);
+                // ((15.9) And those called in from outside and on their way.)
+                int coming = t == 1 ? d.incoming(Entity.COP) : t == 2 ? d.incoming(Entity.SOLDIER) : 0;
+                if (coming > 0) num += "  +" + coming;
                 float size = text.getTextSize();
                 if (rowScale < 1) text.setTextSize(size * rowScale);
                 c.drawText(ROW_LABELS[t], x0 + 26 * dp, ty, text);

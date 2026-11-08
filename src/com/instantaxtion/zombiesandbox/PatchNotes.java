@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.8";
-    static final int VERSION_CODE = 148;
+    static final String VERSION = "15.9";
+    static final int VERSION_CODE = 149;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "15.9  -  Marines that arrive, reinforcements counted, nobody stuck at the water",
+                    "Marines: the landing craft come in from just offshore, not from the far edge of the map (on the big island maps they were minutes out at sea), and a little faster. A call deep inland no longer means no Marines at all: they land on the nearest shore there is. And only where there's a way on foot from the beach to the fight - never on a pier, a jetty or the prison island.",
+                    "Reinforcements count: police and soldiers aboard the trucks, cars, boats and helicopters bringing them in (and anyone riding along) are counted with the police and the military, and those called in from outside and still on their way show as +N beside them.",
+                    "Fixed: people stuck on beaches and piers. Running from the dead, they ran into the water's edge or out to the end of a pier and stood there pushing; now they turn along the shore, and with the dead well behind them they stop and get their breath back. And on the beach, everyone near no longer heads for the very same spot and stands there in a crush: each finds a place of their own.",
+            },
             {
                     "15.8  -  A far bigger prison, and the army",
                     "The island prison is far bigger: half the width of the map and most of the bay, with two rows of cell blocks round the exercise yard, watchtowers every thirty tiles or so all round the wall, up to 350 inmates and the guards to match.",
