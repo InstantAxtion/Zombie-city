@@ -316,7 +316,9 @@ final class Nav {
 
     // ------------------------------------------------------------------ tile A*, in a box
 
-    private int[] aG, aFrom, aStamp;
+    private int[] aG, aStamp;
+    /** ((16.4) Which way each tile was reached from, as one of the eight directions: a byte, not a whole tile index. */
+    private byte[] aFrom;
     private long[] aHeap = new long[4096];
     private int aRun;
 
@@ -324,7 +326,7 @@ final class Nav {
     private int[] astar(int s, int g, int x0, int y0, int x1, int y1, int maxExpand) {
         if (aG == null) {
             aG = new int[w * h];
-            aFrom = new int[w * h];
+            aFrom = new byte[w * h];
             aStamp = new int[w * h];
         }
         int run = ++aRun;
@@ -332,7 +334,6 @@ final class Nav {
         int gx = g % w, gy = g / w, size = 0;
         aStamp[s] = run;
         aG[s] = 0;
-        aFrom[s] = -1;
         aHeap[size++] = ((long) heur(s % w, s / w, gx, gy) << 32) | s;
         int expanded = 0;
         while (size > 0) {
@@ -343,9 +344,9 @@ final class Nav {
             if (f - heur(tx, ty, gx, gy) > aG[t]) continue;
             if (t == g) {
                 int n = 0;
-                for (int k = t; k != s; k = aFrom[k]) n++;
+                for (int k = t; k != s; k -= DX[aFrom[k]] + DY[aFrom[k]] * w) n++;
                 int[] path = new int[n];
-                for (int k = t, i = n - 1; k != s; k = aFrom[k]) path[i--] = k;
+                for (int k = t, i = n - 1; k != s; k -= DX[aFrom[k]] + DY[aFrom[k]] * w) path[i--] = k;
                 return path;
             }
             if (++expanded > maxExpand) return null;
@@ -359,7 +360,7 @@ final class Nav {
                 if (aStamp[nb] == run && ng >= aG[nb]) continue;
                 aStamp[nb] = run;
                 aG[nb] = ng;
-                aFrom[nb] = t;
+                aFrom[nb] = (byte) q;
                 if (size == aHeap.length) aHeap = Arrays.copyOf(aHeap, size * 2);
                 aHeap[size] = ((long) (ng + heur(nx, ny, gx, gy)) << 32) | nb;
                 up(aHeap, size++);

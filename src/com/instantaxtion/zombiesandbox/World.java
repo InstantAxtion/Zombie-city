@@ -5717,9 +5717,9 @@ final class World {
      * fit: with too few kept, people setting out on their walks had them worked out again and again, and the
      * big maps lagged with hardly anything happening.)
      */
-    private final java.util.LinkedHashMap<float[], char[]> fieldCache = new java.util.LinkedHashMap<float[], char[]>(32, 0.75f, true) {
+    private final java.util.LinkedHashMap<float[], City.WalkField> fieldCache = new java.util.LinkedHashMap<float[], City.WalkField>(32, 0.75f, true) {
         @Override
-        protected boolean removeEldestEntry(java.util.Map.Entry<float[], char[]> eldest) {
+        protected boolean removeEldestEntry(java.util.Map.Entry<float[], City.WalkField> eldest) {
             return size() > fieldBudget();
         }
     };
@@ -5808,7 +5808,7 @@ final class World {
         float[] p = areaPoint(a);
         float ddx = p[0] - e.x, ddy = p[1] - e.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
         if (d < near) return true;
-        char[] f = fieldCache.get(a);
+        City.WalkField f = fieldCache.get(a);
         if (f == null) {
             if (pathBudget < 1) {
                 wander(e, speed * 0.7f);
@@ -7201,7 +7201,7 @@ final class World {
             Entity e = entities.get(i);
             if (e.dead || e.type != Entity.CIVILIAN || e.asked || e.infected || e.fleeTimer > 0) continue;
             if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_SEEK) continue;
-            if (World.hypot(e.x - office.x, e.y - office.y) > 900 || city.fieldAt(city.field(office), e.x, e.y) >= City.FAR) continue;
+            if (World.hypot(e.x - office.x, e.y - office.y) > 900 || !city.reaches(city.field(office), e.x, e.y)) continue;
             asks--;
             e.asked = true;
             if (rnd.nextFloat() < willingness(e)) {
@@ -13000,20 +13000,23 @@ final class World {
 
     /** Walks one tile downhill in a distance field. Returns false if there is nowhere lower to go. */
     /** (10.31) The same, along a 16-bit field (the facilities'). */
-    private boolean followField(Entity e, char[] field, float speed) {
+    private boolean followField(Entity e, City.WalkField field, float speed) {
         if (field == null) return false;
-        int w = city.w;
         int tx = (int) (e.x / City.T), ty = (int) (e.y / City.T);
-        int cur = field[city.tileIndex(e.x, e.y)];
-        if (cur >= City.FAR_C || cur == 0) return false;
-        int best = cur, bx = -1, by = -1;
+        int cur = field.code(tx, ty);
+        // (Out of its reach, or there already.)
+        if (cur <= 1) return false;
+        int best = 0, bx = -1, by = -1;
         for (int oy = -1; oy <= 1; oy++) {
             for (int ox = -1; ox <= 1; ox++) {
                 if (ox == 0 && oy == 0) continue;
                 int nx = tx + ox, ny = ty + oy;
                 if (city.solidTile(nx, ny)) continue;
                 if (ox != 0 && oy != 0 && (city.solidTile(tx + ox, ty) || city.solidTile(tx, ty + oy))) continue;
-                int v = field[ny * w + nx];
+                int code = field.code(nx, ny);
+                if (code == 0) continue;
+                // (How much nearer than here: the place itself nearest of all.)
+                int v = code == 1 ? -100000 : City.wrapDiff(code, cur);
                 if (v < best) {
                     best = v;
                     bx = nx;
@@ -13030,7 +13033,7 @@ final class World {
      * barricade put up since it was worked out) is left alone for a few seconds: it used to fail on one tile and
      * work on the next, and they went back and forth between the two - and straight at the call - and stood there.)
      */
-    private void headFor(Entity e, char[] field, float x, float y, float d, float speed) {
+    private void headFor(Entity e, City.WalkField field, float x, float y, float d, float speed) {
         if (time >= e.fieldOffUntil && followField(e, field, speed)) return;
         if (field != null && time >= e.fieldOffUntil) e.fieldOffUntil = time + 4;
         if (d > 60) walkToSpot(e, x, y, speed);

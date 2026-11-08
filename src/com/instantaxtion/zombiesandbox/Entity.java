@@ -124,7 +124,7 @@ final class Entity {
     /** A spot to stand at: guard posts and player orders. */
     float postX, postY;
     /** Path to an ordered destination. */
-    int[] orderField;
+    City.WalkField orderField;
     /** The building a civilian is running to hide in. */
     City.Building building;
     /** A dropped gun a civilian is going to pick up. */

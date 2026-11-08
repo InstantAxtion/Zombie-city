@@ -41,7 +41,7 @@ final class Dispatch {
         float swatWait;
         /** (11.0) A BearCat sent. */
         boolean bearcatRequested;
-        char[] field;
+        City.WalkField field;
         /** A post on the cordon round the outbreak (World.updateCordon), or -1 for a real call. */
         int cordonPost = -1;
         /** (10.46) A guard spot at an army checkpoint on the road into an infection zone, or null. */
@@ -196,7 +196,8 @@ final class Dispatch {
     final ArrayList<Message> log = new ArrayList<Message>();
     private final ArrayList<Arrival> arrivals = new ArrayList<Arrival>();
     private final ArrayList<Entity> picked = new ArrayList<Entity>();
-    final int[] zoneField;
+    /** ((16.4) Kept compact: see City.WalkField. */
+    City.WalkField zoneField = new City.WalkField();
 
     /** Reserves left to call in: police backup waves and military squads (4 each). Never refilled. */
     int policeReserve, squadReserve, airSorties, tankReserve;
@@ -361,8 +362,6 @@ final class Dispatch {
         squadReserve = reinforcementLevel > 0 ? OUTSIDE_SOLDIERS : 0;
         airSorties = 0;
         tankReserve = TANKS[reinforcementLevel];
-        zoneField = new int[city.w * city.h];
-        java.util.Arrays.fill(zoneField, City.FAR);
     }
 
     static String name(Entity e) {
@@ -951,8 +950,7 @@ final class Dispatch {
     void order(java.util.List<Entity> units, float x, float y) {
         float[] p = city.findWalkable(x, y);
         if (p == null || units.isEmpty()) return;
-        int[] field = new int[city.w * city.h];
-        city.walkFieldFromPoints(field, new float[]{p[0]}, new float[]{p[1]}, 1);
+        City.WalkField field = city.walkField16(p[0], p[1]);
         for (int i = 0; i < units.size(); i++) {
             Entity e = units.get(i);
             release(e);
@@ -3206,6 +3204,6 @@ final class Dispatch {
                 n++;
             }
         }
-        city.walkFieldFromPoints(zoneField, xs, ys, n);
+        zoneField = city.walkFieldFrom(xs, ys, n);
     }
 }

@@ -907,9 +907,9 @@ final class City {
      * time someone needs it, and only the most recently used kept: a Gigantic city has dozens of facilities, and
      * one of these for each took most of a phone's memory. ((10.54) 32 MB of them at most, not 96.)
      */
-    private final java.util.LinkedHashMap<Facility, char[]> facilityFields = new java.util.LinkedHashMap<Facility, char[]>(16, 0.75f, true) {
+    private final java.util.LinkedHashMap<Facility, WalkField> facilityFields = new java.util.LinkedHashMap<Facility, WalkField>(16, 0.75f, true) {
         @Override
-        protected boolean removeEldestEntry(java.util.Map.Entry<Facility, char[]> eldest) {
+        protected boolean removeEldestEntry(java.util.Map.Entry<Facility, WalkField> eldest) {
             // ((10.55) But never fewer than there are stations, bases and hospitals: on a Gigantic map with twenty of
             // them, keeping only a dozen meant people heading for the nearest station had theirs worked out again
             // and again, and the game crawled with hardly a zombie about.)
@@ -931,9 +931,9 @@ final class City {
         return fieldsNeeded;
     }
 
-    /** (Kept as 16-bit distances, half the memory: FAR_C means out of reach.) */
-    char[] field(Facility f) {
-        char[] a = facilityFields.get(f);
+    /** (Kept compact: see WalkField.) */
+    WalkField field(Facility f) {
+        WalkField a = facilityFields.get(f);
         if (a == null) {
             a = walkField16(f.x, f.y);
             facilityFields.put(f, a);
@@ -980,23 +980,84 @@ final class City {
         staleFields.clear();
     }
 
-    /** (10.31) A 16-bit walking field to (x, y) (half the memory: calls each have one). */
-    char[] walkField16(float x, float y) {
+    /**
+     * ((16.4) A way on foot to one place, kept small. Following one only ever compares a tile with the tiles beside
+     * it, and two tiles side by side are never more than a couple of steps apart in walking cost - so each tile keeps
+     * its distance in one byte, wrapping round, and the order between neighbours comes out just the same. And only
+     * over the ground it reaches: a call's way, worked out a few hundred tiles out, is a box that size, not the whole
+     * map. Each was the whole map at two bytes a tile - 6.5 MB on a Large map, dozens kept at once; a player's
+     * order, at four, was 13 MB.)
+     */
+    static final class WalkField {
+        int x0, y0, fw, fh;
+        byte[] d = new byte[0];
+
+        /** 0: out of reach; 1: the place itself; otherwise 2 + the distance, wrapped round at WRAP. */
+        int code(int tx, int ty) {
+            int x = tx - x0, y = ty - y0;
+            if (x < 0 || y < 0 || x >= fw || y >= fh) return 0;
+            return d[y * fw + x] & 0xFF;
+        }
+    }
+
+    static final int WRAP = 250;
+
+    /** How much further b is than a, from their codes (both 2 or more): exact for neighbours. */
+    static int wrapDiff(int b, int a) {
+        int dd = (b - a) % WRAP;
+        if (dd > WRAP / 2) dd -= WRAP;
+        else if (dd < -WRAP / 2) dd += WRAP;
+        return dd;
+    }
+
+    /** Packs a whole-map walking field (FAR for out of reach) into a WalkField. */
+    WalkField packField(int[] dist) {
+        int x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (int y = 0, i = 0; y < h; y++)
+            for (int x = 0; x < w; x++, i++)
+                if (dist[i] < FAR_C) {
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+        WalkField f = new WalkField();
+        if (x1 < 0) return f;
+        f.x0 = x0;
+        f.y0 = y0;
+        f.fw = x1 - x0 + 1;
+        f.fh = y1 - y0 + 1;
+        f.d = new byte[f.fw * f.fh];
+        for (int y = 0; y < f.fh; y++)
+            for (int x = 0, i = (y + y0) * w + x0, o = y * f.fw; x < f.fw; x++, i++, o++) {
+                int v = dist[i];
+                f.d[o] = (byte) (v >= FAR_C ? 0 : v == 0 ? 1 : 2 + v % WRAP);
+            }
+        return f;
+    }
+
+    /** A walking field to the nearest of n points. */
+    WalkField walkFieldFrom(float[] xs, float[] ys, int n) {
+        if (fieldTmp == null) fieldTmp = new int[w * h];
+        walkFieldFromPoints(fieldTmp, xs, ys, n, FAR);
+        return packField(fieldTmp);
+    }
+
+    /** Whether a walking field reaches (x, y). */
+    boolean reaches(WalkField f, float x, float y) {
+        return f != null && f.code((int) (x / T), (int) (y / T)) != 0;
+    }
+
+    /** (10.31) A walking field to (x, y). */
+    WalkField walkField16(float x, float y) {
         return walkField16(x, y, FAR);
     }
 
     /** (10.55) The same, only searching out to limit (people walk to a park nearby, not across the map). */
-    char[] walkField16(float x, float y, int limit) {
+    WalkField walkField16(float x, float y, int limit) {
         if (fieldTmp == null) fieldTmp = new int[w * h];
         walkFieldFromPoints(fieldTmp, new float[]{x}, new float[]{y}, 1, limit);
-        char[] a = new char[w * h];
-        for (int i = 0; i < a.length; i++) a[i] = (char) Math.min(FAR_C, fieldTmp[i]);
-        return a;
-    }
-
-    int fieldAt(char[] field, float x, float y) {
-        int v = field[tileIndex(x, y)];
-        return v >= FAR_C ? FAR : v;
+        return packField(fieldTmp);
     }
 
     // ------------------------------------------------------------------ close-ups

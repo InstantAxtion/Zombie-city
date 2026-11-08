@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Less memory (16.4):** walking routes (to facilities, calls, parks, safe zones and move orders) are stored at a byte a tile and only over the ground they reach; vehicle routes take half the room. Large runs in about 640 MB instead of 800; the memory warnings are Large 700 MB, Big 520, Default 440. Building interiors were never the problem: they're made only for buildings you zoom into, at most 400 at once, and take well under 1 MB.
+
 **Place names, and a bigger brush (16.3):** brush sizes 1, 10, 25 and 50. District and island names go on their own dry land, never on the water, and are shown on the map only when zoomed well out; close in, the district you move into is named briefly at the bottom of the screen.
 
 **Smoother running (16.2):** less work each frame on the bigger maps and fewer stutters: shorter everyday trips for cars and patrols on big maps, reachability checks remembered for a few seconds, units on their way to a merged call keep their route, steep ground worked out once at build time, and a vehicle off the road no longer searches the whole map.

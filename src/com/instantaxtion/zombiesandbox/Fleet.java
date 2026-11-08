@@ -784,7 +784,13 @@ final class Fleet {
     }
 
     static final class Route {
-        private int[] keys, vals;
+        private int[] keys;
+        /**
+         * ((16.4) The distances, two bytes each - four only for a route that needs it, and few do: the routes the
+         * vehicles carry were the biggest thing in a Large map's memory after the map itself.)
+         */
+        private char[] vals16;
+        private int[] vals32;
         private int mask, size;
 
         Route(int entries) {
@@ -792,19 +798,21 @@ final class Fleet {
             int n = 16;
             while (n * 3 < entries * 4) n <<= 1;
             keys = new int[n];
-            vals = new int[n];
+            vals16 = new char[n];
             java.util.Arrays.fill(keys, -1);
             mask = n - 1;
         }
 
         private void grow() {
-            int[] ok = keys, ov = vals;
+            int[] ok = keys, ov32 = vals32;
+            char[] ov16 = vals16;
             keys = new int[ok.length * 2];
-            vals = new int[ok.length * 2];
+            if (ov32 != null) vals32 = new int[ok.length * 2];
+            else vals16 = new char[ok.length * 2];
             java.util.Arrays.fill(keys, -1);
             mask = keys.length - 1;
             size = 0;
-            for (int i = 0; i < ok.length; i++) if (ok[i] != -1) put(ok[i], ov[i]);
+            for (int i = 0; i < ok.length; i++) if (ok[i] != -1) put(ok[i], ov32 != null ? ov32[i] : ov16[i]);
         }
 
         private int slot(int k) {
@@ -815,18 +823,24 @@ final class Fleet {
         void put(int k, int v) {
             next = null;
             if ((size + 1) * 4 > keys.length * 3) grow();
+            if (vals32 == null && (v < 0 || v > 0xFFFF)) {
+                vals32 = new int[vals16.length];
+                for (int i = 0; i < vals16.length; i++) vals32[i] = vals16[i];
+                vals16 = null;
+            }
             int i = slot(k);
             while (keys[i] != -1 && keys[i] != k) i = (i + 1) & mask;
             if (keys[i] == -1) size++;
             keys[i] = k;
-            vals[i] = v;
+            if (vals32 != null) vals32[i] = v;
+            else vals16[i] = (char) v;
         }
 
         int get(int k) {
             int i = slot(k);
             while (true) {
                 int key = keys[i];
-                if (key == k) return vals[i];
+                if (key == k) return vals32 != null ? vals32[i] : vals16[i];
                 if (key == -1) return City.FAR;
                 i = (i + 1) & mask;
             }
@@ -843,8 +857,11 @@ final class Fleet {
             }
         }
 
-        /** (10.49) The next tile down from each tile, once worked out (+1, so 0 is not yet): a route doesn't change. */
-        int[] next;
+        /**
+         * (10.49) The next tile down from each tile, once worked out: a route doesn't change. ((16.4) As which way,
+         * a byte, not the tile itself: 0 not yet, 1 stay, 2-5 east, west, south, north, 6 over the bridge.)
+         */
+        byte[] next;
     }
 
     /**
@@ -3575,10 +3592,20 @@ final class Fleet {
     private int downhill(Route field, int t) {
         int at = field.find(t);
         if (at >= 0) {
-            if (field.next == null) field.next = new int[field.keys.length];
-            int n = field.next[at];
-            if (n == 0) field.next[at] = n = downhillOn(field, t) + 1;
-            return n - 1;
+            if (field.next == null) field.next = new byte[field.keys.length];
+            int W = city.w, n = field.next[at];
+            if (n == 0) {
+                int bt = downhillOn(field, t);
+                field.next[at] = (byte) (bt == t ? 1 : bt == t + 1 ? 2 : bt == t - 1 ? 3 : bt == t + W ? 4 : bt == t - W ? 5 : 6);
+                return bt;
+            }
+            if (n == 1) return t;
+            if (n == 2) return t + 1;
+            if (n == 3) return t - 1;
+            if (n == 4) return t + W;
+            if (n == 5) return t - W;
+            int link = city.bridgeTo(t);
+            return link >= 0 ? link : t;
         }
         return downhillOn(field, t);
     }

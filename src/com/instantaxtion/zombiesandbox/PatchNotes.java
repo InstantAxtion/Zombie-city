@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.3";
-    static final int VERSION_CODE = 153;
+    static final String VERSION = "16.4";
+    static final int VERSION_CODE = 154;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.4  -  Less memory",
+                    "The big maps need a good deal less memory: about 160 MB less at the most on Large (it now runs in about 640 MB rather than 800), about 40 MB less on Big and 20 MB less on Default. The New Game screen's memory warning is lowered to match: Large about 700 MB, Big 520, Default 440.",
+                    "How: the ways on foot that people follow - to the police stations, the bases and the hospitals, to a call, to a park, to a safe zone, and your units' move orders - are kept at a byte a tile, and only over the ground they reach, not the whole map; the routes the vehicles carry are kept in half the room. Everyone goes exactly the same way as before.",
+            },
             {
                     "16.3  -  Place names, and a bigger brush",
                     "Brush sizes are now 1, 10, 25 and 50 (the 5 is gone): 50 puts a whole crowd down at once, spread a little wider.",
