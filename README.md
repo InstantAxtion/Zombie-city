@@ -419,6 +419,10 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**The airport, and boats out by water (16.0):** Metropolis and Downtown Towers get an airport: evacuation flights take
+people out, the army flies troops in, and it can fall to the dead. On the sea maps, boats take people off from docks
+along the waterfront.
+
 **Marines that arrive, reinforcements counted, nobody stuck at the water (15.9):** the Marines land from just offshore,
 near the fight, wherever it is; reinforcements on their way in count with the police and military (and +N for those
 still coming); people no longer get stuck at the water's edge, on piers or in crowds on the beach.

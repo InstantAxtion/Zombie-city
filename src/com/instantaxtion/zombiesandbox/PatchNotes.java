@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "15.9";
-    static final int VERSION_CODE = 149;
+    static final String VERSION = "16.0";
+    static final int VERSION_CODE = 150;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.0  -  The airport, and boats out by water",
+                    "An airport on the Metropolis and Downtown Towers maps (new cities from now on): a fenced airfield in a corner of town with a runway, a terminal, a control tower and airliners at their stands, and a road along its edge.",
+                    "Evacuation flights: with people leaving the city, the airport is one of the places they go. Airliners fly in, land, taxi to the terminal, take up to 120 aboard and take off again - two at once when the crowd is big.",
+                    "The army flies in: more often than not, the main body of the army's reinforcements comes in on transport planes to the airport, sixty to a plane, and moves on to the fighting from there.",
+                    "The airport can fall: with the dead at the terminal for long enough there are no more flights in or out, until it's been clear of them for a minute.",
+                    "Boats out by water: on the maps on the sea, docks along the waterfront where boats come in from offshore, take up to 24 aboard and head back out to sea with them.",
+                    "Fixed: once the island prison fell, the way out through its open gate wasn't always known to those inside.",
+            },
             {
                     "15.9  -  Marines that arrive, reinforcements counted, nobody stuck at the water",
                     "Marines: the landing craft come in from just offshore, not from the far edge of the map (on the big island maps they were minutes out at sea), and a little faster. A call deep inland no longer means no Marines at all: they land on the nearest shore there is. And only where there's a way on foot from the beach to the fight - never on a pier, a jetty or the prison island.",

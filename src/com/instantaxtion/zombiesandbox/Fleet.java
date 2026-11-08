@@ -47,6 +47,8 @@ final class Fleet {
      * the dead; and a gun truck: an open truck with a fast-firing gun that pours long bursts into a horde.)
      */
     static final int K_IFV = 9, K_GUNTRUCK = 10;
+    /** ((15.10) Planes at the airport: an airliner taking people out, a military transport flying troops in.) */
+    static final int K_AIRLINER = 11, K_TRANSPORT = 12;
 
     /** Kinds of everyday car (which ones are about depends on the country). */
     static final int M_SEDAN = 0, M_PICKUP = 1, M_SUV = 2, M_KEI = 3, M_HATCH = 4, M_VAN = 5, M_TAXI = 6, M_BUS = 7,
@@ -1354,7 +1356,12 @@ final class Fleet {
      * nearest the fighting, eight Marines to a boat, put them ashore, and pull back out. False if there's no way in by
      * water.
      */
-    boolean marineLanding(int count, float tx, float ty, String place, Dispatch.Incident inc) {
+    /**
+     * ((15.9) From marineLanding, for the evacuation boats too.) The way in by water to the bit of open shore nearest
+     * (tx, ty) that has a way on foot to it: {the route of water tiles from just offshore, {the land tile, the last
+     * water tile}}, or null if there's none (no sea that reaches the edge of the map).
+     */
+    int[][] seaApproach(float tx, float ty) {
         int w0 = city.w, h0 = city.h, n = w0 * h0;
         int[] dist = new int[n];
         java.util.Arrays.fill(dist, Integer.MAX_VALUE);
@@ -1376,7 +1383,7 @@ final class Fleet {
                     q[tail++] = t;
                 }
             }
-        if (tail == 0) return false;
+        if (tail == 0) return null;
         while (head < tail) {
             int c = q[head++], x = c % w0, y = c / w0;
             int[] nb = {x > 0 ? c - 1 : -1, x < w0 - 1 ? c + 1 : -1, y > 0 ? c - w0 : -1, y < h0 - 1 ? c + w0 : -1};
@@ -1433,7 +1440,7 @@ final class Fleet {
             }
             if (best >= 0) break;
         }
-        if (best < 0) return false;
+        if (best < 0) return null;
         // The way in: from the shore back out along the falling distances, then turned round.
         java.util.ArrayList<Integer> path = new java.util.ArrayList<Integer>();
         for (int c = best; ; ) {
@@ -1451,6 +1458,15 @@ final class Fleet {
         int skip = Math.max(0, path.size() - MARINE_RUN);
         int[] route = new int[path.size() - skip];
         for (int k = 0; k < route.length; k++) route[k] = path.get(k + skip);
+        return new int[][]{route, {land, best}};
+    }
+
+    boolean marineLanding(int count, float tx, float ty, String place, Dispatch.Incident inc) {
+        int[][] a = seaApproach(tx, ty);
+        if (a == null) return false;
+        int w0 = city.w;
+        int[] route = a[0];
+        int land = a[1][0];
         int boats = (count + 7) / 8;
         for (int b = 0; b < boats; b++) {
             Vehicle v = make(BOAT);
@@ -1477,7 +1493,67 @@ final class Fleet {
     static final int MARINE_RUN = 70;
 
     /** (11.0) A landing boat: in along its way over the water, Marines ashore, a while covering them, then gone. */
+    /** (15.9) How many an evacuation boat takes off. */
+    static final int BOAT_SEATS = 24;
+
+    /** (15.9) An evacuation boat: in along the water to its dock, people aboard, then back out to sea with them. */
+    private boolean updateEvacBoat(Vehicle v, float dt) {
+        World.EvacStop st = v.evacStop < w.evacStops.size() ? w.evacStops.get(v.evacStop) : null;
+        int[] path = v.boatPath;
+        if (v.busPhase == 1) {
+            v.speed = 0;
+            v.timer += dt;
+            v.checkCd -= dt;
+            if (v.checkCd > 0) return false;
+            v.checkCd = 0.5f;
+            if (st != null) w.boardEvac(v, v.evacStop, st.x, st.y, World.STOP_REACH + 16, BOAT_SEATS - v.riders.size());
+            boolean full = v.riders.size() >= BOAT_SEATS, danger = st == null || w.countZombiesNear(st.x, st.y, 50) >= 2;
+            boolean nobody = st == null || w.waitingFor(v.evacStop, st.x, st.y, true) == 0;
+            if (full || danger || (v.timer > 20 && nobody) || v.timer > 70) {
+                v.busPhase = 2;
+                v.boatAt = path.length - 1;
+                if (st != null && st.bus == v) {
+                    st.bus = null;
+                    st.busCd = 4;
+                }
+                if (v.riders.size() >= 6 && st != null && w.rnd.nextFloat() < 0.6f)
+                    w.dispatch.say(Dispatch.WHO_INFO, null, "News: A boat has left " + st.place + " with " + v.riders.size() + " aboard.", v.x, v.y);
+            }
+            return false;
+        }
+        boolean in = v.busPhase == 0;
+        if (in && (st == null || st.closed)) {
+            v.busPhase = 2;
+            v.boatAt = Math.max(0, Math.min(path.length - 1, v.boatAt));
+            in = false;
+        }
+        if (in ? v.boatAt >= path.length : v.boatAt < 0) {
+            if (in) {
+                v.busPhase = 1;
+                v.timer = 0;
+                v.checkCd = 0;
+                return false;
+            }
+            // Out at sea: away with everyone aboard.
+            w.droveOut(v.riders);
+            return true;
+        }
+        int t = path[v.boatAt];
+        float gx = (t % city.w + 0.5f) * City.T, gy = (t / city.w + 0.5f) * City.T;
+        float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        v.speed = Math.min(v.speed + dt * 50, 110);
+        if (d < 4) v.boatAt += in ? 1 : -1;
+        else {
+            float step = Math.min(d, v.speed * dt);
+            v.x += dx / d * step;
+            v.y += dy / d * step;
+            v.angle = turnTo(v.angle, (float) Math.atan2(dy, dx), dt * 3);
+        }
+        return false;
+    }
+
     private boolean updateBoat(Vehicle v, float dt) {
+        if (v.evacStop >= 0) return updateEvacBoat(v, dt);
         v.timer += dt;
         if (v.timer < 0) return false;
         if (v.state == DRIVE) {
@@ -1821,7 +1897,158 @@ final class Fleet {
         w.emit(Sfx.JET, tx, ty);
     }
 
+    /** (15.10) How many an airliner takes out, and how many soldiers a transport brings. */
+    static final int PLANE_SEATS = 120, TRANSPORT_LOAD = 60;
+
+    /** (15.10) An airliner in to the airport to take people out (the evacuation stop k). */
+    boolean sendAirliner(int k) {
+        if (city.runway == null || w.airportClosed) return false;
+        Vehicle v = make(JET);
+        setKind(v, K_AIRLINER);
+        v.evacStop = k;
+        startApproach(v);
+        vehicles.add(v);
+        return true;
+    }
+
+    /**
+     * (15.10) Soldiers flown in to the airport on transports, sixty to a plane, off and away to the call once they're
+     * down. False if there's no airport, or it's fallen.
+     */
+    boolean flyInTroops(int count, Dispatch.Incident inc, String place) {
+        if (city.runway == null || w.airportClosed) return false;
+        for (int b = 0; count > 0; b++, count -= TRANSPORT_LOAD) {
+            Vehicle v = make(JET);
+            setKind(v, K_TRANSPORT);
+            v.passengers = Math.min(TRANSPORT_LOAD, count);
+            v.passengerType = Entity.SOLDIER;
+            v.reinforcement = true;
+            v.incident = inc;
+            v.place = place;
+            startApproach(v);
+            v.x -= b * 900;
+            vehicles.add(v);
+        }
+        return true;
+    }
+
+    /** (15.10) A plane lined up on the runway from far out to the west, at height. */
+    private void startApproach(Vehicle v) {
+        float ry = (city.runway[1] + city.runway[3]) / 2;
+        v.x = Math.min(-200, city.runway[0] - 1400);
+        v.y = ry;
+        v.angle = 0;
+        v.alt = 1;
+        v.speed = 200;
+        v.busPhase = 0;
+        v.timer = 0;
+    }
+
+    /**
+     * (15.10) A plane at the airport: in on the approach, down onto the runway and slowing, along to its stand by the
+     * terminal; there, people board (an airliner) or the troops get off (a transport); then back to the end of the
+     * runway, the take-off run, and away - with everyone aboard counted as out of the city.
+     */
+    private boolean updatePlane(Vehicle v, float dt) {
+        float[] rw = city.runway, ap = city.apron;
+        float ry = (rw[1] + rw[3]) / 2, len = rw[2] - rw[0];
+        World.EvacStop st = v.evacStop >= 0 && v.evacStop < w.evacStops.size() ? w.evacStops.get(v.evacStop) : null;
+        float gx, gy, speed;
+        switch (v.busPhase) {
+            case 0: // The approach, coming down to the threshold.
+                gx = rw[0] + 30;
+                gy = ry;
+                speed = 200;
+                v.alt = Math.min(1, Math.max(0, (gx - v.x) / 900));
+                if (w.airportClosed) {
+                    // (The airport has fallen: it goes round and away again.)
+                    v.busPhase = 6;
+                    return false;
+                }
+                break;
+            case 1: // Down and slowing along the runway.
+                gx = rw[0] + len * 0.45f;
+                gy = ry;
+                speed = Math.max(60, v.speed - dt * 50);
+                v.alt = 0;
+                break;
+            case 2: // Taxiing to the stand.
+                gx = ap[0];
+                gy = ap[1];
+                speed = 45;
+                break;
+            case 3: { // At the stand.
+                v.speed = 0;
+                v.timer += dt;
+                v.checkCd -= dt;
+                if (v.kind == K_TRANSPORT) {
+                    if (v.passengers > 0 && v.timer > 2) {
+                        v.tx = v.x;
+                        v.ty = v.y;
+                        unload(v, true);
+                        v.passengers = 0;
+                    }
+                    if (v.timer > 8) v.busPhase = 4;
+                    return false;
+                }
+                if (v.checkCd > 0) return false;
+                v.checkCd = 0.5f;
+                if (st != null) w.boardEvac(v, v.evacStop, st.x, st.y, World.STOP_REACH + 40, PLANE_SEATS - v.riders.size());
+                boolean full = v.riders.size() >= PLANE_SEATS, danger = w.countZombiesNear(v.x, v.y, 120) >= 2 || w.airportClosed;
+                boolean nobody = st == null || w.waitingFor(v.evacStop, st.x, st.y, true) == 0;
+                if (full || danger || (v.timer > 25 && nobody) || v.timer > 90) {
+                    v.busPhase = 4;
+                    if (st != null && st.bus == v) {
+                        st.bus = null;
+                        st.busCd = 10;
+                    }
+                    if (v.riders.size() >= 10)
+                        w.dispatch.say(Dispatch.WHO_INFO, null, "News: An evacuation flight has taken off from the airport with " + v.riders.size() + " aboard.", v.x, v.y);
+                }
+                return false;
+            }
+            case 4: // Back to the end of the runway.
+                gx = rw[0] + 30;
+                gy = ry;
+                speed = 50;
+                break;
+            case 5: // The take-off run.
+                gx = rw[2] + 60;
+                gy = ry;
+                speed = Math.min(220, v.speed + dt * 70);
+                v.alt = Math.min(1, Math.max(0, (v.x - (rw[0] + len * 0.55f)) / (len * 0.45f)));
+                break;
+            default: // Away to the east.
+                gx = city.worldW() + 600;
+                gy = ry - 300;
+                speed = 220;
+                v.alt = 1;
+                break;
+        }
+        float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        v.speed = speed;
+        if (d < Math.max(6, speed * dt)) {
+            if (v.busPhase == 6 || v.busPhase >= 7) {
+                w.droveOut(v.riders);
+                return true;
+            }
+            v.busPhase = v.busPhase == 0 ? 1 : v.busPhase == 1 ? 2 : v.busPhase == 2 ? 3 : v.busPhase == 4 ? 5 : 6;
+            v.timer = 0;
+            v.checkCd = 0;
+            return false;
+        }
+        v.x += dx / d * speed * dt;
+        v.y += dy / d * speed * dt;
+        v.angle = turnTo(v.angle, (float) Math.atan2(dy, dx), dt * (v.alt > 0.5f ? 1.5f : 3));
+        if (v.busPhase == 6 && v.x > city.worldW() + 500) {
+            w.droveOut(v.riders);
+            return true;
+        }
+        return false;
+    }
+
     private boolean updateJet(Vehicle v, float dt) {
+        if (v.kind == K_AIRLINER || v.kind == K_TRANSPORT) return updatePlane(v, dt);
         v.x += (float) Math.cos(v.angle) * v.speed * dt;
         v.y += (float) Math.sin(v.angle) * v.speed * dt;
         float d = (float) World.hypot(v.tx - v.x, v.ty - v.y);
@@ -5380,7 +5607,35 @@ final class Fleet {
             World.EvacStop st = w.evacStops.get(k);
             if (st.bus != null && (st.bus.removedFromFleet || st.bus.broken || st.bus.evacStop != k)) st.bus = null;
             st.busCd -= 2;
+            if (st.airport && !st.closed && st.busCd <= 0) st.bus = null;
             if (st.bus != null || st.closed || st.busCd > 0 || w.waitingFor(k, st.x, st.y, false) < 3) continue;
+            // ((15.10) The airport: an evacuation flight.)
+            if (st.airport) {
+                // (A second flight in at once when there's a crowd waiting.)
+                int planes = 0;
+                for (Vehicle o : vehicles) if (o.type == JET && o.evacStop == k) planes++;
+                int waiting = w.waitingFor(k, st.x, st.y, false);
+                if (planes < (waiting > PLANE_SEATS * 2 ? 2 : 1) && waiting >= 8 && sendAirliner(k)) {
+                    for (Vehicle o : vehicles) if (o.type == JET && o.evacStop == k) st.bus = o;
+                    st.busCd = 20;
+                }
+                continue;
+            }
+            // ((15.9) A dock: a boat in from offshore.)
+            if (st.dock) {
+                Vehicle b = make(BOAT);
+                b.boatPath = st.route;
+                b.boatAt = 0;
+                b.x = (st.route[0] % city.w + 0.5f) * City.T;
+                b.y = (st.route[0] / city.w + 0.5f) * City.T;
+                b.evacStop = k;
+                b.busPhase = 0;
+                b.state = DRIVE;
+                vehicles.add(b);
+                st.bus = b;
+                st.busCd = 6;
+                continue;
+            }
             // In from the edge of the map, the nearest way in to the stop.
             float[] in = exitNear(st.bx, st.by);
             if (in == null) continue;

@@ -5216,6 +5216,33 @@ final class GameView extends View implements Menu.Host {
 
     /** A strike jet high overhead: its shadow far below, swept wings and a contrail (drawn as smoke). */
     private void drawJet(Canvas c, Fleet.Vehicle v) {
+        // ((15.10) A plane at the airport: an airliner, or a grey military transport; its shadow falls further off
+        // the higher it is.)
+        if (v.kind == Fleet.K_AIRLINER || v.kind == Fleet.K_TRANSPORT) {
+            float u = 14f, off = 4 + v.alt * 60;
+            c.save();
+            c.translate(v.x + off, v.y + off * 1.3f);
+            c.rotate((float) Math.toDegrees(v.angle));
+            fill.setColor(0x30000000);
+            c.drawRect(-4.5f * u, -0.6f * u, 4.5f * u, 0.6f * u, fill);
+            c.drawRect(-1.6f * u, -4.2f * u, -0.6f * u, 4.2f * u, fill);
+            c.restore();
+            if (v.kind == Fleet.K_TRANSPORT) {
+                c.save();
+                c.translate(v.x, v.y);
+                c.rotate((float) Math.toDegrees(v.angle));
+                fill.setColor(0xFF6A7060);
+                c.drawRect(-1.4f * u, -5 * u, -0.4f * u, 5 * u, fill);
+                c.drawRect(-4.6f * u, -1.8f * u, -3.8f * u, 1.8f * u, fill);
+                fill.setColor(0xFF7A806E);
+                c.drawRect(-4.6f * u, -0.8f * u, 4 * u, 0.8f * u, fill);
+                c.drawCircle(4 * u, 0, 0.8f * u, fill);
+                fill.setColor(0xFF4A5040);
+                for (float ey : new float[]{-3.6f, -2.0f, 2.0f, 3.6f}) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, fill);
+                c.restore();
+            } else City.drawAirliner(c, fill, v.x, v.y, u, v.angle, 0xFF2E6EB8);
+            return;
+        }
         c.save();
         c.translate(v.x + 40, v.y + 55);
         c.rotate((float) Math.toDegrees(v.angle));

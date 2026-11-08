@@ -2334,6 +2334,14 @@ final class Dispatch {
                 return;
             }
         }
+        // ((15.10) With an airport, the main body of the army flies in to it (when it hasn't fallen).)
+        if (army && !a.qrf && !a.air && w.city.runway != null && !w.airportClosed && rnd.nextFloat() < 0.6f
+                && w.fleet.flyInTroops(a.count, a.incident, a.place)) {
+            say(WHO_MILITARY, null, "Military: " + a.count + " soldiers flying in to the airport, " + ((a.count + Fleet.TRANSPORT_LOAD - 1) / Fleet.TRANSPORT_LOAD)
+                    + (a.count > Fleet.TRANSPORT_LOAD ? " transports" : " transport") + ". They'll move on to " + a.place + " from there.", w.city.apron[0], w.city.apron[1]);
+            w.timeline("Soldiers flew in to the airport", w.city.apron[0], w.city.apron[1]);
+            return;
+        }
         // ((11.0) On a map with water, the quick reaction force are Marines, and they come in by boat.)
         if (army && a.qrf && w.fleet.marineLanding(a.count, a.x, a.y, a.place, a.incident)) {
             say(WHO_MILITARY, null, "Military: Marines coming in by boat, " + ((a.count + 7) / 8) + " landing craft with " + a.count

@@ -6770,6 +6770,7 @@ final class World {
     private void cityLife() {
         keyBuildings();
         if (city.prison != null) prisonLife();
+        if (city.apron != null) airportLife();
         reservePilots();
         if (((int) time) % 5 == 0) fleet.stationHelis();
         government();
@@ -14766,6 +14767,11 @@ final class World {
         float busCd;
         /** (10.60) How many have been given a place to wait here since the last bus (see waitSpot). */
         int waiting;
+        /** ((15.9) A dock on the water: boats come in to (bx, by) from offshore along this way, not buses by road.) */
+        boolean dock;
+        int[] route;
+        /** ((15.10) The airport: evacuation flights from here.) */
+        boolean airport;
     }
 
     /** (10.60) How many have been given a place on the platform since the last train. */
@@ -14777,6 +14783,69 @@ final class World {
     final ArrayList<EvacStop> evacStops = new ArrayList<EvacStop>();
     /** Who waits for the train: their stop number. */
     static final int STOP_TRAIN = -2;
+
+    // ------------------------------------------------------------------ (15.10) the airport
+
+    /** (15.10) The airport has fallen to the dead (no flights in or out), and how long they've held the terminal. */
+    boolean airportClosed;
+    private float airportThreat, airportClear;
+
+    /**
+     * (15.10) Once a second: the dead at the terminal for long enough and the airport falls - no more flights; cleared
+     * of them for a minute, and it opens again.
+     */
+    private void airportLife() {
+        float tx = city.apron[0], ty = city.apron[1] + 4 * City.T;
+        int dead = countZombiesNear(tx, ty, 160);
+        if (!airportClosed) {
+            airportThreat = dead >= 6 ? airportThreat + 1 : Math.max(0, airportThreat - 2);
+            if (airportThreat > 15) {
+                airportClosed = true;
+                airportClear = 0;
+                banner("AIRPORT OVERRUN", "The dead have taken the airport. No more flights in or out.");
+                timeline("The airport fell to the dead", tx, ty);
+                dispatch.sighting(tx, ty, null);
+            }
+        } else {
+            airportClear = dead == 0 ? airportClear + 1 : 0;
+            if (airportClear > 60) {
+                airportClosed = false;
+                airportThreat = 0;
+                dispatch.say(Dispatch.WHO_INFO, null, "News: The airport has been cleared of the dead. Flights are running again.", tx, ty);
+                timeline("The airport was cleared and opened again", tx, ty);
+            }
+        }
+    }
+
+    /** (15.9) How many docks for evacuation boats on a map on the water (more on the bigger maps). */
+    private int addDocks() {
+        if (city.waterKind == CityConfig.W_NONE || city.waterKind == CityConfig.W_LAKE) return 0;
+        int want = Math.max(2, Math.min(5, (int) (city.worldW() / 2500)));
+        java.util.Random r = new java.util.Random(city.cfg.seed * 17L + 3);
+        int made = 0;
+        for (int tries = 0; tries < want * 4 && made < want; tries++) {
+            float[] q = city.randomWalkableInTown(r);
+            if (q == null) continue;
+            int[][] a = fleet.seaApproach(q[0], q[1]);
+            if (a == null) continue;
+            int land = a[1][0], water = a[1][1], w0 = city.w;
+            float lx = (land % w0 + 0.5f) * City.T, ly = (land / w0 + 0.5f) * City.T;
+            boolean close = false;
+            for (EvacStop o : evacStops) if (o.dock && World.hypot(o.x - lx, o.y - ly) < 1500) close = true;
+            if (close) continue;
+            EvacStop st = new EvacStop();
+            st.dock = true;
+            st.route = a[0];
+            st.bx = (water % w0 + 0.5f) * City.T;
+            st.by = (water / w0 + 0.5f) * City.T;
+            st.x = lx;
+            st.y = ly;
+            st.place = city.placeName(lx, ly) + " waterfront";
+            evacStops.add(st);
+            made++;
+        }
+        return made;
+    }
 
     /** People are leaving the city right now (and the buses and trains are running). */
     boolean exodusOn() {
@@ -14840,6 +14909,24 @@ final class World {
                         evacStops.add(st);
                     }
                 }
+                // ((15.10) And the airport, if there is one.)
+                if (city.airport != null && city.gateArea != null) {
+                    EvacStop st = new EvacStop();
+                    st.airport = true;
+                    st.x = st.bx = city.gateArea[0];
+                    st.y = st.by = city.gateArea[1];
+                    st.place = "the airport";
+                    evacStops.add(st);
+                    dispatch.say(Dispatch.WHO_INFO, null, "News: Evacuation flights are leaving from the airport.", st.x, st.y);
+                }
+                // ((15.9) And on the maps on the water, docks where boats take people off.)
+                int docks = addDocks();
+                if (docks > 0) {
+                    StringBuilder dw = new StringBuilder();
+                    for (EvacStop st : evacStops) if (st.dock) dw.append(dw.length() == 0 ? "" : ", ").append(st.place);
+                    dispatch.say(Dispatch.WHO_INFO, null, "News: Boats are taking people off from the water's edge at " + dw + ".", city.worldW() / 2, city.worldH() / 2);
+                    timeline("Boats began taking people off by water");
+                }
                 StringBuilder where = new StringBuilder();
                 for (int k = 0; k < evacStops.size() && k < 3; k++) where.append(k == 0 ? "" : ", ").append(evacStops.get(k).place);
                 dispatch.say(Dispatch.WHO_INFO, null, "News: Evacuation buses are picking people up at " + where
@@ -14851,7 +14938,7 @@ final class World {
                         + "to keep to the main roads.", city.worldW() / 2, city.worldH() / 2);
         }
         // (A stop with the dead at it is closed: those waiting there go to another.)
-        for (EvacStop st : evacStops) st.closed = countZombiesNear(st.x, st.y, 110) > 0;
+        for (EvacStop st : evacStops) st.closed = countZombiesNear(st.x, st.y, 110) > 0 || (st.airport && airportClosed);
         // Out on the street: they decide to go (not all at once).
         for (int i = 0, m = entities.size(); i < m; i++) {
             Entity e = entities.get(i);

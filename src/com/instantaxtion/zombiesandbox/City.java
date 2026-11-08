@@ -490,7 +490,9 @@ final class City {
             BT_RADAR = 6, BT_GUARD = 7;
     static final int BD_RUNWAY = 0, BD_HANGAR = 1, BD_TANK = 2, BD_RANGE = 3, BD_OBSTACLE = 4, BD_RADAR = 5,
             BD_DISH = 6, BD_FUEL = 7, BD_CONTAINER = 8, BD_MAST = 9, BD_SANDBAGS = 10, BD_KILLHOUSE = 11, BD_JET = 12,
-            BD_SHED = 13, BD_FLAG = 14, BD_HARDSTAND = 15;
+            BD_SHED = 13, BD_FLAG = 14, BD_HARDSTAND = 15,
+            // ((15.10) The airport: an airliner parked at the terminal.)
+            BD_AIRLINER = 16;
     /** What's inside a base beyond barracks: {kind, x0, y0, x1, y1} in world units. */
     private final List<float[]> baseDecor = new ArrayList<float[]>();
     private final List<float[]> paths = new ArrayList<float[]>();
@@ -584,6 +586,14 @@ final class City {
             computeSolid();
             for (int[] l : buildingLots) createBuilding(l);
         }
+        // ((15.10) The airport's terminal.)
+        if (airport != null)
+            for (Building b : buildings)
+                if (b.kind == JAIL && b.x0 >= airport[0] * T && b.x1 <= airport[2] * T && b.y0 >= airport[1] * T && b.y1 <= airport[3] * T) {
+                    b.name = "Airport Terminal";
+                    b.variant = -1;
+                    b.capacity = 0;
+                }
         // ((15.6) The prison's buildings: the cell blocks lettered, the admin block, nobody sheltering in any of them.)
         if (prison != null) {
             char letter = 'A';
@@ -2530,7 +2540,7 @@ final class City {
             int th = by1 - by0;
             railY0 = by0 + th / 3 + rnd.nextInt(Math.max(1, th / 3));
             railRows = 3;
-            split(bx0 + in, by0 + in, bx1 - in, railY0, 0, -1, -1);
+            splitTop(bx0 + in, by0 + in, bx1 - in, railY0);
             split(bx0 + in, railY0 + railRows, bx1 - in, by1 - in, 0, -1, -1);
             for (int y = railY0; y < railY0 + railRows; y++)
                 for (int x = 0; x < w; x++) {
@@ -2555,7 +2565,7 @@ final class City {
         } else if (cfg.militaryTown()) {
             militaryTown(bx0, by0, bx1, by1, in);
         } else {
-            split(bx0 + in, by0 + in, bx1 - in, by1 - in, 0, -1, -1);
+            splitTop(bx0 + in, by0 + in, bx1 - in, by1 - in);
         }
         // ((11.1) Not since the thin band of country: whole corners of town left as fields undid it.)
         if (organic && cfg.civic < 27) erodeTown(bx0, by0, bx1, by1);
@@ -3547,6 +3557,11 @@ final class City {
                     c.drawRect(x0 + w * 0.15f, y1 - 1.5f, x1 - w * 0.15f, y1, p);
                     break;
                 }
+                case BD_AIRLINER: {
+                    // ((15.10) An airliner at its stand: white fuselage, swept wings, a coloured tail.)
+                    drawAirliner(c, p, cx, cy, Math.min(w, h * 1.6f) / 9f, (float) -Math.PI / 2, 0xFF2E6EB8);
+                    break;
+                }
                 case BD_JET: {
                     p.setColor(0xFF6E7A82);
                     c.drawRect(x0, cy - 1.2f, x1, cy + 1.2f, p);
@@ -4438,6 +4453,40 @@ final class City {
         jail = townJail;
     }
 
+    /** (15.10) An airliner from above, nose along angle a, sized u (about a ninth of its length). */
+    static void drawAirliner(Canvas c, Paint p, float x, float y, float u, float a, int tail) {
+        c.save();
+        c.translate(x, y);
+        c.rotate((float) Math.toDegrees(a));
+        p.setColor(0x40000000);
+        c.drawRect(-4.5f * u + 2, -0.55f * u + 2, 4.5f * u + 2, 0.55f * u + 2, p);
+        // Wings and tailplane.
+        p.setColor(0xFFC8CCD2);
+        android.graphics.Path wing = new android.graphics.Path();
+        wing.moveTo(0.8f * u, 0);
+        wing.lineTo(-1.2f * u, -4.2f * u);
+        wing.lineTo(-2.0f * u, -4.2f * u);
+        wing.lineTo(-1.0f * u, 0);
+        wing.lineTo(-2.0f * u, 4.2f * u);
+        wing.lineTo(-1.2f * u, 4.2f * u);
+        wing.close();
+        c.drawPath(wing, p);
+        c.drawRect(-4.4f * u, -1.6f * u, -3.6f * u, 1.6f * u, p);
+        // Engines under the wings.
+        p.setColor(0xFF8A9098);
+        c.drawRect(-0.6f * u, -2.3f * u, 0.4f * u, -1.7f * u, p);
+        c.drawRect(-0.6f * u, 1.7f * u, 0.4f * u, 2.3f * u, p);
+        // Fuselage, nose and tail fin.
+        p.setColor(0xFFF4F6F8);
+        c.drawRect(-4.5f * u, -0.55f * u, 4.0f * u, 0.55f * u, p);
+        c.drawCircle(4.0f * u, 0, 0.55f * u, p);
+        p.setColor(tail);
+        c.drawRect(-4.6f * u, -0.25f * u, -3.4f * u, 0.25f * u, p);
+        p.setColor(0xFF2A3A4A);
+        c.drawRect(3.6f * u, -0.3f * u, 4.1f * u, 0.3f * u, p);
+        c.restore();
+    }
+
     /**
      * (15.6) The prison wall: two tiles of grey concrete standing high (a long shadow to the lower right, a pale top),
      * coils of razor wire all along it, watchtowers on it, and the steel gate - yellow and black, shut, or its two
@@ -4546,10 +4595,74 @@ final class City {
                 tiles[y * w + x] = ROAD;
                 solid[y * w + x] = false;
                 roadDir[y * w + x] = 1;
+                // ((16.0) And the walking routes told: the way out was still worked out as through a wall.)
+                solidChanged(y * w + x);
             }
         clear3 = null;
         stepC = null;
         if (bitmap != null) redrawArea(prisonGate[0] * T - 2 * T, prisonGate[1] * T - T, prisonGate[2] * T + 2 * T, prisonGate[3] * T + 3 * T);
+    }
+
+    /**
+     * ((15.10) The airport: its fenced grounds (tiles: x0, y0, x1, y1), the runway {x0, y0, x1, y1} (world), where the
+     * planes park at the terminal {x, y}, and where people wait to board {x, y}.)
+     */
+    int[] airport;
+    float[] runway, apron, gateArea;
+
+    /**
+     * (15.10) The streets of a stretch of town - and on the maps with an airport, the airport kept clear in its top
+     * left corner first, with a road along its edges, and the streets laid out round it.
+     */
+    private void splitTop(int x0, int y0, int x1, int y1) {
+        int aw = Math.min(120, (int) ((x1 - x0) * 0.55f)), ah = Math.min(40, (int) ((y1 - y0) * 0.6f));
+        if (!cfg.airport() || aw < 60 || ah < 26) {
+            split(x0, y0, x1, y1, 0, -1, -1);
+            return;
+        }
+        int ax1 = x0 + aw, ay1 = y0 + ah;
+        carve(new Street(x0, ay1, x1, ay1 + 3, false, true));
+        carve(new Street(ax1, y0, ax1 + 3, ay1 + 3, true, true));
+        if (x1 - (ax1 + 3) >= 6) split(ax1 + 3, y0, x1, ay1, 1, -1, -1);
+        if (y1 - (ay1 + 3) >= 6) split(x0, ay1 + 3, x1, y1, 1, -1, -1);
+        airportGrounds(x0, y0, ax1, ay1);
+    }
+
+    /**
+     * (15.10) The airport: a fence round tarmac, the runway along the far side, the terminal by the gate onto the road,
+     * the control tower, and airliners parked at their stands.
+     */
+    private void airportGrounds(int x0, int y0, int x1, int y1) {
+        fill(x0, y0, x1 - x0, y1 - y0, LOT);
+        for (int x = x0; x < x1; x++) {
+            tiles[y0 * w + x] = FENCE;
+            tiles[(y1 - 1) * w + x] = FENCE;
+        }
+        for (int y = y0; y < y1; y++) {
+            tiles[y * w + x0] = FENCE;
+            tiles[y * w + x1 - 1] = FENCE;
+        }
+        airport = new int[]{x0, y0, x1, y1};
+        // The gate: in the fence onto the road below, at the terminal's end.
+        int gx = x1 - 14;
+        for (int x = gx; x < gx + 4; x++) tiles[(y1 - 1) * w + x] = LOT;
+        // The runway along the top, the full length.
+        float rx0 = (x0 + 3) * T, rx1 = (x1 - 3) * T, ry0 = (y0 + 3) * T, ry1 = (y0 + 10) * T;
+        baseDecor.add(new float[]{BD_RUNWAY, rx0, ry0, rx1, ry1});
+        runway = new float[]{rx0, ry0, rx1, ry1};
+        // The terminal by the gate, the control tower beside it.
+        // (The terminal to the west of the gate, the control tower to the east: the way in from the gate open between.)
+        int th = Math.max(5, Math.min(8, (y1 - y0) / 4));
+        govLot(gx - 24, y1 - 2 - th, 22, th, JAIL);
+        addFacilityLot(gx + 7, y1 - 2 - th, 3, 3, TOWER, 6);
+        apron = new float[]{(gx - 13) * T, (y1 - 4 - th - 4) * T};
+        gateArea = new float[]{(gx + 2) * T, (y1 - 5) * T};
+        // Airliners at their stands along the apron.
+        for (int k = 0; k < 3; k++) {
+            float px = (x0 + 8 + k * 14) * T, py = (y1 - 4 - th - 6) * T;
+            if (px > (x1 - 34) * T) break;
+            baseDecor.add(new float[]{BD_AIRLINER, px, py, px + 9 * T, py + 6 * T});
+        }
     }
 
     /** ((15.5) The Military Town's great base: where it goes (tiles: x0, y0, x1, y1), kept clear of the streets.) */
@@ -11341,6 +11454,17 @@ final class City {
             String sign = country.gunSign();
             float ts = Math.min(9f, bw / (sign.length() * 0.75f));
             sign(sign, (x0 + x1) / 2, (y0 + y1) / 2, ts, 0xFFF2E2B8);
+            return;
+        }
+        if (own != null && own.kind == JAIL && own.name != null && own.name.equals("Airport Terminal")) {
+            // ((15.10) The terminal: a long pale roof, a glass front along the apron side, and its name.)
+            p.setColor(0xFFC8CCD0);
+            c.drawRect(x0, y0, x1, y1, p);
+            p.setColor(0xFFE2E6EA);
+            c.drawRect(x0 + 1.5f, y0 + 1.5f, x1 - 1.5f, y1 - 1.5f, p);
+            p.setColor(0xFF6FA0C8);
+            c.drawRect(x0 + 2, y0 + 2, x1 - 2, y0 + 6, p);
+            sign("AIRPORT", (x0 + x1) / 2, (y0 + y1) / 2 + 2, Math.min(10f, bw / 6f), 0xFF2A3A4A);
             return;
         }
         if (own != null && own.kind == JAIL && prison != null && own.name != null && own.name.equals("Gatehouse")) {
