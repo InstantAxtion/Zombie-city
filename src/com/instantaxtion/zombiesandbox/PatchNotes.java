@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.6";
-    static final int VERSION_CODE = 156;
+    static final String VERSION = "16.7";
+    static final int VERSION_CODE = 157;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.7  -  Ammo trucks that get there",
+                    "Fixed: soldiers waiting on an ammo truck took it for arrived whenever it stopped - at a junction, in a queue - and set off on foot to wherever it was, then back again when it drove on, until they'd wandered off.",
+                    "Fixed: an ammo truck held up for a few seconds on its way stopped there for good, sometimes half the town short, as a troop truck does to let its squad walk the rest. With nobody aboard to walk, it now plans its way again and keeps going.",
+            },
             {
                     "16.6  -  Full armouries, trucks you can see",
                     "Fixed: in a city caught unprepared (everyone short of rounds), the hundreds of soldiers at the army base topped up from its armoury in the first second and emptied it before a shot was fired - and with it empty, no ammo truck could go out to a fight. Topping up while standing about now never takes the armoury's last half; that's kept for those who come back from a fight.",

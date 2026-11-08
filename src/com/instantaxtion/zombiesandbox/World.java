@@ -9433,8 +9433,11 @@ final class World {
         }
         if (e.task == Dispatch.T_RESUPPLY && e.supplyTruck != null) {
             Fleet.Vehicle v = e.supplyTruck;
-            boolean coming = v.ammoTruck && v.speed > 3 && v.state != Fleet.RETURN;
-            if (v.cargo <= 0 || v.broken || v.burnt || v.removedFromFleet || (v.speed > 3 && !coming)) {
+            // ((16.7) Still on its way by what it's doing, not how fast it's going this moment: held at a junction or in
+            // a queue it was taken for there, and they set off to wherever it had stopped - and when it drove on, back
+            // again - and on a long drive the waiting ran out before it came.)
+            boolean coming = v.ammoTruck && v.state == Fleet.DRIVE;
+            if (v.cargo <= 0 || v.broken || v.burnt || v.removedFromFleet || v.state == Fleet.RETURN || (v.speed > 3 && !coming)) {
                 // (Gone, or emptied before they got there: the base after all.)
                 e.supplyTruck = null;
             } else if (coming) {

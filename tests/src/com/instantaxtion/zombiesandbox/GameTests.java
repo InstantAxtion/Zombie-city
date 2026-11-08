@@ -2752,9 +2752,6 @@ public final class GameTests {
                 c.seed = 77;
                 c.normalize();
                 c.seed = 77;
-                // ((16.5) Map version 29, the streets this was written on: on this seed's newer ones the call it picks
-                // is the far side of town, and the truck's drive there now and then outlasts the test's four minutes.)
-                c.civic = 29;
                 World w = new World(c);
                 w.populate(c);
                 City.Facility base = w.city.mainBase();

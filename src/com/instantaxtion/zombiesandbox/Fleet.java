@@ -295,6 +295,8 @@ final class Fleet {
          */
         int cargo;
         boolean ammoTruck;
+        /** ((16.7) Times an ammo truck held up on its way has planned its way again, rather than stopping there. */
+        int jamTries;
         /** ((14.0) A bulldozer: the wreck it's on its way to push off the road, its base, and the seconds left pushing.) */
         Vehicle clearing;
         City.Facility dozerBase;
@@ -4157,7 +4159,14 @@ final class Fleet {
         }
         // Give up and stop where we are if the car hasn't made progress for a while.
         // (Reinforcements on their long drive in wait a little longer in a jam before getting out to walk.)
-        if (v.stuckTimer > (v.reinforcement ? 12 : 4)) arrived = true;
+        // ((16.7) But an ammo truck has nobody aboard to walk the rest, and the fight it's for is waiting on it: held
+        // up, it plans its way again and keeps at it a good while before it gives up - it used to stop for good on
+        // an open road thousands of feet short after four seconds in a jam.)
+        if (v.ammoTruck && v.state == DRIVE && !arrived && v.stuckTimer > 4 && v.jamTries < 4 && v.rerouteCd <= 0 && route(v, v.tx, v.ty)) {
+            v.jamTries++;
+            v.rerouteCd = 5;
+            v.pathField = null;
+        } else if (v.stuckTimer > (v.reinforcement ? 12 : 4)) arrived = true;
         if (arrived) {
             if (v.kind == K_DOZER) return dozerArrived(v);
             if (v.state == DRIVE && v.block != null) {

@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Ammo trucks that get there (16.7):** soldiers wait for an ammo truck until it has actually arrived (not just stopped at a junction), and an ammo truck held up on the way plans its way again instead of stopping there for good.
+
 **Full armouries, trucks you can see (16.6):** topping up while standing at a base or station never takes the armoury below half (it was emptied at the start in an unprepared city, so no ammo trucks could go out). Parked vehicles are redrawn sharp over the map picture when zoomed in on the bigger maps, and bases short of room for parked trucks show a few standing in the yard. Army trucks no longer stop halfway to a call when pushed to the edge of their route.
 
 **No hospital (16.5):** new cities have no hospital (map version 30); older saved cities keep the building, but nothing uses it and no walking route to it is worked out. The rescue helicopter brings survivors back to its base. The army's field hospital tent is unchanged. Soldiers who set off on foot for rounds now still count for an ammo truck (450 px, was 350).
