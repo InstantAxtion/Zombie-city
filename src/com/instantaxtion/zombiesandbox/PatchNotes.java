@@ -9,7 +9,7 @@ final class PatchNotes {
     static final String[][] NOTES = {
             {
                     "16.2  -  Smoother running",
-                    "Smoother on the bigger maps: about 15% less work each frame on Default, and the worst stutters roughly halved on Default and Big. Cars and patrols plan shorter everyday trips on the big maps, a vehicle asking whether it can reach somewhere it asked about a moment ago isn't worked out again, and units already on their way to a call that merges with one nearby carry on, not all looking for a new way at once.",
+                    "Smoother running: about 15% less work each frame on Default and its worst stutters roughly halved, with Big a little lighter too. Cars and patrols plan shorter everyday trips on the big maps, a vehicle asking whether it can reach somewhere it asked about a moment ago isn't worked out again, and units already on their way to a call that merges with one nearby carry on, not all looking for a new way at once.",
                     "Steep ground is worked out once when the city is built, not over and over while vehicles look for a way across country, and a vehicle starting away from any road no longer searches the whole map for one. New cities also build a little faster.",
             },
             {
