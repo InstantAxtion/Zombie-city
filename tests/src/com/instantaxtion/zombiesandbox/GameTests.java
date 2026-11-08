@@ -945,8 +945,9 @@ public final class GameTests {
             public void run() throws Exception {
                 check(CityConfig.retired(CityConfig.OPT_PRESET, 0) && CityConfig.retired(CityConfig.OPT_PRESET, 7), "Classic and Campus are gone");
                 CityConfig d = new CityConfig();
-                check(d.values(CityConfig.OPT_SIZE)[CityConfig.LARGE].equals("Default") && d.values(CityConfig.OPT_SIZE)[CityConfig.HUGE].equals("Massive"),
-                        "the sizes are Default, Large and Massive");
+                // ((16.1) Since renamed: Default is the Gigantic now (see the 16.1 test).)
+                check(d.values(CityConfig.OPT_SIZE)[CityConfig.GIGANTIC].equals("Default") && d.values(CityConfig.OPT_SIZE)[CityConfig.HUGE].equals("Massive"),
+                        "the sizes are named");
                 check(CityConfig.retired(CityConfig.OPT_ZOMBIES, 3) && d.zombies() == 0, "no choosing how many zombies: the game starts quiet");
                 // No animals.
                 CityConfig c = new CityConfig();
@@ -4363,6 +4364,27 @@ public final class GameTests {
                 int docks = (Integer) ad.invoke(pw);
                 check(docks >= 1, "docks on the waterfront (" + docks + ")");
                 for (World.EvacStop st : pw.evacStops) if (st.dock) check(st.route != null && st.route.length > 0 && st.route.length <= Fleet.MARINE_RUN, "a way in by sea to each");
+            }
+        });
+        test("16.1: map sizes - Default, Big and a new Large with twice the ground and the same people", new Check() {
+            public void run() {
+                int offered = 0;
+                for (int s = 0; s <= CityConfig.VAST; s++) if (!CityConfig.retired(CityConfig.OPT_SIZE, s)) offered++;
+                check(offered == 3 && !CityConfig.retired(CityConfig.OPT_SIZE, CityConfig.GIGANTIC) && !CityConfig.retired(CityConfig.OPT_SIZE, CityConfig.COLOSSAL)
+                        && !CityConfig.retired(CityConfig.OPT_SIZE, CityConfig.VAST) && CityConfig.retired(CityConfig.OPT_SIZE, CityConfig.LARGE), "three sizes offered, the old Default gone");
+                check("Default".equals(CityConfig.sizeName(CityConfig.GIGANTIC)) && "Big".equals(CityConfig.sizeName(CityConfig.COLOSSAL))
+                        && "Large".equals(CityConfig.sizeName(CityConfig.VAST)), "called Default, Big and Large");
+                CityConfig big = new CityConfig(), large = new CityConfig();
+                big.v[CityConfig.OPT_SIZE] = CityConfig.COLOSSAL;
+                large.v[CityConfig.OPT_SIZE] = CityConfig.VAST;
+                float area = (float) large.tiles() * large.tiles() / ((float) big.tiles() * big.tiles());
+                check(area > 1.95f && area < 2.05f, "twice the ground (" + area + ")");
+                check(big.residentsTarget() == large.residentsTarget(), "the same number of people");
+                CityConfig fresh = new CityConfig();
+                fresh.v[CityConfig.OPT_SIZE] = CityConfig.LARGE;
+                fresh.dropRetired();
+                check(fresh.v[CityConfig.OPT_SIZE] == CityConfig.GIGANTIC, "the New Game screen starts on Default");
+                check(CityConfig.LARGE != CityConfig.VAST && large.code().length() > 0, "a city code for it");
             }
         });
         test("every screen draws", new Check() {

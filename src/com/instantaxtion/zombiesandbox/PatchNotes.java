@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.0";
-    static final int VERSION_CODE = 150;
+    static final String VERSION = "16.1";
+    static final int VERSION_CODE = 151;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.1  -  Map sizes, and the traffic police",
+                    "Map sizes: the old Default is gone. The two bigger sizes are now called Default and Big, and there's a new Large: twice the ground of Big, with the same number of people, so the city is spread out with more room between. It needs a phone with plenty of memory (about 850 MB for the game) and runs slower than Big; the New Game screen says so if this phone hasn't enough.",
+                    "The traffic police look the part: a fluorescent vest with silver reflective bands, a white peaked cap and white gloves - and waving traffic through, one arm out with a glowing orange wand, the other raised to hold the rest.",
+            },
             {
                     "16.0  -  The airport, and boats out by water",
                     "An airport on the Metropolis and Downtown Towers maps (new cities from now on): a fenced airfield in a corner of town with a runway, a terminal, a control tower and airliners at their stands, and a road along its edge.",

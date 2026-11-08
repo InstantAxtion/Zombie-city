@@ -419,6 +419,9 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Map sizes, and the traffic police (16.1):** sizes are now Default, Big and a new Large (twice the ground of Big, the
+same people). Traffic officers have a hi-vis vest, white cap and gloves, and a glowing wand.
+
 **The airport, and boats out by water (16.0):** Metropolis and Downtown Towers get an airport: evacuation flights take
 people out, the army flies troops in, and it can fall to the dead. On the sea maps, boats take people off from docks
 along the waterfront.

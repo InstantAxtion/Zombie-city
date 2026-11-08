@@ -7913,23 +7913,64 @@ final class GameView extends View implements Menu.Host {
         c.restore();
     }
 
-    /** (15.0) A traffic officer: a hi-vis vest and white cap, and an arm out waving traffic through. */
+    /**
+     * (15.0) A traffic officer. ((16.1) Drawn properly: a fluorescent vest over the uniform with two silver reflective
+     * bands across it and over the shoulders, a white peaked cap, white gloves - and, waving traffic through, one arm
+     * out with a glowing orange wand, swinging, and the other raised flat to hold the rest.)
+     */
     private void drawTrafficKit(Canvas c, Entity e) {
         float r = e.radius;
-        stroke.setColor(0xFFC8E83A);
-        stroke.setStrokeWidth(r * 0.3f);
-        c.drawCircle(e.x, e.y, r * 0.78f, stroke);
-        fill.setColor(0xFFF4F4F4);
-        c.drawCircle(e.x, e.y, r * 0.36f, fill);
-        if (e.waveUntil > world.time) {
-            float sw = (float) Math.sin(world.time * 12) * 0.5f;
-            float a = e.angle + 1.57f + sw;
-            stroke.setColor(0xFFD8F23A);
-            stroke.setStrokeWidth(r * 0.38f);
-            c.drawLine(e.x, e.y, e.x + (float) Math.cos(a) * r * 2.2f, e.y + (float) Math.sin(a) * r * 2.2f, stroke);
+        c.save();
+        c.translate(e.x, e.y);
+        c.rotate((float) Math.toDegrees(e.angle));
+        // The vest over the shoulders and back.
+        fill.setColor(0xFFCBEA1E);
+        oval.set(-r * 0.78f, -r * 0.92f, r * 0.62f, r * 0.92f);
+        c.drawOval(oval, fill);
+        // Reflective bands: two across the back, one over each shoulder.
+        fill.setColor(0xFFE6EAEE);
+        c.drawRect(-r * 0.55f, -r * 0.86f, -r * 0.38f, r * 0.86f, fill);
+        c.drawRect(-r * 0.05f, -r * 0.9f, r * 0.12f, r * 0.9f, fill);
+        fill.setColor(0xFFB8BEC4);
+        c.drawRect(-r * 0.5f, -r * 0.08f, r * 0.05f, r * 0.08f, fill);
+        boolean waving = e.waveUntil > world.time;
+        float sw = waving ? (float) Math.sin(world.time * 10) * 0.6f : 0;
+        if (waving) {
+            // The wand arm, swinging, the glow of the wand at its end.
+            float a = 1.25f + sw;
+            float hx = (float) Math.cos(a) * r * 2.2f, hy = (float) Math.sin(a) * r * 2.2f;
+            stroke.setColor(0xFFCBEA1E);
+            stroke.setStrokeWidth(r * 0.42f);
+            c.drawLine(0, r * 0.6f, hx, hy, stroke);
+            stroke.setColor(0x66FF8A1E);
+            stroke.setStrokeWidth(r * 0.9f);
+            float wx = hx + (float) Math.cos(a) * r * 1.4f, wy = hy + (float) Math.sin(a) * r * 1.4f;
+            c.drawLine(hx, hy, wx, wy, stroke);
+            stroke.setColor(0xFFFF8A1E);
+            stroke.setStrokeWidth(r * 0.36f);
+            c.drawLine(hx, hy, wx, wy, stroke);
             fill.setColor(0xFFFFFFFF);
-            c.drawCircle(e.x + (float) Math.cos(a) * r * 2.3f, e.y + (float) Math.sin(a) * r * 2.3f, r * 0.32f, fill);
+            c.drawCircle(hx, hy, r * 0.3f, fill);
+            // The other hand up, flat: stop.
+            stroke.setColor(0xFFCBEA1E);
+            stroke.setStrokeWidth(r * 0.42f);
+            c.drawLine(0, -r * 0.6f, r * 1.4f, -r * 1.1f, stroke);
+            fill.setColor(0xFFFFFFFF);
+            c.drawCircle(r * 1.5f, -r * 1.15f, r * 0.32f, fill);
+        } else {
+            // White gloves at the sides.
+            fill.setColor(0xFFFFFFFF);
+            c.drawCircle(r * 0.3f, -r * 0.95f, r * 0.24f, fill);
+            c.drawCircle(r * 0.3f, r * 0.95f, r * 0.24f, fill);
         }
+        // The white cap, its black peak to the front.
+        fill.setColor(0xFF1A1C20);
+        c.drawRect(r * 0.2f, -r * 0.3f, r * 0.62f, r * 0.3f, fill);
+        fill.setColor(0xFFF6F6F2);
+        c.drawCircle(0, 0, r * 0.46f, fill);
+        fill.setColor(0xFF1E3E8A);
+        c.drawCircle(0, 0, r * 0.16f, fill);
+        c.restore();
     }
 
     /** (14.9) A mortar pit: a ring of sandbags round the post, the tube on its baseplate in the middle, pointing where it last fired. */
