@@ -71,7 +71,7 @@ final class GameView extends View implements Menu.Host {
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5, BTN_TOP = 6;
     private static final int TOP_BUTTONS = 7;
     private static final int[] SPEEDS = {1, 2, 4, 8};
-    private static final int[] BRUSHES = {1, 5, 10, 25};
+    private static final int[] BRUSHES = {1, 10, 25, 50};
     private static final int[] SHOP_AWNINGS = {0xFFD83A3A, 0xFF2E7D4F, 0xFF2E5FB0, 0xFFE8A21C, 0xFF8A2E6B};
     private static final int[] ROW_COLORS = {0xFFF0AD4E, 0xFF4F7BE0, 0xFF8FA05A, 0xFF7CC24E};
     private static final String[] ROW_LABELS = {"Civilians", "Cops", "Military", "Zombies"};
@@ -2012,7 +2012,7 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(9.5f * dp);
         for (int i = 0, n = city.districts.size(); i < n; i++) {
             City.District d = city.districts.get(i);
-            if (d.tiles < 40) continue;
+            if (!d.labelled()) continue;
             float x = tacX(d.name, tacRect.left + d.cx * sx), y = tacRect.top + d.cy * sy;
             if (!tacClaim(d.name, x, y)) continue;
             text.setColor(0xC0000000);
@@ -5692,6 +5692,89 @@ final class GameView extends View implements Menu.Host {
         return true;
     }
 
+    /** ((11.5) Letter-spaced capitals, as on a printed map. */
+    private static String spaced(String name) {
+        StringBuilder sb = new StringBuilder();
+        String up = name.toUpperCase(java.util.Locale.ROOT);
+        for (int k = 0; k < up.length(); k++) {
+            if (k > 0) sb.append(up.charAt(k) == ' ' || up.charAt(k - 1) == ' ' ? " " : "\u200A");
+            sb.append(up.charAt(k));
+        }
+        return sb.toString();
+    }
+
+    /** ((16.3) A map name: a soft dark halo to stand off the streets, then the letters. */
+    private void haloText(Canvas c, String label, float x, float y, int col, float a) {
+        text.setStyle(Paint.Style.STROKE);
+        text.setStrokeWidth(2.6f * dp);
+        text.setColor(alpha(0xFF0C1014, a * 0.5f));
+        c.drawText(label, x, y, text);
+        text.setStyle(Paint.Style.FILL);
+        text.setColor(alpha(col, a * 0.95f));
+        c.drawText(label, x, y, text);
+    }
+
+    /** ((16.3) The place the camera is over, named for a moment as it moves into it, close in. */
+    private City.District bannerDistrict;
+    private String bannerTitle, bannerSub;
+    private float bannerT;
+
+    private void drawPlaceBanner(Canvas c, float overview) {
+        City city0 = world.city;
+        if (city0.districts.isEmpty()) return;
+        float cx = camX + getWidth() / scale / 2, cy = camY + (barTop > 0 ? barTop : getHeight()) / scale / 2;
+        if (cx < 0 || cy < 0 || cx >= city0.worldW() || cy >= city0.worldH()) return;
+        City.District d = city0.districtOf(cx, cy);
+        if (d != null && d != bannerDistrict) {
+            bannerDistrict = d;
+            // (Not on the overview, where the names are on the map already; nor for a scrap of a district.)
+            if (overview < 0.5f && d.labelled()) {
+                bannerTitle = spaced(d.name);
+                int isl = city0.islandRects != null ? city0.island((int) (cx / City.T), (int) (cy / City.T)) : -1;
+                String where = isl >= 0 && city0.islandNames != null ? city0.islandNames[isl] : city0.name;
+                bannerSub = where != null && !where.equals(d.name) ? where : null;
+                bannerT = 3.2f;
+            }
+        }
+        if (bannerT <= 0 || bannerTitle == null) return;
+        bannerT -= frameDt;
+        if (overview >= 0.5f) bannerT = Math.min(bannerT, 0.4f);
+        float a = Math.min(1, Math.min((3.2f - bannerT) / 0.35f, bannerT / 0.9f));
+        if (a <= 0) return;
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(13 * dp);
+        float tw = text.measureText(bannerTitle);
+        float subW = 0;
+        if (bannerSub != null) {
+            text.setTextSize(9.5f * dp);
+            subW = text.measureText(bannerSub);
+        }
+        float half = Math.max(tw, subW) / 2 + 26 * dp, x = getWidth() / 2f;
+        // (Low down in the middle, just above the tools; if something's there, up under the top buttons; else not at all.)
+        float hgt = (bannerSub != null ? 30 : 18) * dp;
+        float y0 = barTop - 14 * dp - hgt;
+        oval.set(x - half, y0, x + half, y0 + hgt);
+        if (!claim(oval)) {
+            float top = 8 * dp;
+            for (RectF t : topRects) top = Math.max(top, t.bottom);
+            y0 = top + 30 * dp;
+            oval.set(x - half, y0, x + half, y0 + hgt);
+            if (!claim(oval)) return;
+        }
+        float base = y0 + 13 * dp;
+        text.setTextSize(13 * dp);
+        haloText(c, bannerTitle, x, base, 0xFFF6F1E2, a);
+        // Fine rules either side of the name.
+        stroke.setStrokeWidth(1 * dp);
+        stroke.setColor(alpha(0xFFF6F1E2, a * 0.55f));
+        c.drawLine(x - tw / 2 - 22 * dp, base - 4.5f * dp, x - tw / 2 - 8 * dp, base - 4.5f * dp, stroke);
+        c.drawLine(x + tw / 2 + 8 * dp, base - 4.5f * dp, x + tw / 2 + 22 * dp, base - 4.5f * dp, stroke);
+        if (bannerSub != null) {
+            text.setTextSize(9.5f * dp);
+            haloText(c, bannerSub, x, base + 13 * dp, 0xFFC8D0D6, a * 0.9f);
+        }
+    }
+
     private boolean uiCovers(RectF r) {
         if (overlaps(r, statsShown) || overlaps(r, meterRect)) return true;
         for (int i = 0; i < feedCount; i++) if (overlaps(r, feedLines[i])) return true;
@@ -5709,22 +5792,23 @@ final class GameView extends View implements Menu.Host {
         placedCount = 0;
         // Further out still, on the Islands: each island's town, in big letters.
         City city0 = world.city;
-        float islandAlpha = Math.max(0, Math.min(1, (1.9f - scale / dp) / 0.8f));
+        // ((16.3) On the island's own dry land, not the middle of its bounds out at sea; letter-spaced like the
+        // districts, a little smaller, and only once you're well out.)
+        float islandAlpha = Math.max(0, Math.min(1, (1.2f - scale / dp) / 0.45f));
         if (city0.islandRects != null && islandAlpha > 0) {
             text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(24 * dp);
+            text.setTextSize(17 * dp);
             for (int i = 0; i < city0.islandRects.length; i++) {
                 int[] q = city0.islandRects[i];
-                float sx = screenX((q[0] + q[2]) / 2f * City.T), sy = screenY((q[1] + q[3]) / 2f * City.T);
+                float lx = city0.islandLabel != null ? city0.islandLabel[i * 2] : (q[0] + q[2]) / 2f * City.T;
+                float ly = city0.islandLabel != null ? city0.islandLabel[i * 2 + 1] : (q[1] + q[3]) / 2f * City.T;
+                float sx = screenX(lx), sy = screenY(ly);
                 if (sx < -200 * dp || sx > getWidth() + 200 * dp || sy < 20 * dp || sy > barTop) continue;
-                String label = city0.islandNames[i].toUpperCase();
+                String label = spaced(city0.islandNames[i]);
                 float tw = text.measureText(label);
-                oval.set(sx - tw / 2, sy - 22 * dp, sx + tw / 2, sy + 4 * dp);
+                oval.set(sx - tw / 2, sy - 17 * dp, sx + tw / 2, sy + 4 * dp);
                 if (!claim(oval)) continue;
-                text.setColor(alpha(0xFF000000, islandAlpha * 0.6f));
-                c.drawText(label, sx + 2 * dp, sy + 2 * dp, text);
-                text.setColor(alpha(0xFFFFF4C8, islandAlpha * 0.95f));
-                c.drawText(label, sx, sy, text);
+                haloText(c, label, sx, sy, 0xFFFFF4C8, islandAlpha);
             }
         }
 
@@ -5967,29 +6051,22 @@ final class GameView extends View implements Menu.Host {
         }
             text.setTextAlign(Paint.Align.CENTER);
         // Zoomed out: the names of the districts across the map.
-        float districtAlpha = Math.max(0, Math.min(1, (3.2f - scale) / 1.2f));
+        // ((16.3) Only on the overview, zoomed well out: close in, where the playing is, they were big letters across
+        // the streets and the people in them. Smaller now, quieter, and never the first thing claimed: a call, a
+        // vehicle or a safe zone has its place first. Close in, the place shows by name below as you move into it.)
+        float districtAlpha = Math.max(0, Math.min(1, (1.3f - scale / dp) / 0.45f));
         if (districtAlpha > 0) {
-            // ((11.5) As on a printed map: letter-spaced capitals, bigger for a bigger district, with a dark outline
-            // to stand off the streets; and when something else has its middle, a clear spot just beside it instead
-            // of no name at all.)
             for (int i = 0, n = world.city.districts.size(); i < n; i++) {
                 City.District d = world.city.districts.get(i);
-                if (d.tiles < 40) continue;
+                if (!d.labelled()) continue;
                 float sx0 = screenX(d.cx), sy0 = screenY(d.cy);
                 if (sx0 < -200 * dp || sx0 > getWidth() + 200 * dp || sy0 < -40 * dp || sy0 > barTop + 40 * dp) continue;
                 String label = spacedNames.get(d);
                 if (label == null) {
-                    StringBuilder sb = new StringBuilder();
-                    String up = d.name.toUpperCase(java.util.Locale.ROOT);
-                    for (int k = 0; k < up.length(); k++) {
-                        if (k > 0) sb.append(up.charAt(k) == ' ' || up.charAt(k - 1) == ' ' ? " " : "\u200A");
-                        if (up.charAt(k) != ' ') sb.append(up.charAt(k));
-                        else sb.append(' ');
-                    }
-                    label = sb.toString();
+                    label = spaced(d.name);
                     spacedNames.put(d, label);
                 }
-                float size = Math.max(12.5f, Math.min(19, 11 + (float) Math.sqrt(d.tiles) / 14)) * dp;
+                float size = Math.max(10.5f, Math.min(14.5f, 9.5f + (float) Math.sqrt(d.tiles) / 18)) * dp;
                 text.setTextSize(size);
                 float tw = text.measureText(label);
                 boolean put = false;
@@ -6002,14 +6079,13 @@ final class GameView extends View implements Menu.Host {
                     put = claim(oval);
                 }
                 if (!put) continue;
-                text.setStyle(Paint.Style.STROKE);
-                text.setStrokeWidth(3.2f * dp);
-                text.setColor(alpha(0xFF101418, districtAlpha * 0.55f));
-                c.drawText(label, sx, sy, text);
-                text.setStyle(Paint.Style.FILL);
-                text.setColor(alpha(d.type == City.DT_INDUSTRIAL ? 0xFFE6DCC8 : d.type == City.DT_PARKSIDE ? 0xFFDDEFC8 : 0xFFF6F1E2, districtAlpha * 0.92f));
-                c.drawText(label, sx, sy, text);
+                haloText(c, label, sx, sy, d.type == City.DT_INDUSTRIAL ? 0xFFE6DCC8 : d.type == City.DT_PARKSIDE ? 0xFFDDEFC8 : 0xFFF6F1E2,
+                        districtAlpha * 0.85f);
             }
+        }
+        drawPlaceBanner(c, districtAlpha);
+        // (The rest as before: from a little way out, not right in close.)
+        if (scale < 3.2f) {
             // (10.46) Infection zones: their name, how many of the dead are in them, and whether they're held.
             text.setTextSize(11 * dp);
             for (int i = 0; i < world.infection.size(); i++) {
@@ -9275,7 +9351,7 @@ final class GameView extends View implements Menu.Host {
         for (int i = 0; i < n; i++) {
             float ox = 0, oy = 0;
             if (n > 1) {
-                double a = rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(rnd.nextDouble()) * (n > 10 ? 36 : 20);
+                double a = rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(rnd.nextDouble()) * (n >= 50 ? 54 : n > 10 ? 36 : 20);
                 ox = (float) (Math.cos(a) * r);
                 oy = (float) (Math.sin(a) * r);
             }

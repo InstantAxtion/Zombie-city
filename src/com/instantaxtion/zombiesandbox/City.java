@@ -225,6 +225,13 @@ final class City {
         /** The middle of the district's area (world units) and how many tiles it covers. */
         float cx, cy;
         int tiles;
+        /** ((16.3) Hardly any dry land of its own (one out at sea, off the islands): no name drawn for it. */
+        boolean unnamed;
+
+        /** Big enough, and dry enough, to have its name on the map. */
+        boolean labelled() {
+            return tiles >= 40 && !unnamed;
+        }
     }
 
     final List<District> districts = new ArrayList<District>();
@@ -633,6 +640,8 @@ final class City {
         // ((11.5) Anything worked out from the tiles while the city was being built is let go of: it's done now.)
         clear3 = null;
         stepC = null;
+        // ((16.3) Where the names go on the map: on dry land.)
+        placeLabels();
         // ((16.2) Where it's too steep to drive, worked out now rather than at the first drive off road mid-game.)
         if (elev != null) steepAt(0);
         progress(0.5f, "Painting the map");
@@ -3741,6 +3750,97 @@ final class City {
     /** The Islands map: each island's town, as {x0, y0, x1, y1} tiles (ring road included), and its name. */
     int[][] islandRects;
     String[] islandNames;
+    /** ((16.3) Where each island's name goes on the map (world x, y), on its own dry land; null without islands. */
+    float[] islandLabel;
+
+    /**
+     * ((16.3) Moves each district's and island's name onto its own dry land: as far in from the water and its
+     * borders as it can, near its middle. The middle of a district's tiles - or of an island's bounds - fell in the
+     * harbour, a lake or the sea on the water maps, and the name sat out on the water. Only where the name is drawn
+     * changes: nothing that plays.
+     */
+    private void placeLabels() {
+        if (districtAt == null || districts.isEmpty()) return;
+        int n = w * h;
+        short[] dist = new short[n];
+        // First from the water alone, for the islands; then from the water and every district border.
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 0 && islandRects == null) continue;
+            for (int y = 0, i = 0; y < h; y++)
+                for (int x = 0; x < w; x++, i++) {
+                    if (tiles[i] == WATER) {
+                        dist[i] = 0;
+                        continue;
+                    }
+                    boolean edge = x == 0 || y == 0 || x == w - 1 || y == h - 1;
+                    if (!edge && pass == 1) {
+                        byte me = districtAt[i];
+                        edge = districtAt[i - 1] != me || districtAt[i + 1] != me || districtAt[i - w] != me || districtAt[i + w] != me;
+                    }
+                    dist[i] = edge ? 1 : Short.MAX_VALUE;
+                }
+            for (int y = 1; y < h; y++)
+                for (int x = 1, i = y * w + 1; x < w; x++, i++)
+                    if (dist[i] > 1) dist[i] = (short) Math.min(dist[i], Math.min(dist[i - 1], dist[i - w]) + 1);
+            for (int y = h - 2; y >= 0; y--)
+                for (int x = w - 2, i = y * w + x; x >= 0; x--, i--)
+                    if (dist[i] > 1) dist[i] = (short) Math.min(dist[i], Math.min(dist[i + 1], dist[i + w]) + 1);
+            if (pass == 0) {
+                islandLabel = new float[islandRects.length * 2];
+                for (int k = 0; k < islandRects.length; k++) {
+                    int[] q = islandRects[k];
+                    float mx = (q[0] + q[2]) / 2f, my = (q[1] + q[3]) / 2f, best = -1e9f;
+                    islandLabel[k * 2] = mx * T;
+                    islandLabel[k * 2 + 1] = my * T;
+                    for (int y = Math.max(0, q[1]); y < Math.min(h, q[3]); y++)
+                        for (int x = Math.max(0, q[0]); x < Math.min(w, q[2]); x++) {
+                            int dd = dist[y * w + x];
+                            if (dd == 0) continue;
+                            // (Well in from the shore - enough for big letters - and then as near the middle as can be.)
+                            float score = Math.min(dd, 14) - 0.05f * (float) Math.sqrt((x - mx) * (x - mx) + (y - my) * (y - my));
+                            if (score > best) {
+                                best = score;
+                                islandLabel[k * 2] = (x + 0.5f) * T;
+                                islandLabel[k * 2 + 1] = (y + 0.5f) * T;
+                            }
+                        }
+                }
+                continue;
+            }
+            int nd = districts.size();
+            float[] best = new float[nd], mx = new float[nd], my = new float[nd];
+            int[] at = new int[nd], dry = new int[nd];
+            for (int k = 0; k < nd; k++) {
+                best[k] = -1e9f;
+                at[k] = -1;
+                mx[k] = districts.get(k).cx / T;
+                my[k] = districts.get(k).cy / T;
+            }
+            for (int y = 0, i = 0; y < h; y++)
+                for (int x = 0; x < w; x++, i++) {
+                    int dd = dist[i];
+                    if (dd == 0) continue;
+                    int k = districtAt[i];
+                    if (k < 0 || k >= nd) continue;
+                    dry[k]++;
+                    float score = Math.min(dd, 9) - 0.04f * (float) Math.sqrt((x - mx[k]) * (x - mx[k]) + (y - my[k]) * (y - my[k]));
+                    if (score > best[k]) {
+                        best[k] = score;
+                        at[k] = i;
+                    }
+                }
+            for (int k = 0; k < nd; k++) {
+                District d = districts.get(k);
+                d.unnamed = dry[k] < 40;
+                if (at[k] < 0) continue;
+                // (Already on dry land of its own, well in: it stays where it was.)
+                int i0 = tileIndex(d.cx, d.cy);
+                if (i0 >= 0 && i0 < n && districtAt[i0] == k && dist[i0] >= Math.min(6, best[k] + 0.5f)) continue;
+                d.cx = (at[k] % w + 0.5f) * T;
+                d.cy = (at[k] / w + 0.5f) * T;
+            }
+        }
+    }
     /** Where the causeway to the mainland reaches the edge of the map {x, y} (convoys come in over it). */
     float[] causewayEnd;
 

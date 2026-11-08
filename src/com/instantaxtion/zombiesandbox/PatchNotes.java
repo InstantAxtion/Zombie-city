@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.2";
-    static final int VERSION_CODE = 152;
+    static final String VERSION = "16.3";
+    static final int VERSION_CODE = 153;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.3  -  Place names, and a bigger brush",
+                    "Brush sizes are now 1, 10, 25 and 50 (the 5 is gone): 50 puts a whole crowd down at once, spread a little wider.",
+                    "Place names on the water maps are on dry land: a district's name or an island's no longer sits out in the harbour, a lake or the sea, and a district that's nearly all water has no name on the map at all.",
+                    "Place names, redone and out of the way: close in, where the playing is, the big names across the streets are gone. Zoomed well out they're on the map as before, smaller and quieter, and never over a call, a vehicle or a safe zone. Close in, the place you move into is named for a moment low in the middle of the screen - the district, with its island or town beneath - and then fades.",
+            },
             {
                     "16.2  -  Smoother running",
                     "Smoother running: about 15% less work each frame on Default and its worst stutters roughly halved, with Big a little lighter too. Cars and patrols plan shorter everyday trips on the big maps, a vehicle asking whether it can reach somewhere it asked about a moment ago isn't worked out again, and units already on their way to a call that merges with one nearby carry on, not all looking for a new way at once.",

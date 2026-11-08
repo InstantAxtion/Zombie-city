@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Place names, and a bigger brush (16.3):** brush sizes 1, 10, 25 and 50. District and island names go on their own dry land, never on the water, and are shown on the map only when zoomed well out; close in, the district you move into is named briefly at the bottom of the screen.
+
 **Smoother running (16.2):** less work each frame on the bigger maps and fewer stutters: shorter everyday trips for cars and patrols on big maps, reachability checks remembered for a few seconds, units on their way to a merged call keep their route, steep ground worked out once at build time, and a vehicle off the road no longer searches the whole map.
 
 **Map sizes, and the traffic police (16.1):** sizes are now Default, Big and a new Large (twice the ground of Big, the
@@ -914,7 +916,7 @@ a Guard Headquarters (the National Guard comes sooner).
     close it.
   - **Move**: drag to pan. Tap someone to follow them with the camera.
 - **Pinch** to zoom and **drag with two fingers** to pan, whichever tool is selected.
-- Top buttons: **Pause/Play**, **Speed** (1x/2x/4x/8x), **Brush** (spawn 1/5/10 at a time),
+- Top buttons: **Pause/Play**, **Speed** (1x/2x/4x/8x), **Brush** (spawn 1/10/25/50 at a time),
   **View** (3D or bird's-eye), **Clear** (choose what to clear), **Menu**.
 - **Take control**: tap anyone with **Move**, then **Take control** on their card to play them yourself: a
   civilian, cop, soldier or zombie. Put your left thumb down anywhere

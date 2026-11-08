@@ -4389,6 +4389,32 @@ public final class GameTests {
                 check(CityConfig.LARGE != CityConfig.VAST && large.code().length() > 0, "a city code for it");
             }
         });
+        test("16.3: the names of the districts and islands are on dry land, never out on the water", new Check() {
+            public void run() {
+                for (int preset : new int[]{CityConfig.ISLANDS, CityConfig.ARCHIPELAGO, CityConfig.PRISON_ISLAND})
+                    for (long seed : new long[]{77, 1234}) {
+                        CityConfig c = new CityConfig();
+                        c.v[CityConfig.OPT_PRESET] = preset;
+                        c.seed = seed;
+                        c.normalize();
+                        c.seed = seed;
+                        City city = new City(c, 0.05f);
+                        int named = 0;
+                        for (City.District d : city.districts) {
+                            if (!d.labelled()) continue;
+                            named++;
+                            check(city.tiles[city.tileIndex(d.cx, d.cy)] != City.WATER, d.name + " is named out on the water (map " + preset + ")");
+                        }
+                        check(named >= 4, "the districts are named (" + named + ", map " + preset + ")");
+                        if (city.islandRects != null) {
+                            check(city.islandLabel != null && city.islandLabel.length == city.islandRects.length * 2, "a place for each island's name");
+                            for (int k = 0; k < city.islandRects.length; k++)
+                                check(city.tiles[city.tileIndex(city.islandLabel[k * 2], city.islandLabel[k * 2 + 1])] != City.WATER,
+                                        city.islandNames[k] + " is named out at sea");
+                        }
+                    }
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());
