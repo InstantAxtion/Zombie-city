@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Smoother running (16.2):** less work each frame on the bigger maps and fewer stutters: shorter everyday trips for cars and patrols on big maps, reachability checks remembered for a few seconds, units on their way to a merged call keep their route, steep ground worked out once at build time, and a vehicle off the road no longer searches the whole map.
+
 **Map sizes, and the traffic police (16.1):** sizes are now Default, Big and a new Large (twice the ground of Big, the
 same people). Traffic officers have a hi-vis vest, white cap and gloves, and a glowing wand.
 

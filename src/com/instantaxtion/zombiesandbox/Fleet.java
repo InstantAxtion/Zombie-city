@@ -1005,7 +1005,8 @@ final class Fleet {
             float[] d = randomRoad();
             if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
             // ((10.34) On the biggest maps everyday trips stay local: a drive right across one is a long search.)
-            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > 3200) continue;
+            // ((16.2) Closer again on the Default and bigger maps: each of those searches was a stutter of 20 to 40 ms.)
+            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > (city.w >= 900 ? 1800 : 2400)) continue;
             // Somewhere on ahead, as a rule: a car doesn't spin round in the road for its next trip.
             float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
             if (tries < 8 && (d[0] - v.x) * hx + (d[1] - v.y) * hy < 0) continue;
@@ -1083,6 +1084,10 @@ final class Fleet {
         // (Everyday traffic and patrol cars keep to the roads; emergencies cut across whatever's paved.)
         boolean strict = v.type == CAR || (v.patrol && v.state != DRIVE);
         int from = city.tileIndex(v.x, v.y);
+        // ((16.2) Not when it isn't on a road itself (pulled up on a lot or a pavement): a roads-only search never got
+        // back to it, so it went right through every road on the map - up to 80 ms on the Big map - before trying the
+        // other way. Straight to the other way.)
+        if (strict && !city.roadBeside(from)) strict = false;
         // (10.27) Four-wheel drive on an emergency: across open country where that's quicker.
         // ((10.34) Only when the call isn't by a road anyway: a search across open country is costly.)
         if (!strict && emergency(v) && allWheel(v) && !city.roadNear(x, y, 5) && city.offroadField(field, x, y, from) && nearField(field, v.x, v.y) < City.FAR) {
@@ -1201,10 +1206,21 @@ final class Fleet {
     boolean canDrive(float fx, float fy, float tx, float ty) {
         float[] start = city.nearestDrivable(fx, fy);
         if (start == null) return false;
-        int[] full = scratchField();
         int si = city.tileIndex(start[0], start[1]);
-        return city.driveField(full, tx, ty, false, si) && full[si] < City.FAR;
+        // ((16.2) Whether there's a way by road from one part of town to another hardly ever changes: asked again
+        // and again for the same stations and calls, it was a whole search each time (then another for the route).)
+        long key = ((long) (si / city.w / 8) << 48) | ((long) (si % city.w / 8) << 32) | ((long) ((int) (ty / City.T) / 8) << 16) | ((int) (tx / City.T) / 8);
+        float[] known = canDriveSeen.get(key);
+        if (known != null && w.time - known[0] < 10) return known[1] > 0;
+        int[] full = scratchField();
+        boolean ok = city.driveField(full, tx, ty, false, si) && full[si] < City.FAR;
+        if (canDriveSeen.size() > 4000) canDriveSeen.clear();
+        canDriveSeen.put(key, new float[]{w.time, ok ? 1 : 0});
+        return ok;
     }
+
+    /** (16.2) Recent answers to canDrive, by where from and to (eight-tile squares): {when, 1 if there's a way}. */
+    private final java.util.HashMap<Long, float[]> canDriveSeen = new java.util.HashMap<Long, float[]>();
 
     /** Trucks sent out take one of the army trucks parked nearby (not the SWAT van, which has its own). */
     private boolean fromParked = true;
@@ -2741,7 +2757,8 @@ final class Fleet {
         buildGrid();
         // (10.32) A route on the biggest maps searches a lot more road: fewer of them a frame there.
         int area = city.w * city.h;
-        routeBudget = area > 600000 ? 2 : area > 300000 ? 3 : 6;
+        // ((16.2) One a step on the biggest maps: a couple of hundred patrol cars need only a few new routes a second.)
+        routeBudget = area > 600000 ? 1 : area > 300000 ? 3 : 6;
         // Who's out with lights and sirens: everyone else gives way to them.
         sirens.clear();
         for (int i = 0; i < vehicles.size(); i++) {
@@ -6076,12 +6093,15 @@ final class Fleet {
 
     /** (10.45) Everything on its way to one call goes on to another instead (where the dead have gone). */
     void redirect(Dispatch.Incident from, Dispatch.Incident to) {
+        // ((16.2) Calls merge with one close by: those on their way keep the way they have, and arrive among it all
+        // the same. A new search each - a dozen in one frame - was a stutter of up to 80 ms.)
+        boolean near = World.hypot(from.x - to.x, from.y - to.y) < 400;
         for (int i = 0, n = vehicles.size(); i < n; i++) {
             Vehicle v = vehicles.get(i);
             if (v.incident != from) continue;
             v.incident = to;
             v.place = to.place;
-            if (v.state == DRIVE && !route(v, to.x, to.y)) v.incident = from;
+            if (v.state == DRIVE && !near && !route(v, to.x, to.y)) v.incident = from;
         }
     }
 

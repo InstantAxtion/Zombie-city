@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.1";
-    static final int VERSION_CODE = 151;
+    static final String VERSION = "16.2";
+    static final int VERSION_CODE = 152;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.2  -  Smoother running",
+                    "Smoother on the bigger maps: about 15% less work each frame on Default, and the worst stutters roughly halved on Default and Big. Cars and patrols plan shorter everyday trips on the big maps, a vehicle asking whether it can reach somewhere it asked about a moment ago isn't worked out again, and units already on their way to a call that merges with one nearby carry on, not all looking for a new way at once.",
+                    "Steep ground is worked out once when the city is built, not over and over while vehicles look for a way across country, and a vehicle starting away from any road no longer searches the whole map for one. New cities also build a little faster.",
+            },
             {
                     "16.1  -  Map sizes, and the traffic police",
                     "Map sizes: the old Default is gone. The two bigger sizes are now called Default and Big, and there's a new Large: twice the ground of Big, with the same number of people, so the city is spread out with more room between. It needs a phone with plenty of memory (about 850 MB for the game) and runs slower than Big; the New Game screen says so if this phone hasn't enough.",

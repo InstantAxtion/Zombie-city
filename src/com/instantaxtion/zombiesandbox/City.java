@@ -360,6 +360,18 @@ final class City {
         // Every tile belongs to its nearest centre, with wobbly borders.
         districtAt = new byte[w * h];
         float[] sx = new float[districts.size()], sy = new float[districts.size()];
+        // ((16.2) The wobble along each row and down each column, and each centre's place and weight, worked out once
+        // rather than for every tile of the map: the same sums, a good part of building a big city.)
+        float[] wobX = new float[h], wobY = new float[w], kx = new float[n], ky = new float[n], kw = new float[n];
+        for (int y = 0; y < h; y++) wobX[y] = (float) Math.sin(y * 0.21f + cfg.seed) * 3;
+        for (int x = 0; x < w; x++) wobY[x] = (float) Math.sin(x * 0.17f + cfg.seed * 0.7f) * 3;
+        for (int k = 0; k < n; k++) {
+            District d = districts.get(k);
+            kx[k] = d.x;
+            ky[k] = d.y;
+            // Downtown is compact; suburbs sprawl.
+            kw[k] = d.type == DT_DOWNTOWN ? 1.25f : d.type == DT_SUBURB ? 0.85f : 1f;
+        }
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {
                 if (country >= 0 && (x < townX0 || y < townY0 || x >= townX1 || y >= townY1)) {
@@ -367,14 +379,12 @@ final class City {
                     districts.get(country).tiles++;
                     continue;
                 }
-                float wx = x + (float) Math.sin(y * 0.21f + cfg.seed) * 3, wy = y + (float) Math.sin(x * 0.17f + cfg.seed * 0.7f) * 3;
+                float wx = x + wobX[y], wy = y + wobY[x];
                 int best = 0;
                 float bd = Float.MAX_VALUE;
                 for (int k = 0; k < n; k++) {
-                    District d = districts.get(k);
-                    // Downtown is compact; suburbs sprawl.
-                    float weight = d.type == DT_DOWNTOWN ? 1.25f : d.type == DT_SUBURB ? 0.85f : 1f;
-                    float dd = ((d.x - wx) * (d.x - wx) + (d.y - wy) * (d.y - wy)) * weight;
+                    float weight = kw[k];
+                    float dd = ((kx[k] - wx) * (kx[k] - wx) + (ky[k] - wy) * (ky[k] - wy)) * weight;
                     if (dd < bd) {
                         bd = dd;
                         best = k;
@@ -623,6 +633,8 @@ final class City {
         // ((11.5) Anything worked out from the tiles while the city was being built is let go of: it's done now.)
         clear3 = null;
         stepC = null;
+        // ((16.2) Where it's too steep to drive, worked out now rather than at the first drive off road mid-game.)
+        if (elev != null) steepAt(0);
         progress(0.5f, "Painting the map");
         // The big map uses 16-bit colour to keep memory down.
         bitmap = Bitmap.createBitmap((int) (w * T * detail), (int) (h * T * detail),
@@ -6816,23 +6828,29 @@ final class City {
             if (c0 == null) return;
         }
         int[] prev = new int[n], queue = new int[n];
+        // (Plain flood over the drivable tiles: the route tables aren't built yet.) ((16.2) Once, then carried on from
+        // the new lanes laid to each station, rather than all over again for every station: the same tiles are
+        // reached, and the map comes out the same, in a fraction of the time.)
+        Arrays.fill(field, FAR);
+        int st0 = tileIndex(c0[0], c0[1]), qt = 0;
+        field[st0] = 0;
+        queue[qt++] = st0;
+        floodDrive(field, queue, qt);
+        java.util.ArrayList<Integer> added = new java.util.ArrayList<Integer>();
         for (Facility f : facilities) {
             if (f.kind != FACILITY_POLICE && f.kind != FACILITY_FIRE) continue;
-            // (Plain flood over the drivable tiles: the route tables aren't built yet.)
-            Arrays.fill(field, FAR);
-            int st0 = tileIndex(c0[0], c0[1]), qh = 0, qt = 0;
-            field[st0] = 0;
-            queue[qt++] = st0;
-            while (qh < qt) {
-                int c = queue[qh++], x = c % w, y = c / w;
-                for (int k = 0; k < 4; k++) {
-                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
-                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                    int j = ny * w + nx;
+            if (added.size() > 0) {
+                qt = 0;
+                for (int a2 = 0; a2 < added.size(); a2++) {
+                    int j = added.get(a2), x = j % w, y = j / w;
                     if (field[j] < FAR || driveCost(j) < 0) continue;
-                    field[j] = field[c] + 1;
+                    boolean touches = (x > 0 && field[j - 1] < FAR) || (x < w - 1 && field[j + 1] < FAR) || (y > 0 && field[j - w] < FAR) || (y < h - 1 && field[j + w] < FAR);
+                    if (!touches) continue;
+                    field[j] = 1;
                     queue[qt++] = j;
                 }
+                floodDrive(field, queue, qt);
+                added.clear();
             }
             float[] p = nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
             if (p == null) p = new float[]{f.x, f.y};
@@ -6870,8 +6888,25 @@ final class City {
                         if (t == GRASS || t == TREE || t == SAND || t == TRAIL) {
                             tiles[j] = DIRT;
                             solid[j] = false;
+                            added.add(j);
                         }
                     }
+            }
+        }
+    }
+
+    /** (16.2) The flood over drivable tiles carried on from the queue's first qt tiles (already marked in field). */
+    private void floodDrive(int[] field, int[] queue, int qt) {
+        int qh = 0;
+        while (qh < qt) {
+            int c = queue[qh++], x = c % w, y = c / w;
+            for (int k = 0; k < 4; k++) {
+                int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                int j = ny * w + nx;
+                if (field[j] < FAR || driveCost(j) < 0) continue;
+                field[j] = field[c] + 1;
+                queue[qt++] = j;
             }
         }
     }
@@ -12401,6 +12436,20 @@ final class City {
     boolean drivable(float x, float y) {
         int tx = City.fl(x / T), ty = City.fl(y / T);
         return tx >= 0 && ty >= 0 && tx < w && ty < h && driveCost(ty * w + tx) > 0;
+    }
+
+    /** (16.2) A road (or a lane: anything a roads-only search goes along) on tile i or one beside it. */
+    boolean roadBeside(int i) {
+        if (i < 0) return false;
+        int x = i % w, y = i / w;
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++) {
+                int nx = x + dx, ny = y + dy;
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                int c = driveCost(ny * w + nx);
+                if (c >= 0 && c <= 4) return true;
+            }
+        return false;
     }
 
     /** The nearest drivable tile centre to (x, y), or null. */

@@ -2146,6 +2146,8 @@ public final class GameTests {
                     if (zz.stun > 0) stunned++;
                     zz.dead = true;
                     w.clearZombies();
+                    // ((16.2) Out of the list now, not at the next step: two hundred of them reached the cap.)
+                    w.entities.remove(zz);
                 }
                 check(stunned > tries * 0.4f && stunned < tries * 0.95f, "shoves work most of the time, not every time (" + stunned + " of " + tries + ")");
                 // Trucks waiting at a base for their squads wait in the yard, clear of the gate.
