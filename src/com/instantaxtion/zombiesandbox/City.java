@@ -921,11 +921,11 @@ final class City {
     /** ((13.3) Facilities whose way on foot is out of date (a building came down), to be worked out again in turn. */
     private final java.util.LinkedHashSet<Facility> staleFields = new java.util.LinkedHashSet<Facility>();
 
-    /** (10.55) How many facilities anyone walks to (all but the fire stations), and a couple to spare. */
+    /** (10.55) How many facilities anyone walks to (all but the fire stations and the hospital), and a couple to spare. */
     private int fieldsNeeded() {
         if (fieldsNeeded == 0) {
             int n = 2;
-            for (Facility f : facilities) if (f.kind != FACILITY_FIRE) n++;
+            for (Facility f : facilities) if (f.kind != FACILITY_FIRE && f.kind != FACILITY_HOSPITAL) n++;
             fieldsNeeded = Math.max(8, n);
         }
         return fieldsNeeded;
@@ -959,7 +959,8 @@ final class City {
         if (facilityFields.size() >= fieldsNeeded()) return false;
         for (int i = 0, n = facilities.size(); i < n; i++) {
             Facility f = facilities.get(i);
-            if (f.kind == FACILITY_FIRE || facilityFields.containsKey(f)) continue;
+            // ((16.5) Nor the hospital, in a city that still has one: nobody walks there.)
+            if (f.kind == FACILITY_FIRE || f.kind == FACILITY_HOSPITAL || facilityFields.containsKey(f)) continue;
             field(f);
             return true;
         }
@@ -2801,10 +2802,11 @@ final class City {
             serviceBuilding(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2, STATION, cfg.civic >= 23 && n == 0 ? 0 : n + 1);
         }
 
-        // One hospital, as far as it can be from the police stations.
+        // One hospital, as far as it can be from the police stations. ((16.5) Not any more: nobody went there for
+        // anything. Cities from before still have theirs, as an ordinary building.)
         int hospital = -1;
         float far = -1;
-        for (int k = 0; k < blocks.size(); k++) {
+        for (int k = 0; k < (cfg.hospital() ? blocks.size() : 0); k++) {
             int[] b = blocks.get(k);
             if (used[k] || b[2] - b[0] - 2 < 6 || b[3] - b[1] - 2 < 6) continue;
             float cx = (b[0] + b[2]) / 2f * T, cy = (b[1] + b[3]) / 2f * T, d = w * T;

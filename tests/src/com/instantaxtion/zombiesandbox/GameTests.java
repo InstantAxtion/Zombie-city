@@ -29,7 +29,8 @@ public final class GameTests {
                     City city = new City(c, 0.1f);
                     String name = CityConfig.PRESETS[c.v[CityConfig.OPT_PRESET]] + " size " + c.v[CityConfig.OPT_SIZE];
                     check(city.buildings.size() > 20, name + " has buildings");
-                    check(city.nearestFacility(City.FACILITY_HOSPITAL, 0, 0) != null, name + " has a hospital");
+                    // ((16.5) No hospital any more: it had nothing left to do.)
+                    check(city.nearestFacility(City.FACILITY_HOSPITAL, 0, 0) == null, name + " has no hospital");
                 }
             }
         });
@@ -989,6 +990,9 @@ public final class GameTests {
                 lc.seed = 3;
                 lc.v[CityConfig.OPT_PRESET] = 8;
                 lc.v[CityConfig.OPT_SIZE] = CityConfig.MASSIVE;
+                // ((16.5) Map version 29, the streets this seed was picked for: without the hospital, a side road's end
+                // meets a lane by a main road, and the count takes that short crossing for a stub.)
+                lc.civic = 29;
                 City lanes = new City(lc, 0.05f);
                 int stubs = 0;
                 for (int y = 0; y < lanes.h; y++)
@@ -2748,6 +2752,10 @@ public final class GameTests {
                 c.seed = 77;
                 c.normalize();
                 c.seed = 77;
+                // ((16.5) Map version 29, the streets this was written on: the base's armoury is emptied at the start by
+                // everyone at it filling up, and on this seed's newer streets the supply truck that refills it comes too
+                // late for an ammo truck to be spared.)
+                c.civic = 29;
                 World w = new World(c);
                 w.populate(c);
                 City.Facility base = w.city.mainBase();
@@ -2970,6 +2978,8 @@ public final class GameTests {
                 c.seed = 41;
                 c.normalize();
                 c.seed = 41;
+                // ((16.5) Map version 29, the streets this pack's spot was chosen on.)
+                c.civic = 29;
                 World w = new World(c);
                 w.populate(c);
                 // A pack of the dead, an outbreak under way, and people leaving town.
@@ -4413,6 +4423,25 @@ public final class GameTests {
                                         city.islandNames[k] + " is named out at sea");
                         }
                     }
+            }
+        });
+        test("16.5: no hospital in a new city; an older city keeps its building, but nobody's sent there and it has no way on foot worked out", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.seed = 41;
+                World w = new World(c);
+                check(w.city.nearestFacility(City.FACILITY_HOSPITAL, 0, 0) == null, "no hospital");
+                for (City.Building b : w.city.buildings) check(b.kind != City.HOSPITAL, "no hospital building");
+                CityConfig o = new CityConfig();
+                o.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                o.seed = 41;
+                o.civic = 29;
+                World ow = new World(o);
+                City.Facility h = ow.city.nearestFacility(City.FACILITY_HOSPITAL, 0, 0);
+                check(h != null, "an older city still has its hospital (saves rebuild the same)");
+                for (int i = 0; i < 400 && ow.city.warmFacilityField(); i++) { }
+                check(((java.util.Map<?, ?>) field(ow.city, "facilityFields")).get(h) == null, "no way on foot to it worked out ahead");
             }
         });
         test("every screen draws", new Check() {

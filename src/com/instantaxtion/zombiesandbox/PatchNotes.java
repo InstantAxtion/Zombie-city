@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.4";
-    static final int VERSION_CODE = 154;
+    static final String VERSION = "16.5";
+    static final int VERSION_CODE = 155;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.5  -  No hospital",
+                    "The hospital is gone: new cities are built without one, and its block is ordinary town. It had nothing left to do - nobody went there for care - and the game still worked out the way on foot to it for everyone, memory and all. A city saved before keeps its building (saved cities rebuild just as they were), but it's only a building now: no way there worked out, no marker or label on the map, nobody sent there.",
+                    "The rescue helicopter brings the people it lifts out back to its base, rather than to the hospital.",
+                    "The army's field hospital, the tent at the base where hurt soldiers and police are patched up, is unchanged.",
+                    "Fixed: soldiers out of rounds at a fight a long way from the base sometimes got no ammo truck - they'd set off on foot and were too far off by the time the army looked again.",
+            },
             {
                     "16.4  -  Less memory",
                     "The big maps need a good deal less memory: about 160 MB less at the most on Large (it now runs in about 640 MB rather than 800), about 40 MB less on Big and 20 MB less on Default. The New Game screen's memory warning is lowered to match: Large about 700 MB, Big 520, Default 440.",

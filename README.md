@@ -260,7 +260,7 @@ counts), and wherever the dead gather the ground glows red. Labels go most impor
 ## City layout
 
 Besides homes, offices and warehouses, cities have shops, gas stations, churches, schools, fire
-stations, supermarkets, a hospital (with a helipad and ambulance bay), police stations, a shopping
+stations, supermarkets, police stations, a shopping
 mall, a football stadium, a power station, building sites, farms on the edge of town and (on some
 maps) a military base. Streets have roundabouts, pavement trees and back alleys; parks can have a
 bandstand and flower beds. Every city has a name. Parks come as
@@ -318,8 +318,8 @@ ranger station: rangers walk the trails and patrol the dirt lanes in their truck
 the dead come. Fire lookout towers stand on the wooded high ground, each with a lookout who changes shift
 with a relief from the ranger station, spots the dead from far off and phones it in. People hike the trails,
 fish from the lake shores and sit round the campfires. When people are cut off out there, the rescue
-helicopter hovers and lowers a search and rescue team on the winch, lifts everyone out and flies them to the
-hospital. Nobody reports zombies that nobody has seen. Saved games from before keep their old maps.
+helicopter hovers and lowers a search and rescue team on the winch, lifts everyone out and flies them back to
+base. Nobody reports zombies that nobody has seen. Saved games from before keep their old maps.
 
 **Walled safe zones (10.15):** a safe zone is a whole city block walled in with concrete barriers and fencing
 (its buildings close the gaps), with gates onto the streets where guards check people for bites and let them
@@ -418,6 +418,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**No hospital (16.5):** new cities have no hospital (map version 30); older saved cities keep the building, but nothing uses it and no walking route to it is worked out. The rescue helicopter brings survivors back to its base. The army's field hospital tent is unchanged. Soldiers who set off on foot for rounds now still count for an ammo truck (450 px, was 350).
 
 **Less memory (16.4):** walking routes (to facilities, calls, parks, safe zones and move orders) are stored at a byte a tile and only over the ground they reach; vehicle routes take half the room. Large runs in about 640 MB instead of 800; the memory warnings are Large 700 MB, Big 520, Default 440. Building interiors were never the problem: they're made only for buildings you zoom into, at most 400 at once, and take well under 1 MB.
 

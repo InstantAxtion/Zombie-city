@@ -6803,7 +6803,7 @@ final class World {
                         "The infected are getting stronger and quicker.",
                         "Reports of infected shrugging off gunshots.",
                         "The virus has fully evolved. Expect the worst."};
-                dispatch.say(Dispatch.WHO_INFO, null, "Hospital: " + lines[stage] + " (stage " + stage + ")",
+                dispatch.say(Dispatch.WHO_INFO, null, "Health officials: " + lines[stage] + " (stage " + stage + ")",
                         city.worldW() / 2, city.worldH() / 2);
             }
             survivorPlans();
@@ -10802,11 +10802,13 @@ final class World {
         for (int i = 0; i < dispatch.incidents.size(); i++) {
             Dispatch.Incident inc = dispatch.incidents.get(i);
             if (inc.resolved || fleet.ammoTruckFor(inc)) continue;
-            // (Those there, or just set off for the base: a soldier out of rounds is let go from the call at once.)
+            // (Those there, or just set off for the base: a soldier out of rounds is let go from the call at once.
+            // ((16.5) Out to 450, not 350: this is looked at every ten seconds, and in ten a soldier who set off on foot
+            // is 370 away - a squad that ran dry just after a look had gone by the next, and no truck came.))
             int low = 0;
             for (int k = 0, n = entities.size(); k < n && low < 2; k++) {
                 Entity e = entities.get(k);
-                if (e.dead || e.type != Entity.SOLDIER || e.ride != null || World.hypot(e.x - inc.x, e.y - inc.y) > 350) continue;
+                if (e.dead || e.type != Entity.SOLDIER || e.ride != null || World.hypot(e.x - inc.x, e.y - inc.y) > 450) continue;
                 float stock = (e.ammo + e.reserve) / (float) Math.max(1, e.magSize + fullReserve(e));
                 if (stock < 0.35f) low++;
             }
@@ -16598,10 +16600,9 @@ final class World {
         return true;
     }
 
-    /** The rescue helicopter sets its survivors down at the hospital. */
+    /** The rescue helicopter sets its survivors down where it lands, back at base. ((16.5) Not at a hospital: there's none.) */
     void dropRescued(Fleet.Vehicle v) {
-        City.Facility h = city.nearestFacility(City.FACILITY_HOSPITAL, v.x, v.y);
-        float x = h != null ? h.x : v.x, y = h != null ? h.y : v.y;
+        float x = v.x, y = v.y;
         int n = v.passengers;
         v.passengers = 0;
         for (int i = 0; i < n; i++) {
@@ -16610,8 +16611,7 @@ final class World {
             e.aware = true;
             e.homeChecked = true;
         }
-        dispatch.say(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": " + n + " survivor" + (n == 1 ? "" : "s") + " safe at "
-                + (h != null ? h.name : "the hospital") + ".", x, y);
+        dispatch.say(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": " + n + " survivor" + (n == 1 ? "" : "s") + " safe at base.", x, y);
         highlight("Rescued: " + n, x, y);
     }
 

@@ -373,7 +373,7 @@ final class Fleet {
                         case HOVER: return v.team == null ? "Rescue helicopter: Coming into a hover" : v.pickup ? "Rescue helicopter: Winching everyone up (" + v.passengers + " aboard)"
                                 : "Rescue helicopter: Lowering the team";
                         case STANDBY: return "Rescue helicopter: At base, waiting for the team's call";
-                        default: return v.passengers > 0 ? "Rescue helicopter: " + v.passengers + " aboard, to the hospital" : "Rescue helicopter: Returning";
+                        default: return v.passengers > 0 ? "Rescue helicopter: " + v.passengers + " aboard, back to base" : "Rescue helicopter: Returning";
                     }
                 }
                 if (v.kind == K_POLICE_HELI) {
@@ -7081,26 +7081,20 @@ final class Fleet {
                 // The team's down: back to base to wait for their call.
                 v.state = FLY_OUT;
                 v.standby = true;
-                City.Facility h = city.nearestFacility(City.FACILITY_HOSPITAL, v.x, v.y);
-                boolean lift = v.passengers > 0 && h != null;
-                v.homeX = lift ? h.x : v.baseX;
-                v.homeY = lift ? h.y : v.baseY;
+                // ((16.5) Anyone aboard comes back to base with them: there's no hospital.)
+                boolean lift = v.passengers > 0;
+                v.homeX = v.baseX;
+                v.homeY = v.baseY;
                 w.dispatch.chatter(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Team's on the ground. "
-                        + (lift ? "Got the lookout off the tower, taking them to the hospital, then back to base." : "Heading back to base.")
+                        + (lift ? "Got the lookout off the tower, bringing them back to base." : "Heading back to base.")
                         + " Call us when you need us.", v.x, v.y);
             } else if (step == 2) {
                 v.state = FLY_OUT;
                 v.standby = false;
-                City.Facility h = city.nearestFacility(City.FACILITY_HOSPITAL, v.x, v.y);
-                if (v.passengers > 0 && h != null) {
-                    v.homeX = h.x;
-                    v.homeY = h.y;
-                } else {
-                    v.homeX = v.baseX;
-                    v.homeY = v.baseY;
-                }
+                v.homeX = v.baseX;
+                v.homeY = v.baseY;
                 w.dispatch.say(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Everyone's aboard. "
-                        + (v.passengers > 0 ? v.passengers + " survivor" + (v.passengers == 1 ? "" : "s") + ", heading for the hospital." : "Nobody left to bring out. Returning."),
+                        + (v.passengers > 0 ? v.passengers + " survivor" + (v.passengers == 1 ? "" : "s") + ", heading back to base." : "Nobody left to bring out. Returning."),
                         v.x, v.y);
             }
         } else if (v.state == STANDBY) {
