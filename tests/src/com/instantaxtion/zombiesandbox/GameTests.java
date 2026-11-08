@@ -2752,9 +2752,8 @@ public final class GameTests {
                 c.seed = 77;
                 c.normalize();
                 c.seed = 77;
-                // ((16.5) Map version 29, the streets this was written on: the base's armoury is emptied at the start by
-                // everyone at it filling up, and on this seed's newer streets the supply truck that refills it comes too
-                // late for an ammo truck to be spared.)
+                // ((16.5) Map version 29, the streets this was written on: on this seed's newer ones the call it picks
+                // is the far side of town, and the truck's drive there now and then outlasts the test's four minutes.)
                 c.civic = 29;
                 World w = new World(c);
                 w.populate(c);
@@ -4442,6 +4441,47 @@ public final class GameTests {
                 check(h != null, "an older city still has its hospital (saves rebuild the same)");
                 for (int i = 0; i < 400 && ow.city.warmFacilityField(); i++) { }
                 check(((java.util.Map<?, ?>) field(ow.city, "facilityFields")).get(h) == null, "no way on foot to it worked out ahead");
+            }
+        });
+        test("16.6: the base's armoury isn't emptied at the start by everyone short of rounds topping up; parked vehicles drawn close up", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                City.Facility base = w.city.mainBase();
+                check(base != null, "a base");
+                // (As in a city caught unprepared: everyone with half their spare rounds.)
+                int short_ = 0;
+                for (Entity e : w.entities)
+                    if (e.isArmed() && (e.type == Entity.SOLDIER || e.type == Entity.COP)) {
+                        e.reserve = World.fullReserve(e) / 2;
+                        short_++;
+                    }
+                check(short_ > 50, "plenty short of rounds (" + short_ + ")");
+                base.ammo = 9000;
+                for (int f = 0; f < 30 * 10; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(base.ammo >= 4500, "half the base's armoury still there after the first ten seconds (" + base.ammo + ")");
+                check(base.ammo < 9000, "but those at it did top up some (" + base.ammo + ")");
+                // Every parked vehicle in view drawn again, sharp, without trouble.
+                w.city.drawParked(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)), 0, 0, w.city.worldW(), w.city.worldH());
+                int trucks = 0;
+                for (City.Facility f : w.city.facilities)
+                    if (f.kind == City.FACILITY_BASE) {
+                        int n = w.city.parkedTrucks(f.x, f.y, Math.max(260, f.r * 2.5f));
+                        for (Fleet.Vehicle v : w.fleet.vehicles)
+                            if (v.type == Fleet.TRUCK && v.standby && World.hypot(v.x - f.x, v.y - f.y) < Math.max(260, f.r * 2.5f)) n++;
+                        check(n >= 2, f.name + " has trucks to be seen (" + n + ")");
+                        trucks += n;
+                    }
+                check(trucks > 0, "trucks at the bases");
             }
         });
         test("every screen draws", new Check() {

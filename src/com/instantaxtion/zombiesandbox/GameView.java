@@ -2546,6 +2546,8 @@ final class GameView extends View implements Menu.Host {
             mapSrc.set(0, 0, world.city.bitmap.getWidth(), world.city.bitmap.getHeight());
             mapDst.set(0, 0, world.city.worldW(), world.city.worldH());
             c.drawBitmap(world.city.bitmap, mapSrc, mapDst, bmpPaint);
+            // ((16.6) Close in on a low-detail map: the parked vehicles drawn sharp, not left as smudges.)
+            if (scale > 1.1f) world.city.drawParked(c, camX - City.T, camY - City.T, camX + getWidth() / scale + City.T, camY + getHeight() / scale + City.T);
         }
         drawCloseUps(c);
 

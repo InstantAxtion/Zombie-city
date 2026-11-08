@@ -12135,6 +12135,10 @@ final class City {
     }
 
     private void drawCar(Canvas c, Paint p, int x, int y) {
+        drawCar(c, p, x, y, prnd);
+    }
+
+    private void drawCar(Canvas c, Paint p, int x, int y, Random prnd) {
         prnd.setSeed(tileSeed(x, y, 3));
         boolean vertical;
         if (isLotCar(x, y)) vertical = true;
@@ -12210,6 +12214,22 @@ final class City {
             p.setColor(0xFF4A5530);
             for (float yy = cy; yy < cy + hl - 1; yy += 2.2f) c.drawRect(cx - hw + 0.8f, yy, cx + hw - 0.8f, yy + 0.5f, p);
         }
+    }
+
+    private final Random viewRnd = new Random();
+    private final Paint viewPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /**
+     * ((16.6) The parked vehicles in a stretch of the map, drawn again sharp over the map picture, for a close look:
+     * on the bigger maps the picture has a fifth of a pixel or less to a unit, and a truck parked on a base was a
+     * smudge of olive on olive ground - the bases looked as if they had no vehicles at all.)
+     */
+    void drawParked(Canvas c, float x0, float y0, float x1, float y1) {
+        int tx0 = Math.max(0, (int) (x0 / T)), ty0 = Math.max(0, (int) (y0 / T));
+        int tx1 = Math.min(w - 1, (int) (x1 / T)), ty1 = Math.min(h - 1, (int) (y1 / T));
+        for (int y = ty0; y <= ty1; y++)
+            for (int x = tx0; x <= tx1; x++)
+                if (tiles[y * w + x] == CAR) drawCar(c, viewPaint, x, y, viewRnd);
     }
 
     static int darken(int c, float f) {

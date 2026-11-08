@@ -4717,7 +4717,31 @@ final class Fleet {
         }
         int cur = v.field.get(v.pathT);
         if (cur <= 4) return false;
-        int tx = v.pathT % W, ty = v.pathT / W, nt = downhill(v.field, v.pathT), bx = nt % W, by = nt / W;
+        int nt0 = downhill(v.field, v.pathT);
+        if (nt0 == v.pathT && cur > 40) {
+            // ((16.6) Nowhere lower beside it, a long way short of the end: a tile at the edge of its route's corridor,
+            // where it was pushed aside, whose way on lies just outside it. That was taken for arriving - an ammo truck
+            // stopped on an open road halfway to the fight and waited there. The lowest tile close by, or a new plan.)
+            int best = cur;
+            for (int y = v.pathT / W - 2; y <= v.pathT / W + 2; y++)
+                for (int x = v.pathT % W - 2; x <= v.pathT % W + 2; x++) {
+                    if (x < 0 || y < 0 || x >= W || y >= city.h) continue;
+                    int fv = v.field.get(y * W + x);
+                    if (fv < best && !city.solidTile(x, y)) {
+                        best = fv;
+                        nt0 = y * W + x;
+                    }
+                }
+            if (nt0 == v.pathT) {
+                if (v.rerouteCd <= 0 && route(v, v.tx, v.ty)) {
+                    v.rerouteCd = 3;
+                    v.pathField = null;
+                    return driveStep(v, dt, max, throttle);
+                }
+                return false;
+            }
+        }
+        int tx = v.pathT % W, ty = v.pathT / W, nt = nt0, bx = nt % W, by = nt / W;
         if (bx == tx && by == ty) return false;
         int ddx = Integer.signum(bx - tx), ddy = Integer.signum(by - ty);
         // Keep to your own side of the road, in the middle of the lane.
@@ -6437,7 +6461,10 @@ final class Fleet {
      * gate), else null: they're all out.
      */
     float[] baseTruck(City.Facility f) {
-        float[] p = city.takeParkedTruck(f.x, f.y, Math.max(260, f.r * 2.5f));
+        // ((16.6) One standing ready in the yard first.)
+        float[] p = takeStandby(TRUCK, f.x, f.y, Math.max(260, f.r * 2.5f));
+        if (p != null) return p;
+        p = city.takeParkedTruck(f.x, f.y, Math.max(260, f.r * 2.5f));
         if (p != null || f.spareTrucks <= 0 || f.fallen) return p;
         float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
         if (g == null) return null;
@@ -6462,8 +6489,33 @@ final class Fleet {
             }
             int want = Math.max(4, Math.min(40, (soldiers + 3) / 4));
             f.spareTrucks = Math.max(0, want - have);
+            // ((16.6) A few of them out in the yard where they can be seen, parked and ready, when the base's layout
+            // left no room for any along its bottom row - an airfield or a vehicle park across it. The rest were all
+            // in the garages, and the base looked as if it had no vehicles at all.)
+            int show = Math.min(want, SHOWN_TRUCKS) - have;
+            float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
+            for (int k = 0; k < show && f.spareTrucks > 0 && g != null; k++) {
+                float[] p = bay(g, f);
+                if (p == null || World.hypot(p[0] - f.x, p[1] - f.y) > rad) break;
+                Vehicle v = make(TRUCK);
+                v.x = p[0];
+                v.y = p[1];
+                v.homeX = p[0];
+                v.homeY = p[1];
+                v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
+                v.depot = f;
+                v.state = IDLE;
+                v.speed = 0;
+                v.parked = true;
+                v.standby = true;
+                vehicles.add(v);
+                f.spareTrucks--;
+            }
         }
     }
+
+    /** ((16.6) Trucks a base has standing in its yard at the least, where it has them. */
+    static final int SHOWN_TRUCKS = 4;
 
     void stockStations() {
         for (City.Facility f : city.facilities) {

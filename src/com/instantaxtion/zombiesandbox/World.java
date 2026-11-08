@@ -9523,11 +9523,15 @@ final class World {
                 if (p.uses > 0 && p.drop <= 0 && (p.x - e.x) * (p.x - e.x) + (p.y - e.y) * (p.y - e.y) < 30 * 30)
                     e.reserve = fullReserve(e);
             }
-        // Standing at a supply point quietly tops up spare ammo.
+        // Standing at a supply point quietly tops up spare ammo. ((16.6) But never the armoury's last half: with
+        // everyone short at the start (a city caught unprepared), the hundreds standing at the base filled up in
+        // the first second and emptied it, before a shot was fired - and with it empty, no ammo truck could go out
+        // to a fight. The last half is for those who come back from one.)
         if (e.reserve < fullReserve(e) && rnd.nextFloat() < dt) {
             City.Facility f = supplyPoint(e);
-            if (f != null && (f.x - e.x) * (f.x - e.x) + (f.y - e.y) * (f.y - e.y) < f.r * f.r * 1.5f && f.ammo > 0) {
-                int take = Math.min(f.ammo, Math.min(e.magSize, fullReserve(e) - e.reserve));
+            int keep = f == null ? 0 : f.kind == City.FACILITY_BASE ? 4500 : f.kind == City.FACILITY_POLICE ? 1500 : 0;
+            if (f != null && (f.x - e.x) * (f.x - e.x) + (f.y - e.y) * (f.y - e.y) < f.r * f.r * 1.5f && f.ammo > keep) {
+                int take = Math.min(f.ammo - keep, Math.min(e.magSize, fullReserve(e) - e.reserve));
                 f.ammo -= take;
                 e.reserve += take;
             }

@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.5";
-    static final int VERSION_CODE = 155;
+    static final String VERSION = "16.6";
+    static final int VERSION_CODE = 156;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.6  -  Full armouries, trucks you can see",
+                    "Fixed: in a city caught unprepared (everyone short of rounds), the hundreds of soldiers at the army base topped up from its armoury in the first second and emptied it before a shot was fired - and with it empty, no ammo truck could go out to a fight. Topping up while standing about now never takes the armoury's last half; that's kept for those who come back from a fight.",
+                    "Bases' trucks you can see: on the bigger maps the map picture is too coarse for a parked vehicle - an army truck on a base was a smudge of olive on olive ground, and the base looked empty. Close in, every parked vehicle (army trucks, police cars, ambulances, cars) is now drawn sharp over it. And a base whose layout leaves no room along its truck row has a few of its trucks standing out in the yard instead of all of them in the garages.",
+                    "Fixed: an army truck pushed to the edge of its route could take a dip there for the end of the road, and stop on an open road halfway to a fight - an ammo truck would wait there while the soldiers it was for gave up. It finds the way on, or plans again.",
+            },
             {
                     "16.5  -  No hospital",
                     "The hospital is gone: new cities are built without one, and its block is ordinary town. It had nothing left to do - nobody went there for care - and the game still worked out the way on foot to it for everyone, memory and all. A city saved before keeps its building (saved cities rebuild just as they were), but it's only a building now: no way there worked out, no marker or label on the map, nobody sent there.",

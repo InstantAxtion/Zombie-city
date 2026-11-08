@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Full armouries, trucks you can see (16.6):** topping up while standing at a base or station never takes the armoury below half (it was emptied at the start in an unprepared city, so no ammo trucks could go out). Parked vehicles are redrawn sharp over the map picture when zoomed in on the bigger maps, and bases short of room for parked trucks show a few standing in the yard. Army trucks no longer stop halfway to a call when pushed to the edge of their route.
+
 **No hospital (16.5):** new cities have no hospital (map version 30); older saved cities keep the building, but nothing uses it and no walking route to it is worked out. The rescue helicopter brings survivors back to its base. The army's field hospital tent is unchanged. Soldiers who set off on foot for rounds now still count for an ammo truck (450 px, was 350).
 
 **Less memory (16.4):** walking routes (to facilities, calls, parks, safe zones and move orders) are stored at a byte a tile and only over the ground they reach; vehicle routes take half the room. Large runs in about 640 MB instead of 800; the memory warnings are Large 700 MB, Big 520, Default 440. Building interiors were never the problem: they're made only for buildings you zoom into, at most 400 at once, and take well under 1 MB.
