@@ -53,6 +53,8 @@ final class City {
         float patrolCd = 30, quietFor;
         /** A small town's own police or fire station out in the country (10.20). */
         boolean satellite;
+        /** ((16.9) The FBI field office: a police facility of the federal agents' own, not a precinct. */
+        boolean fed;
         /** (10.32) An army base the dead have overrun: command moves elsewhere. And how long it's been going. */
         boolean fallen;
         /** (12.3) An army base's trucks in its garages, besides those parked out in the yard (Fleet.stockBases). */
@@ -540,9 +542,16 @@ final class City {
     private int origin;
 
 
+    /**
+     * ((16.9) How many pixels across the map picture may be: 6144, from 4096, made for a Galaxy S26 Ultra. Its pixels
+     * are kept outside the game's own memory, and at 16 bits a pixel that's 75 MB, under the 100 MB a picture may be to
+     * be drawn at all. Half as sharp again on every big map.)
+     */
+    static final float MAP_PIXELS = 6144f;
+
     City(CityConfig cfg) {
-        // The map picture is kept to about 4096 pixels across, so a massive map still fits in a phone's memory.
-        this(cfg, Math.min(1f, 4096f / (cfg.tiles() * T)));
+        // The map picture is kept to MAP_PIXELS across, so a big map still fits.
+        this(cfg, Math.min(1f, MAP_PIXELS / (cfg.tiles() * T)));
     }
 
     /** A city; with a detail below 1 the map bitmap is drawn smaller (for the New Game preview). */
@@ -713,9 +722,11 @@ final class City {
                 b.name = country.pharmacies[nr.nextInt(country.pharmacies.length)];
                 b.stock = 60;
             } else if (k == SHOP) {
-                // Some shops are gun stores or diners (and the rest are whatever kind of shop they are).
+                // Some shops are diners (and the rest are whatever kind of shop they are). ((16.9) No gun stores any more:
+                // a few people own a gun, and that's all the guns there are in town. The one in twelve that was a gun
+                // store is an ordinary shop - only the shop changes, so saved cities still rebuild street for street.)
                 int roll = nr.nextInt(12);
-                b.shopType = roll == 0 ? 1 : roll < 3 && b.variant < 0 ? 2 : 0;
+                b.shopType = roll == 0 ? 0 : roll < 3 && b.variant < 0 ? 2 : 0;
                 if (b.shopType == 1) {
                     b.variant = -1;
                     // (It looks like a gun store, not whatever kind of shop the lot was going to be.)
@@ -2826,6 +2837,35 @@ final class City {
             int[] b = blocks.get(hospital);
             fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
             serviceBuilding(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2, HOSPITAL, 0);
+        }
+
+        // ((16.9) The FBI field office: a block of its own, away from the police stations, with the agents' black cars
+        // on its lot.)
+        int fbi = -1;
+        float fbiFar = -1;
+        for (int k = 0; k < (cfg.fbiOffice() ? blocks.size() : 0); k++) {
+            int[] b = blocks.get(k);
+            if (used[k] || b[2] - b[0] - 2 < 6 || b[3] - b[1] - 2 < 6) continue;
+            float cx = (b[0] + b[2]) / 2f * T, cy = (b[1] + b[3]) / 2f * T, d = w * T;
+            for (Facility f : facilities) d = Math.min(d, (float) World.hypot(f.x - cx, f.y - cy));
+            // (In town, not out at the edge: the nearer the middle, the likelier.)
+            d -= (float) World.hypot(cx - (townX0 + townX1) / 2f * T, cy - (townY0 + townY1) / 2f * T) * 0.5f;
+            d += rnd.nextFloat() * T * 6;
+            if (d > fbiFar) {
+                fbiFar = d;
+                fbi = k;
+            }
+        }
+        if (fbi >= 0) {
+            used[fbi] = true;
+            int[] b = blocks.get(fbi);
+            fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+            fedLot = true;
+            serviceBuilding(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2, STATION, 99);
+            fedLot = false;
+            Facility fo = facilities.get(facilities.size() - 1);
+            fo.fed = true;
+            fo.name = Dispatch.federal(country) + " Field Office";
         }
 
         if (cfg.civic > 0) government(used);
@@ -5326,6 +5366,9 @@ final class City {
             }
     }
 
+    /** ((16.9) The lot being laid out is the FBI field office's: its cars are the agents' black ones. */
+    private boolean fedLot;
+
     /** A precinct with police cruisers, or a hospital with ambulances, parked next to it. */
     private boolean spareEngine;
 
@@ -5345,7 +5388,7 @@ final class City {
                     // one, out on the apron.)
                     boolean spare = kind == FIRE_STATION && !spareEngine && rnd.nextFloat() < 0.3f;
                     if (spare) spareEngine = true;
-                    carKind[j * w + i] = (byte) (kind == HOSPITAL ? 3 : kind == FIRE_STATION ? (spare ? 4 : 0) : 1);
+                    carKind[j * w + i] = (byte) (kind == HOSPITAL ? 3 : kind == FIRE_STATION ? (spare ? 4 : 0) : fedLot ? 6 : 1);
                 }
         float cx = (lx + lw / 2f) * T, cy = (ly + lh / 2f) * T;
         float[] c = findWalkable(cx, cy);
@@ -5390,7 +5433,11 @@ final class City {
     private void addFacilityLot(int x, int y, int lw, int lh, int kind, int floors) {
         fill(x, y, lw, lh, BUILDING);
         int roof, wall;
-        if (kind == STATION) {
+        if (kind == STATION && fedLot) {
+            // ((16.9) The FBI field office: dark grey and glass.)
+            roof = 0xFF3A3F47;
+            wall = 0xFF9AA3AD;
+        } else if (kind == STATION) {
             roof = 0xFF2F4F86;
             wall = 0xFFD5D9DF;
         } else if (kind == HOSPITAL) {
@@ -8262,7 +8309,7 @@ final class City {
                         fy = vertical ? cy - 7 : cy - 12;
                     }
                     if (allOpen(px - 1, py - 1, 12, 11)) serviceBuilding(px, py, 10, 9, STATION, facilities.size() + 1);
-                    if (allOpen(fx - 1, fy - 1, 12, 11)) serviceBuilding(fx, fy, 10, 9, FIRE_STATION, 0);
+                    if (cfg.fireStations() && allOpen(fx - 1, fy - 1, 12, 11)) serviceBuilding(fx, fy, 10, 9, FIRE_STATION, 0);
                     if (big) {
                         if (!first) carve(cross2);
                         for (Street o : new Street[]{st, cross, cross2}) keepPaved(o);
@@ -12153,7 +12200,7 @@ final class City {
         float hl = kind == 2 || kind == 5 ? 7.8f : 7.5f, hw = kind == 2 || kind == 5 ? 4.8f : 4.2f;
         RectF rect = vertical ? new RectF(cx - hw, cy - hl, cx + hw, cy + hl) : new RectF(cx - hl, cy - hw, cx + hl, cy + hw);
         if (kind == 4) vertical = true;
-        int color = kind == 4 ? 0xFFC8302A : kind == 1 ? country.cruiserBody : kind == 2 ? 0xFF4F5A33 : kind == 3 ? 0xFFF2F2F2
+        int color = kind == 6 ? 0xFF15171A : kind == 4 ? 0xFFC8302A : kind == 1 ? country.cruiserBody : kind == 2 ? 0xFF4F5A33 : kind == 3 ? 0xFFF2F2F2
                 : kind == 5 ? 0xFFE8862A
                 : CAR_COLORS[prnd.nextInt(CAR_COLORS.length)];
         p.setColor(0x55000000);

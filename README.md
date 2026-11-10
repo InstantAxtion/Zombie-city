@@ -227,8 +227,8 @@ counts), and wherever the dead gather the ground glows red. Labels go most impor
 - **Districts**: downtown towers, old-town terraces, suburbs, industrial estates, a university district
   and parkside neighbourhoods, each named on the map when you zoom out.
 - **Supplies**: every building has food; survivors hiding inside eat it and have to go out foraging
-  when it runs out. Supermarkets and gun stores stock ammo, pharmacies medicine.
-- **Functions**: gun stores arm frightened civilians; if the power station is overrun there is a
+  when it runs out. Supermarkets stock ammo, pharmacies medicine.
+- **Functions**: if the power station is overrun there is a
   blackout (no sirens, no safe-zone broadcasts).
 - **Government**: every town has a city hall on its own square (fountain, flags and flower beds),
   and most have a courthouse with a walled jail behind it, an emergency call centre with a radio
@@ -260,7 +260,7 @@ counts), and wherever the dead gather the ground glows red. Labels go most impor
 ## City layout
 
 Besides homes, offices and warehouses, cities have shops, gas stations, churches, schools, fire
-stations, supermarkets, police stations, a shopping
+supermarkets, police stations, an FBI field office, a shopping
 mall, a football stadium, a power station, building sites, farms on the edge of town and (on some
 maps) a military base. Streets have roundabouts, pavement trees and back alleys; parks can have a
 bandstand and flower beds. Every city has a name. Parks come as
@@ -418,6 +418,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**The FBI in town, police by their training, no gun stores (16.9):** an FBI field office in new cities (map version 31) with agents and black cars from the start; per-type police training (aim, head shots, fire rate, reload, preferred distance, nerve; SWAT and riot police push in); no gun stores (about 7% of civilians own a gun), no fire stations in new cities, no civilian barricading; lone police drivers stop to fight; army vehicles overtake slower traffic and soldiers far from base get trucks even when nobody at base is free to drive; the map picture is 6144 pixels across for the Galaxy S26 Ultra.
 
 **Faster on the big maps (16.8):** roughly 1.5x quicker per step on Big and Large and about 1.2x on Default, with much shorter worst-case pauses. Everyday trips and patrols pick destinations within reach and give up on over-long route searches; off-screen calm people decide and update less often; off-screen vehicles update every fourth step; grid lookups replace whole-map scans for gun stores, pickups, station officers, militias and barricades; safe-zone guard routes are reach-limited and compact.
 

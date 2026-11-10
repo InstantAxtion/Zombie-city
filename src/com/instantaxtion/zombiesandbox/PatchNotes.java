@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.8";
-    static final int VERSION_CODE = 158;
+    static final String VERSION = "16.9";
+    static final int VERSION_CODE = 159;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.9  -  The FBI in town, police by their training, no gun stores",
+                    "An FBI field office in town (new cities): a dark grey office block with its agents there from the start and their black cars on the lot. The agents go out to calls like the police, in their own cars.",
+                    "Every kind of police officer fights the way they're trained. SWAT are the best shots, quick to follow up and reload, and push in on the dead rather than wait; marksmen stay well back; riot police hold a close line and push in too; mounted officers use their speed to keep their distance; traffic police are no gunfighters and pull back early; state troopers and park rangers shoot well at range; sheriff's deputies fight close with their shotguns; FBI agents are steady, accurate and quick to reload. How outnumbered each will stand before falling back differs too.",
+                    "No gun stores: a few people own a gun (about one in fifteen), and that's all the guns there are in town. Markets don't hand out guns either; gun owners can still buy rounds there.",
+                    "No fire stations or fire engines in new cities: there's been no fire service for a long time.",
+                    "No barricading: nobody boards up the buildings, shores up a door or fortifies a block. A door the dead break stays broken.",
+                    "A police car or van with only its driver aboard now stops and takes on the dead it passes, like one with a full crew: it used to drive straight past.",
+                    "The army overtakes: a truck or Humvee on a job no longer crawls along behind a tank, an APC or a slow car, but pulls out and passes. And soldiers far from base or a fight get a lift: the base sends a truck with one of the motor pool at the wheel when nobody else is free to drive, and trucks standing by further off come for them. Far fewer walk across the city.",
+                    "Made for the Galaxy S26 Ultra: the map is drawn half as sharp again (6144 pixels across, from 4096) on the bigger maps.",
+            },
             {
                     "16.8  -  Faster on the big maps",
                     "About half as fast again on the Big and Large maps (each step of the game takes about two thirds of the time it did) and a little quicker on Default, with far fewer of the long pauses: the worst ones are about half as long.",

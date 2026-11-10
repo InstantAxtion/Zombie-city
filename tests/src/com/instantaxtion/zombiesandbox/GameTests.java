@@ -430,8 +430,9 @@ public final class GameTests {
                 int[] dist = new int[city.w * city.h];
                 for (int i = 0; i < n; i++) {
                     int[] q = city.islandRects[i];
-                    check(buildings[i] > 150 && precincts[i] > 0 && fire[i] > 0, city.islandNames[i] + ": a town (" + buildings[i]
-                            + " buildings) with its own police and fire station");
+                    // ((16.9) No fire stations in new cities.)
+                    check(buildings[i] > 150 && precincts[i] > 0 && fire[i] == 0, city.islandNames[i] + ": a town (" + buildings[i]
+                            + " buildings) with its own police station");
                     // (A street near the middle of the island.)
                     float[] spot = null;
                     for (int r = 0; r < 60 && spot == null; r++)
@@ -564,7 +565,8 @@ public final class GameTests {
                     g.v[CityConfig.OPT_SIZE] = CityConfig.LARGE;
                     int guns = 0;
                     for (City.Building b : new City(g, 0.1f).buildings) if (b.kind == City.SHOP && b.shopType == 1) guns++;
-                    check(guns > 0, guns + " gun stores");
+                    // ((16.9) No gun stores any more.)
+                    check(guns == 0, guns + " gun stores (there are none now)");
                 }
             }
         });
@@ -1677,6 +1679,9 @@ public final class GameTests {
                 c.seed = 12;
                 c.normalize();
                 c.seed = 12;
+                // ((16.9) Map version 30, the streets this was written on: in newer cities the FBI field office's agents
+                // are near enough to join in, and the officer here isn't alone.)
+                c.civic = 30;
                 World w = new World(c);
                 // (The same run every time: what happens next is chance, and a test shouldn't be.)
                 w.rnd.setSeed(38);
@@ -3206,6 +3211,9 @@ public final class GameTests {
                 c.seed = 73;
                 c.normalize();
                 c.seed = 73;
+                // ((16.9) Map version 30, the streets this was written on: in newer cities the FBI field office's agents
+                // are near enough to join in, and the officer here isn't alone.)
+                c.civic = 30;
                 World w = new World(c);
                 w.populate(c);
                 java.util.Random r = new java.util.Random(7);
@@ -3220,6 +3228,9 @@ public final class GameTests {
                     }
                     check(q != null, "somewhere with no police about");
                     Entity cop = w.spawn(Entity.COP, q[0], q[1]);
+                    // ((16.9) An ordinary patrol officer: SWAT or an FBI agent may now put down four before it's time to call.)
+                    cop.role = Entity.ROLE_RIFLE;
+                    cop.agency = 0;
                     cop.hp = cop.maxHp = 10000;
                     if (round == 1) cop.ammo = cop.reserve = 0;
                     for (int z = 0; z < 4; z++) {
@@ -4493,7 +4504,12 @@ public final class GameTests {
                 java.lang.reflect.Method near = World.class.getDeclaredMethod("gunStoreNear", Entity.class, float.class);
                 near.setAccessible(true);
                 java.util.List<City.Building> stores = new java.util.ArrayList<City.Building>();
-                for (City.Building b : w.city.buildings) if (b.kind == City.SHOP && b.shopType == 1) stores.add(b);
+                // ((16.9) There are no gun stores now: some shops made into them here, to try the grid on.)
+                int nth = 0;
+                for (City.Building b : w.city.buildings) if (b.kind == City.SHOP && nth++ % 4 == 0) {
+                    b.shopType = 1;
+                    stores.add(b);
+                }
                 check(stores.size() > 2, "gun stores (" + stores.size() + ")");
                 for (City.Building b : stores) b.stock = r.nextInt(3) == 0 ? 0 : 10;
                 Entity probe = new Entity();
@@ -4553,6 +4569,59 @@ public final class GameTests {
                     if (quick != slow) differ++;
                 }
                 check(differ == 0, "open ground by the bits agrees with the long way (" + differ + " differ)");
+            }
+        });
+        test("16.9: no gun stores or fire stations; an FBI field office with its agents and cars; police trained differently; no barricading", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                c.normalize();
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 60; f++) w.update(1 / 30f);
+                int guns = 0, fire = 0;
+                for (City.Building b : w.city.buildings) if (b.kind == City.SHOP && b.shopType == 1) guns++;
+                for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_FIRE) fire++;
+                check(guns == 0 && fire == 0, "no gun stores (" + guns + ") and no fire stations (" + fire + ")");
+                City.Facility office = null;
+                for (City.Facility f : w.city.facilities) if (f.fed) office = f;
+                check(office != null && office.kind == City.FACILITY_POLICE, "an FBI field office");
+                int agents = 0, cars = 0;
+                for (Entity e : w.entities) if (e.type == Entity.COP && e.agency == 4 && Math.hypot(e.x - office.x, e.y - office.y) < 400) agents++;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.agency == 4 && Math.hypot(v.x - office.x, v.y - office.y) < 500) cars++;
+                check(agents >= 8 && cars >= 2, "agents (" + agents + ") and their cars (" + cars + ") at the office from the start");
+                // A small share of civilians carry a gun.
+                int civ = 0, armed = 0;
+                for (Entity e : w.entities) if (e.type == Entity.CIVILIAN) {
+                    civ++;
+                    if (e.hasGun) armed++;
+                }
+                check(armed > 0 && armed < civ * 0.16f, "a few civilians armed (" + armed + " of " + civ + ")");
+                // Trained differently: SWAT and FBI shoot better than a patrol officer, traffic police worse; SWAT hold on longer.
+                Entity swat = new Entity(), traffic = new Entity(), patrol = new Entity(), fbi = new Entity();
+                swat.type = traffic.type = patrol.type = fbi.type = Entity.COP;
+                swat.role = Entity.ROLE_SWAT;
+                traffic.role = Entity.ROLE_TRAFFIC;
+                fbi.agency = 4;
+                check(World.doctrine(swat)[0] > World.doctrine(patrol)[0] && World.doctrine(fbi)[0] > World.doctrine(patrol)[0]
+                        && World.doctrine(traffic)[0] < World.doctrine(patrol)[0], "aim: SWAT and FBI better, traffic worse");
+                check(World.doctrine(swat)[5] > World.doctrine(patrol)[5] && World.doctrine(traffic)[5] < World.doctrine(patrol)[5], "nerve: SWAT more, traffic less");
+                check(World.doctrine(new Entity()) == null, "only police have a police training");
+                // Nobody barricades: a building with people sheltering in it keeps the door it has.
+                City.Building home = null;
+                for (City.Building b : w.city.buildings) if (b.capacity > 4 && !b.collapsed && b.doorX > 0) { home = b; break; }
+                check(home != null, "a building to shelter in");
+                home.barricade = 40;
+                for (int k = 0; k < 4; k++) {
+                    Entity p = w.spawn(Entity.CIVILIAN, home.doorX, home.doorY);
+                    p.dead = p.removed = true;
+                    home.occupants.add(p);
+                }
+                for (int f = 0; f < 30 * 10; f++) w.update(1 / 30f);
+                check(home.barricade <= 40.01f, "the door isn't shored up (" + home.barricade + ")");
             }
         });
         test("every screen draws", new Check() {

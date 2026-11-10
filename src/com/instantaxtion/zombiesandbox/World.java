@@ -412,7 +412,7 @@ final class World {
     private static final String[] READINESS_NEWS = {"",
             "Police: we weren't ready for this. Ammunition is short, and the towns around can spare only half the help.",
             "News: panic is sweeping the city. People are running instead of hiding.",
-            "News: half the town owns a gun, and they're using them.",
+            "News: more people here own a gun than anyone thought, and they're using them.",
             "Military: we've been preparing for this. Extra units are standing by."};
 
     /** Rolls how ready the city is (a hidden factor, revealed on the radio once the outbreak is under way). */
@@ -425,7 +425,8 @@ final class World {
             dispatch.squadReserve = dispatch.squadReserve * 3 / 4;
             for (Entity e : entities) if (e.isArmed()) e.reserve /= 2;
         } else if (readiness == 3) {
-            for (Entity e : entities) if (e.type == Entity.CIVILIAN && !e.hasGun && rnd.nextFloat() < 0.2f) armCivilian(e, 12 + rnd.nextInt(3) * 6);
+            // ((16.9) A few more, not a fifth of everyone: a small share of people carry a gun.)
+            for (Entity e : entities) if (e.type == Entity.CIVILIAN && !e.hasGun && rnd.nextFloat() < 0.06f) armCivilian(e, 12 + rnd.nextInt(3) * 6);
         } else if (readiness == 4) {
             if (dispatch.policeReserve > 0) dispatch.policeReserve += 40;
             if (dispatch.squadReserve > 0) dispatch.squadReserve += 24;
@@ -493,9 +494,7 @@ final class World {
             if (inWorst >= 10 && inWorst > zs * 0.6f && (city.mainBase() != null || counts[Entity.SOLDIER] > 0))
                 wt[1] = command == CMD_HAWK ? 3 : command == CMD_SLOW ? 0.4f : 1;
         }
-        boolean stores = false;
-        for (City.Building b : city.buildings) if (b.kind == City.SHOP && b.shopType == 1 && !b.collapsed) stores = true;
-        if (stores && alert >= 2) wt[2] = command == CMD_ARMED ? 4 : command == CMD_HAWK ? 0.2f : 0.5f;
+        // ((16.9) No handing out guns: there are no gun stores to open.)
         if (!guardCalled && alert >= 2 && city.armory != null) wt[3] = command == CMD_CAUTIOUS || command == CMD_HAWK ? 2 : 0.6f;
         if (alert >= 2 && counts[Entity.COP] > 0) wt[4] = command == CMD_SLOW ? 0.3f : 0.8f;
         // (The slow ones mostly talk about it.)
@@ -518,29 +517,10 @@ final class World {
                     Entity e = entities.get(i);
                     if (!e.dead && e.type == Entity.CIVILIAN && !e.aware && rnd.nextFloat() < 0.8f) e.aware = true;
                 }
-                boardUp();
                 break;
             }
             case DEC_QUARANTINE: {
                 if (sealDistrict(worst) > 0) escalation = Math.max(escalation, 1);
-                break;
-            }
-            case DEC_GUNS: {
-                banner("GUN STORES OPEN", "The city is handing out guns to anyone who can use one.");
-                dispatch.say(Dispatch.WHO_INFO, null, "News: The gun stores are open and giving everything away. Anyone who can shoot, go and get armed.", mx, my);
-                for (City.Building b : city.buildings) {
-                    if (b.kind != City.SHOP || b.shopType != 1 || b.collapsed) continue;
-                    b.stock = Math.max(b.stock, gunStock());
-                }
-                // ((16.8) Each person once, with the stores near them looked up: one chance in seven for each store
-                // within 500, as before. Each store went through everyone in turn - twenty million looks on the Large
-                // map, a third of a second in one step.)
-                for (int i = 0, n = entities.size(); i < n; i++) {
-                    Entity e = entities.get(i);
-                    if (e.dead || e.type != Entity.CIVILIAN || e.hasGun || e.building != null) continue;
-                    int near = gunStoresWithin(e.x, e.y, 500);
-                    if (near > 0 && rnd.nextFloat() < 1 - (float) Math.pow(0.85, near)) armCivilian(e, 18);
-                }
                 break;
             }
             case DEC_GUARD:
@@ -739,7 +719,7 @@ final class World {
         int stations = 0, satBases = 0;
         City.Facility base = city.mainBase();
         for (City.Facility x : city.facilities) {
-            if (x.kind == City.FACILITY_POLICE) stations++;
+            if (x.kind == City.FACILITY_POLICE && !x.fed) stations++;
             if (x.kind == City.FACILITY_BASE && x.satellite && x != base) satBases++;
         }
         int cops = f[0];
@@ -791,7 +771,8 @@ final class World {
         // Half the cops start at their precinct, the rest on patrol; soldiers start on base.
         City.Facility base = city.mainBase();
         int stations = 0;
-        for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE) stations++;
+        // ((16.9) The FBI field office isn't a precinct: it has its own agents (below).)
+        for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE && !f.fed) stations++;
         int[] force = forces(cfg, city);
         int cops = force[0], soldiers = force[1], satEach = force[2];
         // Most officers are out in patrol cars, two to a car ((11.4) about five in six of them); the rest are at their
@@ -801,7 +782,7 @@ final class World {
         int made = 0;
         City.Facility[] precincts = new City.Facility[Math.max(1, stations)];
         int pk = 0;
-        for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE) precincts[pk++] = f;
+        for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE && !f.fed) precincts[pk++] = f;
         // ((10.41) A small town's station out in the country runs two cars of its own; the rest are the city's.)
         int town = 0;
         for (City.Facility f : precincts) if (f != null && !f.satellite) town++;
@@ -830,7 +811,7 @@ final class World {
         int copsAtStations = stations > 0 ? cops - aboard : 0;
         int k = 0;
         for (City.Facility f : city.facilities) {
-            if (f.kind != City.FACILITY_POLICE) continue;
+            if (f.kind != City.FACILITY_POLICE || f.fed) continue;
             int n = copsAtStations / stations + (k++ < copsAtStations % stations ? 1 : 0);
             for (int i = 0; i < n; i++) spawn(Entity.COP, f.x + rnd.nextFloat() * 40 - 20, f.y + rnd.nextFloat() * 40 - 20);
         }
@@ -838,11 +819,21 @@ final class World {
         // A marksman at each precinct (since 10.10).
         if (cfg.nature())
             for (City.Facility f : city.facilities)
-                if (f.kind == City.FACILITY_POLICE) spawnCop(Entity.ROLE_MARKSMAN, f.x + rnd.nextFloat() * 20 - 10, f.y + rnd.nextFloat() * 20 - 10);
+                if (f.kind == City.FACILITY_POLICE && !f.fed) spawnCop(Entity.ROLE_MARKSMAN, f.x + rnd.nextFloat() * 20 - 10, f.y + rnd.nextFloat() * 20 - 10);
+        // ((16.9) The FBI field office's own agents, there from the start, with their cars on the lot (see
+        // Fleet.stockStations). More of them on the bigger maps.)
+        for (City.Facility f : city.facilities) {
+            if (!f.fed) continue;
+            int agents = cfg.v[CityConfig.OPT_SIZE] >= CityConfig.VAST ? 14 : cfg.v[CityConfig.OPT_SIZE] >= CityConfig.COLOSSAL ? 12 : 10;
+            for (int i = 0; i < agents; i++) {
+                Entity a = spawn(Entity.COP, f.x + rnd.nextFloat() * 40 - 20, f.y + rnd.nextFloat() * 40 - 20);
+                if (a != null) makeAgency(a, 4);
+            }
+        }
         // ((15.0) Mounted police out of the main precinct, and traffic officers at the busy junctions near each one.)
         if (cfg.nature() && stations > 0) {
             City.Facility hq = null;
-            for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE && (hq == null || f.r > hq.r)) hq = f;
+            for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE && !f.fed && (hq == null || f.r > hq.r)) hq = f;
             int horses = Math.max(2, Math.min(4, stations + 1));
             for (int i = 0; i < horses; i++) {
                 Entity m = spawn(Entity.COP, hq.x + rnd.nextFloat() * 30 - 15, hq.y + rnd.nextFloat() * 30 - 15);
@@ -4292,7 +4283,7 @@ final class World {
         }
         if (controlledIn != null) {
             out[n++] = CA_EXIT;
-            out[n++] = CA_BARRICADE;
+            // ((16.9) No barricading: nobody boards up the buildings any more.)
             if (!searched.contains(controlledIn)) out[n++] = CA_SEARCH;
             return n;
         }
@@ -4877,13 +4868,8 @@ final class World {
             else if (idle && (e.fleeTimer > 0 || (broadcasting() && readiness != 2 && e.heardZone))) goalScore[G_ZONE] = 0.42f + 0.2f * careful;
             if (threat != null && threatDist < 28) goalScore[G_ZONE] = Math.min(goalScore[G_ZONE], 0.15f);
         }
-        // A gun: from a gun store (scared, or one of the third who'd go and raid one once it's on the news)...
+        // ((16.9) No going for a gun: there are no gun stores. Those who own one have it already.)
         if (e.task == Dispatch.T_RESUPPLY) goalScore[G_RESTOCK] = 0.5f;
-        else if (idle && !e.hasGun && e.leader == null && threatDist > 40 && (e.fear > 0 || (e.aware && e.nameSeed % 3 == 0))) {
-            City.Building g = gunStoreNear(e, e.aware && e.nameSeed % 3 == 0 ? 700 : 220);
-            e.storeCandidate = g;
-            if (g != null) goalScore[G_GUNSTORE] = 0.25f + 0.25f * brave;
-        }
         // ... or out of rounds, when it's quiet: restock.
         // ((10.60) Not only when it's quiet: when the nearest of the dead is still a way off, too.)
         if (idle && e.hasGun && threatDist > 70 && e.ammo + e.reserve <= 2) goalScore[G_RESTOCK] = 0.45f;
@@ -6707,7 +6693,7 @@ final class World {
     private void government() {
         // ((11.5) The government buildings' work goes on whatever happens to the buildings: road crews board up
         // shelters through the outbreak; nobody tracks which office has fallen, and the jail has nobody to break out.)
-        if (outbreak && alert >= 1 && aftermath == AFTER_NONE) boardUp();
+        // ((16.9) Not boarding up shelters any more: nobody barricades buildings.)
     }
 
     /** How long the dead have held a building (it falls at 15). */
@@ -6721,28 +6707,6 @@ final class World {
         return !(t == 0 && !b.collapsed && countZombiesNear(b.doorX, b.doorY, 200) == 0 && peopleNear(b.doorX, b.doorY, 120));
     }
 
-    /**
-     * Road crews out in the trucks during the outbreak: every so often they board up a building where people
-     * are sheltering (one nobody's fighting at).
-     */
-    private void boardUp() {
-        crewTimer -= 1;
-        if (crewTimer > 0) return;
-        crewTimer = 12;
-        City.Building best = null;
-        for (int i = 0, n = city.buildings.size(); i < n; i++) {
-            City.Building b = city.buildings.get(i);
-            if (b.collapsed || b.occupants.isEmpty() || b.barricade >= 70 || b.fighting) continue;
-            if (countZombiesNear(b.doorX, b.doorY, 80) > 0) continue;
-            if (best == null || b.occupants.size() > best.occupants.size()) best = b;
-        }
-        if (best == null) return;
-        best.barricade = Math.min(100, best.barricade + 35);
-        boardedUp++;
-        if (boardedUp == 1 || boardedUp % 10 == 0)
-            dispatch.say(Dispatch.WHO_INFO, null, "News: Road crews are boarding up buildings with people sheltering inside ("
-                    + boardedUp + " so far).", best.doorX, best.doorY);
-    }
 
     /**
      * The jail: its inmates stay locked up unless the dead get in (some are bitten, the rest run), the power
@@ -7121,10 +7085,8 @@ final class World {
             for (int i = 0, n = entities.size(); i < n; i++) {
                 Entity o = entities.get(i);
                 if (o != e && o.leader != e) continue;
-                if (b.kind == City.MARKET && !o.hasGun && o.type == Entity.CIVILIAN && b.stock >= 12) {
-                    armCivilian(o, 18);
-                    b.stock -= 18;
-                } else if (b.kind == City.PHARMACY && b.stock > 0) {
+                // ((16.9) A market no longer hands out guns: only those who own one carry one.)
+                if (b.kind == City.PHARMACY && b.stock > 0) {
                     o.hp = o.maxHp;
                     b.stock--;
                 }
@@ -7574,23 +7536,6 @@ final class World {
         storeCellIdx = new int[l.size()];
         int[] at = Arrays.copyOf(storeCellStart, storeCellStart.length);
         for (int i = 0; i < l.size(); i++) storeCellIdx[at[cellOf[i]]++] = i;
-    }
-
-    /** ((16.8) How many open gun stores have their door within radius of (x, y). */
-    private int gunStoresWithin(float x, float y, float radius) {
-        if (storeCellStart == null) indexGunStores();
-        java.util.List<City.Building> l = gunStores();
-        int n = 0;
-        int cx0 = Math.max(0, (int) ((x - radius) / STORE_CELL)), cx1 = Math.min(storeGW - 1, (int) ((x + radius) / STORE_CELL));
-        int cy0 = Math.max(0, (int) ((y - radius) / STORE_CELL)), cy1 = Math.min(storeGH - 1, (int) ((y + radius) / STORE_CELL));
-        for (int cy = cy0; cy <= cy1; cy++)
-            for (int cx = cx0; cx <= cx1; cx++)
-                for (int k = storeCellStart[cy * storeGW + cx]; k < storeCellStart[cy * storeGW + cx + 1]; k++) {
-                    City.Building b = l.get(storeCellIdx[k]);
-                    if (b.collapsed || b.kind != City.SHOP || b.shopType != 1) continue;
-                    if (World.hypot(x - b.doorX, y - b.doorY) < radius) n++;
-                }
-        return n;
     }
 
     private City.Building gunStoreNear(Entity e, float radius) {
@@ -8447,7 +8392,7 @@ final class World {
     /** ((13.3) The dead further off than this, in tiles, and soldiers with nothing to do ride out to them. */
     static final int RIDE_TILES = 50;
     /** ((13.3) Further than this from base and soldiers with nothing to do ride back. */
-    static final float RIDE_HOME = 900;
+    static final float RIDE_HOME = 600;
 
     /**
      * ((13.3) Soldiers with nothing to do, a long way from the dead or from base: a truck for them and the rest of
@@ -8456,7 +8401,8 @@ final class World {
      */
     private boolean rideOut(Entity e, float dt) {
         if (e.rig != null || e.ride != null || e == controlled || (e.driveCd -= dt) > 0) return false;
-        e.driveCd = 10;
+        // ((16.9) Asked again sooner when there wasn't one: every five seconds, not ten.)
+        e.driveCd = 5;
         if (nearest(e, 100, true, false) != null) return false;
         Dispatch.Incident inc = null;
         float bd = 4000;
@@ -9697,10 +9643,12 @@ final class World {
         if (t != null && e.task != Dispatch.T_MOVE) {
             float ddx = t.x - e.x, ddy = t.y - e.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
-            float keep = soldier ? (e.role == Entity.ROLE_COMMANDER ? 90 : e.role == Entity.ROLE_SNIPER ? 60 : 40) : 50;
+            // ((16.9) Each kind of police officer keeps their own distance (see doctrine).)
+            float[] dc = doctrine(e);
+            float keep = soldier ? (e.role == Entity.ROLE_COMMANDER ? 90 : e.role == Entity.ROLE_SNIPER ? 60 : 40) : dc != null ? dc[4] : 50;
             // (10.28) Soldiers sent in close right up; police on a perimeter keep their distance.
             if (soldier && e.task == Dispatch.T_RESPOND && e.role != Entity.ROLE_COMMANDER && e.role != Entity.ROLE_SNIPER) keep = 26;
-            else if (!soldier && e.task == Dispatch.T_RESPOND && e.incident != null && e.incident.zombiesNear >= 4) keep = 70;
+            else if (!soldier && e.task == Dispatch.T_RESPOND && e.incident != null && e.incident.zombiesNear >= 4) keep = Math.max(keep, keep * 1.4f);
             // Low on rounds: they don't let them get close.
             if (stock < 0.5f) keep *= 1 + (0.5f - stock) * 3;
             Dispatch.SafeZone guarding = e.task == Dispatch.T_GUARD ? e.zone : null;
@@ -9721,6 +9669,10 @@ final class World {
                 // ((11.5) On the gate outside the walls and the dead are on them: back inside, not stood there.)
                 walkToSpot(e, guarding.x, guarding.y, e.runSpeed * 0.9f);
             else if (guarding != null) holdPost(e, guarding, 0.5f);
+            else if (!soldier && (e.role == Entity.ROLE_SWAT || e.role == Entity.ROLE_RIOT) && d > keep + 20 && !swarmed && stock >= 0.4f
+                    && countZombiesNear(t.x, t.y, 60) < 5)
+                // ((16.9) SWAT and riot police push in on them, steadily, rather than wait for them to come.)
+                steer(e, ddx / d, ddy / d, e.speed * (e.role == Entity.ROLE_SWAT ? 0.6f : 0.4f));
             else if (e.task == Dispatch.T_NONE && e.member % 3 == 2 && d > keep + 25) {
                 // Flankers work round to the side for a clear angle, instead of all firing down one line.
                 float side = e.callsign % 2 == 0 ? 1 : -1;
@@ -10615,7 +10567,8 @@ final class World {
                 if (near >= 6) {
                     float odds = near / (float) Math.max(1, armedNear(e.x, e.y, 130));
                     // (Soldiers sent in close are meant to be there: it takes a lot more to turn them.)
-                    float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : 4;
+                    // ((16.9) Each kind of police officer's nerve: see doctrine.)
+                    float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : doctrine(e) != null ? doctrine(e)[5] : 4;
                     // ((10.59) A veteran stands longer.)
                     nerve += rank(e) * 0.75f;
                     if (odds >= nerve - (e.goal == A_FALLBACK ? 1.5f : 0))
@@ -11144,7 +11097,6 @@ final class World {
             if (group.size() < 3) continue;
             City.Building b = shelterWithin(e, 200);
             if (b == null) continue;
-            b.barricade = 100;
             for (int k = 0; k < group.size(); k++) {
                 Entity o = group.get(k);
                 o.militia = true;
@@ -11583,11 +11535,11 @@ final class World {
                 int level = h.fort >= 100 ? 3 : h.fort >= 60 ? 2 : h.fort >= 25 ? 1 : 0;
                 if (level > h.said) {
                     h.said = level;
-                    dispatch.say(Dispatch.WHO_INFO, null, "News: " + cap(h.name) + (level == 1 ? " have barricaded the doors and windows."
+                    dispatch.say(Dispatch.WHO_INFO, null, "News: " + cap(h.name) + (level == 1 ? " have dug in and are keeping watch."
                             : level == 2 ? " have pushed cars across the street and are filling sandbags." : " have walled off their block."), h.x, h.y);
                 }
             }
-            if (quiet) b.barricade = Math.min(100, b.barricade + h.fort * 0.05f);
+            // ((16.9) No barricading the doors as they dig in.)
             // A group feeds whoever turns up (as long as there's room).
             h.recruitTimer -= 1;
             if (h.recruitTimer <= 0 && b.occupants.size() < b.capacity) {
@@ -11903,6 +11855,8 @@ final class World {
             base = e.role == Entity.ROLE_GUNNER ? 0.1f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
         else return HEADSHOT * ranked;
         float f = Math.max(0.35f, 1.25f - d / range) * ranked;
+        // ((16.9) Police: their training (see doctrine).)
+        if (e.type == Entity.COP) f *= doctrine(e)[1];
         if (t.type == Entity.RUNNER) f *= 0.6f;
         // A clearer shot from the high ground.
         if (city.elev != null && city.elevation(e.x, e.y) > city.elevation(t.x, t.y) + 3) f *= 1.2f;
@@ -12024,6 +11978,40 @@ final class World {
         return best;
     }
 
+    /**
+     * ((16.9) How each kind of police officer is trained, as {aim, head shots, time between shots, reload time,
+     * distance kept from the dead, nerve (how outnumbered before falling back)}: 1 and 50 and 4 for an ordinary
+     * patrol officer. SWAT go in close, fast and accurate and hold on; marksmen stay well back; riot police hold a
+     * close line; mounted officers use their speed to keep their distance; traffic police are no gunfighters and pull
+     * back early; state troopers and park rangers shoot well at range; sheriff's deputies fight close with their
+     * shotguns; FBI agents are steady, accurate and quick to reload.
+     */
+    private static final float[] D_PATROL = {1f, 1f, 1f, 1f, 50, 4}, D_SWAT = {1.25f, 1.35f, 0.85f, 0.75f, 32, 7},
+            D_MARKSMAN = {1f, 1f, 1f, 0.9f, 110, 3.5f}, D_RIOT = {0.9f, 0.85f, 1f, 1f, 28, 6.5f}, D_K9 = {0.95f, 0.95f, 1f, 1f, 45, 4.5f},
+            D_MOUNTED = {0.85f, 0.85f, 1.05f, 1.1f, 85, 3.5f}, D_TRAFFIC = {0.8f, 0.75f, 1.15f, 1.2f, 70, 3},
+            D_TROOPER = {1.1f, 1.1f, 0.95f, 0.9f, 60, 4.5f}, D_SHERIFF = {1f, 1.05f, 1f, 1f, 35, 5},
+            D_RANGER = {1.15f, 1.2f, 1f, 1f, 75, 4}, D_FBI = {1.2f, 1.25f, 0.9f, 0.75f, 60, 5.5f};
+
+    /** ((16.9) A police officer's training (see D_PATROL), or null for anyone else. */
+    static float[] doctrine(Entity e) {
+        if (e.type != Entity.COP) return null;
+        switch (e.role) {
+            case Entity.ROLE_SWAT: return D_SWAT;
+            case Entity.ROLE_MARKSMAN: return D_MARKSMAN;
+            case Entity.ROLE_RIOT: return D_RIOT;
+            case Entity.ROLE_K9: return D_K9;
+            case Entity.ROLE_MOUNTED: return D_MOUNTED;
+            case Entity.ROLE_TRAFFIC: return D_TRAFFIC;
+        }
+        switch (e.agency) {
+            case 1: return D_TROOPER;
+            case 2: return D_SHERIFF;
+            case 3: return D_RANGER;
+            case 4: return D_FBI;
+        }
+        return D_PATROL;
+    }
+
     private void fire(Entity e, Entity t, float d, float range) {
         e.shotAt = time;
         boolean soldier = e.type == Entity.SOLDIER;
@@ -12105,12 +12093,18 @@ final class World {
             accuracy = 0.9f;
         }
         if (e.weapon == Entity.W_SHOTGUN && d < 60) pellets(e, t, dmg);
+        // ((16.9) Police: as well as they've been trained (see doctrine).)
+        float[] dc = doctrine(e);
+        if (dc != null) {
+            accuracy *= dc[0];
+            e.cooldown *= dc[2];
+        }
         // Soldiers near their commander fight better.
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
         accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e)));
         if (e.ammo <= 0 && e.reserve > 0) {
-            e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+            e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f * (dc != null ? dc[3] : 1);
             emit(Sfx.RELOAD, e.x, e.y);
         }
         // (10.45) How far the shot carries depends on the gun: a pistol's crack, a shotgun's boom, a rifle's
@@ -12301,10 +12295,8 @@ final class World {
                 boolean near = peopleNear(b.doorX, b.doorY, 32);
                 if ((near && rnd.nextFloat() < dt * 1.2f) || rnd.nextFloat() < dt / 100f) burstOut(b);
             }
-            if (b.occupants.isEmpty()) {
-                b.barricade = Math.min(100, b.barricade + dt * 4);
-                continue;
-            }
+            // ((16.9) A door the dead broke stays broken: nobody comes to fix it.)
+            if (b.occupants.isEmpty()) continue;
             // Survivors eat what's in the building; when it runs out they have to go out and find more.
             b.hunger += dt;
             if (b.hunger > 20) {
@@ -12361,14 +12353,8 @@ final class World {
                 continue;
             }
             b.fighting = false;
-            // Everyone inside helps shore up the door: more people, a stronger barricade. ((11.5) With the tools and
-            // timber of a hardware store or lumber yard to hand, a lot quicker.)
+            // ((16.9) Those inside no longer shore up the door: no barricading.)
             int use = useOf(b);
-            float tools = use == Variants.U_TOOLS ? 2.5f : 1;
-            if (!zombieWithin(b.doorX, b.doorY, 60))
-                b.barricade = Math.min(100, b.barricade + dt * (2 + b.occupants.size() * 0.5f) * tools);
-            else if (b.occupants.size() >= 4 || (tools > 1 && b.occupants.size() >= 2))
-                b.barricade = Math.min(100, b.barricade + dt * b.occupants.size() * 0.25f * tools);
             windowShots(b, dt);
             // ((11.5) Somewhere with medical supplies: the hurt sheltering there are patched up.)
             if (use == Variants.U_MEDICAL)
@@ -12516,7 +12502,6 @@ final class World {
         if (b.lurkers <= 0) {
             b.lurkers = 0;
             b.fighting = false;
-            b.barricade = Math.max(b.barricade, 15);
             b.infestKnown = false;
             if (b.fightTime > 3)
                 dispatch.say(Dispatch.WHO_INFO, null, "Survivors on " + city.placeName(b.doorX, b.doorY) + " fought off the dead inside. "

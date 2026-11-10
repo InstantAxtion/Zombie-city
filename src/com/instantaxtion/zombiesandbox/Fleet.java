@@ -3884,6 +3884,18 @@ final class Fleet {
                 limit = Math.min(limit, 30 + Math.max(0, gap));
                 continue;
             }
+            // ((16.9) Overtaking: the army on a job, or anything on lights and sirens, doesn't trail behind slower
+            // traffic going the same way - a tank, an APC, a car that won't pull over. Out and past it, a little
+            // quicker than it's going, then back in. (Not in a junction, nor past one sat at a light.) Military
+            // convoys used to crawl along behind their slowest.)
+            boolean urgent = v.player == null && v.type != TANK && !v.parked
+                    && (v.lightsOn() || (army(v) && (v.state == DRIVE || v.state == RETURN) && v.incident != null));
+            if (urgent && lead > 2 && gap < 45 && !o.held && !o.queued && !o.parked && o.player == null
+                    && lead < 60 && city.junctionIdAt(v.x, v.y) < 0 && city.junctionIdAt(o.x, o.y) < 0) {
+                v.passing = 1.4f;
+                limit = Math.min(limit, Math.max(lead + 30, 45));
+                continue;
+            }
             if (gap < 25 && lead < 5) {
                 v.queued = true;
                 int d = o.held ? 1 : o.holdDepth > 0 ? o.holdDepth + 1 : 0;
@@ -5350,17 +5362,32 @@ final class Fleet {
         v.reconCd -= dt;
         if (v.spotCd > 0) return null;
         v.spotCd = 0.6f;
-        if (v.crew.isEmpty() || v.player != null || (v.type != CRUISER && v.type != TRUCK)) return null;
+        // ((16.9) A police car or van with only its driver aboard is no different: the driver pulls up and takes them on.
+        // It used to drive straight past, as if there was nobody in it to get out.)
+        boolean lone = v.crew.isEmpty() && v.driver != null && (v.type == CRUISER || policeTruck(v)) && v.state == DRIVE;
+        if ((v.crew.isEmpty() && !lone) || v.player != null || (v.type != CRUISER && v.type != TRUCK)) return null;
         Entity z = w.nearestZombie(v.x, v.y, 105);
         if (z == null || z.hidden || !city.los(v.x, v.y, z.x, z.y)) return null;
         Dispatch.Incident inc = v.incident;
         if (inc != null && World.hypot(z.x - inc.x, z.y - inc.y) < 240) return null;
-        Entity who = v.crew.get(0);
+        Entity who = lone ? v.driver : v.crew.get(0);
         // (Out of rounds: nothing to fight with, so they drive on.)
         boolean armed = false;
+        if (lone) armed = who.ammo + who.reserve > 0;
         for (Entity e : v.crew) if (e.ammo + e.reserve > 0) armed = true;
         if (!armed) return null;
-        return w.dispatch.sighting(z.x, z.y, who);
+        Dispatch.Incident seen = w.dispatch.sighting(z.x, z.y, who);
+        if (seen != null && lone) {
+            // (The driver becomes the car's crew, and gets out with it like any crew.)
+            Entity d = v.driver;
+            v.driver = null;
+            v.realDriver = false;
+            d.rig = v;
+            d.dead = true;
+            d.removed = true;
+            v.crew.add(d);
+        }
+        return seen;
     }
 
     private boolean hordeAhead(Vehicle v) {
@@ -6142,6 +6169,8 @@ final class Fleet {
         v.angle = (float) Math.atan2(inc.y - p[1], inc.x - p[0]);
         v.patrol = true;
         v.station = f;
+        // ((16.9) The FBI's own cars, from the field office.)
+        if (f.fed) v.agency = 4;
         v.state = MUSTER;
         v.crewWanted = officers.size();
         v.incident = inc;
@@ -6595,6 +6624,7 @@ final class Fleet {
                 v.homeY = p[1];
                 v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
                 v.depot = f;
+                if (f.fed) v.agency = 4;
                 v.state = IDLE;
                 v.speed = 0;
                 v.parked = true;
@@ -6648,7 +6678,9 @@ final class Fleet {
                 // ((11.7) Only a car or truck parked there, and only with someone there to drive it out: nothing comes
                 // out of a station or base with nobody in it, and none appear from nowhere when they're all out.)
                 drv = freeDriver(f, type, group);
-                if (drv == null) v = null;
+                // ((16.9) A base's trucks come out with one of the motor pool at the wheel when there's nobody else free
+                // to drive: soldiers far from base used to be left to walk it - most of them, late on, with everyone out.)
+                if (drv == null && !(type == Entity.SOLDIER && !f.fallen)) v = null;
                 else if (v == null && type == Entity.SOLDIER && !f.fallen) {
                     // ((12.3) One of the trucks in the base's motor pool.)
                     float[] p = baseTruck(f);
@@ -6671,7 +6703,8 @@ final class Fleet {
             if (v == null && type == Entity.SOLDIER) {
                 // ((12.3) Or an army truck standing by somewhere in town, after dropping a squad off: it drives over.)
                 drv = null;
-                float best = 1600;
+                // ((16.9) From further off: a truck a couple of miles away is still quicker than the walk.)
+                float best = 3000;
                 for (int i = 0, m = vehicles.size(); i < m; i++) {
                     Vehicle o = vehicles.get(i);
                     if (!o.standby || o.type != TRUCK || o.broken || o.burnt || o.kind == K_BIKE || o.pickupFor != null || o.player != null
