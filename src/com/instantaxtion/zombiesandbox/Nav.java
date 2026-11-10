@@ -324,16 +324,26 @@ final class Nav {
 
     /** A tile route from s to g (start excluded) inside the box, or null within maxExpand tiles searched. */
     private int[] astar(int s, int g, int x0, int y0, int x1, int y1, int maxExpand) {
-        if (aG == null) {
-            aG = new int[w * h];
-            aFrom = new byte[w * h];
-            aStamp = new int[w * h];
+        // ((16.10) Its working arrays cover only the box searched, not the whole map: two whole-map arrays and a third
+        // were 25 MB on the Large map, for searches that never leave a few clusters (see path()). Each tile's place
+        // in them is worked out from where it is in the box.)
+        // (The start and the goal always inside it.)
+        x0 = Math.min(x0, Math.min(s % w, g % w));
+        y0 = Math.min(y0, Math.min(s / w, g / w));
+        x1 = Math.max(x1, Math.max(s % w, g % w) + 1);
+        y1 = Math.max(y1, Math.max(s / w, g / w) + 1);
+        int bw = x1 - x0, bh = y1 - y0, area = bw * bh;
+        if (aG == null || aG.length < area) {
+            aG = new int[area];
+            aFrom = new byte[area];
+            aStamp = new int[area];
         }
         int run = ++aRun;
         if (s == g) return new int[0];
         int gx = g % w, gy = g / w, size = 0;
-        aStamp[s] = run;
-        aG[s] = 0;
+        int ls = (s / w - y0) * bw + (s % w - x0);
+        aStamp[ls] = run;
+        aG[ls] = 0;
         aHeap[size++] = ((long) heur(s % w, s / w, gx, gy) << 32) | s;
         int expanded = 0;
         while (size > 0) {
@@ -341,26 +351,35 @@ final class Nav {
             aHeap[0] = aHeap[--size];
             down(aHeap, size);
             int t = (int) (top & 0xFFFFFFFFL), f = (int) (top >>> 32), tx = t % w, ty = t / w;
-            if (f - heur(tx, ty, gx, gy) > aG[t]) continue;
+            int lt = (ty - y0) * bw + (tx - x0);
+            if (f - heur(tx, ty, gx, gy) > aG[lt]) continue;
             if (t == g) {
                 int n = 0;
-                for (int k = t; k != s; k -= DX[aFrom[k]] + DY[aFrom[k]] * w) n++;
+                for (int k = t; k != s; ) {
+                    int q = aFrom[(k / w - y0) * bw + (k % w - x0)];
+                    k -= DX[q] + DY[q] * w;
+                    n++;
+                }
                 int[] path = new int[n];
-                for (int k = t, i = n - 1; k != s; k -= DX[aFrom[k]] + DY[aFrom[k]] * w) path[i--] = k;
+                for (int k = t, i = n - 1; k != s; ) {
+                    path[i--] = k;
+                    int q = aFrom[(k / w - y0) * bw + (k % w - x0)];
+                    k -= DX[q] + DY[q] * w;
+                }
                 return path;
             }
             if (++expanded > maxExpand) return null;
             for (int q = 0; q < 8; q++) {
                 int dx = DX[q], dy = DY[q], nx = tx + dx, ny = ty + dy;
                 if (nx < x0 || ny < y0 || nx >= x1 || ny >= y1) continue;
-                int nb = ny * w + nx;
+                int nb = ny * w + nx, ln = (ny - y0) * bw + (nx - x0);
                 if (!open(nb) && nb != g) continue;
                 if (dx != 0 && dy != 0 && (!open(ty * w + nx) || !open(ny * w + tx))) continue;
-                int ng = aG[t] + cost(nb, nx, ny) * (dx != 0 && dy != 0 ? 14 : 10) / 10;
-                if (aStamp[nb] == run && ng >= aG[nb]) continue;
-                aStamp[nb] = run;
-                aG[nb] = ng;
-                aFrom[nb] = (byte) q;
+                int ng = aG[lt] + cost(nb, nx, ny) * (dx != 0 && dy != 0 ? 14 : 10) / 10;
+                if (aStamp[ln] == run && ng >= aG[ln]) continue;
+                aStamp[ln] = run;
+                aG[ln] = ng;
+                aFrom[ln] = (byte) q;
                 if (size == aHeap.length) aHeap = Arrays.copyOf(aHeap, size * 2);
                 aHeap[size] = ((long) (ng + heur(nx, ny, gx, gy)) << 32) | nb;
                 up(aHeap, size++);
@@ -395,7 +414,13 @@ final class Nav {
         }
         if (tiles == null) tiles = hierarchical(s, g);
         // (Gave up on the clusters: a long plain search, as a last resort.)
-        if (tiles == null && far <= CS * 6) tiles = astar(s, g, 0, 0, w, h, 30000);
+        // ((16.10) In a box round the two of them, a long way out on every side, not the whole map: no search that stops
+        // at thirty thousand tiles gets further than that.)
+        if (tiles == null && far <= CS * 6) {
+            int m = 160;
+            tiles = astar(s, g, Math.max(0, Math.min(x0, gx) - m), Math.max(0, Math.min(y0, gy) - m),
+                    Math.min(w, Math.max(x0, gx) + m + 1), Math.min(h, Math.max(y0, gy) + m + 1), 30000);
+        }
         if (tiles == null) return null;
         return straighten(s, tiles);
     }

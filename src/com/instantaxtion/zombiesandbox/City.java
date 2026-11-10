@@ -942,11 +942,18 @@ final class City {
         return fieldsNeeded;
     }
 
+    /**
+     * ((16.10) How far, in steps of walking cost, the way on foot to a station or a base is worked out: a long walk,
+     * not the whole map. Beyond it people find their own way, as to anywhere else. The whole map, for a score of
+     * stations and bases, was 60 MB on the Large map - more than a phone's game memory could spare.)
+     */
+    static final int FACILITY_REACH = 600;
+
     /** (Kept compact: see WalkField.) */
     WalkField field(Facility f) {
         WalkField a = facilityFields.get(f);
         if (a == null) {
-            a = walkField16(f.x, f.y);
+            a = walkField16(f.x, f.y, FACILITY_REACH);
             facilityFields.put(f, a);
         }
         return a;
@@ -964,7 +971,7 @@ final class City {
         if (!staleFields.isEmpty()) {
             Facility f = staleFields.iterator().next();
             staleFields.remove(f);
-            if (facilityFields.containsKey(f)) facilityFields.put(f, walkField16(f.x, f.y));
+            if (facilityFields.containsKey(f)) facilityFields.put(f, walkField16(f.x, f.y, FACILITY_REACH));
             return true;
         }
         if (facilityFields.size() >= fieldsNeeded()) return false;
@@ -1054,9 +1061,9 @@ final class City {
     }
 
     WalkField walkFieldFrom(float[] xs, float[] ys, int n, int limit) {
-        if (fieldTmp == null) fieldTmp = new int[w * h];
-        walkFieldFromPoints(fieldTmp, xs, ys, n, limit);
-        return packField(fieldTmp);
+        int[] tmp = walkScratch();
+        walkFieldFromPoints(tmp, xs, ys, n, limit);
+        return packField(tmp);
     }
 
     /** Whether a walking field reaches (x, y). */
@@ -1071,9 +1078,26 @@ final class City {
 
     /** (10.55) The same, only searching out to limit (people walk to a park nearby, not across the map). */
     WalkField walkField16(float x, float y, int limit) {
+        int[] tmp = walkScratch();
+        walkFieldFromPoints(tmp, new float[]{x}, new float[]{y}, 1, limit);
+        return packField(tmp);
+    }
+
+    /**
+     * ((16.10) The one whole-map scratch array the ways on foot and the vehicles' route searches share: they're never
+     * worked out at the same moment, and each was 12.5 MB on the Large map. A way on foot fills all of it, so the next
+     * route search clears all of it first (see driveField).)
+     */
+    int[] scratch() {
         if (fieldTmp == null) fieldTmp = new int[w * h];
-        walkFieldFromPoints(fieldTmp, new float[]{x}, new float[]{y}, 1, limit);
-        return packField(fieldTmp);
+        return fieldTmp;
+    }
+
+    /** The scratch array for a way on foot, which leaves all of it written: the next route search clears it all. */
+    private int[] walkScratch() {
+        int[] a = scratch();
+        if (dfLast == a) dfTouchedN = -1;
+        return a;
     }
 
     // ------------------------------------------------------------------ close-ups

@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.9";
-    static final int VERSION_CODE = 159;
+    static final String VERSION = "16.10";
+    static final int VERSION_CODE = 160;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.10  -  The Large map fits",
+                    "The Large map now runs in about 400 MB of the game's memory (it needed over 500, more than a phone like the Galaxy S26 Ultra gives a game), Big in 300 and Default in 260. The New Game screen's memory warnings are lowered to match.",
+                    "How: the ways on foot to the police stations and bases are worked out as far as a long walk, not across the whole map (anyone further off finds their own way, as they would anywhere); the walking router works in the few blocks round each trip instead of a whole-map table; the ways on foot and the vehicles' route searches share one scratch table; and the grid that finds who's near whom uses bigger squares, a quarter of the memory.",
+            },
             {
                     "16.9  -  The FBI in town, police by their training, no gun stores",
                     "An FBI field office in town (new cities): a dark grey office block with its agents there from the start and their black cars on the lot. The agents go out to calls like the police, in their own cars.",

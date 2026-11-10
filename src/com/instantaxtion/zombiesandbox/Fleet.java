@@ -923,8 +923,8 @@ final class Fleet {
     private int[] scratch;
 
     private int[] scratchField() {
-        if (scratch == null || scratch.length != city.w * city.h) scratch = new int[city.w * city.h];
-        return scratch;
+        // ((16.10) Shared with the ways on foot: see City.scratch.)
+        return city.scratch();
     }
 
     /** The corridor along the way down a full field from (x, y). */
