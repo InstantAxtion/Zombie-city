@@ -14080,7 +14080,7 @@ final class World {
         int by0 = Math.max(0, (int) ((y - radius) / City.T)), by1 = Math.min(city.h - 1, (int) ((y + radius) / City.T));
         for (int ty = by0; ty <= by1; ty++)
             for (int tx = bx0; tx <= bx1; tx++) {
-                int bi = city.buildingAt[ty * city.w + tx];
+                int bi = city.buildingAt.get(ty * city.w + tx);
                 if (bi < 0) continue;
                 City.Building b = city.buildings.get(bi);
                 if (b.collapsed || hitBuildings.contains(b)) continue;
@@ -16017,7 +16017,7 @@ final class World {
             int t = z.ring[z.ringAt];
             byte k = city.tiles[t];
             if (k != City.GRASS && k != City.SIDEWALK && k != City.PLAZA && k != City.DIRT && k != City.SAND && k != City.TREE) continue;
-            if (city.buildingAt[t] >= 0) continue;
+            if (city.buildingAt.get(t) >= 0) continue;
             float cx = (t % city.w + 0.5f) * City.T, cy = (t / city.w + 0.5f) * City.T;
             if (gatherLiving(cx, cy, 9) > 0 || zombieWithin(cx, cy, 9)) continue;
             z.wall.add(new int[]{t, k});

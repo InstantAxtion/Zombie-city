@@ -238,7 +238,7 @@ final class City {
 
     final List<District> districts = new ArrayList<District>();
     /** Which district each tile belongs to. */
-    private byte[] districtAt;
+    private OffHeap.Bytes districtAt;
     /** The countryside around a town, or -1. */
     private int countryDistrict = -1;
     /** The district of the block currently being filled in. */
@@ -367,7 +367,7 @@ final class City {
             districts.add(d);
         }
         // Every tile belongs to its nearest centre, with wobbly borders.
-        districtAt = new byte[w * h];
+        districtAt = new OffHeap.Bytes(w * h);
         float[] sx = new float[districts.size()], sy = new float[districts.size()];
         // ((16.2) The wobble along each row and down each column, and each centre's place and weight, worked out once
         // rather than for every tile of the map: the same sums, a good part of building a big city.)
@@ -384,7 +384,7 @@ final class City {
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {
                 if (country >= 0 && (x < townX0 || y < townY0 || x >= townX1 || y >= townY1)) {
-                    districtAt[y * w + x] = (byte) country;
+                    districtAt.set(y * w + x, (byte) (country));
                     districts.get(country).tiles++;
                     continue;
                 }
@@ -399,7 +399,7 @@ final class City {
                         best = k;
                     }
                 }
-                districtAt[y * w + x] = (byte) best;
+                districtAt.set(y * w + x, (byte) (best));
                 if (y >= landH || (islandRects != null && island(x, y) < 0)) continue;
                 sx[best] += x;
                 sy[best] += y;
@@ -425,12 +425,12 @@ final class City {
     /** Which district a world position is in (an index into districts), or -1. */
     int districtIndex(float x, float y) {
         if (districtAt == null) return -1;
-        return districtAt[tileIndex(x, y)];
+        return districtAt.get(tileIndex(x, y));
     }
 
     District districtOf(float x, float y) {
         if (districtAt == null || districts.isEmpty()) return null;
-        return districts.get(districtAt[tileIndex(x, y)]);
+        return districts.get(districtAt.get(tileIndex(x, y)));
     }
 
     /** The kind of district at a tile. */
@@ -438,7 +438,7 @@ final class City {
         if (districtAt == null) return DT_MIDTOWN;
         tx = Math.max(0, Math.min(w - 1, tx));
         ty = Math.max(0, Math.min(h - 1, ty));
-        return districts.get(districtAt[ty * w + tx]).type;
+        return districts.get(districtAt.get(ty * w + tx)).type;
     }
 
     static final int SURF_ASPHALT = 0, SURF_COBBLE = 1, SURF_CONCRETE = 2, SURF_CHIPSEAL = 3;
@@ -495,7 +495,7 @@ final class City {
         return blocks;
     }
     /** 0 normal car, 1 police car, 2 army truck. */
-    private byte[] carKind;
+    private OffHeap.Bytes carKind;
     private final List<float[]> helipads = new ArrayList<float[]>();
     private final List<float[]> tents = new ArrayList<float[]>();
     /**
@@ -531,7 +531,8 @@ final class City {
     /** Everyone the city's homes can house. */
     int totalResidents;
     /** Which building stands on each tile (index into buildings), or -1. */
-    final int[] buildingAt;
+    /** ((16.11) Kept outside the game's memory: see OffHeap.) */
+    final OffHeap.Ints buildingAt;
     /** Tree canopies as {x, y, radius}; drawn above the ground by GameView. */
     final List<float[]> trees = new ArrayList<float[]>();
     /** Street lamps as {x, y}. */
@@ -582,9 +583,9 @@ final class City {
         queue = new int[w * h];
         roadDir = new byte[w * h];
         mainRoad = new boolean[w * h];
-        carKind = new byte[w * h];
-        buildingAt = new int[w * h];
-        Arrays.fill(buildingAt, -1);
+        carKind = new OffHeap.Bytes(w * h);
+        buildingAt = new OffHeap.Ints(w * h);
+        buildingAt.fill(-1);
         generate();
         clearHighwaySides();
         joinRoads();
@@ -760,11 +761,11 @@ final class City {
             }
             int[] of = wingOf.get(l);
             if (of != null) {
-                int mi = buildingAt[of[1] * w + of[0]];
+                int mi = buildingAt.get(of[1] * w + of[0]);
                 if (mi >= 0) b.main = buildings.get(mi);
             }
             for (int j = l[1]; j < l[1] + l[3]; j++)
-                for (int i = l[0]; i < l[0] + l[2]; i++) buildingAt[j * w + i] = buildings.size();
+                for (int i = l[0]; i < l[0] + l[2]; i++) buildingAt.set(j * w + i, buildings.size());
             buildings.add(b);
             return b;
         }
@@ -870,7 +871,7 @@ final class City {
             for (int y = ty; y < ty + lh; y++)
                 for (int x = tx; x < tx + lw; x++) {
                     byte t = tiles[y * w + x];
-                    if (t == BUILDING || t == ROAD || t == RAIL || t == BASE || buildingAt[y * w + x] >= 0) return null;
+                    if (t == BUILDING || t == ROAD || t == RAIL || t == BASE || buildingAt.get(y * w + x) >= 0) return null;
                 }
             addLot(tx, ty, lw, lh, kind == ED_HOUSE ? HOUSE : SHOP);
             if (!live) return null;
@@ -885,10 +886,10 @@ final class City {
             if (nb != null) clearDoorway(nb);
             return nb;
         }
-        if (buildingAt[i] >= 0 && !buildings.isEmpty()) {
+        if (buildingAt.get(i) >= 0 && !buildings.isEmpty()) {
             // Only Clear touches a building: it knocks it down.
             if (kind != ED_CLEAR || !live) return null;
-            Building b = buildings.get(buildingAt[i]);
+            Building b = buildings.get(buildingAt.get(i));
             if (!b.collapsed) collapse(b);
             return null;
         }
@@ -1195,7 +1196,7 @@ final class City {
     void label(String text, float x, float y, float size, int color) {
         if (!collectLabels) return;
         int tx = Math.max(0, Math.min(w - 1, (int) (x / T))), ty = Math.max(0, Math.min(h - 1, (int) (y / T)));
-        labels.add(new Label(text, x, y, size, color, buildingAt[ty * w + tx]));
+        labels.add(new Label(text, x, y, size, color, buildingAt.get(ty * w + tx)));
     }
 
     /** (10.52) A roof sign centred on (x, y), on a plate: it reads the same on a flat roof or across a ridge. */
@@ -1250,9 +1251,9 @@ final class City {
     // ------------------------------------------------------------------ the lie of the land (see Terrain)
 
     /** Each tile's height (null on cities built before 10.10, which are flat). */
-    float[] elev;
+    OffHeap.Floats elev;
     /** What kind each tree is (Country.TK_: broadleaf unless set; null on cities built before 10.10). */
-    byte[] treeKind;
+    OffHeap.Bytes treeKind;
     /** Waterfalls: {x, y, dx, dy} (world units; the way the water falls). */
     final List<float[]> falls = new ArrayList<float[]>();
     /** Names out in the country (the park, mountains, a lake, the falls, campsites) and where: {x, y, kind}. */
@@ -1304,16 +1305,16 @@ final class City {
     private final java.util.IdentityHashMap<int[], Integer> lotResidents = new java.util.IdentityHashMap<int[], Integer>();
 
     void setTreeKind(int i, byte kind) {
-        if (treeKind == null) treeKind = new byte[w * h];
-        treeKind[i] = kind;
+        if (treeKind == null) treeKind = new OffHeap.Bytes(w * h);
+        treeKind.set(i, (byte) (kind));
     }
 
     byte treeKindAt(int i) {
-        return treeKind == null ? 0 : treeKind[i];
+        return treeKind == null ? 0 : treeKind.get(i);
     }
 
     void unpine(int i) {
-        if (treeKind != null) treeKind[i] = 0;
+        if (treeKind != null) treeKind.set(i, (byte) (0));
     }
 
     /** Shallow stream water anyone can wade across (since 10.14): it's water, but not in the way. */
@@ -1359,7 +1360,7 @@ final class City {
         if (elev == null) return 0;
         int tx = (int) (x / T), ty = (int) (y / T);
         if (tx < 0 || ty < 0 || tx >= w || ty >= h) return 0;
-        return elev[ty * w + tx];
+        return elev.get(ty * w + tx);
     }
 
     /** How steeply the ground rises (height per tile) going from (x, y) in direction (dx, dy) (a unit vector). */
@@ -1834,7 +1835,7 @@ final class City {
                         int nx = x + dx, ny = y + dy;
                         if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
                         int j = ny * w + nx;
-                        int bi = buildingAt[j];
+                        int bi = buildingAt.get(j);
                         if (bi >= 0 && bi < buildings.size()) {
                             int k = buildings.get(bi).kind;
                             if (k == HOUSE || k == BARN) homes.add(bi);
@@ -1855,7 +1856,7 @@ final class City {
                     for (int dx = -1; dx <= 1; dx++) {
                         int nx = x + dx, ny = y + dy;
                         if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                        int j = ny * w + nx, bi = buildingAt[j];
+                        int j = ny * w + nx, bi = buildingAt.get(j);
                         if ((tiles[j] == LOT && !drive[j] && comp[j] != i) || (bi >= 0 && bi < buildings.size()
                                 && buildings.get(bi).kind != HOUSE && buildings.get(bi).kind != BARN)) {
                             forecourt = true;
@@ -1923,7 +1924,7 @@ final class City {
                     for (int a = a0; a <= a1 && clear; a++) {
                         int i = frontTile(k, a);
                         byte t = tiles[i];
-                        if (oneWay[i] != 0 || (bridge != null && bridge[i]) || buildingAt[i] >= 0
+                        if (oneWay[i] != 0 || (bridge != null && bridge[i]) || buildingAt.get(i) >= 0
                                 || (slipWay != null && slipWay[i] != 0) || nearRamp(i)
                                 || !(t == GRASS || t == TREE || t == DIRT || t == ROAD || t == TRAIL || t == SAND)) clear = false;
                     }
@@ -2158,20 +2159,20 @@ final class City {
         int x = c % w, y = c / w;
         if (x < 3 || y < 3 || x >= w - 3 || y >= h - 3) return false;
         if ((bridge != null && bridge[c]) || (oneWay != null && oneWay[c] != 0) || (slipTile != null && slipTile[c])
-                || (curveTile != null && curveTile[c]) || (keepPaved != null && keepPaved[c]) || buildingAt[c] >= 0) return false;
+                || (curveTile != null && curveTile[c]) || (keepPaved != null && keepPaved[c]) || buildingAt.get(c) >= 0) return false;
         int ring = 0;
         for (int dy = -1; dy <= 1; dy++)
             for (int dx = -1; dx <= 1; dx++) {
                 if (dx == 0 && dy == 0) continue;
                 int j = (y + dy) * w + x + dx;
-                if (anchors(tiles[j]) || buildingAt[j] >= 0) return false;
+                if (anchors(tiles[j]) || buildingAt.get(j) >= 0) return false;
                 if (roadTile(j)) ring++;
             }
         if (ring > 3) return false;
         // (A lane passing a home a step or two off still serves it.)
         for (int dy = -2; dy <= 2; dy++)
             for (int dx = -2; dx <= 2; dx++) {
-                int bi = buildingAt[(y + dy) * w + x + dx];
+                int bi = buildingAt.get((y + dy) * w + x + dx);
                 if (bi >= 0 && bi < buildings.size() && (buildings.get(bi).kind == HOUSE || buildings.get(bi).kind == BARN)) return false;
             }
         boolean l = roadTile(c - 1), r = roadTile(c + 1), u = roadTile(c - w), d = roadTile(c + w);
@@ -2717,7 +2718,7 @@ final class City {
         if (m > 0) tidyDeadEnds();
         // (10.30) A big army base of its own out in the country, on the Massive maps.
         // The lie of the land: hills, and out in the country mountains, streams, lakes, a park and campsites.
-        if (cfg.nature()) elev = new Terrain(this, new Random(cfg.seed * 977L + 3)).build();
+        if (cfg.nature()) elev = OffHeap.Floats.of(new Terrain(this, new Random(cfg.seed * 977L + 3)).build());
         if (fieldTile != null)
             for (int i = 0; i < w * h; i++) if (fieldTile[i] && tiles[i] == TREE) tiles[i] = GRASS;
         // Each neighbourhood is a place of its own, as far as anyone roaming between places is concerned.
@@ -3309,7 +3310,7 @@ final class City {
             int ty = ay + ah - 2;
             if (rnd.nextFloat() < 0.75f && tiles[ty * w + i] == BASE && !hasNeighbor(i, ty, CAR)) {
                 tiles[ty * w + i] = CAR;
-                carKind[ty * w + i] = 2;
+                carKind.set(ty * w + i, (byte) (2));
             }
         }
         float cx = (ax + aw / 2f) * T, cy = (ay + ah * 0.62f) * T;
@@ -3905,8 +3906,8 @@ final class City {
                     }
                     boolean edge = x == 0 || y == 0 || x == w - 1 || y == h - 1;
                     if (!edge && pass == 1) {
-                        byte me = districtAt[i];
-                        edge = districtAt[i - 1] != me || districtAt[i + 1] != me || districtAt[i - w] != me || districtAt[i + w] != me;
+                        byte me = districtAt.get(i);
+                        edge = districtAt.get(i - 1) != me || districtAt.get(i + 1) != me || districtAt.get(i - w) != me || districtAt.get(i + w) != me;
                     }
                     dist[i] = edge ? 1 : Short.MAX_VALUE;
                 }
@@ -3951,7 +3952,7 @@ final class City {
                 for (int x = 0; x < w; x++, i++) {
                     int dd = dist[i];
                     if (dd == 0) continue;
-                    int k = districtAt[i];
+                    int k = districtAt.get(i);
                     if (k < 0 || k >= nd) continue;
                     dry[k]++;
                     float score = Math.min(dd, 9) - 0.04f * (float) Math.sqrt((x - mx[k]) * (x - mx[k]) + (y - my[k]) * (y - my[k]));
@@ -3966,7 +3967,7 @@ final class City {
                 if (at[k] < 0) continue;
                 // (Already on dry land of its own, well in: it stays where it was.)
                 int i0 = tileIndex(d.cx, d.cy);
-                if (i0 >= 0 && i0 < n && districtAt[i0] == k && dist[i0] >= Math.min(6, best[k] + 0.5f)) continue;
+                if (i0 >= 0 && i0 < n && districtAt.get(i0) == k && dist[i0] >= Math.min(6, best[k] + 0.5f)) continue;
                 d.cx = (at[k] % w + 0.5f) * T;
                 d.cy = (at[k] / w + 0.5f) * T;
             }
@@ -4982,7 +4983,7 @@ final class City {
         for (int ty = ty0; ty <= ty1; ty++)
             for (int tx = tx0; tx <= tx1; tx++) {
                 int i = ty * w + tx;
-                if (tiles[i] != CAR || carKind[i] != 2) continue;
+                if (tiles[i] != CAR || carKind.get(i) != 2) continue;
                 float dx = (tx + 0.5f) * T - x, dy = (ty + 0.5f) * T - y, d = dx * dx + dy * dy;
                 if (d < bd) {
                     bd = d;
@@ -4991,7 +4992,7 @@ final class City {
             }
         if (best < 0) return null;
         tiles[best] = BASE;
-        carKind[best] = 0;
+        carKind.set(best, (byte) (0));
         solid[best] = false;
         stepsChanged(best);
         int bx = best % w, by = best / w;
@@ -5071,7 +5072,7 @@ final class City {
         for (int ty = ty0; ty <= ty1; ty++)
             for (int tx = tx0; tx <= tx1; tx++) {
                 int i = ty * w + tx;
-                if (tiles[i] != CAR || carKind[i] != 2) continue;
+                if (tiles[i] != CAR || carKind.get(i) != 2) continue;
                 float dx = (tx + 0.5f) * T - x, dy = (ty + 0.5f) * T - y;
                 if (dx * dx + dy * dy < radius * radius) n++;
             }
@@ -5085,7 +5086,7 @@ final class City {
         int i = ty * w + tx;
         if (tiles[i] != BASE) return;
         tiles[i] = CAR;
-        carKind[i] = 2;
+        carKind.set(i, (byte) (2));
         solid[i] = true;
         clearChanged(i);
         stepsChanged(i);
@@ -5294,7 +5295,7 @@ final class City {
                 int[] q = uv(r, u, v, 1, 1);
                 if (rnd.nextFloat() < 0.5f) {
                     tiles[q[1] * w + q[0]] = CAR;
-                    carKind[q[1] * w + q[0]] = (byte) (rnd.nextFloat() < 0.2f ? 1 : 0);
+                    carKind.set(q[1] * w + q[0], (byte) ((rnd.nextFloat() < 0.2f ? 1 : 0)));
                 }
             }
     }
@@ -5343,7 +5344,7 @@ final class City {
                 int[] q = uv(r, u, tv, 1, 1);
                 if (tiles[q[1] * w + q[0]] != BASE) continue;
                 tiles[q[1] * w + q[0]] = CAR;
-                carKind[q[1] * w + q[0]] = 2;
+                carKind.set(q[1] * w + q[0], (byte) (2));
             }
     }
 
@@ -5386,7 +5387,7 @@ final class City {
                 int[] q = uv(r, u, tv, 1, 1);
                 if (tiles[q[1] * w + q[0]] != LOT || rnd.nextFloat() < 0.25f) continue;
                 tiles[q[1] * w + q[0]] = CAR;
-                carKind[q[1] * w + q[0]] = 5;
+                carKind.set(q[1] * w + q[0], (byte) (5));
             }
     }
 
@@ -5412,7 +5413,7 @@ final class City {
                     // one, out on the apron.)
                     boolean spare = kind == FIRE_STATION && !spareEngine && rnd.nextFloat() < 0.3f;
                     if (spare) spareEngine = true;
-                    carKind[j * w + i] = (byte) (kind == HOSPITAL ? 3 : kind == FIRE_STATION ? (spare ? 4 : 0) : fedLot ? 6 : 1);
+                    carKind.set(j * w + i, (byte) ((kind == HOSPITAL ? 3 : kind == FIRE_STATION ? (spare ? 4 : 0) : fedLot ? 6 : 1)));
                 }
         float cx = (lx + lw / 2f) * T, cy = (ly + lh / 2f) * T;
         float[] c = findWalkable(cx, cy);
@@ -6756,7 +6757,7 @@ final class City {
     /** One-way slip roads: which way along each tile traffic may go (as oneWay), and (10.32) its exact heading. */
     byte[] slipWay;
     /** ((13.3) The way each slip road tile runs, in 256ths of a turn: a byte, not a float, for each tile of the map.) */
-    byte[] slipAng;
+    OffHeap.Bytes slipAng;
 
     /** (10.32) A step from tile n to tile t (dx, dy) that doesn't go against a slip road's way, at either end. */
     private boolean slipOk(int n, int t, int dx, int dy) {
@@ -6766,7 +6767,7 @@ final class City {
     private boolean slipStep(int i, int dx, int dy) {
         if (slipWay[i] <= 0) return true;
         if (slipAng == null) return wayOk(slipWay, i, dx, dy);
-        float a = slipAng[i] * (float) (Math.PI * 2 / 256);
+        float a = slipAng.get(i) * (float) (Math.PI * 2 / 256);
         return dx * (float) Math.cos(a) + dy * (float) Math.sin(a) > -0.35f;
     }
 
@@ -6857,13 +6858,13 @@ final class City {
                         int i = y * w + x;
                         if (tiles[i] != ROAD || (oneWay != null && oneWay[i] != 0) || curveTile == null || !curveTile[i]) continue;
                         byte had = slipWay[i];
-                        if (slipAng == null) slipAng = new byte[w * h];
+                        if (slipAng == null) slipAng = new OffHeap.Bytes(w * h);
                         float ang = (float) Math.atan2(dy, dx);
                         // (Where two slip roads meet going different ways: both ways there.)
                         if (had == 0) {
                             slipWay[i] = code;
-                            slipAng[i] = (byte) Math.round(ang * (256 / (Math.PI * 2)));
-                        } else if (had > 0 && Math.cos(ang - slipAng[i] * (Math.PI * 2 / 256)) < 0.3f) slipWay[i] = -1;
+                            slipAng.set(i, (byte) (Math.round(ang * (256 / (Math.PI * 2)))));
+                        } else if (had > 0 && Math.cos(ang - slipAng.get(i) * (Math.PI * 2 / 256)) < 0.3f) slipWay[i] = -1;
                     }
             }
         }
@@ -7683,8 +7684,8 @@ final class City {
         districts.add(d);
         for (int y = Math.max(0, y0); y < Math.min(h, y1); y++)
             for (int x = Math.max(0, x0); x < Math.min(w, x1); x++) {
-                districts.get(districtAt[y * w + x]).tiles--;
-                districtAt[y * w + x] = (byte) id;
+                districts.get(districtAt.get(y * w + x)).tiles--;
+                districtAt.set(y * w + x, (byte) (id));
                 d.tiles++;
             }
     }
@@ -7981,8 +7982,8 @@ final class City {
             float[] sx = new float[districts.size()], sy = new float[districts.size()];
             for (District d : districts) d.tiles = 0;
             for (int i = 0; i < w * h; i++) {
-                if (!near[i]) districtAt[i] = (byte) countryDistrict;
-                int id = districtAt[i];
+                if (!near[i]) districtAt.set(i, (byte) (countryDistrict));
+                int id = districtAt.get(i);
                 districts.get(id).tiles++;
                 sx[id] += i % w;
                 sy[id] += i / w;
@@ -8476,9 +8477,9 @@ final class City {
         for (int y = Math.max(0, cy - 16); y < Math.min(h, cy + 16); y++)
             for (int x = Math.max(0, cx - 16); x < Math.min(w, cx + 16); x++) {
                 if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > 16 * 16) continue;
-                District old = districts.get(districtAt[y * w + x]);
+                District old = districts.get(districtAt.get(y * w + x));
                 old.tiles--;
-                districtAt[y * w + x] = (byte) id;
+                districtAt.set(y * w + x, (byte) (id));
                 d.tiles++;
             }
     }
@@ -8698,7 +8699,7 @@ final class City {
             for (int i = x0; i < x0 + 4; i++) {
                 byte t = tiles[j * w + i];
                 if (t != LOT && t != PLAZA && t != GRASS && ((t != CAR && t != TREE) || padsOnly)) return false;
-                if (buildingAt[j * w + i] >= 0) return false;
+                if (buildingAt.get(j * w + i) >= 0) return false;
             }
         for (float[] p : helipads) if (World.hypot(p[0] - (x0 + 2) * T, p[1] - (y0 + 2) * T) < 70) return false;
         return true;
@@ -8708,7 +8709,7 @@ final class City {
     Building buildingAt(float x, float y) {
         int tx = City.fl(x / T), ty = City.fl(y / T);
         if (tx < 0 || ty < 0 || tx >= w || ty >= h) return null;
-        int i = buildingAt[ty * w + tx];
+        int i = buildingAt.get(ty * w + tx);
         return i < 0 || buildings.get(i).collapsed ? null : buildings.get(i);
     }
 
@@ -8933,7 +8934,7 @@ final class City {
                 // (10.40) Lanes and drives are drawn smoothly over the ground afterwards (drawLanes).
                 if (t == DIRT || (t == LOT && drive != null && drive[y * w + x])) col = laneGround(x, y);
                 if (t == CAR && isLotCar(x, y)) col = 0xFF48494D;
-                if (t == CAR && carKind[y * w + x] == 2) col = 0xFF6A6E5E;
+                if (t == CAR && carKind.get(y * w + x) == 2) col = 0xFF6A6E5E;
                 if (slipTile != null && slipTile[y * w + x] && (t == ROAD || t == CAR))
                     col = country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837;
                 else if (curveTile != null && curveTile[y * w + x] && (t == ROAD || t == CAR))
@@ -9868,7 +9869,7 @@ final class City {
         for (int y = Math.max(0, gy0()); y < Math.min(h, gy1()); y++)
             for (int x = Math.max(0, gx0()); x < Math.min(w, gx1()); x++) {
                 byte t = tiles[y * w + x];
-                if (t != BASE && t != FENCE && !(t == CAR && carKind[y * w + x] == 2)) continue;
+                if (t != BASE && t != FENCE && !(t == CAR && carKind.get(y * w + x) == 2)) continue;
                 p.setColor(0xFF62665A);
                 c.drawLine(x * T, y * T, x * T + T, y * T, p);
                 c.drawLine(x * T, y * T, x * T, y * T + T, p);
@@ -10864,7 +10865,7 @@ final class City {
     private Bitmap shadeMap() {
         if (shade != null) return shade;
         float top = 0;
-        for (float v : elev) top = Math.max(top, v);
+        for (int q = 0; q < elev.length; q++) top = Math.max(top, elev.get(q));
         // (Only real mountains get snow.)
         // (Snow lower down in the north and the Alps; none in the tropics or the desert.)
         float snow = country.snowLine > 0 && top > 55 ? top * country.snowLine : Float.MAX_VALUE;
@@ -10873,12 +10874,12 @@ final class City {
             for (int x = 0; x < w; x++) {
                 int i = y * w + x;
                 if (tiles[i] == WATER) continue;
-                float gx = (elev[y * w + Math.min(w - 1, x + 1)] - elev[y * w + Math.max(0, x - 1)]) / 2;
-                float gy = (elev[Math.min(h - 1, y + 1) * w + x] - elev[Math.max(0, y - 1) * w + x]) / 2;
+                float gx = (elev.get(y * w + Math.min(w - 1, x + 1)) - elev.get(y * w + Math.max(0, x - 1))) / 2;
+                float gy = (elev.get(Math.min(h - 1, y + 1) * w + x) - elev.get(Math.max(0, y - 1) * w + x)) / 2;
                 // Lit from the north-west, like the buildings' shadows.
                 float lit = (gx + gy) * 0.707f * (cfg.civic >= 9 ? 0.11f : 0.075f);
                 float white = Math.min(0.32f, Math.max(0, lit)), black = Math.min(0.5f, Math.max(0, -lit));
-                if (elev[i] > snow) white = Math.max(white, Math.min(1, (elev[i] - snow) / (top - snow) * 2.5f) * 0.7f);
+                if (elev.get(i) > snow) white = Math.max(white, Math.min(1, (elev.get(i) - snow) / (top - snow) * 2.5f) * 0.7f);
                 float a = Math.min(0.75f, white + black);
                 if (a < 0.01f) continue;
                 // (Snow and sunny slopes a little warm; shade a little blue.)
@@ -11059,7 +11060,7 @@ final class City {
                 if (x >= townX0 - 2 && x < townX1 + 2 && y >= townY0 - 2 && y < townY1 + 2) continue;
                 int i = y * w + x;
                 if (tiles[i] == WATER || tiles[i + 1] == WATER || tiles[i + w] == WATER || tiles[i + w + 1] == WATER) continue;
-                float a = elev[i], b = elev[i + 1], cc = elev[i + w + 1], d = elev[i + w];
+                float a = elev.get(i), b = elev.get(i + 1), cc = elev.get(i + w + 1), d = elev.get(i + w);
                 float lo = Math.min(Math.min(a, b), Math.min(cc, d)), hi = Math.max(Math.max(a, b), Math.max(cc, d));
                 for (float lv = (float) Math.ceil(lo / 4) * 4; lv < hi; lv += 4) {
                     boolean major = Math.round(lv) % 20 == 0;
@@ -11280,7 +11281,7 @@ final class City {
                 int ax = st.vertical ? cx : cx + s, ay = st.vertical ? cy + s : cy;
                 int bx = st.vertical ? cx : cx + 2 * s, by = st.vertical ? cy + 2 * s : cy;
                 if (!crosswalk(ax, ay) || !junctionAt(bx, by)) continue;
-                int id = junctionId[by * w + bx];
+                int id = junctionId.get(by * w + bx);
                 int type = junctions.get(id)[4];
                 if (type == J_BEND) continue;
                 float hx = st.vertical ? 0 : s, hy = st.vertical ? s : 0, rx = -hy, ry = hx;
@@ -11714,7 +11715,7 @@ final class City {
         int roof = b[4], kind = b[6];
         Random r = new Random(b[5]);
         float bw = x1 - x0, bh = y1 - y0;
-        int bi = buildingAt[b[1] * w + b[0]];
+        int bi = buildingAt.get(b[1] * w + b[0]);
         Building own = bi >= 0 && bi < buildings.size() ? buildings.get(bi) : null;
         if (own != null && own.kind == SHOP && own.shopType == 1 && cfg.nature()) {
             // A gun store: a dark roof, an orange stripe along the front and GUNS in big letters.
@@ -12219,7 +12220,7 @@ final class City {
         if (isLotCar(x, y)) vertical = true;
         else vertical = roadDir[y * w + x] == 1;
         float cx = x * T + T / 2f, cy = y * T + T / 2f;
-        byte kind = carKind[y * w + x];
+        byte kind = carKind.get(y * w + x);
         if (kind == 2 || kind == 5) vertical = true;
         float hl = kind == 2 || kind == 5 ? 7.8f : 7.5f, hw = kind == 2 || kind == 5 ? 4.8f : 4.2f;
         RectF rect = vertical ? new RectF(cx - hw, cy - hl, cx + hw, cy + hl) : new RectF(cx - hl, cy - hw, cx + hl, cy + hw);
@@ -12770,11 +12771,11 @@ final class City {
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++) {
                     int k = y * w + x;
-                    float e = elev[k], m = 0;
-                    if (x > 0) m = Math.max(m, Math.abs(e - elev[k - 1]));
-                    if (x < w - 1) m = Math.max(m, Math.abs(e - elev[k + 1]));
-                    if (y > 0) m = Math.max(m, Math.abs(e - elev[k - w]));
-                    if (y < h - 1) m = Math.max(m, Math.abs(e - elev[k + w]));
+                    float e = elev.get(k), m = 0;
+                    if (x > 0) m = Math.max(m, Math.abs(e - elev.get(k - 1)));
+                    if (x < w - 1) m = Math.max(m, Math.abs(e - elev.get(k + 1)));
+                    if (y > 0) m = Math.max(m, Math.abs(e - elev.get(k - w)));
+                    if (y < h - 1) m = Math.max(m, Math.abs(e - elev.get(k + w)));
                     s[k] = m > 2.2f;
                 }
             steep = s;
@@ -12873,7 +12874,7 @@ final class City {
                 if (stepC == null) buildSteps();
                 int sb = t * 4;
                 for (int k = 0; k < 4; k++) {
-                    int sc = stepC[sb + k];
+                    int sc = stepC.get(sb + k);
                     if (sc < 0) {
                         if (!offroad) continue;
                         int nn = k == 0 ? t + 1 : k == 1 ? t - 1 : k == 2 ? t + w : t - w;
@@ -12930,7 +12931,7 @@ final class City {
                 // A step across the road (from lane to lane) outside a junction is a last resort: routes keep
                 // to their row of the road and only change rows at the junctions, so cars don't swerve over.
                 // (Emergencies too: lights and sirens still keep to their own side.)
-                if (c >= 0 && c <= 4 && junctionId[n] < 0 && junctionId[t] < 0) {
+                if (c >= 0 && c <= 4 && junctionId.get(n) < 0 && junctionId.get(t) < 0) {
                     byte rd = roadDir[n];
                     if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
                 }
@@ -12952,13 +12953,13 @@ final class City {
      * road) already applied: -1 if it can't, the cost otherwise, plus 64 if everyday traffic may use it too.
      * Worked out once for the map, and again for a tile and its neighbours when it changes.)
      */
-    private byte[] stepC;
+    private OffHeap.Bytes stepC;
     /** (For the tests: the long way, to check the tables against.) */
     static boolean slowSteps;
 
     private void buildSteps() {
         if (junction == null) computeJunctions();
-        byte[] sc = new byte[w * h * 4];
+        OffHeap.Bytes sc = new OffHeap.Bytes(w * h * 4);
         stepC = sc;
         // (The table is for ordinary traffic, whatever search asked for it first.)
         boolean was = offroad;
@@ -12968,7 +12969,7 @@ final class City {
     }
 
     private void fillSteps(int t) {
-        for (int k = 0; k < 4; k++) stepC[t * 4 + k] = (byte) stepCost(t, k);
+        for (int k = 0; k < 4; k++) stepC.set(t * 4 + k, (byte) (stepCost(t, k)));
     }
 
     /** The step from tile t in direction k (right, left, down, up): its cost, +64 if onto road or track; -1 if not allowed. */
@@ -12982,7 +12983,7 @@ final class City {
         if (oneWay != null && c >= 0 && (!oneWayOk(n, tx - nx, ty - ny) || !oneWayOk(t, tx - nx, ty - ny))) return -1;
         if (divided != null && c >= 0 && (!wayOk(divided, n, tx - nx, ty - ny) || !wayOk(divided, t, tx - nx, ty - ny))) return -1;
         if (slipWay != null && c >= 0 && !slipOk(n, t, tx - nx, ty - ny)) return -1;
-        if (c >= 0 && c <= 4 && junctionId[n] < 0 && junctionId[t] < 0) {
+        if (c >= 0 && c <= 4 && junctionId.get(n) < 0 && junctionId.get(t) < 0) {
             byte rd = roadDir[n];
             if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
         }
@@ -13089,15 +13090,15 @@ final class City {
             for (int y = z[1]; y <= z[3]; y++)
                 for (int x = z[0]; x <= z[2]; x++) junction[y * w + x] = false;
         // Group the junction tiles into junctions, and decide how each is controlled.
-        junctionId = new int[w * h];
-        Arrays.fill(junctionId, -1);
+        junctionId = new OffHeap.Ints(w * h);
+        junctionId.fill(-1);
         junctions.clear();
         int[] stack = new int[w * h];
         for (int i = 0; i < w * h; i++) {
-            if (!junction[i] || junctionId[i] >= 0) continue;
+            if (!junction[i] || junctionId.get(i) >= 0) continue;
             int id = junctions.size(), top = 0, x0 = w, y0 = h, x1 = -1, y1 = -1, size = 0;
             stack[top++] = i;
-            junctionId[i] = id;
+            junctionId.set(i, id);
             while (top > 0) {
                 int t = stack[--top], tx = t % w, ty = t / w;
                 size++;
@@ -13109,8 +13110,8 @@ final class City {
                     int nx = tx + (q == 0 ? 1 : q == 1 ? -1 : 0), ny = ty + (q == 2 ? 1 : q == 3 ? -1 : 0);
                     if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
                     int n = ny * w + nx;
-                    if (junction[n] && junctionId[n] < 0) {
-                        junctionId[n] = id;
+                    if (junction[n] && junctionId.get(n) < 0) {
+                        junctionId.set(n, id);
                         stack[top++] = n;
                     }
                 }
@@ -13186,7 +13187,7 @@ final class City {
                 // Big enough together (both sides of a divided highway): lights.
                 if (into[4] == J_STOP && (into[2] - into[0] >= 4 || into[3] - into[1] >= 4)) into[4] = J_LIGHTS;
             }
-            for (int i = 0; i < w * h; i++) if (junctionId[i] >= 0) junctionId[i] = newId[junctionId[i]];
+            for (int i = 0; i < w * h; i++) if (junctionId.get(i) >= 0) junctionId.set(i, newId[junctionId.get(i)]);
             junctions.clear();
             junctions.addAll(out);
         }
@@ -13195,20 +13196,20 @@ final class City {
             int[] jb = junctions.get(id);
             for (int y = jb[1]; y <= jb[3]; y++)
                 for (int x = jb[0]; x <= jb[2]; x++)
-                    if (junctionId[y * w + x] < 0 && paved(x, y)) junctionId[y * w + x] = id;
+                    if (junctionId.get(y * w + x) < 0 && paved(x, y)) junctionId.set(y * w + x, id);
         }
     }
 
     static final int J_STOP = 0, J_LIGHTS = 1, J_ROUNDABOUT = 2, J_BEND = 3;
     /** Junctions: {x0, y0, x1, y1 (tiles, inclusive), type, light timing offset}. */
     final List<int[]> junctions = new ArrayList<int[]>();
-    private int[] junctionId;
+    private OffHeap.Ints junctionId;
 
     /** Which junction a point is in, or -1. */
     int junctionIdAt(float x, float y) {
         if (junction == null) computeJunctions();
         int tx = City.fl(x / T), ty = City.fl(y / T);
-        return tx < 0 || ty < 0 || tx >= w || ty >= h ? -1 : junctionId[ty * w + tx];
+        return tx < 0 || ty < 0 || tx >= w || ty >= h ? -1 : junctionId.get(ty * w + tx);
     }
 
     /** Traffic lights: 0 green, 1 amber, 2 red for traffic going north-south (vertical) or east-west. */
@@ -13371,7 +13372,7 @@ final class City {
     /** Part of a bend: two roads meeting at a corner, where nobody stops. */
     boolean bendAt(int x, int y) {
         if (!junctionAt(x, y)) return false;
-        int id = junctionId[y * w + x];
+        int id = junctionId.get(y * w + x);
         return id >= 0 && junctions.get(id)[4] == J_BEND;
     }
 
@@ -13390,7 +13391,7 @@ final class City {
                 byte t = tiles[i];
                 // (Wading across a stream is slow going: a bridge nearby is better.)
                 // ((10.51) Not across the middle of a roundabout: round by the zebra crossings on its arms.)
-                boolean ring = junction[i] && junctionId[i] >= 0 && junctions.get(junctionId[i])[4] == J_ROUNDABOUT;
+                boolean ring = junction[i] && junctionId.get(i) >= 0 && junctions.get(junctionId.get(i))[4] == J_ROUNDABOUT;
                 walkCost[i] = (byte) (isFord(i) ? 6 : t != ROAD ? 1 : crosswalk(x, y) ? 1 : ring ? 8 : junction[i] ? 3 : 8);
             }
     }

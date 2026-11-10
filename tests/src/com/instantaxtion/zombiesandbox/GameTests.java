@@ -547,7 +547,8 @@ public final class GameTests {
                 int[] n = new int[20];
                 for (byte b : city.tiles) n[b]++;
                 float lo = Float.MAX_VALUE, hi = -Float.MAX_VALUE;
-                for (float e : city.elev) {
+                for (int q = 0; q < city.elev.length; q++) {
+                    float e = city.elev.get(q);
                     lo = Math.min(lo, e);
                     hi = Math.max(hi, e);
                 }
@@ -1906,7 +1907,7 @@ public final class GameTests {
                                 for (int dx = -1; dx <= 1; dx++) {
                                     int nx = x + dx, ny = y + dy;
                                     if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                                    int j = ny * w + nx, bi = city.buildingAt[j];
+                                    int j = ny * w + nx, bi = city.buildingAt.get(j);
                                     // ((10.52) A house's wing is the same house.)
                                     City.Building hb = bi >= 0 ? city.buildings.get(bi) : null;
                                     if (hb != null && hb.main != null) hb = hb.main;

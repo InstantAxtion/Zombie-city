@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Memory outside the game's own (16.11):** the largest static per-tile tables (building index, elevation, junction ids, district index, drive step costs, parked-car kinds, tree kinds, slip-road angles) live in Android shared memory (ashmem, via SharedMemory on 8.1+; a mapped scratch file otherwise), outside the Java heap limit. Large now needs ~320 MB of Java heap, Big 240, Default 200; warnings at 380/300/260 MB.
+
 **The Large map fits (16.10):** Large runs in about 400 MB of Java heap (from over 500), Big in 300 and Default in 260: reach-limited station and base walking fields, box-local walking-router arrays, one shared scratch array for walking and driving searches, and 64-px spatial-hash cells. Memory warnings: Large 460 MB, Big 360, Default 320.
 
 **The FBI in town, police by their training, no gun stores (16.9):** an FBI field office in new cities (map version 31) with agents and black cars from the start; per-type police training (aim, head shots, fire rate, reload, preferred distance, nerve; SWAT and riot police push in); no gun stores (about 7% of civilians own a gun), no fire stations in new cities, no civilian barricading; lone police drivers stop to fight; army vehicles overtake slower traffic and soldiers far from base get trucks even when nobody at base is free to drive; the map picture is 6144 pixels across for the Galaxy S26 Ultra.

@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.10";
-    static final int VERSION_CODE = 160;
+    static final String VERSION = "16.11";
+    static final int VERSION_CODE = 161;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.11  -  Memory outside the game's own",
+                    "The biggest of the map's tables - which building is on each tile, the lie of the land, the junctions, the districts, the driving rules, the parked cars, the trees and the slip roads - are kept in shared memory outside the game's own memory, which Android limits to about 512 MB. The Large map now needs about 320 MB of that (from 400), Big 240 and Default 200, with plenty of the phone's memory to spare. No slower.",
+            },
             {
                     "16.10  -  The Large map fits",
                     "The Large map now runs in about 400 MB of the game's memory (it needed over 500, more than a phone like the Galaxy S26 Ultra gives a game), Big in 300 and Default in 260. The New Game screen's memory warnings are lowered to match.",

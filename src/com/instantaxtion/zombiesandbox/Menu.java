@@ -1493,7 +1493,7 @@ final class Menu {
             // (10.32) The biggest maps: how long they take to build, and whether this phone has the memory.
             int size = config.v[CityConfig.OPT_SIZE];
             if (size >= 5) {
-                int needMb = size >= 8 ? 460 : size >= 7 ? 360 : size >= 6 ? 320 : 256; // ((16.10) Measured again: the Large map runs in 400 MB now, Big in 300, Default in 260.)
+                int needMb = size >= 8 ? 380 : size >= 7 ? 300 : size >= 6 ? 260 : 200; // ((16.11) Measured again: the Large map runs in 320 MB now, Big in 240, Default in 200.)
                 long haveMb = Runtime.getRuntime().maxMemory() / 1048576;
                 boolean low = haveMb < needMb;
                 String note = low ? "Warning: this phone gives the game " + haveMb + " MB and a " + CityConfig.sizeName(size)
