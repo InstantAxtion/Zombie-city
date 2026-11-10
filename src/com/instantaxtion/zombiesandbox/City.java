@@ -1039,8 +1039,12 @@ final class City {
 
     /** A walking field to the nearest of n points. */
     WalkField walkFieldFrom(float[] xs, float[] ys, int n) {
+        return walkFieldFrom(xs, ys, n, FAR);
+    }
+
+    WalkField walkFieldFrom(float[] xs, float[] ys, int n, int limit) {
         if (fieldTmp == null) fieldTmp = new int[w * h];
-        walkFieldFromPoints(fieldTmp, xs, ys, n, FAR);
+        walkFieldFromPoints(fieldTmp, xs, ys, n, limit);
         return packField(fieldTmp);
     }
 
@@ -12277,7 +12281,8 @@ final class City {
             int cx = City.fl(x / T), cy = City.fl(y / T);
             if (cx >= 0 && cy >= 0 && cx < w && cy < h) {
                 if (clear3 == null) buildClear3();
-                if (clear3[cy * w + cx]) return false;
+                int ci = cy * w + cx;
+                if ((clear3[ci >>> 6] & (1L << ci)) != 0) return false;
             }
         }
         int tx0 = City.fl((x - r) / T), tx1 = City.fl((x + r) / T);
@@ -12305,12 +12310,14 @@ final class City {
      * a tile centred there can't touch anything solid. Only ever says "open" when it is: a tile that turns solid
      * puts it right for itself and its neighbours (one that opens up is only checked the long way until then).)
      */
-    private boolean[] clear3;
+    /** ((16.8) A bit a tile, not a byte: an eighth of the size, so far more of it stays close at hand - it's looked at
+     * for every step anyone takes, all over the map.) */
+    private long[] clear3;
 
     private void buildClear3() {
-        boolean[] c = new boolean[w * h];
+        long[] c = new long[(w * h >>> 6) + 1];
         clear3 = c;
-        for (int i = 0; i < w * h; i++) c[i] = openRound(i);
+        for (int i = 0; i < w * h; i++) if (openRound(i)) c[i >>> 6] |= 1L << i;
     }
 
     private boolean openRound(int i) {
@@ -12327,7 +12334,11 @@ final class City {
         if (clear3 == null || i < 0 || i >= w * h) return;
         int x = i % w, y = i / w;
         for (int j = Math.max(0, y - 1); j <= Math.min(h - 1, y + 1); j++)
-            for (int k = Math.max(0, x - 1); k <= Math.min(w - 1, x + 1); k++) clear3[j * w + k] = openRound(j * w + k);
+            for (int k = Math.max(0, x - 1); k <= Math.min(w - 1, x + 1); k++) {
+                int ci = j * w + k;
+                if (openRound(ci)) clear3[ci >>> 6] |= 1L << ci;
+                else clear3[ci >>> 6] &= ~(1L << ci);
+            }
     }
 
     /** Can someone walk straight from one point to the other (nothing solid in the way but the odd tree)? */
@@ -12731,7 +12742,19 @@ final class City {
         dfTouched[dfTouchedN++] = t;
     }
 
+    /**
+     * ((16.8) The most tiles a search may look at before giving up, or 0 for no limit: set for everyday trips, which
+     * can always go somewhere else. One whose car couldn't be reached by the roads it keeps to (pulled onto a lot, or
+     * on the wrong side of a one-way system) went through a third of a Large map - 60 ms or more - before failing.)
+     */
+    int searchCap;
+    private int searched;
+    /** ((16.8) The last search gave up at searchCap. */
+    boolean capped;
+
     private boolean driveSearch(int[] dist, float x, float y, boolean strict, int from) {
+        searched = 0;
+        capped = false;
         int fx = from < 0 ? -9 : from % w, fy = from < 0 ? -9 : from / w, stopAt = Integer.MAX_VALUE;
         // (Its own tile, if it's on the road: a tile near it may be the far carriageway, a long way round.)
         int fc = from < 0 ? -1 : driveCost(from);
@@ -12762,6 +12785,11 @@ final class City {
             int tx = t % w, ty = t / w;
             int ht = aim ? 2 * (Math.abs(tx - fx) + Math.abs(ty - fy)) : 0;
             if (dist[t] + ht != d) continue;
+            if (searchCap > 0 && ++searched > searchCap) {
+                for (int b = 0; b < DIAL; b++) dialN[b] = 0;
+                capped = true;
+                return false;
+            }
             int gt = dist[t];
             // Back at the vehicle: finish off the lanes round it, then stop.
             if (stopAt == Integer.MAX_VALUE && (fromRoad ? t == from : Math.abs(tx - fx) <= 1 && Math.abs(ty - fy) <= 1)) stopAt = d + (aim ? 60 : 160);

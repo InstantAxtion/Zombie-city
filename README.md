@@ -419,6 +419,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Faster on the big maps (16.8):** roughly 1.5x quicker per step on Big and Large and about 1.2x on Default, with much shorter worst-case pauses. Everyday trips and patrols pick destinations within reach and give up on over-long route searches; off-screen calm people decide and update less often; off-screen vehicles update every fourth step; grid lookups replace whole-map scans for gun stores, pickups, station officers, militias and barricades; safe-zone guard routes are reach-limited and compact.
+
 **Ammo trucks that get there (16.7):** soldiers wait for an ammo truck until it has actually arrived (not just stopped at a junction), and an ammo truck held up on the way plans its way again instead of stopping there for good.
 
 **Full armouries, trucks you can see (16.6):** topping up while standing at a base or station never takes the armoury below half (it was emptied at the start in an unprepared city, so no ammo trucks could go out). Parked vehicles are redrawn sharp over the map picture when zoomed in on the bigger maps, and bases short of room for parked trucks show a few standing in the yard. Army trucks no longer stop halfway to a call when pushed to the edge of their route.

@@ -4481,6 +4481,80 @@ public final class GameTests {
                 check(trucks > 0, "trucks at the bases");
             }
         });
+        test("16.8: the quick ways to find gun stores, things on the ground and open ground give the same answers as the long ways", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 9;
+                World w = new World(c);
+                java.util.Random r = new java.util.Random(3);
+                // Gun stores: the nearest one with stock, by the grid and by looking at every one.
+                java.lang.reflect.Method near = World.class.getDeclaredMethod("gunStoreNear", Entity.class, float.class);
+                near.setAccessible(true);
+                java.util.List<City.Building> stores = new java.util.ArrayList<City.Building>();
+                for (City.Building b : w.city.buildings) if (b.kind == City.SHOP && b.shopType == 1) stores.add(b);
+                check(stores.size() > 2, "gun stores (" + stores.size() + ")");
+                for (City.Building b : stores) b.stock = r.nextInt(3) == 0 ? 0 : 10;
+                Entity probe = new Entity();
+                int same = 0;
+                for (int k = 0; k < 400; k++) {
+                    probe.x = r.nextFloat() * w.city.worldW();
+                    probe.y = r.nextFloat() * w.city.worldH();
+                    float radius = 200 + r.nextFloat() * 900;
+                    City.Building want = null;
+                    float bd = radius * radius;
+                    for (City.Building b : stores) {
+                        if (b.stock <= 0 || b.collapsed || b.infestKnown) continue;
+                        float d = (b.doorX - probe.x) * (b.doorX - probe.x) + (b.doorY - probe.y) * (b.doorY - probe.y);
+                        if (d < bd) {
+                            bd = d;
+                            want = b;
+                        }
+                    }
+                    if (near.invoke(w, probe, radius) == want) same++;
+                }
+                check(same == 400, "the nearest gun store by the grid is the nearest one (" + same + " of 400)");
+                // Things on the ground: the same, by the grid and the long way.
+                w.pickups.clear();
+                for (int k = 0; k < 120; k++) {
+                    World.Pickup p = new World.Pickup();
+                    p.x = r.nextFloat() * w.city.worldW();
+                    p.y = r.nextFloat() * w.city.worldH();
+                    p.claimed = r.nextInt(5) == 0;
+                    w.pickups.add(p);
+                }
+                same = 0;
+                for (int k = 0; k < 400; k++) {
+                    float x = r.nextFloat() * w.city.worldW(), y = r.nextFloat() * w.city.worldH(), radius = 50 + r.nextFloat() * 1500;
+                    World.Pickup want = null;
+                    float bd = radius * radius;
+                    for (World.Pickup p : w.pickups) {
+                        if (p.claimed || p.drop > 0 || p.melee > 0) continue;
+                        float d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+                        if (d < bd) {
+                            bd = d;
+                            want = p;
+                        }
+                    }
+                    if (w.nearestPickup(x, y, radius) == want) same++;
+                    // (And when one goes, it's gone from the grid at once.)
+                    if (k == 200) w.pickups.remove(0);
+                }
+                check(same == 400, "the nearest thing on the ground by the grid is the nearest one (" + same + " of 400)");
+                // Open ground, kept a bit a tile: the same as working it out the long way, and after a tile changes.
+                int differ = 0;
+                for (int k = 0; k < 4000; k++) {
+                    float x = r.nextFloat() * w.city.worldW(), y = r.nextFloat() * w.city.worldH(), rad = 2 + r.nextFloat() * 5;
+                    boolean quick = w.city.circleBlocked(x, y, rad);
+                    City.slowSteps = true;
+                    boolean slow = w.city.circleBlocked(x, y, rad);
+                    City.slowSteps = false;
+                    if (quick != slow) differ++;
+                }
+                check(differ == 0, "open ground by the bits agrees with the long way (" + differ + " differ)");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

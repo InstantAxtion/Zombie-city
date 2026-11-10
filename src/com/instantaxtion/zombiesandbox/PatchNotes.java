@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.7";
-    static final int VERSION_CODE = 157;
+    static final String VERSION = "16.8";
+    static final int VERSION_CODE = 158;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.8  -  Faster on the big maps",
+                    "About half as fast again on the Big and Large maps (each step of the game takes about two thirds of the time it did) and a little quicker on Default, with far fewer of the long pauses: the worst ones are about half as long.",
+                    "Cars and patrols now pick their next stop near where they are. On the big maps almost every trip went right across the map, a search of hundreds of thousands of streets each time, and an everyday trip gives up on a search that's gone on far too long and goes somewhere else.",
+                    "People off screen with nothing going on make up their minds less often and are worked out less often (they still never walk through walls), off-screen traffic is worked out every fourth step, and those strolling about off screen aren't kept from brushing past each other.",
+                    "Finding the nearest gun store or thing on the ground, the police station's officers, a militia's members, and where to put a barricade no longer means looking through everyone or everything on the map. The worst single pauses - a third of a second when the gun stores opened, and when a district was sealed off - are gone.",
+                    "The ways to a safe zone for its guards are worked out only as far as a walk, and kept in a fraction of the memory.",
+            },
             {
                     "16.7  -  Ammo trucks that get there",
                     "Fixed: soldiers waiting on an ammo truck took it for arrived whenever it stopped - at a junction, in a queue - and set off on foot to wherever it was, then back again when it drove on, until they'd wandered off.",

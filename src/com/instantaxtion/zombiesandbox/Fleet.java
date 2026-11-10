@@ -270,7 +270,7 @@ final class Fleet {
         /** A parked car's alarm going off (seconds left) after zombies bumped into it. */
         float alarm;
         /** ((11.5) Off screen, whether this step is the one it sits out.) */
-        boolean lodSkip;
+        int lodTick;
         /** Police roadblocks: the safe zone this car is closing a road for, which way that road runs, cones out,
          *  and the officer posted beside it. */
         Dispatch.SafeZone block;
@@ -755,6 +755,29 @@ final class Fleet {
         return null;
     }
 
+    /**
+     * ((16.8) A road (or, for country, a lane outside town) somewhere between rmin and rmax from (x, y), or null.
+     * Trips were picked from anywhere on the map and only then turned down for being too far: on the Large map a
+     * random road is within reach of a car one time in a hundred, so after its ten tries almost every patrol and
+     * everyday trip went right across the map anyway - a route search of hundreds of thousands of tiles each, the
+     * worst of the stutters on the big maps.)
+     */
+    private float[] randomRoadNear(float x, float y, float rmin, float rmax, boolean country) {
+        for (int k = 0; k < 120; k++) {
+            double a = w.rnd.nextDouble() * Math.PI * 2;
+            float r = rmin + w.rnd.nextFloat() * (rmax - rmin);
+            int tx = (int) ((x + (float) Math.cos(a) * r) / City.T), ty = (int) ((y + (float) Math.sin(a) * r) / City.T);
+            if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) continue;
+            int i = ty * city.w + tx;
+            if (country) {
+                if (tx >= city.townX0 && tx < city.townX1 && ty >= city.townY0 && ty < city.townY1) continue;
+                if (city.tiles[i] == City.DIRT) return new float[]{(tx + 0.5f) * City.T, (ty + 0.5f) * City.T};
+            } else if (city.tiles[i] == City.ROAD && (city.oneWay == null || city.oneWay[i] == 0))
+                return new float[]{(tx + 0.5f) * City.T, (ty + 0.5f) * City.T};
+        }
+        return null;
+    }
+
     private float[] randomRoad() {
         for (int k = 0; k < 200; k++) {
             int tx = w.rnd.nextInt(city.w), ty = w.rnd.nextInt(city.h);
@@ -976,7 +999,10 @@ final class Fleet {
         // Highway patrol keeps to the highway, sheriffs to the country roads.
         if (v.patrol && v.agency > 0 && v.state == PATROL)
             for (int tries = 0; tries < 12; tries++) {
-                float[] d = v.agency == 1 ? city.randomHighway(w.rnd) : city.randomCountryRoad(w.rnd);
+                float[] d = v.agency == 1 ? city.randomHighway(w.rnd) : null;
+                // ((16.8) A sheriff's next stop picked within its own patch, not anywhere in the country.)
+                if (v.agency == 2 && tries < 10) d = randomRoadNear(v.x, v.y, 300, 1400, true);
+                if (v.agency != 1 && d == null) d = city.randomCountryRoad(w.rnd);
                 // (Highway patrol: on ahead along its own carriageway, so it never has to turn round.)
                 if (d != null && v.agency == 1 && city.onHighway(v.x, v.y)) {
                     // On ahead to the far end; once there, round onto the other side and back.
@@ -1020,8 +1046,11 @@ final class Fleet {
                 if (route(v, d[0], d[1])) return true;
                 if (++routes >= 4) break;
             }
+        // ((16.8) On the bigger maps, picked within reach to begin with (see randomRoadNear).)
+        float reach = city.w >= 900 ? 1800 : 2400;
+        boolean local = (v.type == CAR || v.patrol) && city.w >= 600;
         for (int tries = 0; tries < 12; tries++) {
-            float[] d = randomRoad();
+            float[] d = local && tries < 10 ? randomRoadNear(v.x, v.y, tries < 6 ? 400 : 160, reach, false) : randomRoad();
             if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
             // ((10.34) On the biggest maps everyday trips stay local: a drive right across one is a long search.)
             // ((16.2) Closer again on the Default and bigger maps: each of those searches was a stutter of 20 to 40 ms.)
@@ -1100,6 +1129,18 @@ final class Fleet {
                 if (f.kind == City.FACILITY_BASE && World.hypot(x - f.x, y - f.y) < f.r + City.T * 2) return false;
         }
         int[] field = scratchField();
+        // ((16.8) An everyday trip gives up on a search that's gone on far longer than a drive of its length takes:
+        // it can always go somewhere else. See City.searchCap.)
+        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null;
+        city.searchCap = casual ? 15000 : 0;
+        try {
+            return routeOn(v, x, y, field);
+        } finally {
+            city.searchCap = 0;
+        }
+    }
+
+    private boolean routeOn(Vehicle v, float x, float y, int[] field) {
         // (Everyday traffic and patrol cars keep to the roads; emergencies cut across whatever's paved.)
         boolean strict = v.type == CAR || (v.patrol && v.state != DRIVE);
         int from = city.tileIndex(v.x, v.y);
@@ -1120,7 +1161,8 @@ final class Fleet {
         }
         if (!city.driveField(field, x, y, strict, from) || nearField(field, v.x, v.y) >= City.FAR) {
             // Off the road (shoved onto the pavement, or parked on a lot): find the way back over whatever's paved.
-            if (!strict || !city.driveField(field, x, y, false, from) || nearField(field, v.x, v.y) >= City.FAR) return false;
+            // ((16.8) Not after an everyday search that gave up: the other way would only give up too.)
+            if (!strict || city.capped || !city.driveField(field, x, y, false, from) || nearField(field, v.x, v.y) >= City.FAR) return false;
         }
         v.field = corridor(field, v.x, v.y);
         v.tx = x;
@@ -2787,6 +2829,9 @@ final class Fleet {
             if (o.player == null && !airborne(o) && (o.lightsOn() || army) && Math.abs(o.speed) > 18) sirens.add(o);
         }
         boolean lodOn = w.viewX1 >= 0 && w.viewX1 - w.viewX0 < 2000 && vehicles.size() > 120;
+        // ((16.8) Every fourth step with over four hundred on the map, four steps' worth: under a tile's length, even
+        // at highway speed.)
+        int lodEvery = vehicles.size() > 400 ? 4 : 2;
         for (int i = vehicles.size() - 1; i >= 0; i--) {
             Vehicle v = vehicles.get(i);
             // ((11.5) Well off screen (out past the edge, not just round it), everyday traffic and units on their
@@ -2794,10 +2839,10 @@ final class Fleet {
             // Back near the screen they're worked out every step again, well before they come into view.)
             float vdt = dt;
             if (lodOn && v.player == null && !airborne(v) && v.type != TRAIN && v.type != BOAT && farOff(v)) {
-                v.lodSkip = !v.lodSkip;
-                if (v.lodSkip) continue;
-                vdt = dt * 2;
-            } else v.lodSkip = false;
+                if (++v.lodTick < lodEvery) continue;
+                v.lodTick = 0;
+                vdt = dt * lodEvery;
+            } else v.lodTick = 0;
             if (v.alarm > 0) {
                 // Whoop, whoop: every zombie for streets around comes to see.
                 v.alarm -= vdt;

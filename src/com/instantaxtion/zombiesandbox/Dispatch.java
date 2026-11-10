@@ -82,8 +82,8 @@ final class Dispatch {
         float baseR;
         /** The dead are inside the wall: the guards fall back on the tents. */
         boolean fallingBack;
-        /** The way there, for the guards. */
-        int[] field;
+        /** The way there, for the guards. ((16.8) Kept compact, and only out to a walk's distance: see World.ZONE_REACH.) */
+        City.WalkField field;
         /** The compound in tiles, wall included (inclusive). */
         int tx0, ty0, tx1, ty1;
         /** The wall: its tiles in order round the block, each section's strength (0 to 100) and whether it's up. */
@@ -1276,8 +1276,10 @@ final class Dispatch {
                 continue;
             }
             ArrayList<Entity> there = new ArrayList<Entity>();
-            for (int i = 0, n = w.entities.size(); i < n; i++) {
-                Entity e = w.entities.get(i);
+            // ((16.8) Those in the grid round the station, not a look through everyone in the city for each station:
+            // on the Large map that was half a million looks at once, every six seconds.)
+            for (int i = 0, n = w.gatherLiving(f.x, f.y, 220); i < n; i++) {
+                Entity e = w.gathered[i];
                 if (e.dead || e.type != Entity.COP || e.task != T_NONE || e.rig != null || e.ride != null) continue;
                 if (e.ammo + e.reserve <= 0 || e.hp < e.maxHp * 0.35f || e.role == Entity.ROLE_PILOT) continue;
                 if (World.hypot(e.x - f.x, e.y - f.y) < 220) there.add(e);

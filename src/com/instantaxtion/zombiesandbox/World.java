@@ -218,8 +218,15 @@ final class World {
         marksTick = 0.1f;
         if (viewX1 < 0) return;
         float x0 = viewX0 - 60, x1 = viewX1 + 60, y0 = viewY0 - 60, y1 = viewY1 + 60;
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity e = entities.get(i);
+        // ((16.8) Only those in the grid's cells round the screen, not a look at all tens of thousands for the few in
+        // view.)
+        if (hashSize < 0) return;
+        int gx0 = Math.max(0, (int) ((x0 - GRID_SLACK) / CELL)), gx1 = Math.min(gw - 1, (int) ((x1 + GRID_SLACK) / CELL));
+        int gy0 = Math.max(0, (int) ((y0 - GRID_SLACK) / CELL)), gy1 = Math.min(gh - 1, (int) ((y1 + GRID_SLACK) / CELL));
+        for (int gy = gy0; gy <= gy1; gy++)
+          for (int gx = gx0; gx <= gx1; gx++)
+           for (int k = cellStart[gy * gw + gx], kend = k + cellCount[gy * gw + gx]; k < kend; k++) {
+            Entity e = sorted[k];
             if (e.dead || e.aloft || e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
             if (e.wet > 0) e.wet -= step;
             if (e.markX < 0) {
@@ -524,11 +531,15 @@ final class World {
                 for (City.Building b : city.buildings) {
                     if (b.kind != City.SHOP || b.shopType != 1 || b.collapsed) continue;
                     b.stock = Math.max(b.stock, gunStock());
-                    for (int i = 0, n = entities.size(); i < n; i++) {
-                        Entity e = entities.get(i);
-                        if (!e.dead && e.type == Entity.CIVILIAN && !e.hasGun && e.building == null
-                                && World.hypot(e.x - b.doorX, e.y - b.doorY) < 500 && rnd.nextFloat() < 0.15f) armCivilian(e, 18);
-                    }
+                }
+                // ((16.8) Each person once, with the stores near them looked up: one chance in seven for each store
+                // within 500, as before. Each store went through everyone in turn - twenty million looks on the Large
+                // map, a third of a second in one step.)
+                for (int i = 0, n = entities.size(); i < n; i++) {
+                    Entity e = entities.get(i);
+                    if (e.dead || e.type != Entity.CIVILIAN || e.hasGun || e.building != null) continue;
+                    int near = gunStoresWithin(e.x, e.y, 500);
+                    if (near > 0 && rnd.nextFloat() < 1 - (float) Math.pow(0.85, near)) armCivilian(e, 18);
                 }
                 break;
             }
@@ -1986,9 +1997,14 @@ final class World {
      * at each of thirty thousand people every step, to find there was nothing to do, was a fifth of the time.)
      */
     private int[] lodWake = new int[0], lodSet = new int[0];
+    /** ((16.8) The step on which each was last calm and off screen in the biggest cities: see separate(). */
+    private int[] lodQuiet = new int[0];
     private float lodViewX = -1e9f, lodViewY = -1e9f;
 
     /** ((13.1) Whoever's at this place in the list has nothing to do until their next turn, every so many steps.) */
+    /** ((16.8) Over eighteen thousand people: the biggest cities' slower pace for those off screen. */
+    private boolean lodHuge;
+
     private void sleep(int i, int every) {
         // (Not if they've just died, or been taken over, or anything has been added in the meantime.)
         if (i >= lodWake.length || entities.get(i).dead || entities.get(i) == controlled) return;
@@ -2054,6 +2070,7 @@ final class World {
         if (lodWake.length < entities.size()) {
             lodWake = Arrays.copyOf(lodWake, entities.size() + 1024);
             lodSet = Arrays.copyOf(lodSet, lodWake.length);
+            lodQuiet = Arrays.copyOf(lodQuiet, lodWake.length);
         }
         // (Looking somewhere else, everyone is looked at again: those coming into view move straight away.)
         if (Math.abs(viewX0 - lodViewX) > 24 || Math.abs(viewY0 - lodViewY) > 24) {
@@ -2073,7 +2090,10 @@ final class World {
                 // nothing going on and nobody watching less often again.)
                 boolean huge = entities.size() > 18000;
                 // ((13.5) A little less often again in the biggest cities: nobody sees them, and nothing's near.)
-                lodCalm = huge ? 10 : crowd ? 4 : 3;
+                // ((16.8) Every fifteenth step with over eighteen thousand: half a second's walk at a time - under a tile,
+                // never through a wall - for people nobody is watching, with nothing going on and none of the dead near.)
+                lodCalm = huge ? 15 : crowd ? 4 : 3;
+                lodHuge = huge;
                 lodBusy = huge ? 6 : crowd ? 3 : 2;
                 lodNear = huge ? 4 : 2;
             }
@@ -2090,8 +2110,14 @@ final class World {
                 if (!seen) e.lodStep = (i + lodFrame) % lodCalm == 0 ? lodCalm : 0;
                 // (On a struggling phone, those off screen even less often.)
                 int every = quality == Q_FULL || seen ? lodCalm : quality == Q_REDUCED ? 5 : 8;
-                if ((i + lodFrame) % every == 0) think(e, dt * every);
+                // ((16.8) In the biggest cities, off screen, they still move as often but make up their minds every other
+                // time: twice a second or so for someone strolling along with nothing near, which nobody sees. Deciding
+                // was the largest single part of each step on the biggest maps.)
+                int decide = !seen && lodHuge && every == lodCalm ? every * 2 : every;
+                if ((i + lodFrame) % decide == 0) think(e, dt * decide);
                 if (!seen && every == lodCalm) sleep(i, lodCalm);
+                // ((16.8) Marked for separate(), which then passes them over without looking at them again.)
+                if (!seen && lodHuge && e.task == Dispatch.T_NONE && e.fleeTimer <= 0 && e.stun <= 0) lodQuiet[i] = lodFrame;
             } else if (e.isZombie() && e.charge <= 0 && e.noiseTimer <= 0 && e != controlled && !onScreen(e)
                     && lodHDist(e) > 40) {
                 // The same for the dead shuffling about off screen with nobody near (since 10.31 on any phone,
@@ -2108,12 +2134,21 @@ final class World {
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
                 if ((i + lodFrame) % lodBusy == 0) think(e, dt * lodBusy);
                 sleep(i, lodBusy);
+            } else if (lodHuge && (e.type == Entity.COP || e.type == Entity.SOLDIER) && e != controlled && !e.aiming && e.rig == null
+                    && e.ride == null && !onScreen(e) && lodZDist(e) > 40) {
+                // ((16.8) In the biggest cities, police and soldiers off screen on their way somewhere, with none of the
+                // dead for forty tiles: every other step too. Hundreds of them were worked out every step.)
+                e.lodStep = (i + lodFrame) % 2 == 0 ? 2 : 0;
+                if ((i + lodFrame) % 2 == 0) think(e, dt * 2);
+                sleep(i, 2);
             } else if (e.type == Entity.CIVILIAN && e != controlled && !onScreen(e) && lodZDist(e) > 30) {
                 // (10.31) And people off screen who know what's going on but have none of the dead near them:
                 // every other frame (a Gigantic city in a panic is tens of thousands of them).
                 e.lodStep = (i + lodFrame) % lodBusy == 0 ? lodBusy : 0;
                 int every = quality == Q_FULL ? lodBusy : quality == Q_REDUCED ? 3 : 4;
-                if ((i + lodFrame) % every == 0) think(e, dt * every);
+                // ((16.8) Every other time in the biggest cities, as above.)
+                int decide = lodHuge && every == lodBusy ? every * 2 : every;
+                if ((i + lodFrame) % decide == 0) think(e, dt * decide);
                 if (every == lodBusy) sleep(i, lodBusy);
             } else if (e != controlled && e.rig == null && !e.aiming && e.ride == null && !onScreen(e)
                     && (e.type == Entity.CIVILIAN ? lodZDist(e) > 8
@@ -2597,9 +2632,9 @@ final class World {
     private int nearN;
 
     /** (10.31) The living in the grid cells within r of (x, y) (some a little further), into gathered[]. */
-    private Entity[] gathered = new Entity[256];
+    Entity[] gathered = new Entity[256];
 
-    private int gatherLiving(float x, float y, float r) {
+    int gatherLiving(float x, float y, float r) {
         int n = 0;
         int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
         int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
@@ -6400,12 +6435,18 @@ final class World {
         int i = ty * city.w + tx;
         byte t = city.tiles[i];
         if (city.solid[i] || t == City.RAIL) return null;
-        // Not on top of someone.
-        for (int k = 0, n = entities.size(); k < n; k++) {
-            Entity e = entities.get(k);
-            if (Math.abs(e.x - (tx * City.T + City.T / 2f)) < City.T / 2f + e.radius
-                    && Math.abs(e.y - (ty * City.T + City.T / 2f)) < City.T / 2f + e.radius) return null;
-        }
+        // Not on top of someone. ((16.8) Those in the grid's cells round it - the living and the dead - not a look
+        // through everyone: sealing off a district put up seventy, each looking at tens of thousands.)
+        float bx = tx * City.T + City.T / 2f, by = ty * City.T + City.T / 2f, reach = City.T + GRID_SLACK;
+        if (hashSize < 0) buildHash();
+        int gx0 = Math.max(0, (int) ((bx - reach) / CELL)), gx1 = Math.min(gw - 1, (int) ((bx + reach) / CELL));
+        int gy0 = Math.max(0, (int) ((by - reach) / CELL)), gy1 = Math.min(gh - 1, (int) ((by + reach) / CELL));
+        for (int gy = gy0; gy <= gy1; gy++)
+            for (int gx = gx0; gx <= gx1; gx++)
+                for (int k = cellStart[gy * gw + gx], kend = k + cellCount[gy * gw + gx]; k < kend; k++) {
+                    Entity e = sorted[k];
+                    if (Math.abs(e.x - bx) < City.T / 2f + e.radius && Math.abs(e.y - by) < City.T / 2f + e.radius) return null;
+                }
         float[] b = {tx * City.T + City.T / 2f, ty * City.T + City.T / 2f, 220, i, t};
         city.tiles[i] = City.FENCE;
         city.solid[i] = true;
@@ -7508,18 +7549,70 @@ final class World {
         return gunStores;
     }
 
+    /**
+     * ((16.8) The gun stores by where they are, in squares of STORE_CELL: a look for one nearby goes through the few
+     * squares round about, not all of them. A Large city has over five hundred, and thousands of people a second
+     * were looking - most of the time spent deciding what to do.)
+     */
+    private int[] storeCellStart, storeCellIdx;
+    private int storeGW, storeGH;
+    private static final float STORE_CELL = 512;
+
+    private void indexGunStores() {
+        java.util.List<City.Building> l = gunStores();
+        storeGW = (int) (city.worldW() / STORE_CELL) + 1;
+        storeGH = (int) (city.worldH() / STORE_CELL) + 1;
+        storeCellStart = new int[storeGW * storeGH + 1];
+        int[] cellOf = new int[l.size()];
+        for (int i = 0; i < l.size(); i++) {
+            City.Building b = l.get(i);
+            int cx = Math.max(0, Math.min(storeGW - 1, (int) (b.doorX / STORE_CELL))), cy = Math.max(0, Math.min(storeGH - 1, (int) (b.doorY / STORE_CELL)));
+            cellOf[i] = cy * storeGW + cx;
+            storeCellStart[cellOf[i] + 1]++;
+        }
+        for (int c = 0; c < storeGW * storeGH; c++) storeCellStart[c + 1] += storeCellStart[c];
+        storeCellIdx = new int[l.size()];
+        int[] at = Arrays.copyOf(storeCellStart, storeCellStart.length);
+        for (int i = 0; i < l.size(); i++) storeCellIdx[at[cellOf[i]]++] = i;
+    }
+
+    /** ((16.8) How many open gun stores have their door within radius of (x, y). */
+    private int gunStoresWithin(float x, float y, float radius) {
+        if (storeCellStart == null) indexGunStores();
+        java.util.List<City.Building> l = gunStores();
+        int n = 0;
+        int cx0 = Math.max(0, (int) ((x - radius) / STORE_CELL)), cx1 = Math.min(storeGW - 1, (int) ((x + radius) / STORE_CELL));
+        int cy0 = Math.max(0, (int) ((y - radius) / STORE_CELL)), cy1 = Math.min(storeGH - 1, (int) ((y + radius) / STORE_CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++)
+                for (int k = storeCellStart[cy * storeGW + cx]; k < storeCellStart[cy * storeGW + cx + 1]; k++) {
+                    City.Building b = l.get(storeCellIdx[k]);
+                    if (b.collapsed || b.kind != City.SHOP || b.shopType != 1) continue;
+                    if (World.hypot(x - b.doorX, y - b.doorY) < radius) n++;
+                }
+        return n;
+    }
+
     private City.Building gunStoreNear(Entity e, float radius) {
+        if (storeCellStart == null) indexGunStores();
         City.Building best = null;
         float bd = radius * radius;
-        for (int i = 0, n = gunStores().size(); i < n; i++) {
-            City.Building b = gunStores().get(i);
-            if (b.kind != City.SHOP || b.shopType != 1 || b.stock <= 0 || b.collapsed || b.infestKnown) continue;
-            float d = (b.doorX - e.x) * (b.doorX - e.x) + (b.doorY - e.y) * (b.doorY - e.y);
-            if (d < bd) {
-                bd = d;
-                best = b;
+        java.util.List<City.Building> l = gunStores();
+        int cx0 = Math.max(0, (int) ((e.x - radius) / STORE_CELL)), cx1 = Math.min(storeGW - 1, (int) ((e.x + radius) / STORE_CELL));
+        int cy0 = Math.max(0, (int) ((e.y - radius) / STORE_CELL)), cy1 = Math.min(storeGH - 1, (int) ((e.y + radius) / STORE_CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * storeGW + cx;
+                for (int k = storeCellStart[c]; k < storeCellStart[c + 1]; k++) {
+                    City.Building b = l.get(storeCellIdx[k]);
+                    if (b.kind != City.SHOP || b.shopType != 1 || b.stock <= 0 || b.collapsed || b.infestKnown) continue;
+                    float d = (b.doorX - e.x) * (b.doorX - e.x) + (b.doorY - e.y) * (b.doorY - e.y);
+                    if (d < bd) {
+                        bd = d;
+                        best = b;
+                    }
+                }
             }
-        }
         return best;
     }
 
@@ -11041,8 +11134,10 @@ final class World {
             Entity e = entities.get(i);
             if (e.dead || e.type != Entity.CIVILIAN || !e.hasGun || e.militia || e.ammo + e.reserve < 6 || e == controlled) continue;
             java.util.ArrayList<Entity> group = new java.util.ArrayList<Entity>();
-            for (int k = 0; k < n && group.size() < 6; k++) {
-                Entity o = entities.get(k);
+            // ((16.8) From those in the grid round them, not everyone in the city for each: once the gun stores open
+            // there are thousands with a gun, and this looked at tens of thousands for each one.)
+            for (int k = 0, m = gatherLiving(e.x, e.y, 140); k < m && group.size() < 6; k++) {
+                Entity o = gathered[k];
                 if (o.dead || o.type != Entity.CIVILIAN || !o.hasGun || o.militia || o == controlled || o.ammo + o.reserve < 6) continue;
                 if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) < 140 * 140) group.add(o);
             }
@@ -12189,11 +12284,12 @@ final class World {
             }
         }
         float frameDt = dt;
+        int bmask = 3;
         for (int i = 0, n = city.buildings.size(); i < n; i++) {
             // ((13.1) A quarter of the buildings each frame, four frames' worth, for everything (not only the visitors,
             // as since 10.31): tens of thousands of them on the biggest maps, nearly all with nothing going on.)
-            if (((i + lodFrame) & 3) != 0) continue;
-            dt = frameDt * 4;
+            if (((i + lodFrame) & bmask) != 0) continue;
+            dt = frameDt * (bmask + 1);
             City.Building b = city.buildings.get(i);
             // The last shot's flash in the windows fades whatever happens next (it used to stay lit for good
             // when the fight ended, or everyone inside was lost, right after a shot).
@@ -12617,17 +12713,61 @@ final class World {
     Pickup nearestPickup(float x, float y, float radius) {
         Pickup best = null;
         float bd = radius * radius;
-        for (int i = 0, n = pickups.size(); i < n; i++) {
-            Pickup p = pickups.get(i);
-            if (p.claimed || p.drop > 0 || p.melee > 0) continue;
-            float d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
-            if (d < bd) {
-                bd = d;
-                best = p;
+        // ((16.8) By where they are, in squares of PICK_CELL, sorted out once a step (or when one comes or goes): only
+        // the squares round about are looked at. Thousands asked each second, and went through every one.)
+        if (pickupsAt != lodFrame || pickupsN != pickups.size()) indexPickups();
+        int cx0 = Math.max(0, (int) ((x - radius) / PICK_CELL)), cx1 = Math.min(pickGW - 1, (int) ((x + radius) / PICK_CELL));
+        int cy0 = Math.max(0, (int) ((y - radius) / PICK_CELL)), cy1 = Math.min(pickGH - 1, (int) ((y + radius) / PICK_CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * pickGW + cx;
+                for (int k = pickStart[c]; k < pickStart[c + 1]; k++) {
+                    Pickup p = pickups.get(pickIdx[k]);
+                    if (p.claimed || p.drop > 0 || p.melee > 0) continue;
+                    float d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+                    if (d < bd) {
+                        bd = d;
+                        best = p;
+                    }
+                }
             }
-        }
         return best;
     }
+
+    private static final float PICK_CELL = 256;
+    private int[] pickStart, pickIdx = new int[64], pickCellOf = new int[64];
+    private int pickGW, pickGH;
+
+    private void indexPickups() {
+        pickupsAt = lodFrame;
+        int n = pickupsN = pickups.size();
+        if (pickStart == null) {
+            pickGW = (int) (city.worldW() / PICK_CELL) + 1;
+            pickGH = (int) (city.worldH() / PICK_CELL) + 1;
+            pickStart = new int[pickGW * pickGH + 1];
+        }
+        if (pickIdx.length < n) {
+            pickIdx = new int[n * 2];
+            pickCellOf = new int[n * 2];
+        }
+        // (A counting sort: a few thousand squares to clear, a few dozen things to place.)
+        Arrays.fill(pickStart, 0);
+        for (int i = 0; i < n; i++) {
+            Pickup p = pickups.get(i);
+            int c = Math.max(0, Math.min(pickGH - 1, (int) (p.y / PICK_CELL))) * pickGW + Math.max(0, Math.min(pickGW - 1, (int) (p.x / PICK_CELL)));
+            pickCellOf[i] = c;
+            pickStart[c + 1]++;
+        }
+        for (int c = 0; c + 1 < pickStart.length; c++) pickStart[c + 1] += pickStart[c];
+        if (pickCur == null || pickCur.length != pickStart.length) pickCur = new int[pickStart.length];
+        System.arraycopy(pickStart, 0, pickCur, 0, pickStart.length);
+        for (int i = 0; i < n; i++) pickIdx[pickCur[pickCellOf[i]]++] = i;
+    }
+
+    private int[] pickCur;
+
+    private int pickupsAt = -1, pickupsN;
+    private float pkX0, pkY0, pkX1, pkY1;
 
     private void updatePickups(float dt) {
         for (int i = pickups.size() - 1; i >= 0; i--) {
@@ -12656,6 +12796,9 @@ final class World {
      * of the wall facing out, and some of those off to cover (and mend) any breach. While it's going up they
      * work on the next stretch of wall.
      */
+    /** ((16.8) How far, in steps of walking cost, the way to a safe zone's gates is worked out for its guards. */
+    static final int ZONE_REACH = 500;
+
     private void holdPost(Entity e, Dispatch.SafeZone z, float speedFactor) {
         float run = e.runSpeed * speedFactor, walk = e.speed * speedFactor;
         int gates = z.gateTiles.length;
@@ -12672,8 +12815,10 @@ final class World {
             }
             xs[gates] = z.x;
             ys[gates] = z.y;
-            z.field = new int[city.w * city.h];
-            city.walkFieldFromPoints(z.field, xs, ys, gates + 1);
+            // ((16.8) Out to a walk's distance, not the whole map, and kept small: on the Large map it was a search of
+            // every street in town - over a tenth of a second, the longest step of the game - and 13 MB kept for
+            // each zone. A guard further off than that finds their own way, as anyone does.)
+            z.field = city.walkFieldFrom(xs, ys, gates + 1, ZONE_REACH);
         }
         float far = Math.max(Math.abs(e.x - z.x) - (z.right() - z.left()) / 2, Math.abs(e.y - z.y) - (z.bottom() - z.top()) / 2);
         // ((12.0) Through the wall one way or the other: the way planned from the other side is no good now. A guard
@@ -13438,9 +13583,14 @@ final class World {
         for (int i = 0, n = entities.size(); i < n; i++) {
             // (Not those passed over this step: like those with lodStep 0, they've not moved.)
             if (i < lodWake.length && lodWake[i] - lodFrame > 0 && lodSet[i] != lodFrame) continue;
+            if (i < lodQuiet.length && lodQuiet[i] == lodFrame) continue;
             Entity e = entities.get(i);
             if (e.dead || e.lodStep == 0) continue;
             if (big && (i + lodFrame) % sepEvery != 0 && !onScreen(e)) continue;
+            // ((16.8) And in the biggest crowds, not at all for someone going calmly about their day off screen: nobody
+            // sees two of them brush past each other, and they're kept apart again the moment they're looked at. Over
+            // a tenth of each step on the biggest maps.)
+            if (sepEvery == 4 && e.type == Entity.CIVILIAN && e.task == Dispatch.T_NONE && e.fleeTimer <= 0 && e.stun <= 0 && !onScreen(e)) continue;
             // ((10.34) Someone standing still is left be: whoever walks into them steps aside themselves.)
             if (e.want <= 0.5f && e.stun <= 0 && e.vx == 0 && e.vy == 0 && entities.size() > 6000) continue;
             // Only the cells within touching distance (the biggest body is under 8 across, plus a little for
