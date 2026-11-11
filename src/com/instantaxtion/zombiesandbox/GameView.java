@@ -3686,7 +3686,10 @@ final class GameView extends View implements Menu.Host {
     /** The next number from the building's own sequence, 0 to 1 (so its furniture never moves). */
     private float irand() {
         ihash = ihash * 1103515245 + 12345;
-        return ((ihash >>> 8) & 0xFFFF) / 65535f;
+        // ((16.12) Up to just under 1, never 1 itself: over 65535 it came to exactly 1 one time in 65536, and a pick
+        // from a list by it (the colours of the goods on a supermarket's shelves) went one past the end and the game
+        // stopped.)
+        return ((ihash >>> 8) & 0xFFFF) / 65536f;
     }
 
     private void box(Canvas c, float l, float t, float r, float b, int color) {
