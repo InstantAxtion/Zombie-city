@@ -861,7 +861,7 @@ final class Menu {
         String[][] totals = {
                 {"Time", World.clock(t)},
                 {"People now", String.valueOf(world.humanCount() + world.hiding + world.riding + world.visiting)},
-                {"Zombies now", String.valueOf(world.zombieCount())},
+                {world.enemyLabel() + " now", String.valueOf(world.zombieCount())},
                 {"Most zombies at once", String.valueOf(world.peakZombies)},
                 {"Zombies killed", String.valueOf(world.zombiesKilled)},
                 // ((12.0) And by whom.)
@@ -1510,6 +1510,20 @@ final class Menu {
                 y += 12 * dp;
             }
         }
+        // ((17.0) The game mode: who the police and the army are up against.)
+        y = segRow(c, CityConfig.OPT_MODE, "Game mode", lx, y, lw);
+        plain.setTextSize(12.5f * dp);
+        plain.setColor(MUTED);
+        plain.setTextAlign(Paint.Align.LEFT);
+        y -= 6 * dp;
+        String[] modeInfo = {"Zombies: an outbreak of the dead. The bitten turn, and the city fights for its life.",
+                "Gangs: armed street gangs hold their turf and take on the police and the army. No zombies: civilians run from the shooting, and can be caught in it.",
+                "Enemy army: an invading army's squads march on the city's police stations and bases, more coming in waves. No zombies: civilians run from the fighting, and can be caught in it."};
+        for (String line : wrap(modeInfo[Math.max(0, Math.min(2, config.mode))], lw - 4 * dp, plain)) {
+            c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
+            y += 16 * dp;
+        }
+        y += 12 * dp;
         int[] fc = previewForce;
         boolean known = fc != null && previewResidents > 0 && config.code().equals(previewKey);
         // (10.50) How many people are about isn't a choice: they come and go from their homes as they please.

@@ -61,6 +61,40 @@ final class GameView extends View implements Menu.Host {
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
             "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
             "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
+    private static final String[] GANG_INFO = {"Pistol: quick to run when it goes badly", "Submachine gun in bursts, up close",
+            "Shotgun: tough, charges in and doesn't break"};
+    private static final String[] ARMY_INFO = {"Assault rifle in bursts; advances on the stations and bases",
+            "Belt-fed machine gun: pins down from a distance", "Scoped rifle: picks off officers from far away"};
+
+    /** ((17.0) What the enemy tool makes in this game: the dead, a gang or the enemy army. */
+    private int enemyType() {
+        int m = world.mode();
+        return m == CityConfig.MODE_GANGS ? Entity.GANGSTER : m == CityConfig.MODE_ARMY ? Entity.INVADER
+                : ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
+    }
+
+    private String[] enemyNames() {
+        int m = world.mode();
+        if (m == CityConfig.MODE_GANGS) return World.GANG_KITS;
+        if (m == CityConfig.MODE_ARMY) return World.ARMY_KITS;
+        String[] n = new String[ZOMBIE_VARIANTS.length];
+        for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
+        return n;
+    }
+
+    private String rowLabel(int t) {
+        return t == 3 ? world.enemyLabel() : ROW_LABELS[t];
+    }
+
+    private String toolName(int t) {
+        if (t == TOOL_ZOMBIE) {
+            int m = world.mode();
+            if (m == CityConfig.MODE_GANGS) return "Gangs";
+            if (m == CityConfig.MODE_ARMY) return "Enemy army";
+        }
+        return TOOL_NAMES[t];
+    }
+
     private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile", "Big and tough, shoves people aside"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
@@ -451,17 +485,17 @@ final class GameView extends View implements Menu.Host {
 
     private void buildIcons() {
         int[] bodies = {0xFFD9534F, 0xFF23408E, 0xFF55623A, 0xFFF2F2F2, 0xFFB07A3E, 0xFF2E2622, 0xFF4E5A3E, 0xFF6B3A36,
-                0xFF4D3F4F, 0xFF4E5A3E, 0xFF6A6F60, 0xFF5E6444, 0xFF5E6A3E, 0xFF6E7A48, 0xFF8A6A34};
+                0xFF4D3F4F, 0xFF4E5A3E, 0xFF6A6F60, 0xFF5E6444, 0xFF5E6A3E, 0xFF6E7A48, 0xFF8A6A34, 0xFFC0282D, 0xFF7A6A4A};
         int[] heads = {0xFF4A2E1A, 0xFF141C38, 0xFF3C4628, 0xFF4A2E1A, 0xFF8C6232, 0xFF9E2A22, 0xFF7C9A5E, 0xFF9DAA70,
-                0xFF6F8D55, 0xFF73905A, 0xFFC8D0B4, 0xFF4E5438, 0xFFA8BE52, 0xFF8E9A5A, 0xFFC8302A};
-        float[] radii = {3.6f, 3.8f, 4f, 3.7f, 2.8f, 3.7f, 3.8f, 3.5f, 6.5f, 3.0f, 3.5f, 2.8f, 3.6f, 5.4f, 3.9f};
+                0xFF6F8D55, 0xFF73905A, 0xFFC8D0B4, 0xFF4E5438, 0xFFA8BE52, 0xFF8E9A5A, 0xFFC8302A, 0xFF1A1410, 0xFF2E2E30};
+        float[] radii = {3.6f, 3.8f, 4f, 3.7f, 2.8f, 3.7f, 3.8f, 3.5f, 6.5f, 3.0f, 3.5f, 2.8f, 3.6f, 5.4f, 3.9f, 3.7f, 4f};
         for (int t = 0; t < Entity.TYPE_COUNT; t++) {
             Entity e = new Entity();
             e.type = t;
             e.radius = radii[t];
             e.body = bodies[t];
             e.head = heads[t];
-            e.skin = e.isZombie() ? heads[t] : t == Entity.DOG ? bodies[t] : 0xFFE0AC69;
+            e.skin = e.isUndead() ? heads[t] : t == Entity.DOG ? bodies[t] : 0xFFE0AC69;
             if (t == Entity.ZOMBIE_DOG) e.skin = 0xFF7A8058;
             e.angle = (float) (-Math.PI / 2);
             e.hp = e.maxHp = 1;
@@ -5443,7 +5477,7 @@ final class GameView extends View implements Menu.Host {
                 float sx = screenX(e.x), sy = screenY(e.y) - (e.radius * scale + 12 * dp);
                 if (sx < 0 || sx > getWidth() || sy < 0 || sy > barTop) continue;
                 String label = e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG ? Names.dog(e.nameSeed)
-                        : e.isZombie() ? null : e.isArmed() ? Dispatch.name(e) : Names.person(e.nameSeed).split(" ")[0];
+                        : e.isUndead() ? null : e.isArmed() ? Dispatch.name(e) : Names.person(e.nameSeed).split(" ")[0];
                 if (label == null) continue;
                 float tw = text.measureText(label);
                 oval.set(sx - tw / 2 - 3 * dp, sy - 9 * dp, sx + tw / 2 + 3 * dp, sy + 3 * dp);
@@ -5762,7 +5796,7 @@ final class GameView extends View implements Menu.Host {
         c.drawCircle(r * 0.9f, r * 0.38f, r * 0.2f, fill);
         fill.setColor(0xFF1A1A1A);
         c.drawCircle(r * 1.5f, 0, r * 0.14f, fill);
-        if (e.isZombie()) {
+        if (e.isUndead()) {
             // Red eyes and a bloody muzzle.
             fill.setColor(0xFFFF3B2F);
             c.drawCircle(r * 1.2f, -r * 0.2f, r * 0.1f, fill);
@@ -5792,7 +5826,7 @@ final class GameView extends View implements Menu.Host {
     private void drawHair(Canvas c, Entity e, float r) {
         int seed = e.nameSeed & 0x7FFFFFFF;
         int style = seed % 7, hair = HAIR[(seed / 7) % HAIR.length], hat = HATS[(seed / 49) % HATS.length];
-        boolean zombie = e.isZombie();
+        boolean zombie = e.isUndead();
         if (zombie) {
             if (style == 0 || style == 3) style = 4; // Hats are long gone.
             hair = City.darken(hair, 0.8f);
@@ -5908,13 +5942,13 @@ final class GameView extends View implements Menu.Host {
         if (anim) {
             // Attacks: the dead lunge as they bite, guns kick back.
             float bite = 1 - Math.min(1, (now - e.biteAt) / 0.25f);
-            if (bite > 0 && e.isZombie()) c.translate(r * 0.5f * bite, 0);
+            if (bite > 0 && e.isUndead()) c.translate(r * 0.5f * bite, 0);
             float kick = 1 - Math.min(1, (now - e.shotAt) / 0.12f);
-            if (kick > 0 && !e.isZombie()) c.translate(-r * 0.2f * kick, 0);
+            if (kick > 0 && !e.isUndead()) c.translate(-r * 0.2f * kick, 0);
             if (spd > 4 && e.type != Entity.CRAWLER) {
                 // Walking: a bob in the stride; the dead lurch from side to side.
                 float bob = (float) Math.sin(e.phase * 2);
-                if (e.isZombie() && e.type != Entity.RUNNER) c.rotate((float) Math.sin(e.phase * 0.5f + (e.nameSeed & 7)) * 9);
+                if (e.isUndead() && e.type != Entity.RUNNER) c.rotate((float) Math.sin(e.phase * 0.5f + (e.nameSeed & 7)) * 9);
                 c.scale(1 + 0.05f * bob, 1 - 0.03f * bob);
             }
             if (e.type == Entity.BLOATER) {
@@ -5922,7 +5956,7 @@ final class GameView extends View implements Menu.Host {
                 float pu = 1 + 0.07f * (float) Math.sin(now * 3 + (e.nameSeed & 15));
                 c.scale(pu, pu);
             }
-            if (e.isZombie() && e.fresh > 44) {
+            if (e.isUndead() && e.fresh > 44) {
                 // Just got up: still unfolding.
                 float t = Math.max(0, 45 - e.fresh);
                 c.scale(0.7f + 0.3f * t, 0.7f + 0.3f * t);
@@ -5941,11 +5975,11 @@ final class GameView extends View implements Menu.Host {
             }
             fill.setColor(e.body);
             c.drawOval(oval, fill);
-            if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
+            if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && (e.aiming || e.isHostile()))) {
                 stroke.setColor(0xFF161616);
                 stroke.setStrokeWidth(r * 0.38f);
                 c.drawLine(r * 0.5f, r * 0.3f, e.type == Entity.SOLDIER ? r * 2.5f : r * 2f, r * 0.3f, stroke);
-            } else if (e.isZombie()) {
+            } else if (e.isUndead()) {
                 // (Arms out in front.)
                 stroke.setColor(e.skin);
                 stroke.setStrokeWidth(r * 1.3f);
@@ -5957,7 +5991,7 @@ final class GameView extends View implements Menu.Host {
             if (e.type != Entity.CRAWLER && scale > 2.5f) {
                 // Legs stepping out in front and behind as they walk.
                 float step = (float) Math.sin(e.phase) * r * 0.55f;
-                fill.setColor(e.isZombie() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
+                fill.setColor(e.isUndead() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
                 oval.set(step - r * 0.3f, -r * 0.55f, step + r * 0.3f, -r * 0.12f);
                 c.drawOval(oval, fill);
                 oval.set(-step - r * 0.3f, r * 0.12f, -step + r * 0.3f, r * 0.55f);
@@ -5973,7 +6007,7 @@ final class GameView extends View implements Menu.Host {
                 c.drawLine(r * 0.3f, r * 0.6f, r * 1.7f - sw, r * 0.9f, stroke);
                 fill.setColor(0x906E0A0A);
                 c.drawCircle(-r * 1.3f, 0, r * 0.5f, fill);
-            } else if (e.isZombie()) {
+            } else if (e.isUndead()) {
                 float sw = (float) Math.sin(e.phase) * r * 0.2f;
                 stroke.setColor(e.skin);
                 if (e.type == Entity.RUNNER && spd > 30) {
@@ -5994,7 +6028,7 @@ final class GameView extends View implements Menu.Host {
                     c.drawLine(r * 0.1f, -r * 0.72f, r * 1.55f + sw, -r * 0.55f, stroke);
                     c.drawLine(r * 0.1f, r * 0.72f, r * 1.55f - sw, r * 0.55f, stroke);
                 }
-            } else if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
+            } else if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && (e.aiming || e.isHostile()))) {
                 boolean soldier = e.type == Entity.SOLDIER;
                 stroke.setColor(e.skin);
                 stroke.setStrokeWidth(r * 0.36f);
@@ -6067,7 +6101,7 @@ final class GameView extends View implements Menu.Host {
                 c.drawCircle(-sw, r * 0.95f, r * 0.28f, fill);
             }
 
-            if (anim && !e.isZombie() && now - e.swingAt < 0.3f) {
+            if (anim && !e.isUndead() && now - e.swingAt < 0.3f) {
                 // A swing: the arm (and bat, axe or rifle butt) sweeps across in front.
                 float t = (now - e.swingAt) / 0.3f;
                 double a = Math.toRadians(-70 + 120 * t);
@@ -6111,7 +6145,7 @@ final class GameView extends View implements Menu.Host {
                 fill.setColor(0xFF3E4652);
                 c.drawRect(-r * 0.36f, -r * 0.6f, r * 0.28f, r * 0.6f, fill);
             }
-            if (e.isArmed() && !world.weaponsOut(e) && !e.isZombie()) {
+            if (e.isArmed() && !world.weaponsOut(e) && !e.isUndead()) {
                 // (10.24) No emergency: the rifle slung across the back, the pistol in its holster.
                 fill.setColor(0xFF161616);
                 if (e.type == Entity.SOLDIER) {
@@ -6120,7 +6154,7 @@ final class GameView extends View implements Menu.Host {
                     c.drawLine(-r * 0.7f, -r * 0.9f, -r * 0.3f, r * 1.0f, stroke);
                 } else c.drawRect(-r * 0.15f, r * 0.6f, r * 0.35f, r * 0.85f, fill);
             }
-            if (e.hasGun && !e.aiming) {
+            if (e.hasGun && !e.aiming && !e.isHostile()) {
                 // A gun tucked in a belt.
                 fill.setColor(0xFF1A1A1A);
                 c.drawRect(-r * 0.2f, r * 0.55f, r * 0.45f, r * 0.8f, fill);
@@ -6216,7 +6250,7 @@ final class GameView extends View implements Menu.Host {
                     fill.setColor(0xFF4C5833);
                     c.drawCircle(r * 0.0f, -r * 0.1f, r * 0.2f, fill);
                 }
-            } else if (e.isZombie()) {
+            } else if (e.isUndead()) {
                 if (e.armored) {
                     // ((13.8) Still in their helmet, so they can be told apart at a glance: police navy with the
                     // visor up, army olive.)
@@ -6262,7 +6296,7 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(0x1A000000);
             c.drawCircle(e.x + r * 0.3f, e.y + r * 0.32f, r * 0.4f, fill);
         }
-        if (e.stun > 0 && e.isZombie()) {
+        if (e.stun > 0 && e.isUndead()) {
             // Dazed: little stars spinning over its head.
             fill.setColor(0xFFFFE27A);
             for (int k = 0; k < 3; k++) {
@@ -6282,7 +6316,7 @@ final class GameView extends View implements Menu.Host {
         }
 
         // ((10.59) A veteran's rank: a gold chevron for each, zoomed in.)
-        int rk = e.isZombie() ? 0 : World.rank(e);
+        int rk = e.isUndead() ? 0 : World.rank(e);
         if (rk >= 2 && scale > 2.2f) {
             stroke.setColor(0xFFF2C94C);
             stroke.setStrokeWidth(0.5f);
@@ -6298,7 +6332,7 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(0xAA000000);
             c.drawRect(bx - 0.4f, by - 0.4f, bx + bw + 0.4f, by + 1.9f, fill);
             float f = e.hp / e.maxHp;
-            fill.setColor(e.isZombie() ? 0xFFB5E04A : (f > 0.5f ? 0xFF4CD964 : f > 0.25f ? 0xFFFFCC00 : 0xFFFF3B30));
+            fill.setColor(e.isUndead() ? 0xFFB5E04A : (f > 0.5f ? 0xFF4CD964 : f > 0.25f ? 0xFFFFCC00 : 0xFFFF3B30));
             c.drawRect(bx, by, bx + bw * f, by + 1.5f, fill);
         }
     }
@@ -6497,7 +6531,7 @@ final class GameView extends View implements Menu.Host {
             String phase = world.aftermath == World.AFTER_RECOVERY ? "   Recovery " + World.clock(at)
                     : world.aftermath == World.AFTER_FALLEN ? "   City fallen" : "";
             int secs0 = (int) world.time;
-            String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   Zombies " + world.zombieCount()
+            String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   " + world.enemyLabel() + " " + world.zombieCount()
                     + phase + "   " + World.clock(secs0);
             // (Short of the buttons along the top in landscape.)
             float room = (portrait ? getWidth() - 10 * dp : topRects[0].left - 8 * dp) - statsRect.left - 24 * dp;
@@ -6522,7 +6556,7 @@ final class GameView extends View implements Menu.Host {
             // beside a large "Cops 414".)
             float rowScale = 1;
             for (int t = 0; t < rows.length; t++) {
-                float need = text.measureText(ROW_LABELS[t]) + text.measureText(String.valueOf(rows[t]));
+                float need = text.measureText(rowLabel(t)) + text.measureText(String.valueOf(rows[t]));
                 rowScale = Math.min(rowScale, (colW - 46 * dp) / need);
             }
             for (int t = 0; t < rows.length; t++) {
@@ -6539,7 +6573,7 @@ final class GameView extends View implements Menu.Host {
                 if (coming > 0) num += "  +" + coming;
                 float size = text.getTextSize();
                 if (rowScale < 1) text.setTextSize(size * rowScale);
-                c.drawText(ROW_LABELS[t], x0 + 26 * dp, ty, text);
+                c.drawText(rowLabel(t), x0 + 26 * dp, ty, text);
                 text.setTextAlign(Paint.Align.RIGHT);
                 c.drawText(num, x0 + colW - 12 * dp, ty, text);
                 text.setTextSize(size);
@@ -6623,7 +6657,7 @@ final class GameView extends View implements Menu.Host {
         if (toolsFolded) {
             text.setTextSize(12 * dp);
             text.setColor(0xFFC8CCD2);
-            String name = tool == TOOL_ZOMBIE ? Entity.NAMES[ZOMBIE_VARIANTS[zombieVariant]] : tool == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
+            String name = tool == TOOL_ZOMBIE ? enemyNames()[zombieVariant] : tool == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
                     : tool == TOOL_MIL ? MIL_NAMES[milVariant] : tool == TOOL_COP ? copNames()[copVariant] : TOOL_NAMES[tool];
             c.drawText("\u25B2  Tools  -  " + name, w / 2f, barTop + 19 * dp, text);
         } else {
@@ -6650,7 +6684,7 @@ final class GameView extends View implements Menu.Host {
             float cx = r.centerX(), cy = r.top + r.height() * 0.4f;
             drawToolIcon(c, i, cx, cy, r.height() * 0.26f);
             text.setColor(sel ? 0xFFFFFFFF : 0xFFC8CCD2);
-            String name = i == TOOL_ZOMBIE ? Entity.NAMES[ZOMBIE_VARIANTS[zombieVariant]]
+            String name = i == TOOL_ZOMBIE ? enemyNames()[zombieVariant]
                     : i == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
                     : i == TOOL_MIL ? MIL_NAMES[milVariant]
                     : i == TOOL_COP ? copNames()[copVariant]
@@ -6831,7 +6865,8 @@ final class GameView extends View implements Menu.Host {
         String title;
         if (e.type == Entity.DOG) title = Names.dog(e.nameSeed) + "  -  Dog";
         else if (e.type == Entity.ZOMBIE_DOG) title = Names.dog(e.nameSeed) + "  -  Zombie dog";
-        else if (e.isZombie()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
+        else if (e.isUndead()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
+        else if (e.isHostile()) title = Names.person(e.nameSeed) + "  -  " + world.hostileTitle(e);
         else if (e.raider) title = Names.person(e.nameSeed) + "  -  Looter" + (e.leader == null ? ", gang leader" : "");
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SWAT)
             title = Country.swat()[1] + " " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
@@ -6855,9 +6890,9 @@ final class GameView extends View implements Menu.Host {
         if (e.infected) health += "   BITTEN: turns in " + Math.max(0, (int) e.infectTimer) + "s";
         if (e.fresh > 0) health += "   Freshly turned";
         lines.add(health);
-        if (!e.canShoot() && e.melee > 0 && !e.isZombie()) lines.add("Carrying " + (e.melee == Entity.M_AXE ? "an axe" : "a " + Entity.MELEE_NAMES[e.melee].toLowerCase()));
+        if (!e.canShoot() && e.melee > 0 && !e.isUndead()) lines.add("Carrying " + (e.melee == Entity.M_AXE ? "an axe" : "a " + Entity.MELEE_NAMES[e.melee].toLowerCase()));
         // ((12.0) What one of the dead was in life.)
-        if (e.isZombie() && e.origin >= 0 && e.origin != Entity.CIVILIAN)
+        if (e.isUndead() && e.origin >= 0 && e.origin != Entity.CIVILIAN)
             lines.add(e.origin == Entity.COP ? "Was a police officer" : e.origin == Entity.SOLDIER ? "Was a soldier" : "Was a " + Entity.NAMES[e.origin].toLowerCase());
         // ((14.5) How far gone it is.)
         float rot = world.rot(e);
@@ -6869,9 +6904,9 @@ final class GameView extends View implements Menu.Host {
                 + "   Aim +" + Math.round((World.aimBonus(e) + 0.05f * World.rank(e)) * 100) + "%" + (e.kills > 0 ? "   Kills " + e.kills : ""));
         // ((10.59) Their rank, with a star for each.)
         int rk = World.rank(e);
-        if (rk > 0 && !e.isZombie()) lines.add(World.RANK_NAMES[rk] + " " + "\u2605\u2605\u2605\u2605".substring(0, rk)
+        if (rk > 0 && !e.isUndead()) lines.add(World.RANK_NAMES[rk] + " " + "\u2605\u2605\u2605\u2605".substring(0, rk)
                 + (rk < World.RANK_KILLS.length - 1 ? "   next at " + World.RANK_KILLS[rk + 1] + " kills" : ""));
-        if (e.leader != null && !e.isZombie()) {
+        if (e.leader != null && !e.isUndead()) {
             String who = e.leader.type == Entity.DOG ? Names.dog(e.leader.nameSeed) : Names.person(e.leader.nameSeed);
             lines.add(e.type == Entity.DOG ? "Owner: " + who : e.type == Entity.SOLDIER ? "Sticking with " + who : "With " + who);
         }
@@ -6881,9 +6916,9 @@ final class GameView extends View implements Menu.Host {
         if (e.leadsHorde) lines.add("Leading a horde of about " + e.hordeSize);
         // Who bit whom.
         Integer biter = world.bitBy.get(e.nameSeed);
-        if (biter != null) lines.add((e.isZombie() ? "Turned by " : "Bitten by ") + Names.person(biter));
+        if (biter != null) lines.add((e.isUndead() ? "Turned by " : "Bitten by ") + Names.person(biter));
         Integer turnedN = world.victims.get(e.nameSeed);
-        if (e.isZombie() && turnedN != null) lines.add("Has turned " + turnedN + (turnedN == 1 ? " person" : " people"));
+        if (e.isUndead() && turnedN != null) lines.add("Has turned " + turnedN + (turnedN == 1 ? " person" : " people"));
         if (e.nameSeed == world.patientZeroSeed && world.patientZeroSeed != 0) lines.add("PATIENT ZERO");
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
@@ -7230,7 +7265,7 @@ final class GameView extends View implements Menu.Host {
         picker = -1;
         selection.clear();
         scale = Math.max(scale, 2.6f * baseDp);
-        world.say("You are " + (e.isZombie() ? "a " + Entity.NAMES[e.type].toLowerCase() : e.type == Entity.DOG ? Names.dog(e.nameSeed)
+        world.say("You are " + (e.isUndead() ? "a " + Entity.NAMES[e.type].toLowerCase() : e.type == Entity.DOG ? Names.dog(e.nameSeed)
                 : Names.person(e.nameSeed)));
     }
 
@@ -7325,7 +7360,7 @@ final class GameView extends View implements Menu.Host {
         attackY = barTop - 80 * dp;
         Fleet.Vehicle car = world.controlledCar;
         String verb = car != null ? (car.type == Fleet.TANK ? "Fire" : car.type == Fleet.CRUISER ? "Siren" : "Horn")
-                : e.isZombie() ? "Bite" : e.canShoot() && e.ammo + e.reserve > 0 ? (e.reload > 0 ? "Reload" : "Shoot")
+                : e.isUndead() ? "Bite" : e.canShoot() && e.ammo + e.reserve > 0 ? (e.reload > 0 ? "Reload" : "Shoot")
                 : e.melee > 0 ? "Swing" : "Shove";
         text.setTextAlign(Paint.Align.CENTER);
         if (world.controlledIn == null) {
@@ -7359,7 +7394,7 @@ final class GameView extends View implements Menu.Host {
             c.drawText(label, r.centerX(), r.centerY() + 4.5f * dp, text);
         }
         // Who you are, and the way out.
-        String who = e.isZombie() ? Entity.NAMES[e.type] : e.type == Entity.DOG ? Names.dog(e.nameSeed) : Names.person(e.nameSeed);
+        String who = e.isUndead() ? Entity.NAMES[e.type] : e.type == Entity.DOG ? Names.dog(e.nameSeed) : Names.person(e.nameSeed);
         String gun = e.canShoot() ? "   " + e.gunName() + " " + e.ammo + " + " + e.reserve : "";
         String place = car != null ? "   Driving (" + Math.max(0, (int) (100 * car.hp / car.maxHp)) + "%)"
                 : world.controlledIn != null ? "   Inside: barricade " + (int) world.controlledIn.barricade + "%, food " + world.controlledIn.food : "";
@@ -7367,7 +7402,7 @@ final class GameView extends View implements Menu.Host {
         String info = who + "   Health " + Math.max(0, (int) e.hp) + "/" + (int) e.maxHp + gun
                 + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "") + place + (group > 0 ? "   Group " + group : "")
                 + (e.infected ? "   BITTEN: " + Math.max(0, (int) e.infectTimer) + "s" : "")
-                + (!e.isZombie() && e.stamina < 0.3f ? "   Out of breath" : "");
+                + (!e.isUndead() && e.stamina < 0.3f ? "   Out of breath" : "");
         text.setTextSize(13 * dp);
         // ((12.0) Smaller when it won't fit across the screen, rather than running off both sides.)
         float room = w - 24 * dp;
@@ -7564,7 +7599,8 @@ final class GameView extends View implements Menu.Host {
     }
 
     private String doing(Entity e) {
-        if (e.isZombie()) {
+        if (e.isHostile()) return world.hostileDoing(e);
+        if (e.isUndead()) {
             // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)
             if (e.stun > 0) return "Knocked back, dazed";
             if (e.charge > 0) return "Lunging at someone";
@@ -7711,11 +7747,7 @@ final class GameView extends View implements Menu.Host {
             }
             case TOOL_COP: return copNames();
             case TOOL_MIL: return MIL_NAMES;
-            case TOOL_ZOMBIE: {
-                String[] n = new String[ZOMBIE_VARIANTS.length];
-                for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
-                return n;
-            }
+            case TOOL_ZOMBIE: return enemyNames();
             case TOOL_PLACE: return PLACE_NAMES;
             case TOOL_BUILD: return BUILD_NAMES;
             default: return EVENT_NAMES;
@@ -7727,7 +7759,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_CIV: return CIV_INFO;
             case TOOL_COP: return COP_INFO;
             case TOOL_MIL: return MIL_INFO;
-            case TOOL_ZOMBIE: return ZOMBIE_INFO;
+            case TOOL_ZOMBIE: return world.mode() == CityConfig.MODE_GANGS ? GANG_INFO : world.mode() == CityConfig.MODE_ARMY ? ARMY_INFO : ZOMBIE_INFO;
             case TOOL_PLACE: return PLACE_INFO;
             case TOOL_BUILD: return BUILD_INFO;
             default: return EVENT_INFO;
@@ -7779,13 +7811,13 @@ final class GameView extends View implements Menu.Host {
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         text.setColor(0xFFFFFFFF);
-        c.drawText(TOOL_NAMES[picker], left + 14 * dp, top + 22 * dp, text);
+        c.drawText(toolName(picker), left + 14 * dp, top + 22 * dp, text);
         text.setTextSize(11.5f * dp);
         text.setColor(0xFFB8BDC4);
         String line = names[cur] + ": " + info[cur];
         float titleW = 0;
         text.setTextSize(14 * dp);
-        titleW = text.measureText(TOOL_NAMES[picker]);
+        titleW = text.measureText(toolName(picker));
         text.setTextSize(11.5f * dp);
         float room = maxW - titleW - 40 * dp;
         while (text.measureText(line) > room && line.length() > 4) line = line.substring(0, line.length() - 4) + "...";
@@ -7832,18 +7864,19 @@ final class GameView extends View implements Menu.Host {
      */
     private void drawPersonBadge(Canvas c, int type, Entity e, float cx, float cy, float size) {
         boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE;
-        int disc = zombie ? 0xFF2E4A22 : type == Entity.COP ? 0xFF1E3366 : type == Entity.SOLDIER ? 0xFF3A4328 : 0xFF5A4022;
+        boolean foe = type == Entity.GANGSTER || type == Entity.INVADER;
+        int disc = zombie ? 0xFF2E4A22 : foe ? 0xFF4A1C1C : type == Entity.COP ? 0xFF1E3366 : type == Entity.SOLDIER ? 0xFF3A4328 : 0xFF5A4022;
         float r = size * 1.18f;
         fill.setColor(disc);
         c.drawCircle(cx, cy, r, fill);
-        stroke.setColor(zombie ? 0xFF7CC24E : type == Entity.COP ? 0xFF6F9BFF : type == Entity.SOLDIER ? 0xFFB8C47A : 0xFFF0AD4E);
+        stroke.setColor(zombie ? 0xFF7CC24E : foe ? 0xFFE05A4E : type == Entity.COP ? 0xFF6F9BFF : type == Entity.SOLDIER ? 0xFFB8C47A : 0xFFF0AD4E);
         stroke.setStrokeWidth(1.4f * dp);
         c.drawCircle(cx, cy, r, stroke);
         c.save();
         c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.95f);
         float bulk = type == Entity.BRUTE ? 1.35f : 1f;
         // Shoulders.
-        int shirt = type == Entity.COP ? e.body : type == Entity.SOLDIER ? e.body : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
+        int shirt = type == Entity.COP || foe ? e.body : type == Entity.SOLDIER ? e.body : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
         fill.setColor(shirt);
         oval.set(cx - r * 0.78f * bulk, cy + r * 0.28f, cx + r * 0.78f * bulk, cy + r * 1.5f);
         c.drawOval(oval, fill);
@@ -7898,6 +7931,21 @@ final class GameView extends View implements Menu.Host {
                 stroke.setStrokeWidth(r * 0.16f);
                 c.drawLine(cx - r * 0.9f, cy + r * 0.75f, cx + r * 0.9f, cy + r * 0.45f, stroke);
             }
+        } else if (type == Entity.INVADER) {
+            // ((17.0) The enemy's dark helmet, and the rifle across the chest.)
+            fill.setColor(0xFF2E2E30);
+            oval.set(cx - hr * 1.2f, hy - hr * 1.25f, cx + hr * 1.2f, hy + hr * 0.1f);
+            c.drawArc(oval, 180, 180, true, fill);
+            stroke.setColor(0xFF161616);
+            stroke.setStrokeWidth(r * (e.kit == 1 ? 0.18f : 0.12f));
+            c.drawLine(cx - r * 0.9f, cy + r * 0.75f, cx + r * 0.9f, cy + r * 0.45f, stroke);
+        } else if (type == Entity.GANGSTER) {
+            // ((17.0) A bandana in the gang's colour.)
+            fill.setColor(e.head != 0 ? e.head : 0xFF1A1410);
+            oval.set(cx - hr * 1.02f, hy - hr * 1.1f, cx + hr * 1.02f, hy - hr * 0.1f);
+            c.drawArc(oval, 180, 180, true, fill);
+            fill.setColor(City.darken(e.body, 0.8f));
+            c.drawRect(cx - hr * 1.05f, hy - hr * 0.55f, cx + hr * 1.05f, hy - hr * 0.3f, fill);
         } else if (!zombie) {
             // Hair.
             fill.setColor(0xFF4A3020);
@@ -7914,9 +7962,13 @@ final class GameView extends View implements Menu.Host {
     }
 
     private void drawToolIcon(Canvas c, int t, float cx, float cy, float size) {
-        int type = t == TOOL_ZOMBIE ? ZOMBIE_VARIANTS[zombieVariant] : t == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[t];
+        int type = t == TOOL_ZOMBIE ? enemyType() : t == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[t];
         if (type >= 0) {
             Entity e = icons[type];
+            if (type == Entity.GANGSTER || type == Entity.INVADER) {
+                e.kit = Math.min(zombieVariant, 2);
+                e.body = type == Entity.GANGSTER ? World.GANG_COLORS[0] : World.ARMY_BODY;
+            }
             if (type == Entity.COP) {
                 int r = t == TOOL_COP ? COP_ROLES[copVariant] : 0;
                 if (iconCopBody == 0) iconCopBody = e.body;
@@ -8790,8 +8842,11 @@ final class GameView extends View implements Menu.Host {
     }
 
     private void spawnBrush(float wx, float wy) {
-        int type = tool == TOOL_ZOMBIE ? ZOMBIE_VARIANTS[zombieVariant] : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
+        int type = tool == TOOL_ZOMBIE ? enemyType() : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
         int n = BRUSHES[brushIdx];
+        boolean foes = tool == TOOL_ZOMBIE && world.hostileMode();
+        // ((17.0) A gang crew or an enemy squad: each lot together, as one gang or one squad.)
+        if (foes) world.newHostileGroup(wx, wy);
         // Only one commander at a time.
         if (tool == TOOL_MIL && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;
         int failed = 0;
@@ -8803,7 +8858,8 @@ final class GameView extends View implements Menu.Host {
                 oy = (float) (Math.sin(a) * r);
             }
             Entity e = tool == TOOL_MIL ? world.spawnSoldier(MIL_ROLES[milVariant], wx + ox, wy + oy)
-                    : tool == TOOL_COP ? world.spawnCop(COP_ROLES[copVariant], wx + ox, wy + oy) : world.spawn(type, wx + ox, wy + oy);
+                    : tool == TOOL_COP ? world.spawnCop(COP_ROLES[copVariant], wx + ox, wy + oy)
+                    : foes ? world.spawnHostile(Math.min(zombieVariant, 2), wx + ox, wy + oy) : world.spawn(type, wx + ox, wy + oy);
             if (e != null) lastAction.add(e);
             else failed++;
         }

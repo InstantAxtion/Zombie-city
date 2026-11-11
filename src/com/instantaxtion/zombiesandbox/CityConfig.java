@@ -53,6 +53,14 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
+    /** ((17.0) The game mode (not one of the eight in v): who the police and the army are up against. */
+    static final int OPT_MODE = 10;
+    static final String[] MODES = {"Zombies", "Gangs", "Enemy army"};
+    static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2;
+    /** ((17.0) See OPT_MODE. Not part of the city code: the same streets can be played any way. */
+    int mode;
+
+    boolean zombieMode() { return mode == MODE_ZOMBIES; }
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
             "Reinforcements", "Country"};
     private static final String[][] VALUES = {
@@ -366,6 +374,7 @@ final class CityConfig implements OptionSet {
         c.seed = seed;
         c.outskirts = outskirts;
         c.exodus = exodus;
+        c.mode = mode;
         c.civic = civic;
         for (int[] e : edits) c.edits.add(e.clone());
         c.normalize();
@@ -671,8 +680,8 @@ final class CityConfig implements OptionSet {
 
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
-    @Override public String[] values(int i) { return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : VALUES[i]; }
-    @Override public int get(int i) { return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : v[i]; }
+    @Override public String[] values(int i) { return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_MODE ? MODES : VALUES[i]; }
+    @Override public int get(int i) { return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_MODE ? mode : v[i]; }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
             outskirts = value;
@@ -680,6 +689,10 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_EXODUS) {
             exodus = value;
+            return;
+        }
+        if (i == OPT_MODE) {
+            mode = Math.max(0, Math.min(MODES.length - 1, value));
             return;
         }
         v[i] = value;

@@ -457,6 +457,7 @@ final class Dispatch {
 
     /** As above; always set, it goes out even if the same was just said (a call for backup from another fight). */
     void say(int who, Entity speaker, String text, float x, float y, boolean always) {
+        text = w.reword(text);
         // ((13.8) The same kind of news again within a few seconds (a second "People are turning into monsters", a
         // third officer down in the same fight) is left out: it's on the map already.)
         String kind = kindOf(who, text);

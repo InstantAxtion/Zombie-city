@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 56;
+    private static final int VERSION = 57;
 
     private SaveGame() {
     }
@@ -38,6 +38,8 @@ final class SaveGame {
             out.writeInt(cfg.exodus);
             // Version 47: the map version the city was built to, itself.
             out.writeInt(cfg.civic);
+            // ((17.0) Version 57: the game mode.)
+            out.writeInt(cfg.mode);
 
             out.writeFloat(w.time);
             out.writeInt(w.turned);
@@ -359,6 +361,10 @@ final class SaveGame {
             // (Version 56, 15.6: the island prison.)
             out.writeBoolean(w.prisonFallen);
             out.writeBoolean(w.prisonSeeded);
+            // (Version 57, 17.0: the gangs' or the enemy's fighters still to come, and how many they started with.)
+            out.writeInt(w.hostileReserve);
+            out.writeInt(w.hostileStart);
+            out.writeInt(w.squadsMade);
         } finally {
             moved = null;
             homeIndex = null;
@@ -443,6 +449,8 @@ final class SaveGame {
         out.writeInt(e.saved);
         // Version 56 (15.6): locked up in the island prison.
         out.writeBoolean(e.inmate);
+        // Version 57 (17.0): a gang member's or enemy soldier's kit.
+        out.writeByte(e.kit);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -473,6 +481,7 @@ final class SaveGame {
             if (version >= 26) cfg.outskirts = in.readInt();
             if (version >= 41) cfg.exodus = in.readInt();
             int civic = version >= 47 ? in.readInt() : -1;
+            if (version >= 57) cfg.mode = Math.max(0, Math.min(CityConfig.MODES.length - 1, in.readInt()));
             // (Cities saved before 10.4 were built without their government quarter.)
             cfg.civic = version >= 48 ? 27 : version >= 47 ? 26 : version >= 46 ? 25 : version >= 45 ? 24 : version >= 44 ? 23 : version >= 43 ? 22 : version >= 42 ? 21 : version >= 40 ? 20 : version >= 39 ? 19 : version >= 38 ? 18 : version >= 37 ? 17 : version >= 36 ? 16 : version >= 35 ? 15 : version >= 34 ? 14 : version >= 33 ? 13 : version >= 32 ? 12 : version >= 31 ? 11 : version >= 30 ? 11 : version >= 29 ? 10 : version >= 28 ? 9 : version >= 27 ? 8 : version >= 26 ? 7 : version >= 25 ? 6 : version >= 24 ? 5 : version >= 23 ? 4 : version >= 22 ? 3 : version >= 20 ? 2 : version >= 19 ? 1 : 0;
             if (civic >= 0) cfg.civic = civic;
@@ -819,6 +828,11 @@ final class SaveGame {
                 w.prisonFallen = in.readBoolean();
                 w.prisonSeeded = in.readBoolean();
             }
+            if (version >= 57) {
+                w.hostileReserve = in.readInt();
+                w.hostileStart = in.readInt();
+                w.squadsMade = in.readInt();
+            }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -899,6 +913,7 @@ final class SaveGame {
         else if (e.isZombie()) e.risen = w.time;
         if (version >= 55) e.saved = in.readInt();
         if (version >= 56) e.inmate = in.readBoolean();
+        if (version >= 57) e.kit = in.readByte();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

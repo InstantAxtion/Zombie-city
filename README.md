@@ -15,7 +15,8 @@ away from the middle of the screen as you pan, and the game plays in both portra
   be called in (Off, Low, Medium or High, each spelled out: waves of police backup, army squads, tanks
   and helicopter sorties). Police and soldiers on duty are set by the size of the city (about one officer
   per 80 residents plus two per station; a garrison at the base if the map has one). Each map decides its
-  own buildings, layout, parks, police stations and military base. **Randomize** rolls a random setup.
+  own buildings, layout, parks, police stations and military base. **Game mode** (17.0): Zombies, Gangs (rival street gangs on their turf) or Enemy army (an invasion from
+  the edge of the map); the last two have no zombies. **Randomize** rolls a random setup.
   **City code** replays a city: every city has a code like `12-483920` (or `12-483920@2` for a city
   outside the USA; shown in the pause menu and stats), so you can play the same streets again or share
   them with a friend.
@@ -415,6 +416,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Gang wars and invasions (17.0):** a Game mode option on New Game (CityConfig.mode, saved from save version 57): Zombies, Gangs or Enemy army. The two new modes have no zombies. Gang members (Entity.GANGSTER) and enemy soldiers (Entity.INVADER) are living, armed and on the enemy side: isZombie() now means "the other side", isUndead() the dead themselves, isHostile() the two new kinds. Up to five gangs hold their turf (from the districts), fight the police and each other, come to nearby gunfire and break when hurt (enforcers don't); enemy squads come in from the map edge and advance on police stations, bases and City Hall, taking and holding each. Both fire on officers, soldiers, armed civilians and police and army vehicles (enemy rockets can wreck a tank), never deliberately on the unarmed, but stray rounds hit bystanders. Each side has reserves that come in waves; the city wins when they're all down and none are left, the enemy when every officer and soldier is down and no help is left. Messages are reworded (World.reword), and the zombie tool, counts and info card follow the mode.
 
 **Nobody goes indoors (16.14):** no errands, work or home visits inside buildings, no hiding or sheltering indoors, no zombies shut inside; indoor outbreaks start at the door. Older saves have everyone let out at the door on load. (World.NO_INDOORS.)
 

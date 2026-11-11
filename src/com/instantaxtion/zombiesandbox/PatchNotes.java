@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.14";
-    static final int VERSION_CODE = 164;
+    static final String VERSION = "17.0";
+    static final int VERSION_CODE = 170;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.0  -  Gang wars and invasions",
+                    "Two new game modes, picked on the New Game screen under Game mode: Gangs and Enemy army. There are no zombies in either. Zombies is still there, as before.",
+                    "Gangs: up to five gangs (the Red Kings, the Eastside Blues, the Violet Crowns, the Southside Lobos and the Gold Saints), each in its own colours, hold their own turf. They hang about on its corners, come to any gunfire nearby, now and then go looking for trouble further off or on a rival's turf, and fight each other as well as the police. Thugs carry pistols and run once they're badly hurt; shooters spray submachine guns at close range; enforcers carry shotguns, charge in and don't break. As crews go down the gang that's winning recruits more, until it can't. The army doesn't fire mortars over a gang war.",
+                    "Enemy army: squads of enemy soldiers in tan uniforms and dark helmets come in from the edge of the map and advance on the nearest police station, army base or City Hall. Each squad has riflemen with a grenade or a rocket for vehicles, a machine gunner who lays down long bursts from where he stands, and sometimes a marksman who picks officers off from far away. They take what they reach and hold it (it's announced, and goes on the timeline), then most move on to the next. They don't break, and as squads fall more come in from the edge until the enemy has none left to send.",
+                    "Both sides shoot back now: gang members and enemy soldiers fire on police cars, army trucks, tanks and helicopters as well as officers and soldiers on foot, and anyone shot at turns on the shooter. Enemy rockets can wreck a tank.",
+                    "Civilians: neither side goes after the unarmed, only the police, the army and anyone carrying a gun. But people run from gunfire, and a round that misses can hit whoever is behind it, so bystanders get hurt and killed in the crossfire.",
+                    "Who wins: the city, once every gang member or enemy soldier is down and no more are coming; the other side, once every officer and soldier is down and there's no more help to call in. Each has its own ending.",
+                    "The Zombies tool becomes Gangs or Enemy army in those modes, with the three kinds of fighter to place. Placed close to some already there, they join them (the same gang or squad); placed on their own they belong to the nearest gang's turf, or form a new squad. The counts, the radio and the timeline speak of gang members or enemy troops, not the dead. Tap one to see their kit, their gang or squad, and what they're up to.",
+                    "How many there are follows the Zombies setting, sized against the city's own police and army: the default is a hard fight, and the biggest more of them than of the city's defenders. There's room kept for them, so a little fewer people live in the city in these modes.",
+            },
             {
                     "16.14  -  Nobody goes indoors",
                     "Nobody goes into a building any more. People on errands, at work or going home get to the door and carry on with their day outside; nobody hides or shelters indoors - running from the dead they get away, make for a safe zone or fight; and none of the dead are shut inside buildings, waiting or slipping in. An outbreak that would have started indoors starts at the door instead. The safe zones' camps are unchanged.",

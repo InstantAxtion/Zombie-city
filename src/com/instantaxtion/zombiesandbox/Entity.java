@@ -5,8 +5,11 @@ final class Entity {
     static final int CIVILIAN = 0, COP = 1, SOLDIER = 2, MEDIC = 3, DOG = 4, RAIDER = 5, ZOMBIE = 6, RUNNER = 7,
             BRUTE = 8, CRAWLER = 9, SCREAMER = 10, ZOMBIE_DOG = 11, SPITTER = 12, BLOATER = 13,
             /** (Firefighters went in 10.49: any in an old save load as civilians.) */
-            FIREFIGHTER = 14;
-    static final int TYPE_COUNT = 15;
+            FIREFIGHTER = 14,
+            /** ((17.0) The other game modes' enemies, on the side the dead take in a zombie game: a gang member, and a
+             * soldier of an enemy army. Armed people - they shoot, never bite, and nobody turns.) */
+            GANGSTER = 15, INVADER = 16;
+    static final int TYPE_COUNT = 17;
 
     /**
      * (10.50) The kind someone of kind t is now: the kinds taken out of the game (crawlers, bloaters, spitters and
@@ -20,7 +23,7 @@ final class Entity {
         }
     }
     static final String[] NAMES = {"Civilian", "Cop", "Soldier", "Medic", "Dog", "Raider", "Zombie", "Runner", "Brute",
-            "Crawler", "Screamer", "Zombie dog", "Spitter", "Bloater", "Firefighter"};
+            "Crawler", "Screamer", "Zombie dog", "Spitter", "Bloater", "Firefighter", "Gang member", "Enemy soldier"};
 
     /** Soldiers' jobs: rifleman, the commander, snipers and machine gunners. */
     static final int ROLE_RIFLE = 0, ROLE_COMMANDER = 1, ROLE_SNIPER = 2, ROLE_GUNNER = 3;
@@ -175,6 +178,11 @@ final class Entity {
     transient int squadSlot;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;
+    /** ((17.0) A gang member's or enemy soldier's kit: 0 the basic one, 1 the automatic, 2 the heavy or the scoped. */
+    int kit;
+    /** ((17.0) Who they're fighting, looked for again every so often (foeT). */
+    transient Entity foe;
+    transient float foeT;
     /** ((14.2) A raider who's opened fire on people lately: police, soldiers and armed survivors shoot back while this lasts.) */
     transient float hostileT;
     /** ((14.2) The shop a raider gang's leader is on the way to strip.) */
@@ -365,12 +373,26 @@ final class Entity {
     float emerged = -999;
     boolean retreatSaid;
 
+    /**
+     * On the enemy's side: one of the dead, or ((17.0) in the other game modes) a gang member or an enemy soldier. Who
+     * the police and the army fight, and who everyone else runs from. (See isUndead for the dead themselves.)
+     */
     boolean isZombie() {
-        return type >= ZOMBIE && type <= BLOATER;
+        return (type >= ZOMBIE && type <= BLOATER) || type >= GANGSTER;
     }
 
     static boolean isZombieType(int type) {
+        return (type >= ZOMBIE && type <= BLOATER) || type >= GANGSTER;
+    }
+
+    /** ((17.0) One of the dead themselves: they bite, rot, shamble, climb, get back up. */
+    boolean isUndead() {
         return type >= ZOMBIE && type <= BLOATER;
+    }
+
+    /** ((17.0) A gang member or an enemy soldier: living, armed, on the enemy's side. */
+    boolean isHostile() {
+        return type >= GANGSTER;
     }
 
     boolean isArmed() {
