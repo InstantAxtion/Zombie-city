@@ -981,8 +981,8 @@ final class World {
         // Zombies start in a few small outbreaks rather than spread evenly.
         int left = cfg.zombies();
         while (left > 0) {
-            // Some zombies are shut inside buildings, waiting for someone to open the door.
-            if (left >= 4 && rnd.nextFloat() < 0.25f) {
+            // Some zombies are shut inside buildings, waiting for someone to open the door. ((16.14) Not any more.)
+            if (!NO_INDOORS && left >= 4 && rnd.nextFloat() < 0.25f) {
                 City.Building b = city.buildings.get(rnd.nextInt(city.buildings.size()));
                 if (b.capacity > 0 && b.occupants.isEmpty() && b.lurkers == 0) {
                     b.lurkers = Math.min(left, 2 + rnd.nextInt(4));
@@ -3404,7 +3404,7 @@ final class World {
                 return;
             }
             // ((12.0) Only an empty one: with people inside on an errand it used to slip in and sit quietly with them.)
-            if (b.capacity > 0 && b.occupants.isEmpty() && b.visitors.isEmpty() && b.lurkers < 5 && z.type != Entity.BRUTE && rnd.nextFloat() < 0.035f) {
+            if (!NO_INDOORS && b.capacity > 0 && b.occupants.isEmpty() && b.visitors.isEmpty() && b.lurkers < 5 && z.type != Entity.BRUTE && rnd.nextFloat() < 0.035f) {
                 b.lurkers++;
                 z.dead = true;
                 z.removed = true;
@@ -4291,7 +4291,7 @@ final class World {
         }
         if (e.isZombie() || e.type == Entity.DOG) return 0;
         if (carToEnter(e) != null) out[n++] = CA_ENTER_CAR;
-        if (doorToEnter(e) != null) out[n++] = CA_ENTER;
+        if (!NO_INDOORS && doorToEnter(e) != null) out[n++] = CA_ENTER;
         // ((14.7) An officer or soldier leads a squad of their own; anyone else rallies people.)
         out[n++] = e.isArmed() ? CA_SQUAD : CA_RALLY;
         if (e.grenades > 0 && e.grenadeCd <= 0) out[n++] = CA_GRENADE;
@@ -4847,7 +4847,7 @@ final class World {
         // Hide indoors: unarmed, a building with room close by, and the dead not already at its door.
         // ((12.0) Someone whose leader has gone indoors without them, or died, hides on their own: they used to wander
         // about for good, set on hiding and never going.)
-        if (!armed && !apocalypse() && ((threat != null && e.taskTimer <= 0 && idle) || e.task == Dispatch.T_HIDE) && threatDist > 30 && (e.leader == null || e.leader.dead)) {
+        if (!NO_INDOORS && !armed && !apocalypse() && ((threat != null && e.taskTimer <= 0 && idle) || e.task == Dispatch.T_HIDE) && threatDist > 30 && (e.leader == null || e.leader.dead)) {
             City.Building b = e.task == Dispatch.T_HIDE ? e.building : null;
             if (b == null || b.occupants.size() >= b.capacity || b.barricade <= 0 || b.collapsed) b = hidingPlace(e);
             if (b != null && countZombiesNear(b.doorX, b.doorY, 35) == 0) {
@@ -5125,6 +5125,12 @@ final class World {
         City.Building b = e.building;
         // (Some other plan by now - a place in a zone, say: that's left alone.)
         if (e.task != Dispatch.T_HIDE) return false;
+        // ((16.14) Nowhere to hide indoors: think again - run, make for a safe zone, or stand and fight.)
+        if (NO_INDOORS) {
+            dropTask(e);
+            e.goalCd = 0;
+            return false;
+        }
         if (b == null || b.occupants.size() >= b.capacity || b.barricade <= 0) {
             dropTask(e);
             return false;
@@ -5332,7 +5338,7 @@ final class World {
         e.paused = false;
         e.errand = null;
         // ((12.4) Not indoors, home or anywhere else, while the dead are loose.)
-        if (!apocalypse() && home != null && home.occupants.size() < home.capacity && home.barricade >= 40 && !home.collapsed
+        if (!NO_INDOORS && !apocalypse() && home != null && home.occupants.size() < home.capacity && home.barricade >= 40 && !home.collapsed
                 && (home.doorX - e.x) * (home.doorX - e.x) + (home.doorY - e.y) * (home.doorY - e.y) < 700 * 700
                 && countZombiesNear(home.doorX, home.doorY, 50) == 0 && !backTowardsIt(e, home.doorX, home.doorY)
                 // (Not back home into ground the dead have taken.)
@@ -5347,7 +5353,7 @@ final class World {
         }
         if (e.taskTimer <= 0) {
             e.taskTimer = 2;
-            City.Building b = apocalypse() ? null : shelterNear(e, 450);
+            City.Building b = apocalypse() || NO_INDOORS ? null : shelterNear(e, 450);
             if (b != null) {
                 e.task = Dispatch.T_HIDE;
                 e.building = b;
@@ -5506,7 +5512,7 @@ final class World {
     /** Goes inside on an errand, with the family. A full place is skipped rather than queued at. */
     private void visit(Entity e, City.Building b) {
         e.errand = null;
-        if (b.lurkers > 0) {
+        if (b.lurkers > 0 && !NO_INDOORS) {
             // Something is waiting inside.
             enterBuilding(e, b);
             return;
@@ -5526,6 +5532,11 @@ final class World {
     /** Goes indoors (out of the simulation) for a while, with the family. */
     private void goInside(Entity e, City.Building b, float stay) {
         e.errand = null;
+        // ((16.14) Nobody goes into a building any more: at the door a moment, then on to the next thing.)
+        if (NO_INDOORS) {
+            e.errandTimer = 3 + rnd.nextFloat() * 10;
+            return;
+        }
         // ((12.4) And no errands indoors while the dead are about.)
         if (apocalypse() && e.type == Entity.CIVILIAN) {
             e.errandTimer = 5 + rnd.nextFloat() * 10;
@@ -5547,6 +5558,35 @@ final class World {
             o.removed = true;
             b.visitors.add(o);
         }
+    }
+
+    /**
+     * ((16.14) Nobody goes into a building: not on errands, to work or home, to hide or shelter, and none of the dead are
+     * shut inside one. Everyone stays out in the streets.
+     */
+    static final boolean NO_INDOORS = true;
+
+    /**
+     * ((16.14) Everyone in a building - sheltering, on an errand, or the dead shut in - out in the street at its door: for
+     * a game saved before nobody went indoors.
+     */
+    void emptyAllBuildings() {
+        if (!NO_INDOORS) return;
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            while (!b.occupants.isEmpty()) {
+                Entity o = b.occupants.remove(b.occupants.size() - 1);
+                if (!release(o, b.doorX + rnd.nextFloat() * 16 - 8, b.doorY + rnd.nextFloat() * 16 - 8)) continue;
+            }
+            while (!b.visitors.isEmpty()) {
+                Entity o = b.visitors.remove(b.visitors.size() - 1);
+                release(o, b.doorX + rnd.nextFloat() * 16 - 8, b.doorY + rnd.nextFloat() * 16 - 8);
+            }
+            for (int k = 0; k < b.lurkers; k++) spawn(Entity.ZOMBIE, b.doorX + rnd.nextFloat() * 16 - 8, b.doorY + rnd.nextFloat() * 16 - 8);
+            b.lurkers = 0;
+            b.fighting = false;
+        }
+        recountInsideNow();
     }
 
     /** Everyone out on errands inside buildings right now. */
@@ -6594,6 +6634,17 @@ final class World {
 
     /** People sheltering in a building, some of them bitten: when one turns, the building is lost. */
     void indoorOutbreak(City.Building b, int infected) {
+        // ((16.14) Nobody indoors: the same people, some of them bitten, out in the street at the door.)
+        if (NO_INDOORS) {
+            int people = infected + 3 + rnd.nextInt(5);
+            for (int i = 0; i < people; i++) {
+                Entity e = spawn(Entity.CIVILIAN, b.doorX + rnd.nextFloat() * 24 - 12, b.doorY + rnd.nextFloat() * 24 - 12);
+                if (e == null || i >= infected) continue;
+                e.infected = true;
+                e.infectTimer = 4 + rnd.nextFloat() * 14;
+            }
+            return;
+        }
         int people = Math.min(b.capacity, infected + 3 + rnd.nextInt(5));
         for (int i = b.occupants.size(); i < people; i++) {
             Entity e = make(Entity.CIVILIAN, b.doorX, b.doorY, -1, 0);
@@ -12222,6 +12273,8 @@ final class World {
     }
 
     private void enterBuilding(Entity e, City.Building b) {
+        // ((16.14) Nobody goes in.)
+        if (NO_INDOORS) return;
         e.task = Dispatch.T_NONE;
         e.building = null;
         // ((12.4) Nobody hides indoors in an outbreak: they run, or make for a safe zone.)

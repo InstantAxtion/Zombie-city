@@ -416,6 +416,8 @@ mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
 
+**Nobody goes indoors (16.14):** no errands, work or home visits inside buildings, no hiding or sheltering indoors, no zombies shut inside; indoor outbreaks start at the door. Older saves have everyone let out at the door on load. (World.NO_INDOORS.)
+
 **No interiors (16.13):** the see-through roofs and the floor plans, furniture and people drawn inside buildings when zoomed in are gone; roofs and walls stay solid at every zoom. People still go into buildings to shelter, shop and work.
 
 **Fix (16.12):** interior drawing's random value could reach exactly 1, indexing one past the end of the supermarket and mall shelf-goods colours (ArrayIndexOutOfBoundsException in drawInterior).

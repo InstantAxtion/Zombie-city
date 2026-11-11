@@ -825,6 +825,8 @@ final class SaveGame {
             d.copCount = copCount;
             d.soldierCount = soldierCount;
             w.afterLoad();
+            // ((16.14) Nobody indoors now: anyone a game saved before had inside a building comes out at its door.)
+            w.emptyAllBuildings();
             return w;
         } finally {
             in.close();

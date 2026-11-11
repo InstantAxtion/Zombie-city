@@ -1063,14 +1063,13 @@ public final class GameTests {
                     float gap = Math.max(Math.max(rs.x0 - p[0], p[0] - rs.x1), Math.max(rs.y0 - p[1], p[1] - rs.y1));
                     check(gap > 6 && !ww.city.solidAt(p[0], p[1]), "the station keeper's spot is clear of the walls (" + gap + ")");
                 }
-                // Out of hiding soon after the street goes quiet.
+                // ((16.14) Nobody goes into a building now: one sent to hide at a house stays out in the street.)
                 Entity hid = null;
                 City.Building home = null;
                 for (Entity e : w.entities)
                     if (!e.dead && e.type == Entity.CIVILIAN && e.leader == null && e != civ) {
                         for (City.Building b : w.city.buildings)
-                            if (b.kind == City.HOUSE && !b.collapsed && b.occupants.isEmpty() && b.lurkers == 0
-                                    && Math.hypot(b.doorX - e.x, b.doorY - e.y) < 400) {
+                            if (b.kind == City.HOUSE && !b.collapsed && Math.hypot(b.doorX - e.x, b.doorY - e.y) < 400) {
                                 home = b;
                                 break;
                             }
@@ -1081,21 +1080,12 @@ public final class GameTests {
                     }
                 java.lang.reflect.Method enter = World.class.getDeclaredMethod("enterBuilding", Entity.class, City.Building.class);
                 enter.setAccessible(true);
-                hid.aware = true;
                 enter.invoke(w, hid, home);
-                check(home.occupants.contains(hid), "hiding inside");
-                w.alert = 2;
-                float out = -1;
-                // ((10.63) Anyone hiding there coming out: with a whole household home with them now, the one put
-                // in may not be the first out of the door.)
-                java.util.ArrayList<Entity> inside = new java.util.ArrayList<Entity>(home.occupants);
-                for (int f = 0; f < 30 * 25 && out < 0; f++) {
-                    w.update(1 / 30f);
-                    for (Entity o : inside) if (!o.dead && !home.occupants.contains(o)) out = f / 30f;
-                    inside.clear();
-                    inside.addAll(home.occupants);
-                }
-                check(out >= 0 && out < 20, "out of hiding " + out + " s after it went quiet");
+                check(!home.occupants.contains(hid) && !hid.removed && w.entities.contains(hid), "nobody goes inside to hide");
+                hid.task = Dispatch.T_HIDE;
+                hid.building = home;
+                for (int f = 0; f < 30; f++) w.update(1 / 30f);
+                check(hid.task != Dispatch.T_HIDE && home.occupants.isEmpty(), "and anyone told to hide thinks again");
                 // Supply trucks after it's over: they come in and fill the shelves and armouries.
                 City.Facility station = null;
                 for (City.Facility f : ww.city.facilities) if (f.kind == City.FACILITY_POLICE) station = f;

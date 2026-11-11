@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.13";
-    static final int VERSION_CODE = 163;
+    static final String VERSION = "16.14";
+    static final int VERSION_CODE = 164;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.14  -  Nobody goes indoors",
+                    "Nobody goes into a building any more. People on errands, at work or going home get to the door and carry on with their day outside; nobody hides or shelters indoors - running from the dead they get away, make for a safe zone or fight; and none of the dead are shut inside buildings, waiting or slipping in. An outbreak that would have started indoors starts at the door instead. The safe zones' camps are unchanged.",
+                    "A game saved before: anyone it had inside a building comes out at the door when it's loaded.",
+            },
             {
                     "16.13  -  No interiors",
                     "Building interiors are gone: zoomed right in, the roofs and walls no longer turn see-through to show the rooms, furniture and people inside. They stay solid at every zoom. People still go into buildings to shelter, shop and work as before; tap a building for who's inside.",
