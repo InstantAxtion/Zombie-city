@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "16.12";
-    static final int VERSION_CODE = 162;
+    static final String VERSION = "16.13";
+    static final int VERSION_CODE = 163;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "16.13  -  No interiors",
+                    "Building interiors are gone: zoomed right in, the roofs and walls no longer turn see-through to show the rooms, furniture and people inside. They stay solid at every zoom. People still go into buildings to shelter, shop and work as before; tap a building for who's inside.",
+            },
             {
                     "16.12  -  Fix",
                     "Fixed: the game could stop when zoomed in on a supermarket or the mall (an error drawing the goods on the shelves, about one time in sixty-five thousand items drawn).",

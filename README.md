@@ -251,11 +251,8 @@ counts), and wherever the dead gather the ground glows red. Labels go most impor
   drive-thrus, motels, brownstones, megachurches and the rest, plus towers, campus halls, factories,
   data centres, big-box stores and homes everywhere. Maps are twice the size they were (192 to 448 tiles
   across) so buildings are at real-world scale.
-- **Interiors**: zoom right in to see a real floor plan: rooms with walls and doorways (homes, flats,
-  offices and hotels), or one big hall with a back room (shops, warehouses, halls), furnished for
-  what the building is. People inside stand or sit at their own spots, apart, and walk between rooms
-  through the doors; when a building is full, the rest are upstairs. Look closely for shapes waiting
-  in the dark. Tap a building with Move for its info card.
+- **Buildings**: roofs and walls stay solid at every zoom (no interiors since 16.13). Tap a building
+  with Move for its info card: who's sheltering inside, its supplies and its state.
 
 ## City layout
 
@@ -418,6 +415,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**No interiors (16.13):** the see-through roofs and the floor plans, furniture and people drawn inside buildings when zoomed in are gone; roofs and walls stay solid at every zoom. People still go into buildings to shelter, shop and work.
 
 **Fix (16.12):** interior drawing's random value could reach exactly 1, indexing one past the end of the supermarket and mall shelf-goods colours (ArrayIndexOutOfBoundsException in drawInterior).
 
@@ -991,7 +990,6 @@ Code layout (`src/com/instantaxtion/zombiesandbox/`):
   fords, winding trails, the ranger station and fire lookout towers (since 10.14).
 - `Roofs.java`: each country's roofs (houses, blocks, shops, churches, temples and shrines).
 - `Variants.java`: the 159 building kinds (name, sign, roof style, colours, which countries and districts).
-- `Interiors.java`: floor plans (rooms, walls, doorways), furniture and the spots people stand or sit at.
 - `Country.java`: the eighteen country themes, and each country's landscape (names, colours, police cars, which side of the road traffic keeps to).
 - `City.java`: city generation (building styles and heights, layouts, stations and bases), the pre-rendered map, line of sight, BFS flow fields and pedestrian routes that prefer pavements and crossings.
 - `World.java`: simulation (AI, shooting, infection, explosions, particles).

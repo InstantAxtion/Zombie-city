@@ -4625,16 +4625,6 @@ public final class GameTests {
                 check(home.barricade <= 40.01f, "the door isn't shored up (" + home.barricade + ")");
             }
         });
-        test("16.12: the interior drawing's random picks never reach 1 (a supermarket's shelves went one past the end)", new Check() {
-            public void run() throws Exception {
-                GameView v = new GameView(new android.app.Activity());
-                java.lang.reflect.Method ir = GameView.class.getDeclaredMethod("irand");
-                ir.setAccessible(true);
-                float hi = 0;
-                for (int i = 0; i < 300000; i++) hi = Math.max(hi, (Float) ir.invoke(v));
-                check(hi < 1f && hi > 0.99f, "under 1 every time, over three hundred thousand picks (highest " + hi + ")");
-            }
-        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());
