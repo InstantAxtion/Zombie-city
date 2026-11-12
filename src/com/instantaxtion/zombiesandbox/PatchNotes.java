@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.4";
-    static final int VERSION_CODE = 184;
+    static final String VERSION = "18.5";
+    static final int VERSION_CODE = 185;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.5  -  Saves keep what's under way; a campaign balance pass",
+                    "A saved game now keeps what was under way: each heist and how far it had got (a standoff and its talks, the money taken), the hostages and who's holding them, bombs still ticking, disasters still going (a tornado on its path, a flood rising or draining, a fire spreading), and the police drones you'd sent. Before, they were lost on loading, and the crews made off. A getaway car still isn't kept: a crew that was driving carries on on foot.",
+                    "A balance pass on the campaign: every mission was played through with nobody giving orders, and those that won themselves made harder. Corner Boys: fewer officers, more gang members. Liberation: fewer police and soldiers, more of the enemy. Lockdown: fewer guards' backup, no more than three may escape. Breakout: more rioters, no more than three may escape. Plaza Boss: fewer officers. Storm Season: an earthquake as well, fewer than 35 lives lost. The Big One: seven disasters, fewer than 35 lives lost. Mothership: a little more money and police to start with.",
+                    "Fixed: in a cartel game, the cartel sometimes failed to find an officer to buy and skipped it.",
+            },
             {
                     "18.4  -  Music for each mode, police drones, outbreak + looters, heavy destruction",
                     "Each mode has its own music in place of the general in-game pieces: a slow swung street beat for gangs, the cartel, heists and the prison break; a marching snare for the enemy army and terror; a cold arpeggio over a drone for the aliens; and a driving ostinato for the disasters. The calm and the action music stay as they were. A disaster under way or a bomb ticking now counts as tension for the music.",

@@ -4779,6 +4779,14 @@ final class World {
     private float heistCd = 15;
     private int crewsMade;
 
+    int crewsMadeCount() {
+        return crewsMade;
+    }
+
+    void setCrewsMade(int n) {
+        crewsMade = Math.max(crewsMade, n);
+    }
+
     boolean heistMode() {
         return mode() == CityConfig.MODE_HEIST;
     }
@@ -5595,8 +5603,9 @@ final class World {
         if (bribeCd <= 0) {
             bribeCd = 110 + rnd.nextFloat() * 60;
             Entity cop = null;
-            for (int k = 0; k < 30 && cop == null; k++) {
-                Entity e = entities.get(rnd.nextInt(entities.size()));
+            int n0 = entities.size(), at = rnd.nextInt(Math.max(1, n0));
+            for (int k = 0; k < n0 && cop == null; k++) {
+                Entity e = entities.get((at + k) % n0);
                 if (!e.dead && e.type == Entity.COP && e.agency == 0 && e.role == 0 && e.ride == null && e.arrested == 0 && e.bleedT == 0) cop = e;
             }
             if (cop != null) {

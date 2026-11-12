@@ -5952,6 +5952,52 @@ public final class GameTests {
                 check(lost[1] > lost[0] * 1.2f, "heavy destruction does more (" + (int) lost[0] + " -> " + (int) lost[1] + ")");
             }
         });
+        test("18.5: a heist with hostages, bombs, disasters and drones under way are kept in a save", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.mode = CityConfig.MODE_HEIST;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                c.seed = 41;
+                World w = new World(c);
+                w.setMaxPopulation(4000);
+                w.populate(c);
+                java.lang.reflect.Method start = World.class.getDeclaredMethod("startHeist");
+                start.setAccessible(true);
+                check((Boolean) start.invoke(w), "a heist");
+                World.Heist h = w.heists.get(0);
+                h.phase = World.H_STANDOFF;
+                h.talk = 7;
+                Entity hostage = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.ride == null) { hostage = e; break; }
+                hostage.arrested = 3;
+                hostage.heldBy = h.squad;
+                h.hostages = 1;
+                // (A bomb, a disaster and a drone too, whatever the mode.)
+                w.plantBomb(w.city.worldW() / 2, w.city.worldH() / 2);
+                w.startDisaster(World.HZ_FLOOD, w.city.worldW() / 3, w.city.worldH() / 3);
+                w.launchDrone(w.city.worldW() / 2, w.city.worldH() / 2);
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.heists.size() == 1 && l.heists.get(0).squad == h.squad && l.heists.get(0).phase == World.H_STANDOFF
+                        && Math.abs(l.heists.get(0).talk - 7) < 0.01f && l.heists.get(0).b != null
+                        && l.city.buildings.indexOf(l.heists.get(0).b) == w.city.buildings.indexOf(h.b), "the heist kept, at its standoff");
+                boolean held = false;
+                for (Entity e : l.entities) held |= !e.dead && e.arrested == 3 && e.heldBy == h.squad;
+                check(held, "the hostage still held by that crew");
+                check(l.bombs.size() == 1 && Math.abs(l.bombs.get(0)[2] - w.bombs.get(0)[2]) < 0.01f, "the bomb still ticking");
+                check(l.hazards.size() == w.hazards.size() && l.hazards.get(0).kind == World.HZ_FLOOD, "the flood still rising");
+                check(l.policeDrones.size() == 1, "the drone still up");
+                // And the game goes on from there.
+                for (int f = 0; f < 60; f++) {
+                    l.update(1 / 30f);
+                    l.evCount = 0;
+                }
+                check(l.heists.size() <= 1, "carries on");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

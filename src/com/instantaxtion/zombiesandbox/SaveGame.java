@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 63;
+    private static final int VERSION = 64;
 
     private SaveGame() {
     }
@@ -408,6 +408,36 @@ final class SaveGame {
             out.writeFloat(w.motherY);
             out.writeFloat(w.motherHp);
             out.writeFloat(w.motherMax);
+            // (Version 64, 18.5: what was under way - heists, bombs, disasters and the police's drones.)
+            out.writeInt(w.heists.size());
+            for (World.Heist h : w.heists) {
+                out.writeInt(h.squad);
+                out.writeInt(w.city.buildings.indexOf(h.b));
+                out.writeInt(h.phase);
+                out.writeFloat(h.t);
+                out.writeInt(h.loot);
+                out.writeInt(h.hostages);
+                out.writeFloat(h.talk);
+                out.writeFloat(h.quiet);
+                out.writeInt(h.out);
+            }
+            out.writeInt(w.bombs.size());
+            for (float[] b : w.bombs) for (int k = 0; k < 4; k++) out.writeFloat(b[k]);
+            out.writeInt(w.hazards.size());
+            for (World.Hazard h : w.hazards) {
+                out.writeInt(h.kind);
+                out.writeFloat(h.x);
+                out.writeFloat(h.y);
+                out.writeFloat(h.r);
+                out.writeFloat(h.vx);
+                out.writeFloat(h.vy);
+                out.writeFloat(h.t);
+                out.writeFloat(h.life);
+                out.writeFloat(h.peak);
+            }
+            out.writeInt(w.policeDrones.size());
+            for (float[] pd : w.policeDrones) for (int k = 0; k < 6; k++) out.writeFloat(pd[k]);
+            out.writeInt(w.crewsMadeCount());
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
@@ -500,6 +530,8 @@ final class SaveGame {
         out.writeByte(e.arrested);
         // Version 59 (17.5): down and bleeding.
         out.writeFloat(e.bleedT);
+        // ((18.5) A hostage's captors.)
+        out.writeInt(e.heldBy);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -931,6 +963,54 @@ final class SaveGame {
                     w.motherHp = in.readFloat();
                     w.motherMax = in.readFloat();
                 }
+                if (version >= 64) {
+                    int hn = in.readInt();
+                    for (int k = 0; k < hn; k++) {
+                        World.Heist h = new World.Heist();
+                        h.squad = in.readInt();
+                        int bi = in.readInt();
+                        h.b = bi >= 0 && bi < w.city.buildings.size() ? w.city.buildings.get(bi) : null;
+                        h.phase = in.readInt();
+                        h.t = in.readFloat();
+                        h.loot = in.readInt();
+                        h.hostages = in.readInt();
+                        h.talk = in.readFloat();
+                        h.quiet = in.readFloat();
+                        h.out = in.readInt();
+                        // (The getaway car isn't kept: a crew that was driving is on foot now.)
+                        if (h.b != null) {
+                            if (h.phase == World.H_DRIVE) h.t = Math.max(h.t, 150);
+                            w.heists.add(h);
+                        }
+                    }
+                    int bn = in.readInt();
+                    for (int k = 0; k < bn; k++) {
+                        float[] b = new float[4];
+                        for (int j = 0; j < 4; j++) b[j] = in.readFloat();
+                        w.bombs.add(b);
+                    }
+                    int zn = in.readInt();
+                    for (int k = 0; k < zn; k++) {
+                        World.Hazard h = new World.Hazard();
+                        h.kind = in.readInt();
+                        h.x = in.readFloat();
+                        h.y = in.readFloat();
+                        h.r = in.readFloat();
+                        h.vx = in.readFloat();
+                        h.vy = in.readFloat();
+                        h.t = in.readFloat();
+                        h.life = in.readFloat();
+                        h.peak = in.readFloat();
+                        w.hazards.add(h);
+                    }
+                    int dn = in.readInt();
+                    for (int k = 0; k < dn; k++) {
+                        float[] pd = new float[6];
+                        for (int j = 0; j < 6; j++) pd[j] = in.readFloat();
+                        w.policeDrones.add(pd);
+                    }
+                    w.setCrewsMade(in.readInt());
+                }
                 int bm = in.readInt();
                 if (bm > 0) {
                     w.battleMap = new float[bm];
@@ -1020,6 +1100,7 @@ final class SaveGame {
         if (version >= 57) e.kit = in.readByte();
         if (version >= 58) e.arrested = in.readByte();
         if (version >= 59) e.bleedT = in.readFloat();
+        if (version >= 64) e.heldBy = in.readInt();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }
