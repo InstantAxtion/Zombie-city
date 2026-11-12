@@ -4647,7 +4647,7 @@ public final class GameTests {
                 check(undead == 0, "no zombies (" + undead + ")");
                 check(gang >= 20, "the gangs are out (" + gang + ")");
                 check(gangs.size() >= 2, "more than one gang (" + gangs.size() + ")");
-                check(kits == 7, "thugs, shooters and enforcers");
+                check((kits & 7) == 7 && (kits & 8) != 0, "thugs, shooters, enforcers and a boss");
                 check(colours == gang, "each in their gang's colours");
                 check(w.zombieCount() == gang && w.outbreak, "they count as the other side, and it's on");
                 check(w.hostileReserve > 0, "more can be recruited");
@@ -4797,8 +4797,11 @@ public final class GameTests {
                     check(l.city.cfg.mode == mode && l.hostileMode(), "the mode came back");
                     check(l.hostileReserve == w.hostileReserve && l.hostileStart == w.hostileStart, "and the fighters still to come");
                     int kw = 0, kl = 0, nw = 0, nl = 0;
+                    // ((17.2) Those riding in a stolen car too: on loading, they're out of it.)
                     for (Entity e : w.entities) if (!e.dead && e.isHostile()) { nw++; kw += e.kit * 7 + e.squad; }
+                    for (Fleet.Vehicle v : w.fleet.vehicles) for (Entity e : v.riders) if (e.isHostile()) { nw++; kw += e.kit * 7 + e.squad; }
                     for (Entity e : l.entities) if (!e.dead && e.isHostile()) { nl++; kl += e.kit * 7 + e.squad; }
+                    for (Fleet.Vehicle v : l.fleet.vehicles) for (Entity e : v.riders) if (e.isHostile()) { nl++; kl += e.kit * 7 + e.squad; }
                     check(nw == nl && kw == kl, "each with their kit and gang or squad (" + nw + "/" + nl + ")");
                 }
                 // Drawn: the enemy tool and its picker for each mode, and the people on the map.
@@ -4940,6 +4943,184 @@ public final class GameTests {
                     zin = city.insideOf(z.x, z.y) == vb;
                 }
                 check(zin, "the dead follow them in through the door");
+            }
+        });
+        test("17.2: open interiors; gang bosses in hideouts, raids, surrender and arrest, turf, corners, robberies, stolen cars", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                c.mode = CityConfig.MODE_GANGS;
+                c.seed = 23;
+                World w = new World(c);
+                w.rnd.setSeed(23);
+                w.populate(c);
+                w.recount();
+                City city = w.city;
+                // Open floors in shops and offices, rooms in homes.
+                int open = 0, rooms = 0;
+                for (City.Building b : city.buildings) {
+                    if (!city.enterable(b)) continue;
+                    int in = Interiors.insideOf(b);
+                    if (Interiors.open(in)) {
+                        check(city.planOf(b).rooms.size() == 1, "an open floor is one room");
+                        open++;
+                    } else if (city.planOf(b).rooms.size() >= 2) rooms++;
+                }
+                check(open > 10 && rooms > 10, "open floors (" + open + ") and homes with rooms (" + rooms + ")");
+                // A boss to each gang, sat hidden in its hideout with two bodyguards.
+                java.lang.reflect.Method ho = World.class.getDeclaredMethod("hideout", int.class);
+                ho.setAccessible(true);
+                for (int f = 0; f < 30 * 3; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int bosses = 0, guards = 0, gangs = 0;
+                for (int g = 0; g < World.GANG_NAMES.length; g++) {
+                    Entity b = w.gangBoss[g];
+                    if (b == null) continue;
+                    gangs++;
+                    if (b.kit == 3 && b.type == Entity.GANGSTER && b.weapon == Entity.W_REVOLVER && city.insideOf(b.x, b.y) == ho.invoke(w, g) && b.hidden) bosses++;
+                }
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.GANGSTER && e.kit == 2) guards++;
+                check(gangs >= 2 && bosses == gangs, "each gang's boss hidden in its hideout (" + bosses + " of " + gangs + ")");
+                check(guards >= gangs * 2, "with bodyguards (" + guards + ")");
+                check(w.districtOwner != null && w.turfVersion > 0, "turf held");
+                int held = 0;
+                for (int d : w.districtOwner) if (d >= 0) held++;
+                check(held >= 1, "gangs hold districts (" + held + ")");
+                // A beaten gang member with an officer right there gives up, is cuffed and walked off.
+                Entity cop = null, thug = null;
+                for (Entity e : w.entities) {
+                    if (e.dead) continue;
+                    if (cop == null && e.type == Entity.COP && e.ride == null && e.rig == null && city.insideOf(e.x, e.y) == null) cop = e;
+                    if (thug == null && e.type == Entity.GANGSTER && e.kit == 0 && city.insideOf(e.x, e.y) == null && !e.hidden) thug = e;
+                }
+                check(cop != null && thug != null, "an officer and a gang member");
+                w.surrender(thug);
+                check(thug.type == Entity.CIVILIAN && thug.arrested == 1 && !thug.hasGun && w.arrests >= 1, "hands up, unarmed, not the enemy any more");
+                float[] near = city.findWalkable(thug.x + 20, thug.y);
+                cop.x = near[0];
+                cop.y = near[1];
+                cop.task = Dispatch.T_NONE;
+                boolean cuffed = false;
+                for (int f = 0; f < 30 * 45 && !cuffed; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    cuffed = thug.arrested == 2 || thug.removed;
+                }
+                check(cuffed, "an officer came and cuffed them (captor " + (thug.captor != null) + ", cop has " + (cop.escortee == thug) + ", d " + (int) Math.hypot(cop.x - thug.x, cop.y - thug.y)
+                        + ", captor d " + (thug.captor == null ? -1 : (int) Math.hypot(thug.captor.x - thug.x, thug.captor.y - thug.y)) + ", t " + (int) thug.arrestT + ", arrested " + thug.arrested + " dead " + thug.dead + ")");
+                // A robbery: in through the shop door, the alarm and the 911 call.
+                Entity robber = null;
+                for (Entity e : w.entities)
+                    if (robber == null && !e.dead && e.type == Entity.GANGSTER && e.kit <= 1 && !w.gangBrokenUp(e.squad) && e.ride == null) robber = e;
+                City.Building shop = null;
+                int quiet = Integer.MAX_VALUE;
+                for (City.Building b : city.buildings)
+                    if (b.kind == City.SHOP && city.enterable(b)) {
+                        int n = w.countZombiesNear(b.doorX, b.doorY, 250);
+                        if (n < quiet) {
+                            quiet = n;
+                            shop = b;
+                        }
+                    }
+                check(robber != null && shop != null, "a gang member and a shop");
+                robber.x = shop.doorX;
+                robber.y = shop.doorY;
+                robber.foe = null;
+                robber.foeT = 999;
+                robber.corner = 0;
+                robber.carJob = 0;
+                robber.robB = shop;
+                robber.robT = 0;
+                robber.robPhase = 0;
+                boolean robbed = false;
+                for (int f = 0; f < 30 * 20 && !robbed && !robber.dead && robber.type == Entity.GANGSTER; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    robbed = robber.robPhase == 1;
+                }
+                boolean said = false;
+                for (World.Moment mo : w.timeline) said |= mo.text.startsWith("Armed robbery");
+                check(robbed && said, "in through the door, robbing it, and it's reported");
+                // A stolen car: off a lot, with a crew aboard.
+                int tile = -1;
+                for (int i = 0; i < city.tiles.length && tile < 0; i++) {
+                    if (city.tiles[i] != City.CAR) continue;
+                    float tx = (i % city.w + 0.5f) * City.T, ty = (i / city.w + 0.5f) * City.T;
+                    if (city.parkedCarNear(tx, ty, 4) == i && w.countZombiesNear(tx, ty, 300) == 0 && city.nearestDrivable(tx, ty) != null
+                            && Math.hypot(city.nearestDrivable(tx, ty)[0] - tx, city.nearestDrivable(tx, ty)[1] - ty) < 50) tile = i;
+                }
+                check(tile >= 0, "a car parked on a lot");
+                float cx = (tile % city.w + 0.5f) * City.T, cy = (tile / city.w + 0.5f) * City.T;
+                float[] spot = city.findWalkable(cx, cy);
+                java.lang.reflect.Field jobs = World.class.getDeclaredField("carJobs");
+                jobs.setAccessible(true);
+                @SuppressWarnings("unchecked") java.util.ArrayList<float[]> jl = (java.util.ArrayList<float[]>) jobs.get(w);
+                int crew = 0, gang = -1;
+                for (Entity e : w.entities) {
+                    if (crew >= 2 || e.dead || e.type != Entity.GANGSTER || e.kit == 3 || w.gangBrokenUp(e.squad) || e.ride != null) continue;
+                    if (gang >= 0 && World.fmod(e.squad, World.GANG_NAMES.length) != gang) continue;
+                    gang = World.fmod(e.squad, World.GANG_NAMES.length);
+                    e.x = spot[0] + crew * 4;
+                    e.y = spot[1];
+                    e.foe = null;
+                    e.foeT = 999;
+                    e.corner = 0;
+                    e.robB = null;
+                    e.carJob = 9999;
+                    e.carX = spot[0];
+                    e.carY = spot[1];
+                    crew++;
+                }
+                jl.add(new float[]{9999, gang, tile, 0, -1});
+                boolean stolen = false;
+                for (int f = 0; f < 30 * 10 && !stolen; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (city.tiles[tile] == City.CAR) continue;
+                    for (Fleet.Vehicle v : w.fleet.vehicles)
+                        if (v.gang == gang && !v.riders.isEmpty() && Math.hypot(v.x - cx, v.y - cy) < 200) stolen = true;
+                }
+                check(stolen, "the car's gone from the lot, the gang aboard and away (tile " + city.tiles[tile] + ")");
+                // The boss goes down: the gang falls apart, and recruits no more.
+                int g0 = -1;
+                for (int g = 0; g < World.GANG_NAMES.length && g0 < 0; g++) if (w.gangBoss[g] != null) g0 = g;
+                Entity boss = w.gangBoss[g0];
+                boss.hp = 0;
+                for (int f = 0; f < 30 * 3; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.gangBrokenUp(g0), "the boss's gang is finished");
+                for (int f = 0; f < 30 * 60; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int left = 0;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.type == Entity.GANGSTER && World.fmod(e.squad, World.GANG_NAMES.length) == g0) left++;
+                check(left <= 3, "its members give up or get out of town (" + left + " left after a minute)");
+                // Saved and loaded: the gangs that are finished, the arrests, who's under arrest.
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.gangBroken == w.gangBroken && l.gangHadBoss == w.gangHadBoss && l.arrests == w.arrests, "gangs and arrests saved");
+                int aw = 0, al = 0;
+                for (Entity e : w.entities) if (!e.dead && e.arrested != 0) aw++;
+                for (Entity e : l.entities) if (!e.dead && e.arrested != 0) al++;
+                check(aw == al, "and who's under arrest (" + aw + "/" + al + ")");
+                // Drawn: the turf, the hideouts, people under arrest.
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {2400, 1080};
+                v.layout(size[0], size[1]);
+                Menu m = (Menu) field(v, "menu");
+                v.startGame(c);
+                v.awaitLoad();
+                m.screen = Menu.NONE;
+                for (int k = 0; k < 30; k++) draw(v, size);
+                check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
             }
         });
         test("every screen draws", new Check() {

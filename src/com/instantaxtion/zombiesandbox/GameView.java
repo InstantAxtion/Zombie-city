@@ -62,7 +62,7 @@ final class GameView extends View implements Menu.Host {
             "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
             "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
     private static final String[] GANG_INFO = {"Pistol: quick to run when it goes badly", "Submachine gun in bursts, up close",
-            "Shotgun: tough, charges in and doesn't break"};
+            "Shotgun: tough, charges in and doesn't break", "One to a gang: tough, a big revolver, guarded; the gang falls apart without them"};
     private static final String[] ARMY_INFO = {"Assault rifle in bursts; advances on the stations and bases",
             "Belt-fed machine gun: pins down from a distance", "Scoped rifle: picks off officers from far away"};
 
@@ -2793,6 +2793,8 @@ final class GameView extends View implements Menu.Host {
         }
         // ((17.1) The insides of buildings with people in them (and of every building, zoomed right in): floors, rooms
         // and furniture, under the people walking about in them.)
+        // ((17.2) Who holds which part of the city in a gang war.)
+        drawTurf(c);
         if (detailed) drawInsides(c, vx0, vy0, vx1, vy1);
         // ((14.9) Mortar pits under their teams.)
         if (detailed)
@@ -3281,6 +3283,38 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(ex.x, ex.y, ex.r * (0.5f + t), stroke);
         }
         c.restore();
+    }
+
+    /** (17.2) The gangs' turf, a tint over each district in the colour of the gang that holds it. */
+    private android.graphics.Bitmap turfBmp;
+    private int turfVer = -1;
+    private final Paint turfPaint = new Paint();
+    private final Rect turfSrc = new Rect();
+    private final RectF turfDst = new RectF();
+
+    private void drawTurf(Canvas c) {
+        if (world.mode() != CityConfig.MODE_GANGS || world.districtOwner == null) return;
+        City city = world.city;
+        if (turfVer != world.turfVersion || turfBmp == null) {
+            turfVer = world.turfVersion;
+            int k = Math.max(1, (city.w + 399) / 400), bw = Math.max(1, city.w / k), bh = Math.max(1, city.h / k);
+            int[] px = new int[bw * bh];
+            int[] own = world.districtOwner;
+            for (int y = 0; y < bh; y++)
+                for (int x = 0; x < bw; x++) {
+                    int d = city.districtOfTile((y * k + k / 2) * city.w + x * k + k / 2);
+                    int g = d >= 0 && d < own.length ? own[d] : -1;
+                    px[y * bw + x] = g >= 0 && !world.gangBrokenUp(g) ? (World.GANG_COLORS[g] & 0x00FFFFFF) | 0xFF000000 : 0;
+                }
+            turfBmp = android.graphics.Bitmap.createBitmap(px, bw, bh, android.graphics.Bitmap.Config.ARGB_8888);
+        }
+        // (Faint when close in, stronger zoomed out where it reads as a map.)
+        float a = scale / dp > 1.5f ? 0.1f : 0.22f;
+        turfPaint.setAlpha((int) (255 * a));
+        turfPaint.setFilterBitmap(true);
+        turfSrc.set(0, 0, turfBmp.getWidth(), turfBmp.getHeight());
+        turfDst.set(0, 0, city.worldW(), city.worldH());
+        c.drawBitmap(turfBmp, turfSrc, turfDst, turfPaint);
     }
 
     /**
@@ -6869,6 +6903,17 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(alpha(0xFF7CFF3A, 0.35f + 0.25f * (float) Math.sin(world.time * 5)));
             c.drawCircle(r * 0.08f, 0, r * 0.58f, fill);
         }
+        if (e.arrested == 1) {
+            // ((17.2) Hands up.)
+            fill.setColor(e.skin);
+            c.drawCircle(r * 0.15f, -r * 0.95f, r * 0.24f, fill);
+            c.drawCircle(r * 0.15f, r * 0.95f, r * 0.24f, fill);
+        } else if (e.arrested == 2) {
+            // (Hands behind them, cuffed.)
+            stroke.setColor(0xFFD8DCE0);
+            stroke.setStrokeWidth(r * 0.14f);
+            c.drawCircle(-r * 0.75f, 0, r * 0.2f, stroke);
+        }
         if (e.hurt > 0) {
             fill.setColor(alpha(0xFFFFFFFF, e.hurt * 0.7f));
             c.drawCircle(0, 0, r * 1.05f, fill);
@@ -7104,7 +7149,7 @@ final class GameView extends View implements Menu.Host {
             c.drawText("PEOPLE " + (int) (b * 100) + "%", bx0, top + 11 * dp, text);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setColor(0xFFB8E09A);
-            c.drawText((int) ((1 - b) * 100) + "% ZOMBIES", bx1, top + 11 * dp, text);
+            c.drawText((int) ((1 - b) * 100) + "% " + world.enemyLabel().toUpperCase(), bx1, top + 11 * dp, text);
         }
     }
 
@@ -7462,6 +7507,8 @@ final class GameView extends View implements Menu.Host {
         else if (e.type == Entity.ZOMBIE_DOG) title = Names.dog(e.nameSeed) + "  -  Zombie dog";
         else if (e.isUndead()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
         else if (e.isHostile()) title = Names.person(e.nameSeed) + "  -  " + world.hostileTitle(e);
+        else if (e.arrested != 0) title = Names.person(e.nameSeed) + "  -  " + (e.arrested == 1 ? "Surrendering" : "Under arrest")
+                + ", " + World.GANG_NAMES[World.fmod(e.squad, World.GANG_NAMES.length)];
         else if (e.raider) title = Names.person(e.nameSeed) + "  -  Looter" + (e.leader == null ? ", gang leader" : "");
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SWAT)
             title = Country.swat()[1] + " " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
@@ -9454,7 +9501,7 @@ final class GameView extends View implements Menu.Host {
             }
             Entity e = tool == TOOL_MIL ? world.spawnSoldier(MIL_ROLES[milVariant], wx + ox, wy + oy)
                     : tool == TOOL_COP ? world.spawnCop(COP_ROLES[copVariant], wx + ox, wy + oy)
-                    : foes ? world.spawnHostile(Math.min(zombieVariant, 2), wx + ox, wy + oy) : world.spawn(type, wx + ox, wy + oy);
+                    : foes ? world.spawnHostile(Math.min(zombieVariant, enemyNames().length - 1), wx + ox, wy + oy) : world.spawn(type, wx + ox, wy + oy);
             if (e != null) lastAction.add(e);
             else failed++;
         }

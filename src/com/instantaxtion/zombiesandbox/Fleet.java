@@ -152,6 +152,8 @@ final class Fleet {
         final ArrayList<Entity> riders = new ArrayList<Entity>();
         /** Driving the riders to a safe zone. */
         boolean rescue;
+        /** ((17.2) A car a gang has stolen, with its crew aboard: which gang (-1 none). */
+        int gang = -1;
         int number;
         /** Helicopter height (0 on the pad, 1 cruising) and how hard it is banking. */
         float alt, bank;
@@ -1119,7 +1121,7 @@ final class Fleet {
 
     private boolean route(Vehicle v, float x, float y) {
         // ((10.34) Patrol cars on their rounds share the budget too: there are a couple of hundred on a Gigantic map.)
-        if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null) {
+        if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.gang < 0) {
             if (routeBudget <= 0) return false;
             routeBudget--;
         }
@@ -1131,7 +1133,7 @@ final class Fleet {
         int[] field = scratchField();
         // ((16.8) An everyday trip gives up on a search that's gone on far longer than a drive of its length takes:
         // it can always go somewhere else. See City.searchCap.)
-        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null;
+        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.gang < 0;
         city.searchCap = casual ? 15000 : 0;
         try {
             return routeOn(v, x, y, field);
@@ -2186,6 +2188,56 @@ final class Fleet {
         if (!newDestination(v)) return null;
         vehicles.add(v);
         return v;
+    }
+
+    /** (17.2) A car taken from a lot, ready for a gang to drive off in (not given anywhere to go yet). */
+    Vehicle stealCar(float x, float y) {
+        float[] p = city.nearestDrivable(x, y);
+        if (p == null || World.hypot(p[0] - x, p[1] - y) > 60) return null;
+        Vehicle v = make(CAR);
+        v.state = CRUISE;
+        v.x = p[0];
+        v.y = p[1];
+        pickModel(v, false);
+        v.angle = (float) Math.atan2(y - p[1], x - p[0]) + (float) Math.PI;
+        vehicles.add(v);
+        return v;
+    }
+
+    /** (17.2) Off it goes with the gang aboard, to (x, y). */
+    boolean gangDrive(Vehicle v, int gang, float x, float y) {
+        float[] p = city.nearestDrivable(x, y);
+        if (p == null) return false;
+        v.parked = false;
+        v.state = CRUISE;
+        v.timer = 0;
+        v.stuckTimer = 0;
+        v.gang = gang;
+        if (!route(v, p[0], p[1])) {
+            v.gang = -1;
+            return false;
+        }
+        return true;
+    }
+
+    /** (17.2) Out they get, and the car's left where it stopped. */
+    void gangOut(Vehicle v) {
+        arrive(v);
+        v.gang = -1;
+        v.parked = true;
+        v.speed = 0;
+        v.state = ABANDONED;
+        v.field = null;
+    }
+
+    /** (17.2) A stolen car with a gang aboard: fast through town (the shooting is World.driveBys), out at the end. */
+    private boolean gangCar(Vehicle v, float dt) {
+        giveWay(v, dt);
+        v.timer += dt;
+        boolean going = !v.broken && driveStep(v, dt, Math.min(junctionRule(v, dt), 95), 1f);
+        if (going) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
+        if (!going || v.broken || v.riders.isEmpty() || v.timer > 120) gangOut(v);
+        return false;
     }
 
     /** A police car with two officers, setting off on patrol from here. */
@@ -5025,6 +5077,7 @@ final class Fleet {
      */
     private boolean updateTraffic(Vehicle v, float dt) {
         if (v.parked) return false;
+        if (v.gang >= 0) return gangCar(v, dt);
         if (fuel(v, dt)) return false;
         if (v.pulled) {
             // (Waiting for the officer: not stuck, not a jam.)

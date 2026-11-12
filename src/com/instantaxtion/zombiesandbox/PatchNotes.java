@@ -2,11 +2,24 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.1";
-    static final int VERSION_CODE = 171;
+    static final String VERSION = "17.2";
+    static final int VERSION_CODE = 172;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.2  -  Gang life, and open interiors",
+                    "Open interiors: shops, cafés, offices, schools, halls, warehouses and the like are now one open floor inside (still furnished), with no inside walls or doorways to squeeze through. Homes, flats, hotels and dorms keep their rooms. The outside walls and front door stay.",
+                    "Gang bosses: each gang has a boss (a big revolver, body armour, much tougher) who sits hidden at the back of the gang's hideout, a building on its turf, with two enforcers as bodyguards. Nobody outside knows the boss is there. Kill or arrest the boss and the gang falls apart: the rest give themselves up if the police are near, or run for the edge of town, and the gang recruits no more. The Gangs spawn tool can place a boss too (one to a gang; a new boss puts a broken gang back together).",
+                    "Police raids: once a gang has been about for a while and has been worn down (or on a tip-off), a handful of officers, SWAT first, raid its hideout: in through the door and after the boss. It goes on the timeline.",
+                    "Arrests: a gang member who's badly hurt or out of rounds with an officer close by puts their hands up. An officer comes over and cuffs them, then walks them to the nearest police station to be booked in (a long way off, a patrol car takes them). Nobody comes for them in a couple of minutes and they slip away. Arrests count in the ending.",
+                    "Turf: the map is tinted in each gang's colour over the districts it holds. Get enough of a gang into a district and it takes it over from whoever had it; it's announced on the radio and the timeline.",
+                    "Drug corners: each gang keeps two corners on its turf, with someone dealing on each. What they bring in buys new members: someone from round the turf joins the gang. Now and then someone calls in a tip and the police head to the corner.",
+                    "Robberies: now and then a gang member walks into a shop and robs it: the alarm goes off, the 911 call comes in, the police come, and the robber runs back to the turf.",
+                    "Stolen cars and drive-bys: a crew walks over to a car parked on a lot, breaks in and drives off in it (the car's gone from the lot), heading for a rival gang's turf or a police station and shooting from the windows at anyone of the other side they pass. At the end they get out and fight.",
+                    "Walls take the blast of grenades and explosions now: someone inside a building is only hurt by one that goes off in there or in sight of them through the door.",
+                    "The 911 calls in a gang war and an invasion are about gunmen and soldiers, not bites, and the bar at the top says Gangs or Enemy instead of Zombies.",
+            },
             {
                     "17.1  -  Walk-in buildings",
                     "Interiors are back, and this time people really go inside. They walk up to the door, through the doorway and from room to room, and they're there inside the whole time, to be seen and found. Nobody vanishes into a building or pops out of one any more.",

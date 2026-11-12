@@ -28,6 +28,21 @@ final class Dispatch {
             "People are turning into monsters on %s!",
             "Somebody bit a man outside my building on %s!",
     };
+    /** ((17.2) The calls in a gang war, and in an invasion.) */
+    private static final String[] GANG_CALLS = {
+            "Shots fired on %s! It's the gangs again!",
+            "There are guys with guns on %s, a whole crew of them!",
+            "I can see %d of them near %s with guns. Please hurry!",
+            "Somebody just got shot outside my building on %s!",
+            "Gang members are shooting at the police on %s!",
+    };
+    private static final String[] ARMY_CALLS = {
+            "There are soldiers on %s and they're not ours!",
+            "Enemy troops coming down %s! Please hurry!",
+            "I can see %d of them near %s, in uniform, with rifles!",
+            "They're shooting at the police on %s!",
+            "Soldiers in tan uniforms on %s, they just blew up a car!",
+    };
 
     static final class Incident {
         float x, y, age, clearTimer, sceneTime;
@@ -597,7 +612,8 @@ final class Dispatch {
         }
         Incident inc = newIncident(zombie.x, zombie.y, count);
         if (inc == null) return;
-        String line = CALLS[rnd.nextInt(CALLS.length)];
+        String[] calls = w.mode() == CityConfig.MODE_GANGS ? GANG_CALLS : w.mode() == CityConfig.MODE_ARMY ? ARMY_CALLS : CALLS;
+        String line = calls[rnd.nextInt(calls.length)];
         String text = line.contains("%d") ? String.format(java.util.Locale.US, line, count, inc.place) : String.format(java.util.Locale.US, line, inc.place);
         say(WHO_911, null, "\"" + text + "\"", inc.x, inc.y);
         if (w.counts[Entity.COP] == 0 && w.counts[Entity.SOLDIER] == 0) {

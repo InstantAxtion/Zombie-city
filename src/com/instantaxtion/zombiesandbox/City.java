@@ -433,6 +433,11 @@ final class City {
 
     /** The district at a world position. */
     /** Which district a world position is in (an index into districts), or -1. */
+    /** (17.2) The district a tile is in, or -1. */
+    int districtOfTile(int i) {
+        return districtAt == null || i < 0 || i >= w * h ? -1 : districtAt.get(i);
+    }
+
     int districtIndex(float x, float y) {
         if (districtAt == null) return -1;
         return districtAt.get(tileIndex(x, y));
@@ -5087,6 +5092,39 @@ final class City {
                 if (dx * dx + dy * dy < radius * radius) n++;
             }
         return n;
+    }
+
+    /** (17.2) The tile of an ordinary car parked on a lot within radius of (x, y), or -1. */
+    int parkedCarNear(float x, float y, float radius) {
+        int tx0 = Math.max(0, (int) ((x - radius) / T)), tx1 = Math.min(w - 1, (int) ((x + radius) / T));
+        int ty0 = Math.max(0, (int) ((y - radius) / T)), ty1 = Math.min(h - 1, (int) ((y + radius) / T));
+        int best = -1;
+        float bd = radius * radius;
+        for (int ty = ty0; ty <= ty1; ty++)
+            for (int tx = tx0; tx <= tx1; tx++) {
+                int i = ty * w + tx;
+                if (tiles[i] != CAR || carKind.get(i) > 1) continue;
+                float dx = (tx + 0.5f) * T - x, dy = (ty + 0.5f) * T - y, d = dx * dx + dy * dy;
+                if (d < bd) {
+                    bd = d;
+                    best = i;
+                }
+            }
+        return best;
+    }
+
+    /** (17.2) A parked car is driven off its lot (stolen): its space is left empty on the lot and on the map picture. */
+    boolean takeParkedCar(int i) {
+        if (i < 0 || i >= tiles.length || tiles[i] != CAR || carKind.get(i) > 1) return false;
+        tiles[i] = LOT;
+        carKind.set(i, (byte) 0);
+        solid[i] = false;
+        opaque[i] = false;
+        clearChanged(i);
+        stepsChanged(i);
+        int x = i % w, y = i / w;
+        redrawArea(x * T - T, y * T - T, x * T + 2 * T, y * T + 2 * T);
+        return true;
     }
 
     /** An army truck parks in an empty bay on a base (the spot one drove off from). */
@@ -12720,6 +12758,8 @@ final class City {
     float[] findWalkable(float x, float y) {
         int tx = City.fl(x / T), ty = City.fl(y / T);
         if (!solidTile(tx, ty) && !circleBlocked(x, y, 4f)) return new float[]{x, y};
+        // ((17.2) Inside a building people walk into, clear of its walls: right there.)
+        if (insideOf(x, y) != null && !circleBlocked(x, y, 4f)) return new float[]{x, y};
         for (int r = 1; r <= 5; r++) {
             float best = Float.MAX_VALUE;
             float[] res = null;

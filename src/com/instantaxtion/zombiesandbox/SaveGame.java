@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 57;
+    private static final int VERSION = 58;
 
     private SaveGame() {
     }
@@ -365,6 +365,11 @@ final class SaveGame {
             out.writeInt(w.hostileReserve);
             out.writeInt(w.hostileStart);
             out.writeInt(w.squadsMade);
+            // (Version 58, 17.2: the gangs that have had a boss and have fallen apart, and the arrests.)
+            out.writeInt(w.gangHadBoss);
+            out.writeInt(w.gangBroken);
+            out.writeInt(w.arrests);
+            out.writeInt(w.jailed);
         } finally {
             moved = null;
             homeIndex = null;
@@ -451,6 +456,8 @@ final class SaveGame {
         out.writeBoolean(e.inmate);
         // Version 57 (17.0): a gang member's or enemy soldier's kit.
         out.writeByte(e.kit);
+        // Version 58 (17.2): under arrest.
+        out.writeByte(e.arrested);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -833,6 +840,12 @@ final class SaveGame {
                 w.hostileStart = in.readInt();
                 w.squadsMade = in.readInt();
             }
+            if (version >= 58) {
+                w.gangHadBoss = in.readInt();
+                w.gangBroken = in.readInt();
+                w.arrests = in.readInt();
+                w.jailed = in.readInt();
+            }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -914,6 +927,7 @@ final class SaveGame {
         if (version >= 55) e.saved = in.readInt();
         if (version >= 56) e.inmate = in.readBoolean();
         if (version >= 57) e.kit = in.readByte();
+        if (version >= 58) e.arrested = in.readByte();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

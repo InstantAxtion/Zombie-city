@@ -70,13 +70,50 @@ final class Interiors {
             case Variants.I_GYM: case Variants.I_BATH: case Variants.I_FIRE: min = 70; break;
             default: min = 34; break;
         }
-        if (isHall(inside)) hall(p, inside, x0, y0, x1, y1, dx, dy, r);
+        if (open(inside)) {
+            // ((17.2) One open floor, furnished for what it is: no rooms to squeeze between.)
+            p.rooms.add(new float[]{x0, y0, x1, y1, mainKind(inside), dx, dy});
+        } else if (isHall(inside)) hall(p, inside, x0, y0, x1, y1, dx, dy, r);
         else {
             split(p, x0, y0, x1, y1, min, r, 0, dx, dy);
             assign(p, inside, b, r);
         }
         for (int i = 0; i < p.rooms.size(); i++) furnish(p, i, r);
         return p;
+    }
+
+    /**
+     * ((17.2) Open inside: one floor with no walls or doorways inside it - everything but homes, flats, hotels and dorms,
+     * which keep their rooms.)
+     */
+    static boolean open(int inside) {
+        return inside != Variants.I_HOME && inside != Variants.I_HOTEL && inside != Variants.I_DORM;
+    }
+
+    /** What an open floor is: the main room of the place. */
+    private static int mainKind(int inside) {
+        switch (inside) {
+            case Variants.I_CAFE: case Variants.I_RESTAURANT: return DINING;
+            case Variants.I_BAR: return BARROOM;
+            case Variants.I_PEWS: return PEWS;
+            case Variants.I_RACKS: return RACKS;
+            case Variants.I_FACTORY: return MACHINES;
+            case Variants.I_GYM: return GYMFLOOR;
+            case Variants.I_LIBRARY: return BOOKS;
+            case Variants.I_BATH: return POOLS;
+            case Variants.I_SEATS: return SEATS;
+            case Variants.I_SALON: return SALON;
+            case Variants.I_LAUNDRY: return LAUNDRY;
+            case Variants.I_SHOWROOM: return SHOWROOM;
+            case Variants.I_FIRE: return APPARATUS;
+            case Variants.I_ARCADE: return ARCADE;
+            case Variants.I_KITCHEN: return BAKERY;
+            case Variants.I_CLASSROOM: return CLASS;
+            case Variants.I_WARD: return WARD;
+            case Variants.I_OFFICE: return OPENPLAN;
+            case Variants.I_LAB: return LAB;
+            default: return SHOPFLOOR;
+        }
     }
 
     /** Places that are one big room with a few back rooms: shops, cafés, warehouses, halls. */

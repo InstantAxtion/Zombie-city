@@ -191,6 +191,20 @@ final class Entity {
     transient City.Building routeB;
     /** ((17.1) When they were last finding their way in, out of or round a building: they squeeze past each other there. */
     transient float inT = -9;
+    /**
+     * ((17.2) Under arrest: 1 hands up, waiting for an officer; 2 cuffed and being walked to the station. With who has
+     * them (and, for that officer, who they're taking in).
+     */
+    byte arrested;
+    transient float arrestT, escortT;
+    transient Entity captor, escortee;
+    /** ((17.2) A gang member's errands: a shop to rob, a car to steal (the job and where it is), a corner to keep (1 or 2). */
+    transient City.Building robB;
+    transient float robT, carX, carY;
+    transient int robPhase, carJob, corner;
+    /** ((17.2) An officer on a raid on a gang's hideout: the building, and how long it's been going. */
+    transient City.Building raidB;
+    transient float raidT;
     /** ((17.0) A gang member's or enemy soldier's kit: 0 the basic one, 1 the automatic, 2 the heavy or the scoped. */
     int kit;
     /** ((17.0) Who they're fighting, looked for again every so often (foeT). */
