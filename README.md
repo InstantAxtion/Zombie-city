@@ -9,6 +9,10 @@ away from the middle of the screen as you pan, and the game plays in both portra
 
 ## Main menu
 
+- **Campaign** (18.0): seven missions to play in order as the commander - a set force, a budget to buy
+  more police, soldiers, vehicles and air support (earned by funding and by doing well), units that come in
+  from the stations and bases and go where you send them, and an objective against the clock. Up to three
+  stars a mission; veterans who make rank carry over to the next. New Game below is the sandbox.
 - **New Game** opens the city setup, with a live preview of the city and these options: the map (Suburbs,
   Metropolis, Islands or Archipelago), map size (Default, Gigantic or Colossal: about 20,000, 27,500 and
   30,000 people) and how many reinforcements can
@@ -416,6 +420,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**The Campaign (18.0):** Campaign.java holds the missions (fixed preset, size, seed, mode, starting police and soldiers, enemy count, budget, funding, time limit, goal and the two star thresholds), Campaign.config builds a mission's CityConfig (CityConfig.mission; outside help off, CityConfig.zombies gives the mission's enemy count), and Campaign.begin starts it: World.missionStart, forces cut to the mission's with Campaign.trim, SWAT teams off, veterans applied from the roster (Records.veterans). World.cityLife calls Campaign.tick once a second for the result (World.missionResult, missionStars, missionWhy); the budget is worked out from the mission's start money, funding per minute and rewards (Campaign.earned) less World.spent, so nothing double-counts after a load. World.callNationalGuard does nothing in a mission. GameView: commander() switches the tool bar to Move, Orders, Police, Military, Vehicles and Support with prices in the pickers, commandAt buys and deploys (Campaign.arrival for where units come in, Dispatch.order to send them), the top Clear button shows the goal, drawMissionPanel sits above the tool bar, and a finished mission goes into Records (missionWon: best stars and the new veteran roster) and opens the report. Menu: the CAMPAIGN screen (mission cards with stars, locked until the one before is won), a Campaign button on the main menu, and on the report the mission's result, stars and objectives with Campaign, Retry and Next mission buttons. Save version 60 keeps the mission, its start, the money spent and its result.
 
 **Cover and suppression (17.6):** World.COVER: aimAndFire records who someone's trading shots with (only an armed one); World.coverStep (run from move) finds a nearby spot where World.inCover (something solid 5-13 px towards the enemy) holds and a line to shoot along exists (or from a step to either side), and steers there; fire halves the chance to hit someone in cover, and near misses raise Entity.suppress (worse aim, cover sought at once), which fades. Fleet.damage now applies to helicopters (220 health for the city's), with Fleet.heliCrash for one shot down.
 

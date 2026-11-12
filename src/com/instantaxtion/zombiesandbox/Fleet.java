@@ -2551,6 +2551,8 @@ final class Fleet {
      * Run now and then: a helicopter lost is not replaced, but a pilot who's been killed is (from whoever's
      * nearby, while there are any).
      */
+    private final java.util.HashSet<float[]> padStocked = new java.util.HashSet<float[]>();
+
     void stationHelis() {
         java.util.List<float[]> pads = city.helipads();
         for (int k = 0; k < pads.size(); k++) {
@@ -2559,6 +2561,8 @@ final class Fleet {
             for (int i = 0; i < vehicles.size() && v == null; i++) if (vehicles.get(i).padAt == p) v = vehicles.get(i);
             if (v == null) {
                 if (padLost.contains(p)) continue;
+                // ((18.0) In a mission a pad's helicopter is there once: one lost isn't replaced for free.)
+                if (w.city.cfg.mission >= 0 && !padStocked.add(p)) continue;
                 v = make(HELI);
                 v.padAt = p;
                 v.pad = true;
@@ -2602,7 +2606,8 @@ final class Fleet {
                 if (v.pilotComing == null || v.pilotComing.dead || v.pilotComing.pilotFor != v) v.pilotComing = w.callReservePilot(v);
                 if (v.flight.isEmpty()) continue;
             }
-            while (v.flight.size() < want && v.crewSpawns < 8) {
+            // ((18.0) In a mission, only the pad's first crew: no new pilots from nowhere once they're lost.)
+            while (v.flight.size() < want && v.crewSpawns < (w.city.cfg.mission >= 0 ? want : 8)) {
                 boolean pilot = livePilot(v) == null;
                 if (pilot && v.crewSpawns > 0) break;
                 v.crewSpawns++;
@@ -5829,6 +5834,8 @@ final class Fleet {
             if (w.release(d, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10) && hurt) d.hp *= 0.7f;
             return;
         }
+        // ((18.0) In a mission a driver nobody sent doesn't climb out as one more officer or soldier.)
+        if (w.city.cfg.mission >= 0) return;
         Entity e = w.spawn(d.type, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);
         if (e == null) return;
         e.nameSeed = d.nameSeed;

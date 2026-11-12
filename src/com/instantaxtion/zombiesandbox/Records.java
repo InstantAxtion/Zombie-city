@@ -38,6 +38,35 @@ final class Records {
         add(5, 1);
     }
 
+    // ---- ((18.0) The campaign: the best stars for each mission, and the veterans carried from one to the next.) ----
+
+    int missionStars(int id) {
+        return prefs.getInt("mission" + id, 0);
+    }
+
+    /** A mission's open to play once the one before it has been won. */
+    boolean unlocked(int id) {
+        return id == 0 || missionStars(id - 1) > 0;
+    }
+
+    String veterans() {
+        return prefs.getString("veterans", "");
+    }
+
+    /** A mission won: its best stars kept, and the veterans who came through it are the roster now. */
+    void missionWon(int id, int stars, String roster) {
+        SharedPreferences.Editor ed = prefs.edit();
+        if (stars > missionStars(id)) ed.putInt("mission" + id, stars);
+        ed.putString("veterans", roster == null ? "" : roster);
+        ed.apply();
+    }
+
+    int totalStars() {
+        int n = 0;
+        for (int i = 0; i < Campaign.MISSIONS.length; i++) n += missionStars(i);
+        return n;
+    }
+
     private int lastKilled;
     private World lastWorld;
 

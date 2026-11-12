@@ -2,11 +2,23 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.6";
-    static final int VERSION_CODE = 176;
+    static final String VERSION = "18.0";
+    static final int VERSION_CODE = 180;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.0  -  The Campaign: play as the commander",
+                    "A proper game alongside the sandbox: Campaign on the main menu. Seven missions played in order across the three modes - zombies, gangs and the enemy army - each opening once the one before is won. New Game is still the sandbox, unchanged.",
+                    "You're the commander, not a god. A mission starts you with a set number of police and soldiers on its own fixed city, against a set enemy. Only the commander's tools are on the bar: Police, Military, Vehicles, Support and Orders. There's no spawning the other side, no Clear button (it shows the mission's goal instead), no bombs or events for free, and no help from outside you didn't pay for.",
+                    "A budget: every officer, soldier, vehicle and strike costs money (each choice shows its price). Money comes in as funding every minute and as rewards for doing well: kills, arrests, the wounded saved, people freed, enemy vehicles knocked out, gangs broken.",
+                    "Deploying: tap where you want them and the units you buy come in from the nearest police station (police) or base (soldiers), or the edge of town if that's closer, and march to the spot. Patrol cars and BearCats roll out of the station; tanks drive from the base to where you tapped. Barricades, supplies and medkits go down where you tap; supply drops and airstrikes land there. Use Orders to move anyone you have.",
+                    "Objectives: destroy the dead, survive until the clock runs out, arrest so many gang members, break so many gangs, or hold the city's stations, base and City Hall. A panel above the tool bar shows the mission, how the objective's going, the time left and the money. Run out of time, lose the city, or lose all your forces with no money for more, and the mission's failed.",
+                    "Stars: one for winning, one for keeping civilian deaths down, one for keeping your own losses down. Your best for each mission is kept.",
+                    "Veterans: officers and soldiers who've made rank in a won mission (Blooded and up) carry over to the next, taking the place of the first of their kind there with their name and their kills - and their better aim. Up to ten on the roster.",
+                    "Each mission is the same on every phone: its own city, forces, enemy and population (the Max population setting is for the sandbox). Helicopters lost on their pads aren't replaced, and there's no Undo: what's bought is bought.",
+                    "The report at a mission's end shows the result, the stars and each objective, with Retry, Next mission and Campaign buttons. Missions save and load like any other game.",
+            },
             {
                     "17.6  -  Cover and suppressing fire",
                     "Gunfights use cover. Anyone trading shots with an armed enemy - police, soldiers, gang members, enemy soldiers, armed civilians - looks for a spot close by with something solid between them and the enemy (a parked car, a wall, a tree, the corner of a building they can lean out round) and moves there, firing as they go. Someone behind cover is half as easy to hit.",

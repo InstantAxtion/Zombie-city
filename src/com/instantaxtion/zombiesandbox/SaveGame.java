@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 59;
+    private static final int VERSION = 60;
 
     private SaveGame() {
     }
@@ -377,6 +377,12 @@ final class SaveGame {
             out.writeInt(w.bledOut);
             out.writeInt(w.enemyVehiclesLost);
             out.writeInt(w.freed);
+            // (Version 60, 18.0: the campaign mission.)
+            out.writeInt(cfg.mission);
+            out.writeFloat(w.missionStart);
+            out.writeInt(w.spent);
+            out.writeInt(w.missionResult);
+            out.writeInt(w.missionStars);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
@@ -864,6 +870,14 @@ final class SaveGame {
                 w.bledOut = in.readInt();
                 w.enemyVehiclesLost = in.readInt();
                 w.freed = in.readInt();
+                if (version >= 60) {
+                    int ms = in.readInt();
+                    w.city.cfg.mission = Campaign.get(ms) != null ? ms : -1;
+                    w.missionStart = in.readFloat();
+                    w.spent = in.readInt();
+                    w.missionResult = in.readInt();
+                    w.missionStars = in.readInt();
+                }
                 int bm = in.readInt();
                 if (bm > 0) {
                     w.battleMap = new float[bm];

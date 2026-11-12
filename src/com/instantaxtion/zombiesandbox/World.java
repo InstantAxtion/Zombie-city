@@ -2935,6 +2935,16 @@ final class World {
         return m < 0 ? m + b : m;
     }
 
+    /** ((18.0) The campaign mission being played, or null in a sandbox game. */
+    Campaign.Mission mission() {
+        return Campaign.get(city.cfg.mission);
+    }
+
+    /** ((18.0) A mission's running record: when it started, what's been spent, and how it ended (1 won, 2 failed). */
+    float missionStart;
+    int spent, missionResult, missionStars;
+    String missionWhy;
+
     /** This game's mode (CityConfig.MODE_*). */
     int mode() {
         return city.cfg.mode;
@@ -3111,7 +3121,7 @@ final class World {
         if (n <= 0) return;
         // (Sized against the city's own police and army: the default setting is a fight about two to three, and the
         // biggest more of them than of the city's defenders.)
-        n = Math.max(1, Math.min(hostilePlanned(n, counts[Entity.COP] + counts[Entity.SOLDIER]), maxEntities - entities.size() - 100));
+        n = Math.max(1, Math.min(city.cfg.mission >= 0 ? n : hostilePlanned(n, counts[Entity.COP] + counts[Entity.SOLDIER]), maxEntities - entities.size() - 100));
         hostileStart = n;
         hostileReserve = Math.round(n * (mode() == CityConfig.MODE_GANGS ? GANG_RESERVE : HOSTILE_RESERVE));
         if (mode() == CityConfig.MODE_GANGS) {
@@ -9604,6 +9614,7 @@ final class World {
         if (WOUNDS) rescueLife();
         if (mode() == CityConfig.MODE_GANGS) gangLife();
         if (mode() == CityConfig.MODE_ARMY) armyLife();
+        if (city.cfg.mission >= 0) Campaign.tick(this);
         fieldHospital();
         militias();
         if (outbreak) updateWar();
@@ -11121,6 +11132,8 @@ final class World {
      * Guard (once): two trucks of guardsmen drive in from the edge of town to protect the civilians.
      */
     void callNationalGuard() {
+        // ((18.0) Not in a mission: the only help is what the commander pays for.)
+        if (city.cfg.mission >= 0) return;
         // (A Guard headquarters at the base: the governor doesn't wait so long.)
         City.Facility hq = city.mainBase();
         boolean local = hq != null && hq.baseType == City.BT_GUARD;

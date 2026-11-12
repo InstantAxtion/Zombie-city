@@ -5458,6 +5458,118 @@ public final class GameTests {
                 check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
             }
         });
+        test("18.0: campaign missions - set forces, a budget, commander deploys, objectives, stars, veterans, saves", new Check() {
+            public void run() throws Exception {
+                Campaign.Mission m0 = Campaign.MISSIONS[0];
+                CityConfig c = Campaign.config(0);
+                check(c.mission == 0 && c.mode == m0.mode && c.zombies() == m0.foes, "the mission's city and enemy");
+                World w = new World(c);
+                w.rnd.setSeed(3);
+                w.populate(c);
+                Campaign.begin(w, "");
+                w.recount();
+                check(w.mission() == m0, "it's a mission");
+                check(w.counts[Entity.COP] <= m0.cops && w.counts[Entity.COP] >= m0.cops - 4, "the police cut to the mission's (" + w.counts[Entity.COP] + ")");
+                check(w.counts[Entity.SOLDIER] <= m0.soldiers, "and the soldiers (" + w.counts[Entity.SOLDIER] + ")");
+                check(w.dispatch.policeReserve == 0 && w.dispatch.squadReserve == 0, "no help from outside");
+                // The budget: start money, spent, earned.
+                check(Campaign.budget(w) == m0.budget, "starts with the mission's money");
+                check(Campaign.spend(w, 10) && Campaign.budget(w) == m0.budget - 10, "spending takes it off");
+                check(!Campaign.spend(w, 100000), "can't spend what isn't there");
+                int before = Campaign.budget(w);
+                w.zombiesKilled += 5;
+                check(Campaign.budget(w) > before, "kills earn money");
+                float[] at = Campaign.arrival(w, true, w.city.worldW() / 2, w.city.worldH() / 2);
+                check(at != null, "police have somewhere to come in from");
+                // Run out the clock: failed.
+                w.missionStart = w.time - m0.limit - 1;
+                java.lang.reflect.Method life = World.class.getDeclaredMethod("cityLife");
+                life.setAccessible(true);
+                life.invoke(w);
+                check(w.missionResult == 2 && "Out of time.".equals(w.missionWhy), "out of time, the mission's failed (" + w.missionResult + ", " + w.missionWhy + ")");
+                // Won: every zombie down.
+                World w2 = new World(Campaign.config(0));
+                w2.populate(w2.city.cfg);
+                Campaign.begin(w2, "");
+                for (int f = 0; f < 30 * 40 && w2.missionResult == 0; f++) {
+                    for (Entity e : w2.entities) if (e.isUndead()) e.hp = 0;
+                    w2.update(1 / 30f);
+                    w2.evCount = 0;
+                }
+                check(w2.missionResult == 1 && w2.missionStars >= 1, "cleared: won with stars (" + w2.missionResult + ", " + w2.missionStars + ")");
+                // Saved and loaded.
+                w2.spent = 37;
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w2, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.mission() == m0 && l.spent == 37 && l.missionResult == 1 && l.missionStars == w2.missionStars, "the mission's kept in a save");
+                // Veterans: a ranked officer goes on the roster and comes back in the next mission.
+                Entity hero = null;
+                for (Entity e : w2.entities) if (!e.dead && e.type == Entity.COP) { hero = e; break; }
+                hero.kills = 20;
+                String roster = Campaign.veterans(w2);
+                check(Campaign.rosterSize(roster) >= 1 && roster.contains("," + hero.nameSeed + ";"), "a ranked officer's a veteran (" + roster + ")");
+                World w3 = new World(Campaign.config(1));
+                w3.populate(w3.city.cfg);
+                Campaign.begin(w3, roster);
+                boolean back = false;
+                for (Entity e : w3.entities) back |= e.type == Entity.COP && e.nameSeed == hero.nameSeed && e.kills == 20;
+                check(back, "and is back in the next mission");
+                // The campaign's progress on the phone.
+                Records rec = new Records(new android.app.Activity());
+                check(rec.unlocked(0) && !rec.unlocked(1), "only the first mission open at first");
+                rec.missionWon(0, 2, roster);
+                check(rec.unlocked(1) && rec.missionStars(0) == 2 && rec.veterans().equals(roster), "winning opens the next and keeps the stars and the roster");
+                rec.missionWon(0, 1, "");
+                check(rec.missionStars(0) == 2, "the best stars kept");
+                // The commander's screen: only their tools, buying units that come in and are sent to the spot.
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2000};
+                v.layout(size[0], size[1]);
+                Menu menu = (Menu) field(v, "menu");
+                v.startGame(Campaign.config(2));
+                v.awaitLoad();
+                for (int k = 0; k < 3; k++) draw(v, size);
+                menu.screen = Menu.NONE;
+                World gw = (World) field(v, "world");
+                check(gw.mission() == Campaign.MISSIONS[2], "the mission's started from the view");
+                java.lang.reflect.Method hidden = GameView.class.getDeclaredMethod("hiddenTool", int.class);
+                hidden.setAccessible(true);
+                check((Boolean) hidden.invoke(v, 2) && (Boolean) hidden.invoke(v, 6) && !(Boolean) hidden.invoke(v, 3) && !(Boolean) hidden.invoke(v, 1),
+                        "no people or enemy to spawn, police and orders there");
+                java.lang.reflect.Field tool = GameView.class.getDeclaredField("tool");
+                tool.setAccessible(true);
+                tool.setInt(v, 3);
+                gw.recount();
+                int cops = gw.counts[Entity.COP], money = Campaign.budget(gw);
+                java.lang.reflect.Method cmd = GameView.class.getDeclaredMethod("commandAt", float.class, float.class);
+                cmd.setAccessible(true);
+                float tx = gw.city.worldW() / 2, ty = gw.city.worldH() / 2;
+                cmd.invoke(v, tx, ty);
+                gw.recount();
+                check(gw.counts[Entity.COP] == cops + 1 && Campaign.budget(gw) == money - Campaign.COP_COST[0], "a cop bought (" + cops + " -> "
+                        + gw.counts[Entity.COP] + ", $" + money + " -> $" + Campaign.budget(gw) + ")");
+                Entity newest = null;
+                for (Entity e : gw.entities) if (e.type == Entity.COP && e.task == Dispatch.T_MOVE) newest = e;
+                check(newest != null && World.hypot(newest.postX - tx, newest.postY - ty) < 120, "and sent to the spot");
+                gw.spent = 1000000;
+                cmd.invoke(v, tx, ty);
+                gw.recount();
+                check(gw.counts[Entity.COP] == cops + 1, "no money, no more");
+                for (int k = 0; k < 3; k++) draw(v, size);
+                // The campaign screen and the mission report draw, and a finished mission opens its report.
+                menu.open(Menu.CAMPAIGN);
+                draw(v, size);
+                menu.screen = Menu.NONE;
+                Campaign.finish(gw, 1, null);
+                gw.warBannerTime = 0;
+                draw(v, size);
+                check(menu.screen == Menu.REPORT, "the report's up at the end");
+                draw(v, size);
+                check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

@@ -59,6 +59,8 @@ final class CityConfig implements OptionSet {
     static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2;
     /** ((17.0) See OPT_MODE. Not part of the city code: the same streets can be played any way. */
     int mode;
+    /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
+    int mission = -1;
 
     boolean zombieMode() { return mode == MODE_ZOMBIES; }
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
@@ -375,6 +377,7 @@ final class CityConfig implements OptionSet {
         c.outskirts = outskirts;
         c.exodus = exodus;
         c.mode = mode;
+        c.mission = mission;
         c.civic = civic;
         for (int[] e : edits) c.edits.add(e.clone());
         c.normalize();
@@ -538,7 +541,11 @@ final class CityConfig implements OptionSet {
                     + "(their police, highway patrol, SWAT teams, sheriff's deputies and federal agents), sooner and bigger "
                     + "the worse the city is losing. Then three quarters as many soldiers again as the city has, in three waves: a quick reaction force in Humvees, "
                     + "the main convoy with armour, and air assaults by helicopter wherever it's worst."};
-    int zombies() { return ZOMBIES[v[OPT_ZOMBIES]]; }
+    int zombies() {
+        // ((18.0) A mission's own number.)
+        Campaign.Mission m = Campaign.get(mission);
+        return m != null ? m.foes : ZOMBIES[v[OPT_ZOMBIES]];
+    }
     /** Which country the city is in (see {@link Country}). */
     int country() { return v[OPT_COUNTRY]; }
     /** 0 off, 1 low, 2 medium, 3 high: how many reserve squads and backup waves can be called in. */

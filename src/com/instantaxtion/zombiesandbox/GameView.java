@@ -29,7 +29,10 @@ final class GameView extends View implements Menu.Host {
     private static final String[] BUILD_INFO = {"Drag to lay a road", "Drag to pave", "Drag to grass over", "Drag to plant trees",
             "Drag to build a wall nobody can cross", "Tap to put up a house", "Tap to put up a shop", "Grass over, or knock a building down"};
     /** Tools no longer on the bar: the medic (now in the People picker), Orders, Place, Events and Build. */
-    private static boolean hiddenTool(int t) {
+    private boolean hiddenTool(int t) {
+        // ((18.0) A mission: the commander's tools only - police, soldiers, vehicles and support to buy, and orders.)
+        if (commander())
+            return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
     }
     private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee"};
@@ -86,7 +89,14 @@ final class GameView extends View implements Menu.Host {
         return t == 3 ? world.enemyLabel() : ROW_LABELS[t];
     }
 
+    /** ((18.0) Playing a campaign mission: the commander, with a budget, not the sandbox's free hand. */
+    private boolean commander() {
+        return world != null && hasGame && world.mission() != null;
+    }
+
     private String toolName(int t) {
+        if (commander() && t == TOOL_PLACE) return "Vehicles";
+        if (commander() && t == TOOL_EVENT) return "Support";
         if (t == TOOL_ZOMBIE) {
             int m = world.mode();
             if (m == CityConfig.MODE_GANGS) return "Gangs";
@@ -749,9 +759,11 @@ final class GameView extends View implements Menu.Host {
             @Override
             public void run() {
                 World w = new World(cfg);
-                w.setMaxPopulation(maxPop);
+                // ((18.0) A mission's the same on every phone: its own population, not the setting's.)
+                w.setMaxPopulation(cfg.mission >= 0 ? Campaign.population(cfg.mission) : maxPop);
                 w.gore = gore;
                 w.populate(cfg);
+                if (cfg.mission >= 0) Campaign.begin(w, records.veterans());
                 built = w;
             }
         });
@@ -855,6 +867,7 @@ final class GameView extends View implements Menu.Host {
         feedOnAge.clear();
         centerCamera();
         menu.screen = Menu.NONE;
+        missionSetup();
     }
 
     /** Waits for a city being built (for the tests). */
@@ -891,7 +904,23 @@ final class GameView extends View implements Menu.Host {
         hintTime = 14f;
         lastMessageCount = 0;
         menu.screen = Menu.NONE;
+        missionSetup();
     }
+
+    /** ((18.0) The tool bar for the game just started or loaded: a mission's commander tools, or the sandbox's. */
+    private void missionSetup() {
+        missionRecorded = world != null && world.missionResult != 0;
+        if (commander()) {
+            brushIdx = 0;
+            if (Campaign.PLACE_COST[placeVariant] < 0) placeVariant = 1;
+            if (Campaign.EVENT_COST[eventVariant] < 0) eventVariant = 4;
+        }
+        picker = -1;
+        if (getWidth() > 0) onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
+    }
+
+    /** ((18.0) Whether this game's mission result has gone into the campaign records yet. */
+    private boolean missionRecorded;
 
     @Override
     public void toMainMenu() {
@@ -1217,7 +1246,11 @@ final class GameView extends View implements Menu.Host {
         }
 
         // ((17.5) The game's over: the after-action report, once the ending's been shown.)
-        if (hasGame && world != null && world.warResult != 0 && !reportShown && world.warBannerTime <= 0 && !menu.isOpen()) {
+        if (hasGame && world != null && world.missionResult != 0 && !missionRecorded) {
+            missionRecorded = true;
+            if (world.missionResult == 1) records.missionWon(world.city.cfg.mission, world.missionStars, Campaign.veterans(world));
+        }
+        if (hasGame && world != null && (world.warResult != 0 || world.missionResult != 0) && !reportShown && world.warBannerTime <= 0 && !menu.isOpen()) {
             reportShown = true;
             menu.open(Menu.REPORT);
         }
@@ -7222,6 +7255,37 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** ((12.0) s at the text size set now, or a little smaller (down to 80%) if that's what it takes, then cut to fit.) */
+    /** ((18.0) A mission's panel above the tool bar: the objective and how it's going, the clock, and the budget. */
+    private void drawMissionPanel(Canvas c) {
+        Campaign.Mission m = world.mission();
+        float pw = Math.min(getWidth() - 20 * dp, 440 * dp), ph = 44 * dp;
+        float left = (getWidth() - pw) / 2, top = barTop - ph - (toolsFolded ? 6 : 20) * dp;
+        oval.set(left, top, left + pw, top + ph);
+        fill.setColor(0xE0141619);
+        c.drawRoundRect(oval, 10 * dp, 10 * dp, fill);
+        int res = world.missionResult;
+        stroke.setColor(res == 1 ? 0xFF8BE05A : res == 2 ? 0xFFFF6A5A : 0x80E8C547);
+        stroke.setStrokeWidth(1.2f * dp);
+        c.drawRoundRect(oval, 10 * dp, 10 * dp, stroke);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(12.5f * dp);
+        text.setColor(0xFFE8C547);
+        String head = m.title.toUpperCase(java.util.Locale.US) + "   ";
+        c.drawText(head, left + 10 * dp, top + 18 * dp, text);
+        float hx = left + 10 * dp + text.measureText(head);
+        text.setColor(0xFFF2F2F2);
+        String prog = res == 1 ? "Complete  " + Campaign.stars(world.missionStars) : res == 2 ? "Failed" : Campaign.progress(world);
+        c.drawText(fitText(prog, left + pw - 10 * dp - hx), hx, top + 18 * dp, text);
+        text.setTextSize(12 * dp);
+        int left2 = Campaign.timeLeft(world);
+        text.setColor(left2 < 60 && res == 0 ? 0xFFFF8A6A : 0xFFB8BDC4);
+        c.drawText("⏱ " + (res != 0 ? "-" : World.clock(left2) + " left"), left + 10 * dp, top + 36 * dp, text);
+        text.setTextAlign(Paint.Align.RIGHT);
+        text.setColor(0xFF8BE05A);
+        c.drawText("$" + Campaign.budget(world) + "   +" + m.income + "/min", left + pw - 10 * dp, top + 36 * dp, text);
+        text.setTextAlign(Paint.Align.LEFT);
+    }
+
     private String shrinkToFit(String s, float width) {
         float size = text.getTextSize(), w = text.measureText(s);
         if (w > width) text.setTextSize(Math.max(size * 0.8f, size * width / w));
@@ -7390,7 +7454,7 @@ final class GameView extends View implements Menu.Host {
         drawMapLabels(c);
         drawPopups(c);
         // Top buttons.
-        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], settings.buildings3d() ? "3D" : "Top", "Clear", "Menu", "Kills"};
+        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], settings.buildings3d() ? "3D" : "Top", commander() ? "Goal" : "Clear", "Menu", "Kills"};
         text.setTextSize((portrait ? 11 : 12) * dp);
         text.setTextAlign(Paint.Align.CENTER);
         for (int i = 0; i < TOP_BUTTONS; i++) {
@@ -7475,6 +7539,7 @@ final class GameView extends View implements Menu.Host {
             }
         }
         if (picker >= 0) drawPicker(c);
+        else if (commander()) drawMissionPanel(c);
 
         drawHeadlines(c);
         // ((12.0) Clear of the tab that folds the tool bar away: cards and lines here used to sit over it.)
@@ -7596,6 +7661,8 @@ final class GameView extends View implements Menu.Host {
 
     /** The Clear menu under the Clear button, and the Undo button above the tool bar. */
     private void drawPopups(Canvas c) {
+        // ((18.0) No Undo in a mission: what's bought is bought.)
+        if (commander()) lastAction.clear();
         if (!lastAction.isEmpty()) {
             text.setTextSize(13 * dp);
             text.setTextAlign(Paint.Align.CENTER);
@@ -8517,6 +8584,26 @@ final class GameView extends View implements Menu.Host {
     }
 
     private String[] optionNames(int t) {
+        String[] n = sandboxNames(t);
+        int[] cost = commander() ? costs(t) : null;
+        if (cost == null) return n;
+        String[] out = new String[n.length];
+        for (int k = 0; k < n.length; k++) out[k] = n[k] + (k >= cost.length || cost[k] < 0 ? "  (n/a)" : cost[k] == 0 ? "  free" : "  $" + cost[k]);
+        return out;
+    }
+
+    /** ((18.0) What each choice of a tool costs in a mission, or null. */
+    private static int[] costs(int t) {
+        switch (t) {
+            case TOOL_COP: return Campaign.COP_COST;
+            case TOOL_MIL: return Campaign.MIL_COST;
+            case TOOL_PLACE: return Campaign.PLACE_COST;
+            case TOOL_EVENT: return Campaign.EVENT_COST;
+            default: return null;
+        }
+    }
+
+    private String[] sandboxNames(int t) {
         switch (t) {
             case TOOL_CIV: {
                 String[] n = new String[CIV_VARIANTS.length];
@@ -9218,6 +9305,30 @@ final class GameView extends View implements Menu.Host {
                 world.say(settings.buildings3d() ? "3D view" : "Bird's-eye view");
                 break;
             case BTN_CLEAR:
+                // ((18.0) In a mission there's no clearing the streets: the button says what the mission wants.)
+                if (commander()) {
+                    world.say(Campaign.goalText(world) + "  " + Campaign.progress(world));
+                    // (And a look at the next of the enemy still out there: the nearest not already on screen.)
+                    float cx = camX + getWidth() / 2f / scale, cy = camY + getHeight() / 2f / scale;
+                    Entity near = null, far = null;
+                    float nd = Float.MAX_VALUE, fd = Float.MAX_VALUE;
+                    for (int k = 0, n = world.entities.size(); k < n; k++) {
+                        Entity e = world.entities.get(k);
+                        if (!e.isZombie() || e.dead || e.removed) continue;
+                        float d = (float) World.hypot(e.x - cx, e.y - cy);
+                        if (d < nd) {
+                            nd = d;
+                            near = e;
+                        }
+                        if (d > 300 && d < fd) {
+                            fd = d;
+                            far = e;
+                        }
+                    }
+                    Entity go = far != null ? far : near;
+                    if (go != null) jumpTo(go.x, go.y);
+                    break;
+                }
                 clearMenu = !clearMenu;
                 break;
             case BTN_TOP:
@@ -9244,6 +9355,12 @@ final class GameView extends View implements Menu.Host {
         follow = null;
         followV = null;
         if (tool != TOOL_ORDER && tool != TOOL_BOMB && tool != TOOL_ERASE) lastAction.clear();
+        if (commander() && tool != TOOL_ORDER) {
+            commandAt(wx, wy);
+            lastSpawnX = wx;
+            lastSpawnY = wy;
+            return;
+        }
         if (tool == TOOL_PLACE) {
             place(wx, wy);
         } else if (tool == TOOL_EVENT) {
@@ -9306,6 +9423,13 @@ final class GameView extends View implements Menu.Host {
             boxX1 = wx;
             boxY1 = wy;
             boxing = dragged;
+        } else if (commander()) {
+            // ((18.0) Nothing brushed on in a mission: one tap, one purchase - but a barricade line can be dragged out.)
+            if (tool == TOOL_PLACE && placeVariant == 3 && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
+                commandAt(wx, wy);
+                lastSpawnX = wx;
+                lastSpawnY = wy;
+            }
         } else if (tool == TOOL_PLACE) {
             // Drag to build a line of barricades.
             if (placeVariant == 3 && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
@@ -9617,6 +9741,94 @@ final class GameView extends View implements Menu.Host {
         orderY = wy;
         orderMarker = 1.5f;
         selection.clear();
+    }
+
+    /**
+     * ((18.0) The commander's tap: police and soldiers bought and sent in from the nearest station or base to the spot,
+     * vehicles out of the station or base, barricades, supplies and air support put down where tapped - each paid for
+     * out of the mission's budget.
+     */
+    private void commandAt(float wx, float wy) {
+        int budget = Campaign.budget(world);
+        if (tool == TOOL_COP || tool == TOOL_MIL) {
+            boolean police = tool == TOOL_COP;
+            int cost = police ? Campaign.COP_COST[copVariant] : Campaign.MIL_COST[milVariant];
+            String name = police ? copNames()[copVariant] : MIL_NAMES[milVariant];
+            int n = BRUSHES[brushIdx];
+            if (!police && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;
+            float[] at = Campaign.arrival(world, police, wx, wy);
+            if (at == null) {
+                world.say("No way in for them from there");
+                return;
+            }
+            java.util.ArrayList<Entity> made = new java.util.ArrayList<Entity>();
+            for (int i = 0; i < n; i++) {
+                if (!Campaign.spend(world, cost)) break;
+                float ox = n > 1 ? (rnd.nextFloat() - 0.5f) * 30 : 0, oy = n > 1 ? (rnd.nextFloat() - 0.5f) * 30 : 0;
+                Entity e = police ? world.spawnCop(COP_ROLES[copVariant], at[0] + ox, at[1] + oy)
+                        : world.spawnSoldier(MIL_ROLES[milVariant], at[0] + ox, at[1] + oy);
+                if (e == null) {
+                    world.spent -= cost;
+                    break;
+                }
+                made.add(e);
+                lastAction.add(e);
+            }
+            if (made.isEmpty()) {
+                world.say(budget < cost ? "Not enough money: " + name + " costs $" + cost + ", you have $" + budget : "No room for them there");
+                return;
+            }
+            world.dispatch.order(made, wx, wy);
+            orderX = wx;
+            orderY = wy;
+            orderMarker = 1.5f;
+            world.say(made.size() + " x " + name + " on the way from " + world.city.placeName(at[0], at[1]) + "  (-$" + cost * made.size() + ")");
+            return;
+        }
+        int[] cost = costs(tool);
+        int v = tool == TOOL_PLACE ? placeVariant : eventVariant;
+        String[] names = tool == TOOL_PLACE ? PLACE_NAMES : EVENT_NAMES;
+        if (cost == null) return;
+        if (v >= cost.length || cost[v] < 0) {
+            world.say(names[v] + " isn't yours to use in a mission");
+            return;
+        }
+        if (budget < cost[v]) {
+            world.say("Not enough money: " + names[v] + " costs $" + cost[v] + ", you have $" + budget);
+            return;
+        }
+        Object made = null;
+        if (tool == TOOL_EVENT) {
+            switch (v) {
+                case 3: world.supplyDrop(wx, wy); made = Boolean.TRUE; break;
+                case 4: world.airstrike(wx, wy); made = Boolean.TRUE; break;
+                case 5: world.cityAlarm(); made = Boolean.TRUE; break;
+            }
+        } else {
+            // (Vehicles come out of the station or the base; the rest go down where tapped.)
+            boolean vehicle = v == 1 || v == 2 || v == 6 || v == 7;
+            float[] at = vehicle ? Campaign.arrival(world, v == 1 || v == 6, wx, wy) : new float[]{wx, wy};
+            if (at == null) at = new float[]{wx, wy};
+            switch (v) {
+                case 1: made = world.fleet.placePolice(at[0], at[1]); break;
+                case 2:
+                    if (world.fleet.sendTank(at[0], at[1], wx, wy, world.city.placeName(wx, wy))) made = Boolean.TRUE;
+                    else made = world.fleet.placeTank(at[0], at[1]);
+                    break;
+                case 3: made = world.placeBarricade(wx, wy); break;
+                case 4: made = world.placeCrate(wx, wy, 0); break;
+                case 5: made = world.placeMedkit(wx, wy); break;
+                case 6: made = world.fleet.placeBearCat(at[0], at[1]); break;
+                case 7: made = world.fleet.startReconAt(at[0], at[1]); break;
+            }
+        }
+        if (made == null) {
+            world.say("Can't put " + names[v].toLowerCase(java.util.Locale.US) + " there");
+            return;
+        }
+        Campaign.spend(world, cost[v]);
+        if (!(made instanceof Boolean)) lastAction.add(made);
+        if (cost[v] > 0 && (tool != TOOL_PLACE || v != 3 || world.messageTime <= 0)) world.say(names[v] + "  (-$" + cost[v] + ")");
     }
 
     private void spawnBrush(float wx, float wy) {
