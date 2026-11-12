@@ -2,11 +2,23 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.0";
-    static final int VERSION_CODE = 180;
+    static final String VERSION = "18.1";
+    static final int VERSION_CODE = 181;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.1  -  Heist mode, negotiators, and two heist missions",
+                    "A new game mode, Heist (New Game, Game mode). Armed crews of four to six hit the city's banks, jewellers, pawn shops and stores one after another - a few minutes apart, two or three at once on the bigger maps - each job somewhere new. There are no zombies.",
+                    "A job: the crew drives in from across town in a stolen car, parks at the door and goes in. The alarm goes off and a 911 call comes in. The people inside are taken hostage (hands up, kept where they are). Half a minute later the crew comes out with the money.",
+                    "The standoff: with three or more officers or soldiers at the door before they're done, the crew is boxed in. Officers close by keep them talking while nobody's shooting, and every so often a hostage is let go. Once the hostages are out and they've talked long enough, the crew gives up and is arrested. Pull back and they make a break for it; leave it long enough and they may shoot their way out. Officers who reach hostages with no robber beside them get them out.",
+                    "The chase: once they're out, back into the car (or a new one stolen close by) and off to the nearest edge of town. Police are called to wherever the car has got to, and officers and soldiers in sight shoot at it. Disable it and the crew carries on on foot. If the car reaches the edge of the map, they're away with the money.",
+                    "The ending: when every crew has been dealt with, the city wins if most heists were stopped. If half or more got away, they win. The after-action report shows heists stopped, those that got away, the money taken, arrests and hostages freed.",
+                    "Negotiator: a new police unit (in the Police picker). In plain clothes with a sidearm, a negotiator at a standoff talks the crew down three times as fast as any other officer. In missions a negotiator costs $30.",
+                    "The robber tool: in Heist mode the enemy button places robbers (a robber, a gunman or a heavy in armour), and each lot goes straight for the nearest place worth robbing.",
+                    "Two new campaign missions after Dead City: The Bank Job (three crews, let no more than one get away) and Crime Wave (six crews, two at a time, no more than two may escape).",
+                    "Getaway cars are labelled on the map: waiting, fleeing or disabled. In a mission the first hint no longer covers the mission panel.",
+            },
             {
                     "18.0  -  The Campaign: play as the commander",
                     "A proper game alongside the sandbox: Campaign on the main menu. Seven missions played in order across the three modes - zombies, gangs and the enemy army - each opening once the one before is won. New Game is still the sandbox, unchanged.",

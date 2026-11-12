@@ -36,6 +36,12 @@ final class Dispatch {
             "Somebody just got shot outside my building on %s!",
             "Gang members are shooting at the police on %s!",
     };
+    private static final String[] HEIST_CALLS = {
+            "Men in masks with guns on %s! I think they've robbed somewhere!",
+            "Shots fired on %s! It's the robbers!",
+            "I can see %d of them near %s, masked, with guns. Please hurry!",
+            "They're shooting at the police on %s!",
+    };
     private static final String[] ARMY_CALLS = {
             "There are soldiers on %s and they're not ours!",
             "Enemy troops coming down %s! Please hurry!",
@@ -612,7 +618,8 @@ final class Dispatch {
         }
         Incident inc = newIncident(zombie.x, zombie.y, count);
         if (inc == null) return;
-        String[] calls = w.mode() == CityConfig.MODE_GANGS ? GANG_CALLS : w.mode() == CityConfig.MODE_ARMY ? ARMY_CALLS : CALLS;
+        String[] calls = w.mode() == CityConfig.MODE_GANGS ? GANG_CALLS : w.mode() == CityConfig.MODE_ARMY ? ARMY_CALLS
+                : w.mode() == CityConfig.MODE_HEIST ? HEIST_CALLS : CALLS;
         String line = calls[rnd.nextInt(calls.length)];
         String text = line.contains("%d") ? String.format(java.util.Locale.US, line, count, inc.place) : String.format(java.util.Locale.US, line, inc.place);
         say(WHO_911, null, "\"" + text + "\"", inc.x, inc.y);

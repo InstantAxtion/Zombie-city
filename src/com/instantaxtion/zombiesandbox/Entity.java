@@ -51,9 +51,11 @@ final class Entity {
     static final int ROLE_MOUNTED = 18, ROLE_TRAFFIC = 19;
     /** ((15.6) The guards at the island prison.) */
     static final int ROLE_PRISON_GUARD = 20;
+    /** ((18.1) A police negotiator: talks robbers in a standoff out (three times as fast as any other officer). */
+    static final int ROLE_NEGOTIATOR = 21;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard", "Negotiator"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -196,6 +198,8 @@ final class Entity {
      * them (and, for that officer, who they're taking in).
      */
     byte arrested;
+    /** ((18.1) A hostage: the heist crew holding them (World.HEIST_SQUAD on), or -1. */
+    int heldBy = -1;
     transient float arrestT, escortT;
     transient Entity captor, escortee;
     /** ((17.2) A gang member's errands: a shop to rob, a car to steal (the job and where it is), a corner to keep (1 or 2). */

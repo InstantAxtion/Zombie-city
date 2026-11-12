@@ -41,9 +41,9 @@ final class GameView extends View implements Menu.Host {
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
-            -1, -2, -3, Entity.ROLE_SAR};
+            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_NEGOTIATOR};
     private static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
-            "Park ranger", "Search & rescue"};
+            "Park ranger", "Search & rescue", "Negotiator"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
     private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
@@ -58,7 +58,8 @@ final class GameView extends View implements Menu.Host {
             "Body armour and a carbine; sent to the worst trouble",
             "Scoped rifle: picks off the dead from a long way off", "State trooper: works the highways, backs up the town",
             "County deputy: patrols the back roads", "Patrols the trails and dirt roads, guards the ranger station",
-            "Rescue specialist: finds the cut-off and gets them out"};
+            "Rescue specialist: finds the cut-off and gets them out",
+            "Talks robbers in a standoff out three times as fast: hostages let go, then the crew gives up"};
     private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
@@ -66,13 +67,15 @@ final class GameView extends View implements Menu.Host {
             "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
     private static final String[] GANG_INFO = {"Pistol: quick to run when it goes badly", "Submachine gun in bursts, up close",
             "Shotgun: tough, charges in and doesn't break", "One to a gang: tough, a big revolver, guarded; the gang falls apart without them"};
+    private static final String[] HEIST_INFO = {"Pistol and a mask: a crew of them goes for the nearest bank or shop",
+            "Submachine gun: sprays the street on the way out", "Body armour and a rifle: holds the door"};
     private static final String[] ARMY_INFO = {"Assault rifle in bursts; advances on the stations and bases",
             "Belt-fed machine gun: pins down from a distance", "Scoped rifle: picks off officers from far away"};
 
     /** ((17.0) What the enemy tool makes in this game: the dead, a gang or the enemy army. */
     private int enemyType() {
         int m = world.mode();
-        return m == CityConfig.MODE_GANGS ? Entity.GANGSTER : m == CityConfig.MODE_ARMY ? Entity.INVADER
+        return m == CityConfig.MODE_GANGS || m == CityConfig.MODE_HEIST ? Entity.GANGSTER : m == CityConfig.MODE_ARMY ? Entity.INVADER
                 : ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
     }
 
@@ -80,6 +83,7 @@ final class GameView extends View implements Menu.Host {
         int m = world.mode();
         if (m == CityConfig.MODE_GANGS) return World.GANG_KITS;
         if (m == CityConfig.MODE_ARMY) return World.ARMY_KITS;
+        if (m == CityConfig.MODE_HEIST) return World.HEIST_KITS;
         String[] n = new String[ZOMBIE_VARIANTS.length];
         for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
         return n;
@@ -101,6 +105,7 @@ final class GameView extends View implements Menu.Host {
             int m = world.mode();
             if (m == CityConfig.MODE_GANGS) return "Gangs";
             if (m == CityConfig.MODE_ARMY) return "Enemy army";
+            if (m == CityConfig.MODE_HEIST) return "Robbers";
         }
         return TOOL_NAMES[t];
     }
@@ -911,6 +916,8 @@ final class GameView extends View implements Menu.Host {
     private void missionSetup() {
         missionRecorded = world != null && world.missionResult != 0;
         if (commander()) {
+            // (The mission panel sits where the first hint would.)
+            hintTime = 0;
             brushIdx = 0;
             if (Campaign.PLACE_COST[placeVariant] < 0) placeVariant = 1;
             if (Campaign.EVENT_COST[eventVariant] < 0) eventVariant = 4;
@@ -7707,7 +7714,7 @@ final class GameView extends View implements Menu.Host {
         else if (e.type == Entity.ZOMBIE_DOG) title = Names.dog(e.nameSeed) + "  -  Zombie dog";
         else if (e.isUndead()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
         else if (e.isHostile()) title = Names.person(e.nameSeed) + "  -  " + world.hostileTitle(e);
-        else if (e.arrested == 3) title = Names.person(e.nameSeed) + "  -  Held by the enemy";
+        else if (e.arrested == 3) title = Names.person(e.nameSeed) + (e.heldBy != -1 ? "  -  Hostage" : "  -  Held by the enemy");
         else if (e.arrested != 0) title = Names.person(e.nameSeed) + "  -  " + (e.arrested == 1 ? "Surrendering" : "Under arrest")
                 + ", " + World.GANG_NAMES[World.fmod(e.squad, World.GANG_NAMES.length)];
         else if (e.raider) title = Names.person(e.nameSeed) + "  -  Looter" + (e.leader == null ? ", gang leader" : "");
@@ -8624,7 +8631,8 @@ final class GameView extends View implements Menu.Host {
             case TOOL_CIV: return CIV_INFO;
             case TOOL_COP: return COP_INFO;
             case TOOL_MIL: return MIL_INFO;
-            case TOOL_ZOMBIE: return world.mode() == CityConfig.MODE_GANGS ? GANG_INFO : world.mode() == CityConfig.MODE_ARMY ? ARMY_INFO : ZOMBIE_INFO;
+            case TOOL_ZOMBIE: return world.mode() == CityConfig.MODE_GANGS ? GANG_INFO : world.mode() == CityConfig.MODE_ARMY ? ARMY_INFO
+                    : world.mode() == CityConfig.MODE_HEIST ? HEIST_INFO : ZOMBIE_INFO;
             case TOOL_PLACE: return PLACE_INFO;
             case TOOL_BUILD: return BUILD_INFO;
             default: return EVENT_INFO;

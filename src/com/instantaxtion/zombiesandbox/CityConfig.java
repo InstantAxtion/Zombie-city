@@ -55,8 +55,8 @@ final class CityConfig implements OptionSet {
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
     /** ((17.0) The game mode (not one of the eight in v): who the police and the army are up against. */
     static final int OPT_MODE = 10;
-    static final String[] MODES = {"Zombies", "Gangs", "Enemy army"};
-    static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2;
+    static final String[] MODES = {"Zombies", "Gangs", "Enemy army", "Heist"};
+    static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2, MODE_HEIST = 3;
     /** ((17.0) See OPT_MODE. Not part of the city code: the same streets can be played any way. */
     int mode;
     /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */

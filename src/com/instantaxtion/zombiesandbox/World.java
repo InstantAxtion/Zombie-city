@@ -620,7 +620,7 @@ final class World {
             // ((17.4) The enemy's armour and helicopters, and the troops still aboard its trucks.)
             if (v.enemy && !v.broken) zs += (v.type == Fleet.TANK ? 12 : v.type == Fleet.HELI ? 10 : v.kind == Fleet.K_APC ? 6 : 2) + v.riders.size() * 4;
         }
-        if (hostileMode()) zs += hostileReserve * (mode() == CityConfig.MODE_GANGS ? 2 : 4) * 0.5f;
+        if (hostileMode()) zs += hostileReserve * (mode() == CityConfig.MODE_GANGS ? 2 : heistMode() ? 10 : 4) * 0.5f;
         if (trait[TR_TOUGH]) zs *= 1.25f;
         if (trait[TR_FRAIL]) zs *= 0.8f;
         float b = hs + zs > 0 ? hs / (hs + zs) : 0.5f;
@@ -1548,6 +1548,11 @@ final class World {
             applyRole(e, Entity.ROLE_RIOT);
         } else if (role == Entity.ROLE_SWAT || role == Entity.ROLE_MARKSMAN) {
             applyRole(e, role);
+        } else if (role == Entity.ROLE_NEGOTIATOR) {
+            // ((18.1) A negotiator: plain clothes, a jacket and a sidearm; talks crews out three times as fast.)
+            e.role = Entity.ROLE_NEGOTIATOR;
+            e.body = 0xFF3A4A5E;
+            e.head = 0xFF2A2A2A;
         } else if (role == Entity.ROLE_SAR) {
             applyRole(e, Entity.ROLE_SWAT);
             e.role = Entity.ROLE_SAR;
@@ -2212,8 +2217,8 @@ final class World {
         separate();
         stampedeNews(dt);
         fleet.update(dt);
-        if (mode() == CityConfig.MODE_GANGS) driveBys(dt);
-        if (mode() == CityConfig.MODE_ARMY) cityVsArmour(dt);
+        if (mode() == CityConfig.MODE_GANGS || heistMode()) driveBys(dt);
+        if (mode() == CityConfig.MODE_ARMY || heistMode()) cityVsArmour(dt);
         updateBlasts(dt);
         updateFirebomb(dt);
         updateMedkits(dt);
@@ -2441,7 +2446,7 @@ final class World {
             boolean clear = z == 0 && rising == 0 && lurking == 0 && bitten == 0 && h > 0 && hostileReserve <= 0;
             if (!clear) clearSince = -1;
             else if (clearSince < 0) clearSince = time;
-            if (clear && time - clearSince >= 4 && hostileMode()) {
+            if (clear && time - clearSince >= 4 && hostileMode() && !heistMode()) {
                 outbreak = false;
                 warResult = 1;
                 boolean gangs = mode() == CityConfig.MODE_GANGS;
@@ -2453,6 +2458,8 @@ final class World {
                         + count(civiliansLost, "civilian", "civilians") + " lost in the crossfire.");
                 startAftermath(AFTER_RECOVERY);
                 calmDown();
+            } else if (heistMode()) {
+                // ((18.1) Heists: how it ends is worked out in heistLife.)
             } else if (hostileMode()) {
                 // ((17.0) The other side wins once there's nobody left to fight them: every officer and soldier down,
                 // and no more help coming from outside.)
@@ -2957,11 +2964,13 @@ final class World {
 
     /** What the other side is called in counts and labels. */
     String enemyLabel() {
-        return mode() == CityConfig.MODE_GANGS ? "Gangs" : mode() == CityConfig.MODE_ARMY ? "Enemy" : "Zombies";
+        return mode() == CityConfig.MODE_GANGS ? "Gangs" : mode() == CityConfig.MODE_ARMY ? "Enemy" : heistMode() ? "Robbers" : "Zombies";
     }
 
     /** What a gang member or enemy soldier is, for the card about them. */
     String hostileTitle(Entity e) {
+        if (e.type == Entity.GANGSTER && heistMode())
+            return HEIST_KITS[Math.max(0, Math.min(2, e.kit))] + (e.squad >= HEIST_SQUAD ? ", the " + crewName(e.squad) : "");
         if (e.type == Entity.GANGSTER) return e.kit == 3 ? "Boss of the " + GANG_NAMES[fmod(e.squad, GANG_NAMES.length)]
                 : GANG_KITS[Math.max(0, Math.min(2, e.kit))] + ", " + GANG_NAMES[fmod(e.squad, GANG_NAMES.length)];
         return ARMY_KITS[Math.max(0, Math.min(2, e.kit))] + ", squad " + (fmod(e.squad, 90) + 1);
@@ -2977,9 +2986,14 @@ final class World {
             {"the dead", "the enemy"}, {"The infected", "The enemy"}, {"the infected", "the enemy"}, {"Outbreak", "Invasion"},
             {"outbreak", "invasion"}, {"hordes", "columns"}, {"horde", "column"}, {"Horde", "Column"}};
 
+    private static final String[][] HEIST_WORDS = {{"THE DEAD", "THE CREWS"}, {"OUTBREAK", "CRIME WAVE"}, {"Zombies", "Robbers"},
+            {"zombies", "robbers"}, {"Zombie", "Robber"}, {"zombie", "robber"}, {"The dead", "The robbers"},
+            {"the dead", "the robbers"}, {"The infected", "The robbers"}, {"the infected", "the robbers"}, {"Outbreak", "Crime wave"},
+            {"outbreak", "crime wave"}, {"hordes", "crews"}, {"horde", "crew"}, {"Horde", "Crew"}};
+
     String reword(String s) {
         if (s == null || city == null || city.cfg.mode == CityConfig.MODE_ZOMBIES) return s;
-        String[][] words = city.cfg.mode == CityConfig.MODE_GANGS ? GANG_WORDS : ARMY_WORDS;
+        String[][] words = city.cfg.mode == CityConfig.MODE_GANGS ? GANG_WORDS : city.cfg.mode == CityConfig.MODE_HEIST ? HEIST_WORDS : ARMY_WORDS;
         for (String[] w : words) if (s.indexOf(w[0]) >= 0) s = s.replace(w[0], w[1]);
         return s;
     }
@@ -3037,6 +3051,10 @@ final class World {
             toolGroup = near.squad;
             return;
         }
+        if (heistMode()) {
+            toolGroup = toolCrew(x, y);
+            return;
+        }
         if (mode() == CityConfig.MODE_GANGS) {
             int g = 0;
             float bd = Float.MAX_VALUE;
@@ -3056,6 +3074,11 @@ final class World {
     Entity spawnHostile(int kit, float x, float y) {
         boolean gangs = mode() == CityConfig.MODE_GANGS;
         if (toolGroup < 0) newHostileGroup(x, y);
+        if (heistMode()) {
+            Entity r = spawn(Entity.GANGSTER, x, y);
+            if (r != null) kitRobber(r, kit, toolGroup);
+            return r;
+        }
         // ((17.2) One boss to a gang: another placed while theirs is about is an enforcer.)
         if (gangs && kit == 3 && gangBoss[fmod(toolGroup, GANG_NAMES.length)] != null && !gangBoss[fmod(toolGroup, GANG_NAMES.length)].dead
                 && gangBoss[fmod(toolGroup, GANG_NAMES.length)].type == Entity.GANGSTER) kit = 2;
@@ -3119,6 +3142,14 @@ final class World {
     /** The game's own gang crews or invading squads, in place of the dead at the start. */
     private void startHostiles(int n) {
         if (n <= 0) return;
+        if (heistMode()) {
+            // ((18.1) Crews to come, one job at a time: a mission's own number, otherwise one for every eight of the setting.)
+            int crews = city.cfg.mission >= 0 ? n : Math.max(2, Math.min(10, n / 8));
+            hostileStart = crews;
+            hostileReserve = crews;
+            heistCd = 12;
+            return;
+        }
         // (Sized against the city's own police and army: the default setting is a fight about two to three, and the
         // biggest more of them than of the city's defenders.)
         n = Math.max(1, Math.min(city.cfg.mission >= 0 ? n : hostilePlanned(n, counts[Entity.COP] + counts[Entity.SOLDIER]), maxEntities - entities.size() - 100));
@@ -3188,7 +3219,7 @@ final class World {
      * gang's new recruits out on its turf - until there are no more to come.
      */
     private void hostileWaves() {
-        if (hostileReserve <= 0 || !hostileMode()) return;
+        if (hostileReserve <= 0 || !hostileMode() || heistMode()) return;
         waveCd -= 1;
         int now = counts[Entity.GANGSTER] + counts[Entity.INVADER];
         if (waveCd > 0 || now >= hostileStart * 0.7f) return;
@@ -3408,6 +3439,8 @@ final class World {
      * squad on the stations, the bases and city hall, holds each one it takes, and doesn't break.
      */
     private void thinkHostile(Entity e, float dt) {
+        // ((18.1) A heist crew's on a job.)
+        if (e.type == Entity.GANGSTER && heistMode() && heistRobber(e, dt)) return;
         boolean army = e.type == Entity.INVADER;
         if (!army && e.kit == 3) {
             // ((17.2) The boss in the hideout, out of sight: nobody outside knows they're there until the police raid it.)
@@ -4600,6 +4633,8 @@ final class World {
         float edge = 3 * City.T;
         if (e.x < edge || e.y < edge || e.x > city.worldW() - edge || e.y > city.worldH() - edge || World.hypot(e.x - e.roamX, e.y - e.roamY) < 20) {
             // Gone: out of the city for good.
+            Heist hh = e.squad >= HEIST_SQUAD ? heistOf(e.squad) : null;
+            if (hh != null) hh.out++;
             e.dead = true;
             e.removed = true;
             counts[e.type]--;
@@ -4611,6 +4646,494 @@ final class World {
 
     // ------------------------------------------------------------------ (17.4) the enemy army's vehicles, artillery,
     // paratroopers and drones; the ground it holds, and the occupation
+
+    // ------------------------------------------------------------------ (18.1) heists
+
+    /** Crews on a job: where, in what car, how far it's got, what they've taken. */
+    static final class Heist {
+        int squad, phase, loot, hostages, out;
+        City.Building b;
+        Fleet.Vehicle car;
+        float t, talk, quiet;
+        boolean said;
+    }
+
+    /** The squad numbers of heist crews start here (gangs are 0 to 7, the army's squads 100 on). */
+    static final int HEIST_SQUAD = 200;
+    static final int H_DRIVE = 0, H_ROB = 1, H_STANDOFF = 2, H_ESCAPE = 3;
+    static final String[] HEIST_KITS = {"Robber", "Gunman", "Heavy"};
+    static final String[] CREW_NAMES = {"Red Masks", "Night Shift", "Clown Crew", "Silver Six", "Getaway Boys", "Grey Coats",
+            "Black Vans", "Lucky Seven", "Midnight Crew", "Hollow Men"};
+    final ArrayList<Heist> heists = new ArrayList<Heist>();
+    /** Heists begun, stopped (the crew taken out or arrested), got away with, and the money taken. */
+    int heistsStarted, heistsStopped, heistsEscaped, lootStolen;
+    private float heistCd = 15;
+    private int crewsMade;
+
+    boolean heistMode() {
+        return mode() == CityConfig.MODE_HEIST;
+    }
+
+    Heist heistOf(int squad) {
+        for (int i = 0, n = heists.size(); i < n; i++) if (heists.get(i).squad == squad) return heists.get(i);
+        return null;
+    }
+
+    String crewName(int squad) {
+        return CREW_NAMES[fmod(squad - HEIST_SQUAD, CREW_NAMES.length)];
+    }
+
+    /** A robber's kit: dark clothes and a mask, and a pistol, a submachine gun, or armour and a rifle. */
+    private void kitRobber(Entity e, int kit, int squad) {
+        e.kit = Math.max(0, Math.min(2, kit));
+        e.squad = squad;
+        e.hasGun = true;
+        e.body = mix(0xFF1E1F24, SHIRTS[rnd.nextInt(SHIRTS.length)], 0.15f);
+        e.head = 0xFF111114;
+        setGun(e, e.kit == 0 ? Entity.W_PISTOL : e.kit == 1 ? Entity.W_SMG : Entity.W_RIFLE, e.kit == 0 ? 60 : e.kit == 1 ? 150 : 150);
+        if (e.kit == 2) {
+            e.hp = e.maxHp = 130;
+            e.armored = true;
+            e.mass = 1.4f;
+        }
+        e.aware = true;
+    }
+
+    /** Somewhere worth robbing: a bank first, then a jeweller or a pawn shop, then any shop with a way in. */
+    private City.Building heistTarget(float nx, float ny, boolean near) {
+        City.Building best = null;
+        float bs = -Float.MAX_VALUE;
+        City.Facility st;
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            if (b.collapsed || b.main != null || b.residents > 0) continue;
+            String t = b.typeName();
+            if (t == null) continue;
+            int worth = t.startsWith("Bank") ? 3 : t.equals("Jeweller") || t.equals("Pawn shop") ? 2 : b.capacity > 0 ? 1 : 0;
+            if (worth == 0 || heistAt(b)) continue;
+            if (!city.enterable(b)) continue;
+            float d = (float) World.hypot(b.doorX - nx, b.doorY - ny);
+            st = city.nearestFacility(City.FACILITY_POLICE, b.doorX, b.doorY);
+            float fromCops = st == null ? 2000 : (float) World.hypot(st.x - b.doorX, st.y - b.doorY);
+            float s = near ? -d + worth * 200 : worth * 1000 + Math.min(fromCops, 1500) + rnd.nextFloat() * 900 - (heistHit.contains(b) ? 3000 : 0);
+            if (s > bs) {
+                bs = s;
+                best = b;
+            }
+        }
+        return best;
+    }
+
+    /** Places already hit: the next crew looks elsewhere. */
+    private final java.util.HashSet<City.Building> heistHit = new java.util.HashSet<City.Building>();
+
+    private boolean heistAt(City.Building b) {
+        for (int i = 0, n = heists.size(); i < n; i++) if (heists.get(i).b == b) return true;
+        return false;
+    }
+
+    /** A point on the road at the nearest edge of the map to (x, y), for a getaway (or the way in). */
+    private float[] roadOut(float x, float y) {
+        float ww = city.worldW(), hh = city.worldH();
+        float dl = x, dr = ww - x, dt = y, db = hh - y, m = Math.min(Math.min(dl, dr), Math.min(dt, db));
+        float[] e = city.edgeSpawn(m == dl ? 0 : m == dr ? ww : x, m == dt ? 0 : m == db ? hh : y);
+        if (e == null) return null;
+        float[] p = city.nearestDrivable(e[0], e[1]);
+        return p != null ? p : e;
+    }
+
+    /** A crew of four to six drives in from the edge of town in a stolen car, to rob somewhere. */
+    private boolean startHeist() {
+        City.Building b = heistTarget(0, 0, false);
+        if (b == null) return false;
+        // (They come in by car from across town, a few streets off.)
+        float[] in = null;
+        for (int tries = 0; tries < 12 && in == null; tries++) {
+            float a = rnd.nextFloat() * TAU, r = 500 + rnd.nextFloat() * 400;
+            float[] p = city.nearestDrivable(b.doorX + (float) Math.cos(a) * r, b.doorY + (float) Math.sin(a) * r);
+            if (p != null && World.hypot(p[0] - b.doorX, p[1] - b.doorY) > 350) in = p;
+        }
+        if (in == null) return false;
+        Heist h = newHeist(b);
+        int size = 4 + rnd.nextInt(3);
+        Fleet.Vehicle car = fleet.stealCar(in[0], in[1]);
+        ArrayList<Entity> crew = new ArrayList<Entity>();
+        for (int i = 0; i < size; i++) {
+            Entity e = spawn(Entity.GANGSTER, in[0] + rnd.nextFloat() * 10 - 5, in[1] + rnd.nextFloat() * 10 - 5);
+            if (e == null) break;
+            kitRobber(e, i == 0 ? 2 : i % 3 == 1 ? 1 : 0, h.squad);
+            crew.add(e);
+        }
+        if (crew.isEmpty()) {
+            heists.remove(h);
+            if (car != null) fleet.discard(car);
+            return false;
+        }
+        if (car != null) {
+            for (Entity e : crew) aboard(car, e);
+            car.getaway = true;
+            if (fleet.gangDrive(car, h.squad, b.doorX, b.doorY)) h.car = car;
+            else {
+                fleet.gangOut(car);
+                car.getaway = false;
+            }
+        }
+        heistsStarted++;
+        return true;
+    }
+
+    private Heist newHeist(City.Building b) {
+        Heist h = new Heist();
+        heistHit.add(b);
+        h.squad = HEIST_SQUAD + crewsMade++;
+        h.b = b;
+        h.phase = H_DRIVE;
+        h.loot = (b.typeName() != null && b.typeName().startsWith("Bank") ? 400 : b.typeName() != null && b.typeName().equals("Jeweller") ? 250 : 60)
+                * 1000 + rnd.nextInt(80) * 1000;
+        heists.add(h);
+        return h;
+    }
+
+    /** ((18.1) The robber tool's next lot: a crew of its own, on foot, already after the nearest place worth robbing. */
+    private int toolCrew(float x, float y) {
+        City.Building b = heistTarget(x, y, true);
+        if (b == null) return HEIST_SQUAD + crewsMade++;
+        Heist h = newHeist(b);
+        heistsStarted++;
+        return h.squad;
+    }
+
+    /** Everyone on a crew, on foot and in its car. */
+    private int crewCount(Heist h) {
+        int n = 0;
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.type == Entity.GANGSTER && e.squad == h.squad && e.arrested == 0) n++;
+        }
+        if (h.car != null && !h.car.removedFromFleet) n += h.car.riders.size();
+        return n;
+    }
+
+    /** Once a second: new jobs, and each crew's job moving on. */
+    private void heistLife() {
+        int active = heists.size();
+        heistCd -= 1;
+        if (hostileReserve > 0 && heistCd <= 0 && active < (city.w > 300 ? 3 : 2)) {
+            if (startHeist()) {
+                hostileReserve--;
+                heistCd = 45 + rnd.nextFloat() * 50;
+            } else heistCd = 10;
+        }
+        for (int k = heists.size() - 1; k >= 0; k--) heistStep(heists.get(k));
+        // All the jobs done: how the city did.
+        if (warResult == 0 && hostileReserve <= 0 && heists.isEmpty() && heistsStarted > 0 && counts[Entity.GANGSTER] == 0) {
+            boolean held = heistsEscaped * 2 <= heistsStarted - 1 || heistsEscaped == 0;
+            outbreak = false;
+            warResult = held ? 1 : 2;
+            timeline(held ? "The robbery wave is over: most crews were stopped" : "The robbery wave is over: too many crews got away");
+            banner(held ? "THE CREWS ARE STOPPED" : "THEY GOT AWAY WITH IT", heistsStopped + " of " + heistsStarted + " heists stopped, "
+                    + heistsEscaped + " got away with $" + String.format(java.util.Locale.US, "%,d", lootStolen) + ".");
+            startAftermath(held ? AFTER_RECOVERY : AFTER_FALLEN);
+            if (held) calmDown();
+        }
+    }
+
+    private void heistStep(Heist h) {
+        h.t += 1;
+        City.Building b = h.b;
+        int crew = crewCount(h);
+        if (crew == 0) {
+            // Everyone on it shot or arrested - or slipped out of town on foot.
+            if (h.out > 0) gotAway(h);
+            else endHeist(h, true);
+            return;
+        }
+        int law = 0;
+        for (int i = 0, m = gatherArmed(b.doorX, b.doorY, 160); i < m; i++) {
+            Entity o = gathered[i];
+            if (!o.dead && o.hp > 0 && (o.type == Entity.COP || o.type == Entity.SOLDIER)) law++;
+        }
+        switch (h.phase) {
+            case H_DRIVE: {
+                boolean inCar = h.car != null && !h.car.removedFromFleet && h.car.gang == h.squad && !h.car.riders.isEmpty();
+                if (inCar) {
+                    if (h.t < 160) break;
+                    fleet.gangOut(h.car);
+                }
+                // Out of the car (or on foot from the start): once any of them is at the door, it's on.
+                boolean there = false;
+                for (int i = 0, m = entities.size(); i < m && !there; i++) {
+                    Entity e = entities.get(i);
+                    if (!e.dead && e.squad == h.squad && e.type == Entity.GANGSTER && World.hypot(e.x - b.doorX, e.y - b.doorY) < 50) there = true;
+                }
+                if (there || h.t > 200) {
+                    h.phase = H_ROB;
+                    h.t = 0;
+                }
+                break;
+            }
+            case H_ROB: {
+                if (h.t == 3) {
+                    emit(Sfx.ALARM, b.doorX, b.doorY);
+                    noise(b.doorX, b.doorY, 240);
+                    String what = b.typeName() != null ? "the " + b.typeName().toLowerCase(java.util.Locale.US) : "a shop";
+                    dispatch.say(Dispatch.WHO_911, null, "911: Armed robbery at " + what + " on " + city.placeName(b.doorX, b.doorY)
+                            + "! Masked men, " + crew + " of them, they've got people in there!", b.doorX, b.doorY, true);
+                    dispatch.sighting(b.doorX, b.doorY, null);
+                    timeline("Heist: " + crewName(h.squad) + " hit " + what, b.doorX, b.doorY);
+                }
+                if (h.t == 5) takeHostages(h);
+                // The police there in numbers before they're done: they're boxed in.
+                if (h.t > 8 && law >= 3) {
+                    h.phase = H_STANDOFF;
+                    h.t = 0;
+                    dispatch.say(Dispatch.WHO_POLICE, null, "Police: We have the robbers contained at " + city.placeName(b.doorX, b.doorY)
+                            + ". " + (h.hostages > 0 ? h.hostages + " hostages inside. " : "") + "Get a negotiator down here.", b.doorX, b.doorY, true);
+                    timeline("Standoff at " + city.placeName(b.doorX, b.doorY), b.doorX, b.doorY);
+                    break;
+                }
+                if (h.t >= 30) beginEscape(h, "They're coming out with the money!");
+                break;
+            }
+            case H_STANDOFF: {
+                // Talking them down: an officer close by keeps them talking; a negotiator three times as fast. Shooting
+                // stops the talks.
+                boolean shooting = false, negotiator = false;
+                int near = 0;
+                for (int i = 0, m = gatherArmed(b.doorX, b.doorY, 130); i < m; i++) {
+                    Entity o = gathered[i];
+                    if (o.dead || o.type != Entity.COP) continue;
+                    near++;
+                    if (o.role == Entity.ROLE_NEGOTIATOR) negotiator = true;
+                }
+                for (int i = 0, m = entities.size(); i < m; i++) {
+                    Entity e = entities.get(i);
+                    if (!e.dead && e.squad == h.squad && e.type == Entity.GANGSTER && e.aiming) shooting = true;
+                }
+                if (shooting) h.quiet = 0;
+                else h.quiet += 1;
+                if (h.quiet > 3 && near > 0) h.talk += negotiator ? 3 : 1;
+                // Every so often, a hostage let go as a sign of good faith.
+                if (h.talk >= 15 && h.hostages > 0) {
+                    h.talk -= 10;
+                    if (releaseHostage(h)) {
+                        h.hostages--;
+                        dispatch.say(Dispatch.WHO_POLICE, null, "Police: They've let a hostage go at " + city.placeName(b.doorX, b.doorY) + ".", b.doorX, b.doorY);
+                    }
+                }
+                if (h.hostages <= 0 && h.talk >= 8 + crew * 4) {
+                    // Talked out: they give themselves up.
+                    for (int i = 0, m = entities.size(); i < m; i++) {
+                        Entity e = entities.get(i);
+                        if (!e.dead && e.squad == h.squad && e.type == Entity.GANGSTER && e.arrested == 0) surrender(e);
+                    }
+                    dispatch.say(Dispatch.WHO_POLICE, null, "Police: The robbers at " + city.placeName(b.doorX, b.doorY) + " have surrendered. Nobody else hurt.",
+                            b.doorX, b.doorY, true);
+                    timeline("Robbers talked out at " + city.placeName(b.doorX, b.doorY), b.doorX, b.doorY);
+                    break;
+                }
+                // The police pulled back: they make a run for it.
+                if (law < 2 && h.t > 10) beginEscape(h, "The robbers are making a break for it!");
+                else if (h.t > 240 && rnd.nextFloat() < 0.05f) beginEscape(h, "The robbers are shooting their way out!");
+                break;
+            }
+            case H_ESCAPE: {
+                Fleet.Vehicle v = h.car;
+                boolean carOk = v != null && !v.removedFromFleet && !v.broken;
+                if (carOk && v.gang != h.squad) {
+                    // Into the car: everyone close by gets in, then off.
+                    int in = 0, out = 0;
+                    for (int i = 0, m = entities.size(); i < m; i++) {
+                        Entity e = entities.get(i);
+                        if (e.dead || e.squad != h.squad || e.type != Entity.GANGSTER || e.arrested != 0) continue;
+                        if (World.hypot(e.x - v.x, e.y - v.y) < 22) {
+                            aboard(v, e);
+                            in++;
+                        } else out++;
+                    }
+                    if (!v.riders.isEmpty() && (out == 0 || h.t > 12)) {
+                        float[] to = roadOut(v.x, v.y);
+                        if (to == null || !fleet.gangDrive(v, h.squad, to[0], to[1])) {
+                            fleet.gangOut(v);
+                            h.car = null;
+                        } else {
+                            v.getaway = true;
+                            dispatch.say(Dispatch.WHO_911, null, "911: They just drove off from " + city.placeName(b.doorX, b.doorY)
+                                    + " in a " + fleet.describe(v).toLowerCase(java.util.Locale.US) + "!", v.x, v.y, true);
+                        }
+                    }
+                } else if (carOk) {
+                    // The chase: the police called to wherever it's got to.
+                    if (((int) h.t) % 4 == 0) dispatch.sighting(v.x, v.y, null);
+                    float edge = 5 * City.T;
+                    if (v.x < edge || v.y < edge || v.x > city.worldW() - edge || v.y > city.worldH() - edge) {
+                        v.riders.clear();
+                        fleet.discard(v);
+                        h.car = null;
+                        gotAway(h);
+                        return;
+                    }
+                } else if (v != null && !v.removedFromFleet && v.gang == h.squad) {
+                    // Shot up: out and on foot.
+                    fleet.gangOut(v);
+                    h.car = null;
+                }
+                break;
+            }
+        }
+    }
+
+    private void beginEscape(Heist h, String line) {
+        h.phase = H_ESCAPE;
+        h.t = 0;
+        // The car's where they left it: if it's gone, they'll steal another close by, or run.
+        if (h.car == null || h.car.removedFromFleet || h.car.broken) {
+            h.car = null;
+            float[] p = city.nearestDrivable(h.b.doorX, h.b.doorY);
+            if (p != null) h.car = fleet.stealCar(p[0], p[1]);
+        }
+        if (h.car != null) {
+            h.car.getaway = true;
+            h.car.parked = true;
+            h.car.speed = 0;
+        }
+        dispatch.say(Dispatch.WHO_911, null, "911: " + line + " " + city.placeName(h.b.doorX, h.b.doorY) + "!", h.b.doorX, h.b.doorY, true);
+        releaseAll(h, false);
+    }
+
+    /** People inside when they went in: hands up, made to stay where they are. */
+    private void takeHostages(Heist h) {
+        for (int i = 0, m = entities.size(); i < m && h.hostages < 8; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.CIVILIAN || e.arrested != 0 || e.bleedT > 0) continue;
+            if (city.insideOf(e.x, e.y) != h.b) continue;
+            e.arrested = 3;
+            e.heldBy = h.squad;
+            e.arrestT = 0;
+            e.postX = e.x;
+            e.postY = e.y;
+            e.task = Dispatch.T_NONE;
+            h.hostages++;
+        }
+    }
+
+    private boolean releaseHostage(Heist h) {
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.arrested == 3 && e.heldBy == h.squad) {
+                freeHostage(e);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void freeHostage(Entity e) {
+        e.arrested = 0;
+        e.heldBy = -1;
+        e.fleeTimer = 6;
+        e.aware = true;
+        freed++;
+    }
+
+    private void releaseAll(Heist h, boolean free) {
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.arrested == 3 && e.heldBy == h.squad) {
+                if (free) freeHostage(e);
+                else {
+                    e.arrested = 0;
+                    e.heldBy = -1;
+                    e.fleeTimer = 6;
+                }
+            }
+        }
+        h.hostages = 0;
+    }
+
+    private void gotAway(Heist h) {
+        h.said = true;
+        heistsEscaped++;
+        lootStolen += h.loot;
+        // Anyone of theirs still on foot scatters.
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.squad == h.squad && e.type == Entity.GANGSTER) e.squad = -1 - HEIST_SQUAD;
+        }
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police: We've lost them. The " + crewName(h.squad) + " got away with $"
+                + String.format(java.util.Locale.US, "%,d", h.loot) + ".", city.worldW() / 2, city.worldH() / 2, true);
+        timeline("The " + crewName(h.squad) + " got away");
+        releaseAll(h, true);
+        heists.remove(h);
+    }
+
+    private void endHeist(Heist h, boolean stopped) {
+        heists.remove(h);
+        releaseAll(h, true);
+        if (h.car != null && !h.car.removedFromFleet && h.car.gang == h.squad) fleet.gangOut(h.car);
+        if (!stopped) return;
+        heistsStopped++;
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police: The " + crewName(h.squad) + " are done: every one of them down or in cuffs.",
+                h.b.doorX, h.b.doorY, true);
+        timeline("Heist stopped: the " + crewName(h.squad), h.b.doorX, h.b.doorY);
+    }
+
+    /**
+     * A robber's part in the job: to the door, inside to hold the place, out to the car and away. False to fight
+     * (anyone of the city's side close and in sight) or, with no job, to do as the hostile do.
+     */
+    private boolean heistRobber(Entity e, float dt) {
+        Heist h = heistOf(e.squad);
+        if (h == null) {
+            // A crew that got away, or lost its job (a saved game): out of town.
+            scatterStep(e, dt);
+            return true;
+        }
+        City.Building b = h.b;
+        e.foeT -= dt;
+        if (e.foeT <= 0 || (e.foe != null && (e.foe.dead || e.foe.hp <= 0))) {
+            e.foeT = 0.35f + rnd.nextFloat() * 0.3f;
+            e.foe = hostileTarget(e, hostileSight(e));
+        }
+        Entity foe = e.foe;
+        boolean fight = foe != null && !foe.dead && foe.hp > 0 && World.hypot(foe.x - e.x, foe.y - e.y) < hostileRange(e)
+                && city.los(e.x, e.y, foe.x, foe.y);
+        if (fight && h.phase != H_ESCAPE) return false;
+        boolean inside = city.insideOf(e.x, e.y) == b;
+        switch (h.phase) {
+            case H_DRIVE:
+            case H_ROB:
+            case H_STANDOFF: {
+                e.aiming = false;
+                Interiors.Plan p = city.planOf(b);
+                float tx = (b.x0 + b.x1) / 2, ty = (b.y0 + b.y1) / 2;
+                if (p != null && !p.spots.isEmpty()) {
+                    float[] s = p.spots.get(fmod(e.nameSeed, p.spots.size()));
+                    tx = s[0];
+                    ty = s[1];
+                }
+                // (One of them watches the door.)
+                if (e.kit == 2) {
+                    tx = b.inX * 0.7f + tx * 0.3f;
+                    ty = b.inY * 0.7f + ty * 0.3f;
+                }
+                if (!indoorMove(e, tx, ty, inside ? e.speed : e.runSpeed * 0.85f)) walkToSpot(e, b.doorX, b.doorY, e.runSpeed * 0.85f);
+                return true;
+            }
+            default: {
+                if (fight && rnd.nextFloat() < 0.5f) return false;
+                Fleet.Vehicle v = h.car;
+                if (v != null && !v.removedFromFleet && !v.broken && v.gang != h.squad) {
+                    e.aiming = false;
+                    walkToSpot(e, v.x, v.y, e.runSpeed);
+                    return true;
+                }
+                if (fight) return false;
+                scatterStep(e, dt);
+                return true;
+            }
+        }
+    }
 
     /** Is any of the city's police or soldiers within r of (x, y)? */
     boolean cityForceNear(float x, float y, float r) {
@@ -4791,7 +5314,7 @@ final class World {
         }
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = fleet.vehicles.get(i);
-            if (!v.enemy || v.broken || v.removedFromFleet) continue;
+            if (!(v.enemy || (v.getaway && v.gang >= 0 && !v.riders.isEmpty())) || v.broken || v.removedFromFleet) continue;
             boolean air = v.type == Fleet.HELI, armour = v.type == Fleet.TANK || v.kind == Fleet.K_APC;
             int shooters = 0;
             for (int k = 0, m = gatherArmed(v.x, v.y, 190); k < m && shooters < 10; k++) {
@@ -4821,7 +5344,10 @@ final class World {
                 if (rnd.nextFloat() < (air ? 0.4f : 0.6f)) fleet.damage(v, armour ? 0.6f : e.type == Entity.SOLDIER ? 5 : 3.5f, false);
                 if (rnd.nextFloat() < 0.3f) emit(e.type == Entity.SOLDIER ? Sfx.RIFLE : Sfx.PISTOL, e.x, e.y);
             }
-            if (v.broken) {
+            if (v.broken && v.getaway) {
+                timeline("Getaway car stopped", v.x, v.y);
+                dispatch.say(Dispatch.WHO_POLICE, null, "Police: Getaway car disabled on " + city.placeName(v.x, v.y) + "! They're out on foot.", v.x, v.y, true);
+            } else if (v.broken) {
                 timeline("Enemy " + (v.type == Fleet.TANK ? "tank" : air ? "helicopter" : v.kind == Fleet.K_APC ? "APC" : "truck") + " knocked out",
                         v.x, v.y);
                 if (rnd.nextFloat() < 0.5f)
@@ -5092,6 +5618,27 @@ final class World {
     private void detainedStep(Entity e, float dt) {
         e.arrestT += dt;
         e.aiming = false;
+        if (e.heldBy != -1) {
+            // ((18.1) A hostage: kept where they are, until the police get in to them with no robber close by.)
+            Heist h = heistOf(e.heldBy);
+            Entity law = lawNear(e, 45);
+            boolean guarded = false;
+            for (int i = 0, n = entities.size(); i < n && !guarded; i++) {
+                Entity o = entities.get(i);
+                if (!o.dead && o.squad == e.heldBy && o.type == Entity.GANGSTER && o.arrested == 0 && World.hypot(o.x - e.x, o.y - e.y) < 80) guarded = true;
+            }
+            if (h == null || (law != null && !guarded)) {
+                if (h != null) h.hostages = Math.max(0, h.hostages - 1);
+                freeHostage(e);
+                if (law != null && rnd.nextFloat() < 0.4f)
+                    dispatch.chatter(Dispatch.WHO_POLICE, law, "Got a hostage out on " + city.placeName(e.x, e.y) + ".", e.x, e.y);
+                return;
+            }
+            if (city.insideOf(e.x, e.y) != null) indoorMove(e, e.postX, e.postY, e.speed * 0.5f);
+            else if (World.hypot(e.postX - e.x, e.postY - e.y) > 6) walkToSpot(e, e.postX, e.postY, e.speed * 0.5f);
+            else steer(e, 0, 0, 0);
+            return;
+        }
         // The city's police or soldiers here: free.
         Entity law = lawNear(e, 45);
         if (law != null || (!enemyHolds(e.x, e.y) && e.arrestT > 20)) {
@@ -9614,6 +10161,7 @@ final class World {
         if (WOUNDS) rescueLife();
         if (mode() == CityConfig.MODE_GANGS) gangLife();
         if (mode() == CityConfig.MODE_ARMY) armyLife();
+        if (heistMode()) heistLife();
         if (city.cfg.mission >= 0) Campaign.tick(this);
         fieldHospital();
         militias();
@@ -11924,7 +12472,7 @@ final class World {
      */
     private boolean mortarStep(Entity e, float dt) {
         // ((17.0) Nobody shells their own city's streets over a gang war.)
-        if (mode() == CityConfig.MODE_GANGS) return false;
+        if (mode() == CityConfig.MODE_GANGS || heistMode()) return false;
         if (e.grenades <= 0) {
             if (e.task == Dispatch.T_POST) {
                 e.task = Dispatch.T_NONE;

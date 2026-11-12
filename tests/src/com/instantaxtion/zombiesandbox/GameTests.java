@@ -2423,7 +2423,8 @@ public final class GameTests {
                 check(c.coreFraction() >= 0.85f, "nine tenths town (" + c.coreFraction() + ")");
                 // The new roles.
                 // ((14.0) And the combat engineers and the mortar teams.)
-                check(Entity.ROLE_NAMES.length == 21 && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
+                // ((18.1) And the negotiator.)
+                check(Entity.ROLE_NAMES.length == 22 && "Negotiator".equals(Entity.ROLE_NAMES[Entity.ROLE_NEGOTIATOR]) && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
                         && "Combat engineer".equals(Entity.ROLE_NAMES[Entity.ROLE_ENGINEER]) && "Mortar team".equals(Entity.ROLE_NAMES[Entity.ROLE_MORTAR]), "every role named");
             }
         });
@@ -5568,6 +5569,96 @@ public final class GameTests {
                 check(menu.screen == Menu.REPORT, "the report's up at the end");
                 draw(v, size);
                 check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
+        test("18.1: heists - crews drive in, rob, take hostages; standoffs talked down; getaways; the ending; saves", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.mode = CityConfig.MODE_HEIST;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 4;
+                c.seed = 7;
+                World w = new World(c);
+                w.setMaxPopulation(5000);
+                w.rnd.setSeed(7);
+                w.populate(c);
+                check(w.hostileReserve >= 2 && w.counts[Entity.GANGSTER] == 0, "crews to come, none on the streets at first (" + w.hostileReserve + ")");
+                // A job: a crew drives in and goes in, the alarm goes, hostages are taken, the police box them in.
+                World.Heist h = null;
+                boolean robbed = false, inside = false, hostages = false, standoff = false;
+                for (int f = 0; f < 30 * 400 && !(standoff && inside); f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    for (World.Heist x : w.heists) {
+                        h = x;
+                        robbed |= x.phase >= World.H_ROB;
+                        hostages |= x.hostages > 0;
+                        standoff |= x.phase == World.H_STANDOFF;
+                        if (f % 15 == 0)
+                            for (Entity e : w.entities) if (!e.dead && e.squad == x.squad && w.city.insideOf(e.x, e.y) == x.b) inside = true;
+                    }
+                }
+                check(h != null && robbed, "a crew got to its target and the robbery's on");
+                check(inside, "robbers inside the building");
+                check(standoff || w.heistsStopped > 0, "the police boxed them in");
+                check(w.heistsStarted >= 1, "counted");
+                // Hostages: held where they are, freed once the police reach them with no robber by them.
+                Entity civ = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.arrested == 0 && e.ride == null) { civ = e; break; }
+                World.Heist fake = new World.Heist();
+                fake.squad = 999;
+                fake.b = w.city.buildings.get(0);
+                w.heists.add(fake);
+                civ.arrested = 3;
+                civ.heldBy = 999;
+                civ.postX = civ.x;
+                civ.postY = civ.y;
+                int freed = w.freed;
+                Entity cop = w.spawnCop(0, civ.x + 10, civ.y);
+                for (int f = 0; f < 60 && civ.arrested != 0; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(civ.arrested == 0 && w.freed > freed, "a hostage freed by an officer");
+                w.heists.remove(fake);
+                // A negotiator: a cop role of its own.
+                Entity neg = w.spawnCop(Entity.ROLE_NEGOTIATOR, civ.x, civ.y);
+                check(neg != null && neg.role == Entity.ROLE_NEGOTIATOR && "Negotiator".equals(Entity.ROLE_NAMES[neg.role]), "negotiators");
+                // Saved and loaded: the tally kept.
+                w.heistsEscaped = 1;
+                w.lootStolen = 123000;
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.mode() == CityConfig.MODE_HEIST && l.heistsEscaped == 1 && l.lootStolen == 123000 && l.heistsStarted == w.heistsStarted, "kept in a save");
+                // The getaway: a crew running for it in a car is shot at, and if it reaches the edge of town it's away.
+                World g = new World(Campaign.config(7));
+                g.setMaxPopulation(5000);
+                g.populate(g.city.cfg);
+                Campaign.begin(g, "");
+                g.hostileReserve = 0;
+                java.lang.reflect.Method start = World.class.getDeclaredMethod("startHeist");
+                start.setAccessible(true);
+                check((Boolean) start.invoke(g), "a heist started");
+                World.Heist gh = g.heists.get(0);
+                java.lang.reflect.Method esc = World.class.getDeclaredMethod("beginEscape", World.Heist.class, String.class);
+                esc.setAccessible(true);
+                // (Everyone out of the car at the door, then away.)
+                for (int f = 0; f < 30 * 120 && gh.phase == World.H_DRIVE; f++) {
+                    g.update(1 / 30f);
+                    g.evCount = 0;
+                }
+                if (g.heists.contains(gh) && gh.phase != World.H_ESCAPE) esc.invoke(g, gh, "test");
+                boolean drove = false;
+                for (int f = 0; f < 30 * 240 && g.heists.contains(gh); f++) {
+                    for (Entity e : g.entities) if (e.type == Entity.COP && !e.dead) e.hp = 0;
+                    g.update(1 / 30f);
+                    g.evCount = 0;
+                    drove |= gh.car != null && gh.car.gang == gh.squad && gh.phase == World.H_ESCAPE;
+                }
+                check(drove, "they drove off in the getaway car");
+                check(g.heistsEscaped == 1 && g.lootStolen > 0, "and with nobody to stop them, got away (" + g.heistsEscaped + ", $" + g.lootStolen + ")");
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {

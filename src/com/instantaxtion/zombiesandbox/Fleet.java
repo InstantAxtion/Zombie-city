@@ -157,6 +157,8 @@ final class Fleet {
         int gang = -1;
         /** ((17.4) The enemy army's: a truck or APC bringing a squad, a tank or an attack helicopter. */
         boolean enemy;
+        /** ((18.1) A heist crew's getaway car: the police shoot at it while the crew's aboard. */
+        boolean getaway;
         transient float enemyT;
         int number;
         /** Helicopter height (0 on the pad, 1 cruising) and how hard it is banking. */
@@ -368,6 +370,8 @@ final class Fleet {
 
     /** A short line about what a vehicle is doing, shown above it on the map. */
     String status(Vehicle v) {
+        // ((18.1) A heist crew's.)
+        if (v.getaway) return "Getaway car" + (v.broken ? ": Disabled" : v.gang >= 0 && !v.riders.isEmpty() ? ": Fleeing!" : ": Waiting");
         // ((17.4) The enemy's.)
         if (v.enemy) return describe(v) + (v.broken ? ": Knocked out" : v.state == DRIVE ? (v.riders.isEmpty() ? ": Advancing" : ": Bringing in troops")
                 : v.state == RETURN || v.state == FLY_OUT ? ": Pulling back" : v.type == HELI ? ": Attacking" : ": Firing!");

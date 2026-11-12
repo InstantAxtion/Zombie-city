@@ -14,7 +14,7 @@ final class Campaign {
     }
 
     /** What winning a mission takes. */
-    static final int G_CLEAR = 0, G_SURVIVE = 1, G_ARREST = 2, G_BREAK = 3, G_HOLD = 4;
+    static final int G_CLEAR = 0, G_SURVIVE = 1, G_ARREST = 2, G_BREAK = 3, G_HOLD = 4, G_HEIST = 5;
 
     static final class Mission {
         final String title, brief;
@@ -45,7 +45,7 @@ final class Campaign {
         }
     }
 
-    private static final int Z = CityConfig.MODE_ZOMBIES, G = CityConfig.MODE_GANGS, A = CityConfig.MODE_ARMY;
+    private static final int Z = CityConfig.MODE_ZOMBIES, G = CityConfig.MODE_GANGS, A = CityConfig.MODE_ARMY, H = CityConfig.MODE_HEIST;
 
     // (cops and soldiers: what the city starts with; foes: the zombies at the start, or the gang members or enemy
     // soldiers on the streets, with more of them to come in waves.)
@@ -64,6 +64,11 @@ final class Campaign {
                     A, 0, CityConfig.MEDIUM, 40, 40, 100, 19288, 600, 100, 1200, G_CLEAR, 0, 60, 120),
             new Mission("Dead City", "Downtown is overrun: ninety of the dead and the numbers climbing. Clear the city.",
                     Z, 1, CityConfig.MEDIUM, 40, 20, 90, 64019, 700, 120, 1200, G_CLEAR, 0, 200, 20),
+            // ((18.1) Heists.)
+            new Mission("The Bank Job", "Three crews are going to hit downtown's banks and shops today. Stop them: box them in and talk them out, or catch the getaway car. Let no more than one get away.",
+                    H, 1, CityConfig.SMALL, 12, 0, 3, 30517, 350, 60, 900, G_HEIST, 1, 10, 6),
+            new Mission("Crime Wave", "Six crews, two at a time, all over the city. A negotiator saves lives; a roadblock of cars and officers stops a getaway. No more than two may escape.",
+                    H, 0, CityConfig.MEDIUM, 12, 0, 6, 77141, 450, 80, 1500, G_HEIST, 2, 20, 12),
     };
 
     /**
@@ -98,7 +103,7 @@ final class Campaign {
     // ---- Costs ----
 
     /** Each police officer by GameView.COP_ROLES order; -1 not to be had. */
-    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15};
+    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15, 30};
     /** Each soldier by GameView.MIL_ROLES order. */
     static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee. */
@@ -117,9 +122,9 @@ final class Campaign {
         Mission m = w.mission();
         if (m == null) return 0;
         int minutes = (int) (missionTime(w) / 60);
-        int perKill = m.mode == G ? 4 : m.mode == A ? 5 : 1;
+        int perKill = m.mode == G || m.mode == H ? 4 : m.mode == A ? 5 : 1;
         return m.income * minutes + w.zombiesKilled * perKill + w.arrests * 10 + w.woundedSaved * 5 + w.freed * 2
-                + w.enemyVehiclesLost * 40 + Integer.bitCount(w.gangBroken) * 150;
+                + w.enemyVehiclesLost * 40 + Integer.bitCount(w.gangBroken) * 150 + w.heistsStopped * 120;
     }
 
     static int budget(World w) {
@@ -228,8 +233,9 @@ final class Campaign {
             case G_SURVIVE: return "Keep the city standing for " + time + ".";
             case G_ARREST: return "Arrest " + m.goalN + " gang members, or clear the streets, within " + time + ".";
             case G_BREAK: return "Break " + m.goalN + (m.goalN == 1 ? " gang" : " gangs") + " within " + time + ".";
+            case G_HEIST: return "Stop the heists: no more than " + m.goalN + (m.goalN == 1 ? " crew" : " crews") + " may get away.";
             case G_HOLD: return "Lose no more than " + m.goalN + (m.goalN == 1 ? " place" : " places") + " to the enemy for " + time + ".";
-            default: return (m.mode == Z ? "Destroy every zombie" : m.mode == G ? "Break every gang" : "Drive out the enemy") + " within " + time + ".";
+            default: return (m.mode == Z ? "Destroy every zombie" : m.mode == G ? "Break every gang" : m.mode == H ? "Stop every heist" : "Drive out the enemy") + " within " + time + ".";
         }
     }
 
@@ -242,6 +248,7 @@ final class Campaign {
             case G_ARREST: return Math.min(w.arrests, m.goalN) + " / " + m.goalN + " arrested";
             case G_BREAK: return Math.min(Integer.bitCount(w.gangBroken), m.goalN) + " / " + m.goalN + " gangs broken";
             case G_HOLD: return taken(w) + " / " + m.goalN + " places lost";
+            case G_HEIST: return w.heistsStopped + " stopped, " + w.heistsEscaped + " / " + m.goalN + " got away";
             default: return w.zombieCount() + (m.mode == Z ? " zombies" : m.mode == G ? " gang members" : " enemy") + " left";
         }
     }
@@ -272,6 +279,11 @@ final class Campaign {
                 break;
             case G_BREAK:
                 won = Integer.bitCount(w.gangBroken) >= m.goalN || w.warResult == 1;
+                break;
+            case G_HEIST:
+                // (Every job done, or the end of the shift, with no more than so many away: won.)
+                if (w.heistsEscaped > m.goalN) why = "Too many crews got away.";
+                won = why == null && (w.warResult == 1 || (w.hostileReserve <= 0 && w.heists.isEmpty() && w.heistsStarted > 0) || out);
                 break;
             case G_HOLD:
                 if (taken(w) > m.goalN) why = "The enemy has taken too much of the city.";

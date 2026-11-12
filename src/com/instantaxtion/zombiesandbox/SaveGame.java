@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 60;
+    private static final int VERSION = 61;
 
     private SaveGame() {
     }
@@ -383,6 +383,11 @@ final class SaveGame {
             out.writeInt(w.spent);
             out.writeInt(w.missionResult);
             out.writeInt(w.missionStars);
+            // (Version 61, 18.1: heists. The jobs under way aren't kept: their crews make off once it's loaded.)
+            out.writeInt(w.heistsStarted);
+            out.writeInt(w.heistsStopped);
+            out.writeInt(w.heistsEscaped);
+            out.writeInt(w.lootStolen);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
@@ -877,6 +882,12 @@ final class SaveGame {
                     w.spent = in.readInt();
                     w.missionResult = in.readInt();
                     w.missionStars = in.readInt();
+                }
+                if (version >= 61) {
+                    w.heistsStarted = in.readInt();
+                    w.heistsStopped = in.readInt();
+                    w.heistsEscaped = in.readInt();
+                    w.lootStolen = in.readInt();
                 }
                 int bm = in.readInt();
                 if (bm > 0) {

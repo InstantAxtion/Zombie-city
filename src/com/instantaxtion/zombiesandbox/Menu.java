@@ -687,15 +687,15 @@ final class Menu {
             y += 8 * dp;
         }
         // Each side's losses, side by side.
-        String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : "The dead";
+        String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : mode == CityConfig.MODE_HEIST ? "The crews" : "The dead";
         String[][] ours = {
                 {"Police officers lost", String.valueOf(world.copsLost)},
                 {"Soldiers lost", String.valueOf(world.soldiersLost)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"Wounded saved", String.valueOf(world.woundedSaved)},
                 {"Bled out", String.valueOf(world.bledOut)},
-                {mode == CityConfig.MODE_ARMY ? "People freed" : mode == CityConfig.MODE_GANGS ? "Booked in at a station" : "People turned",
-                        String.valueOf(mode == CityConfig.MODE_ARMY ? world.freed : mode == CityConfig.MODE_GANGS ? world.jailed : world.turned)},
+                {mode == CityConfig.MODE_ARMY ? "People freed" : mode == CityConfig.MODE_HEIST ? "Hostages freed" : mode == CityConfig.MODE_GANGS ? "Booked in at a station" : "People turned",
+                        String.valueOf(mode == CityConfig.MODE_ARMY || mode == CityConfig.MODE_HEIST ? world.freed : mode == CityConfig.MODE_GANGS ? world.jailed : world.turned)},
         };
         String[][] theirs;
         if (mode == CityConfig.MODE_GANGS) {
@@ -704,6 +704,14 @@ final class Menu {
                     {"Arrested", String.valueOf(world.arrests)},
                     {"Gangs broken", String.valueOf(Integer.bitCount(world.gangBroken))},
                     {"Still on the street", String.valueOf(world.zombieCount())},
+            };
+        } else if (mode == CityConfig.MODE_HEIST) {
+            theirs = new String[][]{
+                    {"Heists stopped", world.heistsStopped + " of " + world.heistsStarted},
+                    {"Got away", String.valueOf(world.heistsEscaped)},
+                    {"Money taken", "$" + String.format(java.util.Locale.US, "%,d", world.lootStolen)},
+                    {"Arrested", String.valueOf(world.arrests)},
+                    {"Taken out", String.valueOf(world.zombiesKilled)},
             };
         } else if (mode == CityConfig.MODE_ARMY) {
             theirs = new String[][]{
@@ -915,7 +923,7 @@ final class Menu {
         c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
                 + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
         y += 28 * dp;
-        String[] modes = {"Zombies", "Gangs", "Enemy army"};
+        String[] modes = {"Zombies", "Gangs", "Enemy army", "Heist"};
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
             Campaign.Mission m = Campaign.MISSIONS[i];
             boolean open = records == null || records.unlocked(i);
@@ -1866,8 +1874,9 @@ final class Menu {
         y -= 6 * dp;
         String[] modeInfo = {"Zombies: an outbreak of the dead. The bitten turn, and the city fights for its life.",
                 "Gangs: armed street gangs hold their turf and take on the police and the army. No zombies: civilians run from the shooting, and can be caught in it.",
-                "Enemy army: an invading army's squads march on the city's police stations and bases, more coming in waves. No zombies: civilians run from the fighting, and can be caught in it."};
-        for (String line : wrap(modeInfo[Math.max(0, Math.min(2, config.mode))], lw - 4 * dp, plain)) {
+                "Enemy army: an invading army's squads march on the city's police stations and bases, more coming in waves. No zombies: civilians run from the fighting, and can be caught in it.",
+                "Heist: armed crews hit the city's banks and shops one after another, taking hostages. Box them in for a standoff and talk them out, or chase the getaway car before it reaches the edge of town."};
+        for (String line : wrap(modeInfo[Math.max(0, Math.min(modeInfo.length - 1, config.mode))], lw - 4 * dp, plain)) {
             c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;
         }
