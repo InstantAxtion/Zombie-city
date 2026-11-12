@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 58;
+    private static final int VERSION = 59;
 
     private SaveGame() {
     }
@@ -370,6 +370,15 @@ final class SaveGame {
             out.writeInt(w.gangBroken);
             out.writeInt(w.arrests);
             out.writeInt(w.jailed);
+            // (Version 59, 17.5: the record for the after-action report: losses, the wounded, where the fighting was.)
+            out.writeInt(w.copsLost);
+            out.writeInt(w.soldiersLost);
+            out.writeInt(w.woundedSaved);
+            out.writeInt(w.bledOut);
+            out.writeInt(w.enemyVehiclesLost);
+            out.writeInt(w.freed);
+            out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
+            if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
             moved = null;
             homeIndex = null;
@@ -458,6 +467,8 @@ final class SaveGame {
         out.writeByte(e.kit);
         // Version 58 (17.2): under arrest.
         out.writeByte(e.arrested);
+        // Version 59 (17.5): down and bleeding.
+        out.writeFloat(e.bleedT);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -846,6 +857,19 @@ final class SaveGame {
                 w.arrests = in.readInt();
                 w.jailed = in.readInt();
             }
+            if (version >= 59) {
+                w.copsLost = in.readInt();
+                w.soldiersLost = in.readInt();
+                w.woundedSaved = in.readInt();
+                w.bledOut = in.readInt();
+                w.enemyVehiclesLost = in.readInt();
+                w.freed = in.readInt();
+                int bm = in.readInt();
+                if (bm > 0) {
+                    w.battleMap = new float[bm];
+                    for (int i = 0; i < bm; i++) w.battleMap[i] = in.readFloat();
+                }
+            }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -928,6 +952,7 @@ final class SaveGame {
         if (version >= 56) e.inmate = in.readBoolean();
         if (version >= 57) e.kit = in.readByte();
         if (version >= 58) e.arrested = in.readByte();
+        if (version >= 59) e.bleedT = in.readFloat();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

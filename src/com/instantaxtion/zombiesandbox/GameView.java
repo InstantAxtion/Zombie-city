@@ -833,6 +833,7 @@ final class GameView extends View implements Menu.Host {
     /** A saved game is ready: into it. */
     private void finishLoad() {
         world = built;
+        reportShown = world != null && world.warResult != 0;
         built = null;
         loading = false;
         applySettings();
@@ -862,7 +863,11 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** The city is ready: into the game. */
+    /** ((17.5) Whether this game's report has been put up at its end already. */
+    private boolean reportShown;
+
     private void finishStart() {
+        reportShown = false;
         world = built;
         built = null;
         loading = false;
@@ -1211,6 +1216,11 @@ final class GameView extends View implements Menu.Host {
             fpsTimer = 0;
         }
 
+        // ((17.5) The game's over: the after-action report, once the ending's been shown.)
+        if (hasGame && world != null && world.warResult != 0 && !reportShown && world.warBannerTime <= 0 && !menu.isOpen()) {
+            reportShown = true;
+            menu.open(Menu.REPORT);
+        }
         boolean inGame = !menu.isOpen();
         boolean simulate = inGame ? !simPaused : menu.liveBackground();
         if (!simulate) simAcc = 0;
@@ -6999,6 +7009,11 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(alpha(0xFF7CFF3A, 0.35f + 0.25f * (float) Math.sin(world.time * 5)));
             c.drawCircle(r * 0.08f, 0, r * 0.58f, fill);
         }
+        if (e.bleedT > 0) {
+            // ((17.5) Down: flat out, a pool of blood spreading.)
+            fill.setColor(0x88600A0A);
+            c.drawCircle(-r * 0.2f, 0, r * (1.2f + Math.min(1.2f, (90 - e.bleedT) / 60f)), fill);
+        }
         if (e.paraT > 0) {
             // ((17.4) Coming down under a canopy.)
             float cr = r * (2.2f + e.paraT * 0.25f);
@@ -7025,6 +7040,16 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(0, 0, r * 1.05f, fill);
         }
         c.restore();
+        if (e.bleedT > 0 && scale > 1.2f * dp) {
+            // ((17.5) A red cross over the wounded, pulsing when there's little time left.)
+            float bx = e.x, by = e.y - r * 2.6f, br = r * 0.85f;
+            boolean urgent = e.bleedT < 15 && ((int) (world.time * 4)) % 2 == 0;
+            fill.setColor(urgent ? 0xFFFFD0D0 : 0xF0FFFFFF);
+            c.drawCircle(bx, by, br, fill);
+            fill.setColor(0xFFD8302A);
+            c.drawRect(bx - br * 0.18f, by - br * 0.6f, bx + br * 0.18f, by + br * 0.6f, fill);
+            c.drawRect(bx - br * 0.6f, by - br * 0.18f, bx + br * 0.6f, by + br * 0.18f, fill);
+        }
         if (anim && e.type == Entity.RUNNER && spd > 30) {
             // Speed lines behind a sprinting runner.
             float ux = -e.vx / spd, uy = -e.vy / spd;
@@ -8350,6 +8375,8 @@ final class GameView extends View implements Menu.Host {
     }
 
     private String doing(Entity e) {
+        if (e.bleedT > 0) return "Down and bleeding: " + (int) Math.ceil(e.bleedT) + "s" + (e.rescuer != null ? ", help is coming" : ", needs help");
+        if (e.rescueOf != null) return "Going to help someone who's down";
         if (e.isHostile()) return world.hostileDoing(e);
         if (e.isUndead()) {
             // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)

@@ -5337,6 +5337,119 @@ public final class GameTests {
                 check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
             }
         });
+        test("17.5: the wounded go down and can be saved or bleed out; the after-action report", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 25;
+                World w = new World(c);
+                w.rnd.setSeed(25);
+                w.populate(c);
+                w.recount();
+                java.lang.reflect.Method cleanup = World.class.getDeclaredMethod("cleanup");
+                cleanup.setAccessible(true);
+                // Shot (not bitten): most go down rather than die.
+                int down = 0, dead = 0, tried = 0;
+                for (Entity e : new java.util.ArrayList<Entity>(w.entities)) {
+                    if (tried >= 40 || e.dead || e.type != Entity.CIVILIAN || e.ride != null) continue;
+                    tried++;
+                    e.hp = -5;
+                    cleanup.invoke(w);
+                    if (!e.dead && e.bleedT > 0 && e.hp > 0) down++;
+                    else if (e.dead) dead++;
+                }
+                check(down > tried / 3 && dead > 0, "some go down, some die outright (" + down + " down, " + dead + " dead of " + tried + ")");
+                // Bitten: no going down.
+                Entity bitten = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.bleedT == 0) { bitten = e; break; }
+                bitten.killedByZombie = true;
+                bitten.hp = -1;
+                cleanup.invoke(w);
+                check(bitten.dead, "the bitten don't go down, they die");
+                // Down, and an officer comes to them and gets them back up.
+                Entity hurt = null;
+                for (Entity e : w.entities) if (!e.dead && e.bleedT > 0) { hurt = e; break; }
+                Entity cop = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && e.rig == null) { cop = e; break; }
+                float[] near = w.city.findWalkable(hurt.x + 30, hurt.y);
+                cop.x = near[0];
+                cop.y = near[1];
+                cop.task = Dispatch.T_NONE;
+                int savedBefore = w.woundedSaved;
+                for (int f = 0; f < 30 * 25 && hurt.bleedT > 0 && !hurt.dead; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(!hurt.dead && hurt.bleedT == 0 && hurt.hp > 1 && w.woundedSaved > savedBefore, "someone patched them up (" + hurt.bleedT + ", hp " + hurt.hp + ")");
+                // Left alone: they bleed out.
+                Entity alone = null;
+                for (Entity e : w.entities) if (!e.dead && e.bleedT > 0) { alone = e; break; }
+                if (alone == null) {
+                    for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.bleedT == 0 && e.ride == null) { alone = e; break; }
+                    alone.hp = -5;
+                    for (int k = 0; k < 20 && alone.bleedT <= 0 && !alone.dead; k++) {
+                        alone.hp = -5;
+                        cleanup.invoke(w);
+                    }
+                }
+                if (alone != null && !alone.dead && alone.bleedT > 0) {
+                    alone.bleedT = 0.5f;
+                    if (alone.rescuer != null) alone.rescuer.rescueOf = null;
+                    alone.rescuer = null;
+                    int bled = w.bledOut;
+                    for (int f = 0; f < 30 * 2; f++) {
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                    }
+                    check(alone.dead && w.bledOut > bled, "nobody got to them in time: bled out");
+                }
+                // Not shot at again while down.
+                Entity g = w.spawn(Entity.GANGSTER, 0, 0);
+                java.lang.reflect.Method foe = World.class.getDeclaredMethod("hostileFoe", Entity.class, Entity.class);
+                foe.setAccessible(true);
+                Entity lying = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP) { lying = e; break; }
+                lying.bleedT = 30;
+                check(!(Boolean) foe.invoke(w, g, lying), "the other side leaves the wounded be");
+                lying.bleedT = 0;
+                // Saved and loaded: the counts and who's down.
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.woundedSaved == w.woundedSaved && l.bledOut == w.bledOut, "the record's kept");
+                // The report: drawn, at the end of a game it opens itself.
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2000};
+                v.layout(size[0], size[1]);
+                Menu m = (Menu) field(v, "menu");
+                CityConfig c2 = new CityConfig();
+                c2.v[CityConfig.OPT_ZOMBIES] = 2;
+                c2.mode = CityConfig.MODE_GANGS;
+                v.startGame(c2);
+                v.awaitLoad();
+                for (int k = 0; k < 3; k++) draw(v, size);
+                m.screen = Menu.NONE;
+                World gw = (World) field(v, "world");
+                for (int f = 0; f < 30 * 30 && gw.warResult == 0; f++) {
+                    gw.hostileReserve = 0;
+                    for (Entity e : gw.entities) if (e.isHostile()) e.hp = 0;
+                    gw.update(1 / 30f);
+                    gw.evCount = 0;
+                }
+                check(gw.warResult == 1, "the gang war's over");
+                gw.warBannerTime = 0;
+                draw(v, size);
+                check(m.screen == Menu.REPORT, "and the report's up");
+                java.lang.reflect.Field sc = Menu.class.getDeclaredField("scroll");
+                sc.setAccessible(true);
+                for (int k = 0; k < 4; k++) {
+                    sc.setFloat(m, k * 600);
+                    draw(v, size);
+                }
+                check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

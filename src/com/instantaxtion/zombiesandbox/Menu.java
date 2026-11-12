@@ -66,7 +66,7 @@ final class Menu {
     }
 
     static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
-            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12;
+            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12, REPORT = 13;
     /** ((15.1) How many save slots there are (the autosave besides): six, up from three.) */
     static final int SLOTS = 6;
 
@@ -78,7 +78,7 @@ final class Menu {
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
             A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000,
-            A_TOP = 29, A_TOP_ROW = 600;
+            A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -175,7 +175,7 @@ final class Menu {
     }
 
     void open(int s) {
-        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP) {
+        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP || s == REPORT) {
             if (screen == MAIN || screen == PAUSE || screen == NONE) returnTo = screen;
         } else {
             returnTo = MAIN;
@@ -251,6 +251,7 @@ final class Menu {
             case SAVES: drawSaves(c, w, h); break;
             case LOG: drawLog(c, w, h); break;
             case TOP: drawTop(c, w, h); break;
+            case REPORT: drawReport(c, w, h); break;
             case REPLAY: drawReplay(c, w, h, dt); break;
         }
         for (Button b : buttons) drawButton(c, b);
@@ -524,9 +525,9 @@ final class Menu {
         backdrop(c, w, h, 0.6f);
         // ((12.0) Restart: the same city from the start, with a second tap to be sure.)
         boolean sure = time - restartArmedAt < 4;
-        String[] labels = {"Resume", "Top Fighters", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", sure ? "Tap again to restart" : "Restart City",
+        String[] labels = {"Resume", "Top Fighters", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", "Report", sure ? "Tap again to restart" : "Restart City",
                 "New Game", "Settings", "Main Menu"};
-        int[] actions = {A_RESUME, A_TOP, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
+        int[] actions = {A_RESUME, A_TOP, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_REPORT, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
         int cols = w > h ? 2 : 1, rowsN = (labels.length + cols - 1) / cols;
         float gap = 7 * dp, bh = Math.min(46 * dp, (h - 138 * dp - gap * (rowsN - 1)) / rowsN);
         float colW = Math.min(300 * dp, (w - 60 * dp) / cols);
@@ -639,6 +640,203 @@ final class Menu {
     /** ((13.3) The Top Fighters list, looked up again once a second rather than every frame. */
     private java.util.ArrayList<Entity> topList = new java.util.ArrayList<Entity>();
     private float topAt = -99;
+
+    /**
+     * ((17.5) The after-action report: how it ended (or how it stands), each side's losses, the fighting strength over
+     * time, where the fighting was on a map of the city, and the best of the city's fighters, living and fallen.
+     */
+    private void drawReport(Canvas c, int w, int h) {
+        float top = header(c, w, h, "After-Action Report");
+        World world = host.world();
+        float side = 16 * dp, maxW = Math.min(w - side * 2, 760 * dp), x0 = (w - maxW) / 2;
+        listArea.set(0, top, w, h - 8 * dp);
+        c.save();
+        c.clipRect(listArea);
+        float y = top + 8 * dp - scroll;
+        int mode = world.mode();
+        // How it ended.
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(22 * dp);
+        boolean won = world.warResult == 1, lost = world.warResult == 2;
+        text.setColor(won ? 0xFF8BE05A : lost ? 0xFFFF6A5A : INK);
+        String title = world.warResult != 0 && world.warBanner != null ? world.warBanner
+                : world.outbreak ? "THE FIGHTING GOES ON" : "NOTHING YET";
+        c.drawText(fit(text, title, maxW), w / 2f, y + 26 * dp, text);
+        y += 36 * dp;
+        plain.setTextAlign(Paint.Align.CENTER);
+        plain.setTextSize(13 * dp);
+        plain.setColor(MUTED);
+        String sub = world.warResult != 0 && world.warSub != null ? world.warSub
+                : World.clock((int) world.outbreakTime) + " of fighting so far.";
+        for (String line : wrap(sub, maxW, plain)) {
+            c.drawText(line, w / 2f, y + 12 * dp, plain);
+            y += 18 * dp;
+        }
+        y += 8 * dp;
+        // Each side's losses, side by side.
+        String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : "The dead";
+        String[][] ours = {
+                {"Police officers lost", String.valueOf(world.copsLost)},
+                {"Soldiers lost", String.valueOf(world.soldiersLost)},
+                {"Civilians lost", String.valueOf(world.civiliansLost)},
+                {"Wounded saved", String.valueOf(world.woundedSaved)},
+                {"Bled out", String.valueOf(world.bledOut)},
+                {mode == CityConfig.MODE_ARMY ? "People freed" : mode == CityConfig.MODE_GANGS ? "Booked in at a station" : "People turned",
+                        String.valueOf(mode == CityConfig.MODE_ARMY ? world.freed : mode == CityConfig.MODE_GANGS ? world.jailed : world.turned)},
+        };
+        String[][] theirs;
+        if (mode == CityConfig.MODE_GANGS) {
+            theirs = new String[][]{
+                    {"Taken out", String.valueOf(world.zombiesKilled)},
+                    {"Arrested", String.valueOf(world.arrests)},
+                    {"Gangs broken", String.valueOf(Integer.bitCount(world.gangBroken))},
+                    {"Still on the street", String.valueOf(world.zombieCount())},
+            };
+        } else if (mode == CityConfig.MODE_ARMY) {
+            theirs = new String[][]{
+                    {"Soldiers killed", String.valueOf(world.zombiesKilled)},
+                    {"Vehicles knocked out", String.valueOf(world.enemyVehiclesLost)},
+                    {"Places taken", String.valueOf(world.checkpoints().length / 2)},
+                    {"Still fighting", String.valueOf(world.zombieCount())},
+            };
+        } else {
+            theirs = new String[][]{
+                    {"Destroyed", String.valueOf(world.zombiesKilled)},
+                    {"Most at once", String.valueOf(world.peakZombies)},
+                    {"Biggest horde", String.valueOf(world.biggestHorde)},
+                    {"Still walking", String.valueOf(world.zombieCount())},
+            };
+        }
+        boolean wide = maxW > 520 * dp;
+        float colW = wide ? (maxW - 12 * dp) / 2 : maxW;
+        float yA = y, yB = wide ? y : y + 30 * dp + ours.length * 22 * dp + 16 * dp;
+        y = Math.max(table(c, x0, yA, colW, "The city", 0xFF6FA8FF, ours), table(c, wide ? x0 + colW + 12 * dp : x0, yB, colW, other, 0xFFFF7A5A, theirs));
+        y += 14 * dp;
+        // Strength over time.
+        RectF chart = new RectF(x0, y, x0 + maxW, y + 170 * dp);
+        fill.setColor(0xFF1C1F24);
+        c.drawRoundRect(chart, 10 * dp, 10 * dp, fill);
+        RectF plot = new RectF(chart.left + 14 * dp, chart.top + 28 * dp, chart.right - 14 * dp, chart.bottom - 20 * dp);
+        int n = world.histCount, max = 10;
+        for (int i = 0; i < n; i++) max = Math.max(max, Math.max(world.histArmed[i], world.histZombies[i]));
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(12 * dp);
+        String[] keys = {"Police & army", mode == CityConfig.MODE_ZOMBIES ? "Zombies" : world.enemyLabel()};
+        int[] cols = {0xFFE8C547, 0xFFFF7A5A};
+        float kx = chart.left + 14 * dp;
+        for (int k = 0; k < 2; k++) {
+            fill.setColor(cols[k]);
+            c.drawCircle(kx + 4 * dp, chart.top + 15 * dp, 4 * dp, fill);
+            text.setColor(INK);
+            c.drawText(keys[k], kx + 12 * dp, chart.top + 19 * dp, text);
+            kx += 24 * dp + text.measureText(keys[k]);
+        }
+        if (n >= 2) {
+            int[][] series = {world.histArmed, world.histZombies};
+            for (int sI = 0; sI < 2; sI++) {
+                stroke.setColor(cols[sI]);
+                stroke.setStrokeWidth(2.2f * dp);
+                for (int i = 1; i < n; i++) {
+                    float ax = plot.left + plot.width() * (i - 1) / (n - 1), bx = plot.left + plot.width() * i / (n - 1);
+                    float ay = plot.bottom - plot.height() * series[sI][i - 1] / (float) max, by = plot.bottom - plot.height() * series[sI][i] / (float) max;
+                    c.drawLine(ax, ay, bx, by, stroke);
+                }
+            }
+            plain.setTextAlign(Paint.Align.RIGHT);
+            plain.setTextSize(11 * dp);
+            plain.setColor(MUTED);
+            c.drawText(World.clock((int) (n * world.statStep)), plot.right, chart.bottom - 6 * dp, plain);
+        }
+        y = chart.bottom + 14 * dp;
+        // Where the fighting was.
+        City city = world.city;
+        float mw = maxW, mh = mw * city.worldH() / city.worldW();
+        if (mh > 420 * dp) {
+            mh = 420 * dp;
+            mw = mh * city.worldW() / city.worldH();
+        }
+        RectF map = new RectF(x0 + (maxW - mw) / 2, y, x0 + (maxW + mw) / 2, y + mh);
+        if (city.bitmap != null) {
+            bmpSrc.set(0, 0, city.bitmap.getWidth(), city.bitmap.getHeight());
+            c.drawBitmap(city.bitmap, bmpSrc, map, bmpPaint);
+        }
+        fill.setColor(0x55000000);
+        c.drawRect(map, fill);
+        float[] bm = world.battleMap;
+        if (bm != null) {
+            int hw = world.heatW();
+            float most = 0;
+            for (float f : bm) most = Math.max(most, f);
+            for (int i = 0; i < bm.length && most > 0; i++) {
+                if (bm[i] <= 0) continue;
+                float f = (float) Math.sqrt(bm[i] / most);
+                float cx = map.left + ((i % hw) + 0.5f) * World.HEAT_CELL / city.worldW() * map.width();
+                float cy = map.top + ((i / hw) + 0.5f) * World.HEAT_CELL / city.worldH() * map.height();
+                float rr = World.HEAT_CELL / city.worldW() * map.width() * (0.3f + 0.6f * f);
+                fill.setColor((((int) (40 + 150 * f)) << 24) | 0xFF3A20);
+                c.drawCircle(cx, cy, rr, fill);
+            }
+        }
+        plain.setTextAlign(Paint.Align.LEFT);
+        plain.setTextSize(12 * dp);
+        plain.setColor(INK);
+        c.drawText("Where the fighting was", map.left + 8 * dp, map.top + 18 * dp, plain);
+        y = map.bottom + 18 * dp;
+        // The best of the city's fighters.
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(15 * dp);
+        text.setColor(INK);
+        c.drawText("Best of the city's fighters", x0, y + 4 * dp, text);
+        y += 14 * dp;
+        java.util.ArrayList<int[]> heroes = world.heroes(5);
+        for (int i = 0; i < heroes.size(); i++) {
+            int[] hr = heroes.get(i);
+            tmp.set(x0, y, x0 + maxW, y + 40 * dp);
+            fill.setColor(i == 0 ? 0xE02A2E22 : 0xE0202328);
+            c.drawRoundRect(tmp, 8 * dp, 8 * dp, fill);
+            text.setTextSize(14 * dp);
+            text.setColor(i == 0 ? 0xFFFFD54A : INK);
+            String who = (i + 1) + ".  " + Names.person(hr[0]) + "  -  " + (hr[1] >= 0 && hr[1] < Entity.NAMES.length ? Entity.NAMES[hr[1]] : "");
+            c.drawText(fit(text, who, maxW - 150 * dp), x0 + 10 * dp, y + 25 * dp, text);
+            text.setTextAlign(Paint.Align.RIGHT);
+            text.setColor(hr[4] == 1 ? ACCENT : MUTED);
+            c.drawText(hr[3] + (hr[3] == 1 ? " kill" : " kills") + (hr[4] == 1 ? "" : "  (fallen)"), x0 + maxW - 10 * dp, y + 25 * dp, text);
+            text.setTextAlign(Paint.Align.LEFT);
+            y += 46 * dp;
+        }
+        if (heroes.isEmpty()) {
+            plain.setColor(MUTED);
+            c.drawText("No kills yet.", x0, y + 16 * dp, plain);
+            y += 24 * dp;
+        }
+        c.restore();
+        contentHeight = y + scroll - top + 10 * dp;
+        clampScroll();
+        drawScrollHint(c, w);
+    }
+
+    /** A titled box of label / number rows; returns where it ends. */
+    private float table(Canvas c, float x, float y, float width, String title, int col, String[][] rows) {
+        tmp.set(x, y, x + width, y + 30 * dp + rows.length * 22 * dp + 8 * dp);
+        fill.setColor(0xFF1C1F24);
+        c.drawRoundRect(tmp, 10 * dp, 10 * dp, fill);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setTextSize(14 * dp);
+        text.setColor(col);
+        c.drawText(title, x + 12 * dp, y + 21 * dp, text);
+        float ry = y + 30 * dp;
+        plain.setTextSize(13 * dp);
+        for (String[] r : rows) {
+            plain.setTextAlign(Paint.Align.LEFT);
+            plain.setColor(MUTED);
+            c.drawText(r[0], x + 12 * dp, ry + 15 * dp, plain);
+            plain.setTextAlign(Paint.Align.RIGHT);
+            plain.setColor(INK);
+            c.drawText(r[1], x + width - 12 * dp, ry + 15 * dp, plain);
+            ry += 22 * dp;
+        }
+        return tmp.bottom;
+    }
 
     /** ((13.3) The living with the most kills, most first. Tap one to go and watch them. */
     private void drawTop(Canvas c, int w, int h) {
@@ -788,6 +986,7 @@ final class Menu {
         float top = header(c, w, h, "Stats");
         World world = host.world();
         button("Replay", A_REPLAY, true, w - 12 * dp - 110 * dp, 12 * dp, w - 12 * dp, 12 * dp + 42 * dp);
+        button("Report", A_REPORT, false, w - 24 * dp - 220 * dp, 12 * dp, w - 24 * dp - 110 * dp, 12 * dp + 42 * dp);
         boolean landscape = w > h;
         float side = 20 * dp;
         // ((12.0) Half the width each sideways: at 58% for the chart, the list beside it cut most of its names short.)
@@ -1933,6 +2132,9 @@ final class Menu {
                 break;
             case A_TOP:
                 open(TOP);
+                break;
+            case A_REPORT:
+                open(REPORT);
                 break;
             case A_LOG:
                 open(LOG);

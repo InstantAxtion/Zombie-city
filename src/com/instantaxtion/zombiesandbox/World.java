@@ -2883,6 +2883,12 @@ final class World {
             if (e.task == Dispatch.T_NONE) afterRide(e, e.rideFrom);
             e.rideFrom = null;
         }
+        // ((17.5) Down and bleeding.)
+        if (e.bleedT > 0) {
+            downedStep(e, dt);
+            return;
+        }
+        if (e.rescueOf != null && rescueStep(e, dt)) return;
         // ((17.4) A paratrooper still coming down; someone the enemy's holding.)
         if (e.paraT > 0) {
             e.paraT -= dt;
@@ -3336,6 +3342,7 @@ final class World {
     /** Is there anyone on the city's side worth shooting (police, soldiers, anyone with a gun) at this one? */
     private boolean hostileFoe(Entity e, Entity o) {
         if (o == e || o.dead || o.hp <= 0 || o.ride != null || o.removed) return false;
+        if (o.bleedT > 0) return false;
         if (o.isHostile()) return e.type == Entity.GANGSTER && o.type == Entity.GANGSTER && o.squad != e.squad;
         if (o.isUndead() || o.type == Entity.DOG) return false;
         if (o == controlled) return true;
@@ -3892,7 +3899,10 @@ final class World {
         e.arrestT += dt;
         e.aiming = false;
         e.fleeTimer = 0;
-        if (e.captor != null && (e.captor.dead || e.captor.hp <= 0 || e.captor.escortee != e)) e.captor = null;
+        if (e.captor != null && (e.captor.dead || e.captor.hp <= 0 || e.captor.escortee != e || e.captor.bleedT > 0 || e.captor.rescueOf != null)) {
+            if (e.captor.escortee == e) e.captor.escortee = null;
+            e.captor = null;
+        }
         if (e.captor == null) {
             // (Looked for every so often, not every step.)
             if (rnd.nextFloat() < dt * 2) {
@@ -3900,7 +3910,8 @@ final class World {
                 float bd = 260 * 260;
                 for (int i = 0, n = gatherArmed(e.x, e.y, 260); i < n; i++) {
                     Entity o = gathered[i];
-                    if (o.dead || o.type != Entity.COP || o.escortee != null || o.ride != null || o.raidB != null || o == controlled) continue;
+                    if (o.dead || o.type != Entity.COP || o.escortee != null || o.ride != null || o.raidB != null || o == controlled
+                            || o.rescueOf != null || o.bleedT > 0) continue;
                     float d2 = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
                     if (d2 < bd) {
                         bd = d2;
@@ -5092,6 +5103,163 @@ final class World {
     /** People freed from the enemy. */
     int freed;
 
+    // ------------------------------------------------------------------ (17.5) the wounded
+
+    /** Shot or blown up rather than bitten: going down hurt, to bleed out unless someone gets to them. */
+    static final boolean WOUNDS = true;
+    /** Police and soldiers killed, the wounded saved, those who bled out, and the enemy's vehicles knocked out. */
+    int copsLost, soldiersLost, woundedSaved, bledOut, enemyVehiclesLost;
+
+    private boolean goDown(Entity e) {
+        if (!WOUNDS || e.bleedT != 0 || e.removed || e == controlled || e.ride != null || e.arrested != 0) return false;
+        if (e.type != Entity.CIVILIAN && e.type != Entity.COP && e.type != Entity.SOLDIER) return false;
+        // (Bitten, or blown apart, or riddled: no.)
+        if (e.killedByZombie || e.infected || e.gibbed || e.hp < -45) return false;
+        if (rnd.nextFloat() > (e.type == Entity.CIVILIAN ? 0.55f : 0.7f)) return false;
+        e.hp = 1;
+        e.bleedT = 35 + rnd.nextFloat() * 30;
+        e.aiming = false;
+        e.stun = 0;
+        e.stayIn = null;
+        if (e.task != Dispatch.T_SHELTER) e.task = Dispatch.T_NONE;
+        if (e.escortee != null) {
+            e.escortee.captor = null;
+            e.escortee = null;
+        }
+        if (e.rescueOf != null) {
+            e.rescueOf.rescuer = null;
+            e.rescueOf = null;
+        }
+        e.raidB = null;
+        if (e.isArmed() && rnd.nextFloat() < 0.5f)
+            dispatch.say(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null,
+                    (e.type == Entity.SOLDIER ? "Military: Man down on " : "Police: Officer down on ") + city.placeName(e.x, e.y) + "! "
+                            + Dispatch.name(e) + " is hit and needs a medic!", e.x, e.y);
+        return true;
+    }
+
+    /** Down: lying there, bleeding out, until someone patches them up (on their feet, weak) or it's too late. */
+    private void downedStep(Entity e, float dt) {
+        e.bleedT -= dt;
+        e.aiming = false;
+        e.fleeTimer = 0;
+        steer(e, 0, 0, 0);
+        // (Patched up by a combat medic: see medicStep.)
+        if (e.hp >= 15) {
+            revive(e, null);
+            return;
+        }
+        if (e.bleedT <= 0) {
+            e.bleedT = -1;
+            e.hp = 0;
+            bledOut++;
+        }
+    }
+
+    private void revive(Entity d, Entity by) {
+        d.bleedT = 0;
+        d.hp = Math.max(d.hp, d.maxHp * 0.3f);
+        d.rescuer = null;
+        woundedSaved++;
+        if (d.type == Entity.CIVILIAN) {
+            d.fleeTimer = 4;
+            d.aware = true;
+        }
+        if (by != null) {
+            by.saved++;
+            if (rnd.nextFloat() < 0.35f) {
+                String who = d.isArmed() ? Dispatch.name(d) : Names.person(d.nameSeed);
+                dispatch.chatter(by.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, by,
+                        "Got " + who + " back on their feet on " + city.placeName(d.x, d.y) + ".", d.x, d.y);
+            }
+        }
+    }
+
+    /** Is it too hot round someone down for anyone but a soldier to go to them? */
+    private boolean underFire(float x, float y) {
+        return countZombiesNear(x, y, 70) > 0;
+    }
+
+    /**
+     * Once a second: someone to go to each of the wounded - a combat medic first, then an officer or soldier close by
+     * with nothing more pressing, or a brave civilian. Nobody goes into the thick of it but soldiers.
+     */
+    private void rescueLife() {
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity d = entities.get(i);
+            if (d.dead || d.bleedT <= 0) continue;
+            if (d.rescuer != null && !d.rescuer.dead && d.rescuer.rescueOf == d) continue;
+            d.rescuer = null;
+            boolean hot = underFire(d.x, d.y);
+            Entity best = null;
+            float bd = Float.MAX_VALUE;
+            for (int k = 0, m = gatherLiving(d.x, d.y, 260); k < m; k++) {
+                Entity o = gathered[k];
+                if (o == d || o.dead || o.bleedT > 0 || o.rescueOf != null || o.ride != null || o.arrested != 0 || o == controlled
+                        || o.escortee != null || o.raidB != null || o.stayIn != null) continue;
+                float dist = (float) World.hypot(o.x - d.x, o.y - d.y);
+                if (dist > 260) continue;
+                if (o.isArmed()) {
+                    if (o.aiming || (hot && o.type != Entity.SOLDIER)) continue;
+                    if (o.role == Entity.ROLE_CORPSMAN) dist *= 0.3f;
+                } else if (o.type == Entity.CIVILIAN) {
+                    if (hot || o.fleeTimer > 0 || bravery(o) < 0.5f || o.leader != null) continue;
+                    dist *= 1.6f;
+                } else continue;
+                if (dist < bd) {
+                    bd = dist;
+                    best = o;
+                }
+            }
+            if (best == null) continue;
+            best.rescueOf = d;
+            best.rescueT = 0;
+            best.treatT = 0;
+            d.rescuer = best;
+        }
+    }
+
+    /** Off to someone down, and seeing to them there. False when something else needs doing first. */
+    private boolean rescueStep(Entity e, float dt) {
+        Entity d = e.rescueOf;
+        if (d == null || d.dead || d.bleedT <= 0 || d.rescuer != e) {
+            e.rescueOf = null;
+            return false;
+        }
+        // (A fight on top of them comes first; a civilian with the dead coming gives up and runs.)
+        if (nearest(e, e.isArmed() ? 45 : 70, true, true) != null) {
+            if (!e.isArmed()) {
+                e.rescueOf = null;
+                d.rescuer = null;
+            }
+            return false;
+        }
+        e.rescueT += dt;
+        float dist = (float) World.hypot(d.x - e.x, d.y - e.y);
+        if (dist > 9) {
+            if (e.rescueT > 45) {
+                e.rescueOf = null;
+                d.rescuer = null;
+                return false;
+            }
+            walkToSpot(e, d.x + 5, d.y, e.runSpeed * 0.85f);
+            e.treatT = 0;
+            return true;
+        }
+        steer(e, 0, 0, 0);
+        e.aiming = false;
+        e.angle = turn(e.angle, (float) Math.atan2(d.y - e.y, d.x - e.x), dt * 4);
+        e.treatT += dt;
+        float need = e.role == Entity.ROLE_CORPSMAN && e.type == Entity.SOLDIER ? 3 : e.isArmed() ? 6 : 8;
+        if (e.treatT >= need) {
+            e.treatT = 0;
+            e.rescueOf = null;
+            revive(d, e);
+        }
+        return true;
+    }
+
+
     /** The enemy's beaten: none of its troops left, and none to come. */
     boolean enemyBeaten() {
         return counts[Entity.INVADER] == 0 && hostileReserve <= 0;
@@ -5128,6 +5296,9 @@ final class World {
         if (fightHeat == null) fightHeat = new float[heatW() * heatW()];
         int hx = Math.min(heatW() - 1, Math.max(0, (int) (x / HEAT_CELL))), hy = Math.min(heatW() - 1, Math.max(0, (int) (y / HEAT_CELL)));
         fightHeat[hy * heatW() + hx] += radius / 200f;
+        // ((17.5) And kept for good, for the after-action report's map.)
+        if (battleMap == null || battleMap.length != fightHeat.length) battleMap = new float[fightHeat.length];
+        battleMap[hy * heatW() + hx] += radius / 200f;
         boolean near = false;
         for (int i = 0; i < noiseRings.size() && !near; i++) {
             float[] r = noiseRings.get(i);
@@ -6011,6 +6182,8 @@ final class World {
     private float hordeLaneSaid, hordeHeatSaid;
     /** (10.32) The noise of fighting, in big squares of the map: it dies away over a minute or two. */
     float[] fightHeat;
+    /** ((17.5) All the fighting this game, square by square (fightHeat without the fading). */
+    float[] battleMap;
     static final float HEAT_CELL = 400;
 
     int heatW() {
@@ -9351,6 +9524,7 @@ final class World {
         raiders();
         hostileWaves();
         if (WALK_IN) countInside();
+        if (WOUNDS) rescueLife();
         if (mode() == CityConfig.MODE_GANGS) gangLife();
         if (mode() == CityConfig.MODE_ARMY) armyLife();
         fieldHospital();
@@ -16240,6 +16414,8 @@ final class World {
     private void cleanup() {
         for (int i = entities.size() - 1; i >= 0; i--) {
             Entity e = entities.get(i);
+            // ((17.5) Not always dead: down, wounded, and bleeding out.)
+            if (e.hp <= 0 && !e.dead && goDown(e)) continue;
             if (e.hp <= 0) e.dead = true;
             if (!e.dead) continue;
             int last = entities.size() - 1;
@@ -16254,6 +16430,9 @@ final class World {
     }
 
     private void onDeath(Entity e) {
+        if (e.type == Entity.COP) copsLost++;
+        if (e.type == Entity.SOLDIER) soldiersLost++;
+        if (e.rescuer != null && e.rescuer.rescueOf == e) e.rescuer.rescueOf = null;
         if (e.kills > 0 && !e.isZombie()) {
             fallenHeroes.add(new int[]{e.nameSeed, e.type, e.role, e.kills});
             if (fallenHeroes.size() > 40) fallenHeroes.remove(0);

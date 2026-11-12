@@ -3277,6 +3277,7 @@ final class Fleet {
         v.broken = true;
         v.parked = true;
         w.carsWrecked++;
+        if (v.enemy) w.enemyVehiclesLost++;
         // The crew bails out (and the driver).
         if (!v.crew.isEmpty()) crewOut(v, true);
         if (v.driver != null) driverOut(v, true);

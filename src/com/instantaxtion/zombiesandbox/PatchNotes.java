@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.4";
-    static final int VERSION_CODE = 174;
+    static final String VERSION = "17.5";
+    static final int VERSION_CODE = 175;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.5  -  The wounded, and the after-action report",
+                    "The wounded: civilians, police and soldiers who are shot or caught in a blast often go down hurt instead of dying outright - lying in a spreading pool of blood with a red cross over them, bleeding out over half a minute to a minute. (The bitten don't: they die and turn, as before. Nor does anyone blown apart or riddled with bullets.) The other side leaves them be, though the dead don't.",
+                    "Saving them: someone goes to each of the wounded - a combat medic first, then an officer or soldier close by with nothing more pressing, or a brave civilian - kneels by them for a few seconds and gets them back on their feet, weak. Only soldiers go into the thick of a fight for someone; anyone else waits until it's clear. Nobody in time, and they bleed out (the cross pulses red near the end). Tap one to see how long they have. Every life saved counts towards the hall of fame.",
+                    "After-action report: when a game ends, a report comes up once the ending has been shown (and it's on the pause menu and the Stats screen any time). How it ended; each side's losses (police, soldiers and civilians lost, the wounded saved and those who bled out, and for the other side kills, arrests, gangs broken, vehicles knocked out or places taken); the fighting strength of each side over time; a map of the city with where the fighting was; and the best of the city's fighters, living and fallen.",
+            },
             {
                     "17.4  -  The enemy army's armour, air power and occupation",
                     "Enemy vehicles, in tan: squads now come in by troop truck or APC, climbing out once there's a fight in reach (a truck then goes back for more; an APC stays and backs them up with its machine gun). A tank comes in with the first squads and with every fifth wave after (three at most at once), its main gun on the city's armour and on knots of its soldiers. Every sixth wave brings an attack helicopter, which circles the fighting with rockets and cannon for a minute and a half.",
