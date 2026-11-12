@@ -20,7 +20,7 @@ away from the middle of the screen as you pan, and the game plays in both portra
   and helicopter sorties). Police and soldiers on duty are set by the size of the city (about one officer
   per 80 residents plus two per station; a garrison at the base if the map has one). Each map decides its
   own buildings, layout, parks, police stations and military base. **Game mode** (17.0): Zombies, Gangs (rival street gangs on their turf), Enemy army (an invasion from
-  the edge of the map) Heist (18.1: armed crews rob banks and shops with hostages: stop them with a standoff or a chase) or Prison break (18.2, on the Prison Island: a riot, then a breakout over the causeway); the last four have no zombies. **Randomize** rolls a random setup.
+  the edge of the map) Heist (18.1: armed crews rob banks and shops with hostages: stop them with a standoff or a chase), Prison break (18.2, on the Prison Island: a riot, then a breakout over the causeway), and (18.3) Cartel (convoys, safe houses, bought officers), Terror (gunmen and bombs for the bomb squad), Disasters (tornado, earthquake, flood, wildfire) or Aliens (a mothership and its drones); only the first has zombies. **Randomize** rolls a random setup.
   **City code** replays a city: every city has a code like `12-483920` (or `12-483920@2` for a city
   outside the USA; shown in the pause menu and stats), so you can play the same streets again or share
   them with a friend.
@@ -420,6 +420,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Cartel, Terror, Disasters, Aliens (18.3):** CityConfig.MODE_CARTEL/TERROR/DISASTER/ALIENS. World.gangLike() and armyLike() let the cartel use the gang machinery (turf, jefes in safe houses, raids) and the aliens the army's (objectives, the front); ownEnding() marks the modes that end themselves. cartelLife: convoys (startConvoy, Fleet getaway cars to roadOut; shipments, convoysSeized) and bought officers (corruptCops). terrorLife: attacks from hostileReserve, plantBomb ({x, y, seconds, defused}) and gunmen (terroristStep); ROLE_BOMB_TECH defuses. disasterLife: World.Hazard (HZ_TORNADO, HZ_QUAKE, HZ_FLOOD, HZ_FIRE) with hazardHurts once a second and hazardsMove each frame; quake for the earthquake. alienLife: the mothership (motherX/Y, motherHp; damage from the city's fire, tanks, helicopters, air strikes; its beam), drones dropped at motherSpot. GameView.drawHazards draws hazards, bombs and the mothership. Save version 63 keeps the counters and the mothership (bombs and disasters under way aren't kept). Campaign missions 12 to 19.
 
 **Prison break (18.2):** CityConfig.MODE_PRISON (normalize puts it on the Prison Island). World.riotLife (once a second, in place of prisonLife) starts the riot (startRiot: joinRiot turns inmates into GANGSTER rioters with squad RIOT_SQUAD, kitRioter; the yard's guards overpowered and their shotguns taken), spreads it, breaks the gate (breakout: prisonFallen, City.openPrisonGate) and ends it. World.rioterStep is a rioter's part (hand to hand, a guard's gun taken, out to the city's far edge; recapture when badly hurt with the law near). riotStage, riotTotal, prisonEscaped and recaptured are in save version 62. Campaign missions 10 and 11 use Campaign.G_PRISON.
 

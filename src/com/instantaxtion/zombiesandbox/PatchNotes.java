@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.2";
-    static final int VERSION_CODE = 182;
+    static final String VERSION = "18.3";
+    static final int VERSION_CODE = 183;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.3  -  Four new modes: Cartel, Terror, Disasters and Aliens",
+                    "Cartel: two or more cartel cells hold their turf, with their jefe hidden in a safe house (raid it, as with a gang boss). Every minute or two a convoy - a car with three sicarios and the product - leaves a safe house for the edge of town; a 911 tip says where from. Police are sent after it and shoot at it; stop it and the product's seized. Five convoys through and the cartel runs the city. Now and then an officer is bought and turns on the rest (still in uniform). Break every cell to win.",
+                    "Terror: one attack after another, a minute or so apart. Gunmen open fire in busy streets on anyone, police or not. Or a bomb is left in a crowd with 90 seconds on it: 911 calls it in, people near it are cleared, and the bomb squad is sent. A bomb technician makes one safe in 8 seconds; any other officer standing over it takes four times as long. The city holds if no more than half the bombs go off.",
+                    "Bomb squad: a new police unit (in the Police picker; $35 in missions). Two start at every police station in Terror games.",
+                    "Disasters: no enemy, just a tornado, an earthquake (with an aftershock), a flash flood and a wildfire, one after another. A tornado tears across town, flinging people and wrecking buildings and cars. A quake cracks and brings down buildings round its centre. A flood rises, holds and drains away, drowning anyone who stays in it. A wildfire spreads and burns. People run from all of them. The police get the injured out. The city comes through if fewer than about one in twelve of its people die. The Disasters button sets one off where you tap.",
+                    "Aliens: a mothership hovers over the city, drifting towards the stations and bases. Alien drones in green drop beneath it and march on them, and its beam burns the streets every half minute. Rifles barely scratch it. Soldiers' rockets, tanks, helicopters and air strikes (call one in under it) bring it down. Once it falls its drones power down one by one. Its health is shown above it.",
+                    "Eight new campaign missions: Plaza Boss and Narco State (cartel), Rush Hour and Black Day (terror), Storm Season and The Big One (disasters), First Contact and Mothership (aliens).",
+                    "The after-action report has a section for each new mode, and the radio speaks of each in its own words.",
+                    "Fixed: rebuilding a fallen building after an outbreak could wait for ever on a busy street, held up by people just walking across the site. Someone standing there still holds the work up; a stream of passers-by now only for ten seconds or so, then the crew moves them on.",
+            },
             {
                     "18.2  -  Prison break",
                     "A new game mode, Prison break (New Game, Game mode). It's played on the Prison Island, the map with the prison, which is picked for you. There are no zombies.",

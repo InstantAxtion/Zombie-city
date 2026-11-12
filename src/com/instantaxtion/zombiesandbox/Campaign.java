@@ -14,7 +14,7 @@ final class Campaign {
     }
 
     /** What winning a mission takes. */
-    static final int G_CLEAR = 0, G_SURVIVE = 1, G_ARREST = 2, G_BREAK = 3, G_HOLD = 4, G_HEIST = 5, G_PRISON = 6;
+    static final int G_CLEAR = 0, G_SURVIVE = 1, G_ARREST = 2, G_BREAK = 3, G_HOLD = 4, G_HEIST = 5, G_PRISON = 6, G_CARTEL = 7, G_TERROR = 8, G_DISASTER = 9;
 
     static final class Mission {
         final String title, brief;
@@ -45,7 +45,8 @@ final class Campaign {
         }
     }
 
-    private static final int Z = CityConfig.MODE_ZOMBIES, G = CityConfig.MODE_GANGS, A = CityConfig.MODE_ARMY, H = CityConfig.MODE_HEIST, P = CityConfig.MODE_PRISON;
+    private static final int Z = CityConfig.MODE_ZOMBIES, G = CityConfig.MODE_GANGS, A = CityConfig.MODE_ARMY, H = CityConfig.MODE_HEIST, P = CityConfig.MODE_PRISON,
+            K = CityConfig.MODE_CARTEL, T = CityConfig.MODE_TERROR, D = CityConfig.MODE_DISASTER, X = CityConfig.MODE_ALIENS;
 
     // (cops and soldiers: what the city starts with; foes: the zombies at the start, or the gang members or enemy
     // soldiers on the streets, with more of them to come in waves.)
@@ -74,6 +75,23 @@ final class Campaign {
                     P, CityConfig.PRISON_ISLAND, CityConfig.SMALL, 20, 6, 30, 50923, 400, 60, 900, G_PRISON, 5, 40, 8),
             new Mission("Breakout", "The whole prison is going up at once. Hold the causeway with everything you've got; no more than five may escape.",
                     P, CityConfig.PRISON_ISLAND, CityConfig.MEDIUM, 16, 6, 90, 81277, 550, 90, 1200, G_PRISON, 5, 60, 15),
+            // ((18.3) The cartel, terror, disasters and the aliens.)
+            new Mission("Plaza Boss", "A cartel has moved into the old town. Stop its convoys - no more than one may get out of the city - and break it before the clock runs out.",
+                    K, 5, CityConfig.SMALL, 14, 0, 46, 61733, 350, 60, 900, G_CARTEL, 1, 40, 10),
+            new Mission("Narco State", "Two cartels, safe houses all over downtown, and officers on their payroll. No more than three convoys through.",
+                    K, 1, CityConfig.MEDIUM, 28, 8, 70, 91847, 500, 80, 1200, G_CARTEL, 3, 40, 18),
+            new Mission("Rush Hour", "Intelligence says a cell will strike today: bombs and gunmen in the busy streets. No more than one bomb may go off. The bomb squad costs money; it's worth it.",
+                    T, 1, CityConfig.SMALL, 18, 0, 5, 44311, 350, 60, 900, G_TERROR, 1, 30, 8),
+            new Mission("Black Day", "A coordinated campaign across the whole city. Eight attacks; no more than three bombs may go off.",
+                    T, 0, CityConfig.MEDIUM, 24, 6, 8, 25509, 500, 80, 1200, G_TERROR, 3, 60, 15),
+            new Mission("Storm Season", "A tornado, a flood and a wildfire are on the way. No enemy to fight: get the injured out and keep the death toll under 50.",
+                    D, 6, CityConfig.SMALL, 20, 0, 3, 73005, 300, 60, 900, G_DISASTER, 50, 20, 4),
+            new Mission("The Big One", "Every disaster at once over a big city, an earthquake among them. Keep the death toll under 60.",
+                    D, 0, CityConfig.MEDIUM, 28, 8, 5, 12577, 450, 90, 1300, G_DISASTER, 60, 30, 8),
+            new Mission("First Contact", "Something has stopped over the city. Its drones are landing. Bring the mothership down and clear the streets of them.",
+                    X, 6, CityConfig.SMALL, 20, 16, 40, 39001, 500, 90, 1200, G_CLEAR, 0, 300, 40),
+            new Mission("Mothership", "The full invasion: a mothership over a big city, drones without end until it falls. Shoot it down, then finish them.",
+                    X, 0, CityConfig.MEDIUM, 28, 24, 80, 66157, 700, 120, 1500, G_CLEAR, 0, 600, 80),
     };
 
     /**
@@ -108,7 +126,7 @@ final class Campaign {
     // ---- Costs ----
 
     /** Each police officer by GameView.COP_ROLES order; -1 not to be had. */
-    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15, 30};
+    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15, 30, 35};
     /** Each soldier by GameView.MIL_ROLES order. */
     static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee. */
@@ -127,9 +145,10 @@ final class Campaign {
         Mission m = w.mission();
         if (m == null) return 0;
         int minutes = (int) (missionTime(w) / 60);
-        int perKill = m.mode == G || m.mode == H || m.mode == P ? 4 : m.mode == A ? 5 : 1;
+        int perKill = m.mode == G || m.mode == H || m.mode == P || m.mode == K || m.mode == T ? 4 : m.mode == A || m.mode == X ? 5 : 1;
         return m.income * minutes + w.zombiesKilled * perKill + w.arrests * 10 + w.woundedSaved * 5 + w.freed * 2
-                + w.enemyVehiclesLost * 40 + Integer.bitCount(w.gangBroken) * 150 + w.heistsStopped * 120;
+                + w.enemyVehiclesLost * 40 + Integer.bitCount(w.gangBroken) * 150 + w.heistsStopped * 120
+                + w.convoysSeized * 100 + w.bombsDefused * 80 + (m.mode == X && !w.motherAlive ? 600 : 0);
     }
 
     static int budget(World w) {
@@ -238,10 +257,14 @@ final class Campaign {
             case G_SURVIVE: return "Keep the city standing for " + time + ".";
             case G_ARREST: return "Arrest " + m.goalN + " gang members, or clear the streets, within " + time + ".";
             case G_BREAK: return "Break " + m.goalN + (m.goalN == 1 ? " gang" : " gangs") + " within " + time + ".";
+            case G_CARTEL: return "Break the cartel: no more than " + m.goalN + " convoys may get out of the city.";
+            case G_TERROR: return "Stop the attacks: no more than " + m.goalN + (m.goalN == 1 ? " bomb" : " bombs") + " may go off.";
+            case G_DISASTER: return "Ride out the disasters: fewer than " + m.goalN + " civilians lost.";
             case G_PRISON: return "End the prison riot: no more than " + m.goalN + " inmates may escape.";
             case G_HEIST: return "Stop the heists: no more than " + m.goalN + (m.goalN == 1 ? " crew" : " crews") + " may get away.";
             case G_HOLD: return "Lose no more than " + m.goalN + (m.goalN == 1 ? " place" : " places") + " to the enemy for " + time + ".";
-            default: return (m.mode == Z ? "Destroy every zombie" : m.mode == G ? "Break every gang" : m.mode == H ? "Stop every heist" : "Drive out the enemy") + " within " + time + ".";
+            default: return (m.mode == Z ? "Destroy every zombie" : m.mode == G ? "Break every gang" : m.mode == H ? "Stop every heist"
+                    : m.mode == X ? "Bring down the mothership and every drone" : "Drive out the enemy") + " within " + time + ".";
         }
     }
 
@@ -254,9 +277,13 @@ final class Campaign {
             case G_ARREST: return Math.min(w.arrests, m.goalN) + " / " + m.goalN + " arrested";
             case G_BREAK: return Math.min(Integer.bitCount(w.gangBroken), m.goalN) + " / " + m.goalN + " gangs broken";
             case G_HOLD: return taken(w) + " / " + m.goalN + " places lost";
+            case G_CARTEL: return Integer.bitCount(w.gangBroken) + " cells broken, " + w.shipments + " / " + m.goalN + " convoys through";
+            case G_TERROR: return w.bombsDefused + " made safe, " + w.bombsExploded + " / " + m.goalN + " went off";
+            case G_DISASTER: return w.disastersDone + " disasters, " + w.civiliansLost + " / " + m.goalN + " lost";
             case G_PRISON: return w.recaptured + " recaptured, " + w.prisonEscaped + " / " + m.goalN + " escaped";
             case G_HEIST: return w.heistsStopped + " stopped, " + w.heistsEscaped + " / " + m.goalN + " got away";
-            default: return w.zombieCount() + (m.mode == Z ? " zombies" : m.mode == G ? " gang members" : " enemy") + " left";
+            default: return (m.mode == X && w.motherAlive ? "Mothership " + (int) (100 * w.motherHp / Math.max(1, w.motherMax)) + "%, " : "")
+                    + w.zombieCount() + (m.mode == Z ? " zombies" : m.mode == G ? " gang members" : m.mode == X ? " drones" : " enemy") + " left";
         }
     }
 
@@ -286,6 +313,18 @@ final class Campaign {
                 break;
             case G_BREAK:
                 won = Integer.bitCount(w.gangBroken) >= m.goalN || w.warResult == 1;
+                break;
+            case G_CARTEL:
+                if (w.shipments > m.goalN) why = "Too many convoys got through.";
+                won = why == null && w.warResult == 1;
+                break;
+            case G_TERROR:
+                if (w.bombsExploded > m.goalN) why = "Too many bombs went off.";
+                won = why == null && (w.warResult == 1 || (out && w.bombs.isEmpty()));
+                break;
+            case G_DISASTER:
+                if (w.civiliansLost >= m.goalN) why = "Too many lives lost.";
+                won = why == null && (w.warResult != 0 || out);
                 break;
             case G_PRISON:
                 if (w.prisonEscaped > m.goalN) why = "Too many inmates escaped.";

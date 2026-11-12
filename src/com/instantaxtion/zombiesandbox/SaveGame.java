@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 62;
+    private static final int VERSION = 63;
 
     private SaveGame() {
     }
@@ -393,6 +393,21 @@ final class SaveGame {
             out.writeInt(w.riotTotal);
             out.writeInt(w.prisonEscaped);
             out.writeInt(w.recaptured);
+            // (Version 63, 18.3: the cartel, terror, disasters and the aliens. Bombs and disasters under way aren't kept.)
+            out.writeInt(w.shipments);
+            out.writeInt(w.convoysSeized);
+            out.writeInt(w.corruptCops);
+            out.writeInt(w.bombsPlanted);
+            out.writeInt(w.bombsDefused);
+            out.writeInt(w.bombsExploded);
+            out.writeInt(w.attacksMade);
+            out.writeInt(w.disastersDone);
+            out.writeInt(w.disasterCivStart);
+            out.writeBoolean(w.motherAlive);
+            out.writeFloat(w.motherX);
+            out.writeFloat(w.motherY);
+            out.writeFloat(w.motherHp);
+            out.writeFloat(w.motherMax);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
@@ -899,6 +914,22 @@ final class SaveGame {
                     w.riotTotal = in.readInt();
                     w.prisonEscaped = in.readInt();
                     w.recaptured = in.readInt();
+                }
+                if (version >= 63) {
+                    w.shipments = in.readInt();
+                    w.convoysSeized = in.readInt();
+                    w.corruptCops = in.readInt();
+                    w.bombsPlanted = in.readInt();
+                    w.bombsDefused = in.readInt();
+                    w.bombsExploded = in.readInt();
+                    w.attacksMade = in.readInt();
+                    w.disastersDone = in.readInt();
+                    w.disasterCivStart = in.readInt();
+                    w.motherAlive = in.readBoolean();
+                    w.motherX = in.readFloat();
+                    w.motherY = in.readFloat();
+                    w.motherHp = in.readFloat();
+                    w.motherMax = in.readFloat();
                 }
                 int bm = in.readInt();
                 if (bm > 0) {

@@ -620,7 +620,7 @@ final class World {
             // ((17.4) The enemy's armour and helicopters, and the troops still aboard its trucks.)
             if (v.enemy && !v.broken) zs += (v.type == Fleet.TANK ? 12 : v.type == Fleet.HELI ? 10 : v.kind == Fleet.K_APC ? 6 : 2) + v.riders.size() * 4;
         }
-        if (hostileMode()) zs += hostileReserve * (mode() == CityConfig.MODE_GANGS ? 2 : heistMode() ? 10 : 4) * 0.5f;
+        if (hostileMode()) zs += hostileReserve * (gangLike() ? 2 : heistMode() ? 10 : 4) * 0.5f;
         // ((18.2) The inmates still in the yard who could join a riot weigh a little.)
         if (trait[TR_TOUGH]) zs *= 1.25f;
         if (trait[TR_FRAIL]) zs *= 0.8f;
@@ -1549,6 +1549,13 @@ final class World {
             applyRole(e, Entity.ROLE_RIOT);
         } else if (role == Entity.ROLE_SWAT || role == Entity.ROLE_MARKSMAN) {
             applyRole(e, role);
+        } else if (role == Entity.ROLE_BOMB_TECH) {
+            // ((18.3) The bomb squad: a heavy olive suit and a visor.)
+            e.role = Entity.ROLE_BOMB_TECH;
+            e.body = 0xFF4A5A3A;
+            e.head = 0xFF2A3326;
+            e.hp = e.maxHp = 140;
+            e.speed *= 0.85f;
         } else if (role == Entity.ROLE_NEGOTIATOR) {
             // ((18.1) A negotiator: plain clothes, a jacket and a sidearm; talks crews out three times as fast.)
             e.role = Entity.ROLE_NEGOTIATOR;
@@ -2218,8 +2225,9 @@ final class World {
         separate();
         stampedeNews(dt);
         fleet.update(dt);
-        if (mode() == CityConfig.MODE_GANGS || heistMode()) driveBys(dt);
-        if (mode() == CityConfig.MODE_ARMY || heistMode()) cityVsArmour(dt);
+        if (gangLike() || heistMode()) driveBys(dt);
+        if (armyLike() || heistMode() || cartelMode()) cityVsArmour(dt);
+        if (disasterMode() && !hazards.isEmpty()) hazardsMove(dt);
         updateBlasts(dt);
         updateFirebomb(dt);
         updateMedkits(dt);
@@ -2447,10 +2455,10 @@ final class World {
             boolean clear = z == 0 && rising == 0 && lurking == 0 && bitten == 0 && h > 0 && hostileReserve <= 0;
             if (!clear) clearSince = -1;
             else if (clearSince < 0) clearSince = time;
-            if (clear && time - clearSince >= 4 && hostileMode() && !heistMode() && !prisonMode()) {
+            if (clear && time - clearSince >= 4 && hostileMode() && !ownEnding()) {
                 outbreak = false;
                 warResult = 1;
-                boolean gangs = mode() == CityConfig.MODE_GANGS;
+                boolean gangs = gangLike();
                 int t = (int) outbreakTime;
                 timeline(gangs ? "The gangs are broken: the streets are the city's again" : "The invasion is beaten back: the city stands");
                 banner(gangs ? "THE GANGS ARE BROKEN" : "THE INVASION IS DEFEATED", "Over after " + clock(t) + ". "
@@ -2459,7 +2467,7 @@ final class World {
                         + count(civiliansLost, "civilian", "civilians") + " lost in the crossfire.");
                 startAftermath(AFTER_RECOVERY);
                 calmDown();
-            } else if (heistMode() || prisonMode()) {
+            } else if (ownEnding()) {
                 // ((18.1) Heists, (18.2) and a prison break: how it ends is worked out in heistLife and riotLife.)
             } else if (hostileMode()) {
                 // ((17.0) The other side wins once there's nobody left to fight them: every officer and soldier down,
@@ -2467,7 +2475,7 @@ final class World {
                 if (armed == 0 && z > 0 && dispatch.policeReserve <= 0 && dispatch.squadReserve <= 0) {
                     outbreak = false;
                     warResult = 2;
-                    boolean gangs = mode() == CityConfig.MODE_GANGS;
+                    boolean gangs = gangLike();
                     timeline(gangs ? "The gangs have taken the city" : "The city has fallen to the enemy");
                     banner(gangs ? "THE GANGS RULE THE STREETS" : "THE CITY HAS FALLEN", gangs ? "Every officer and soldier is down. The city belongs to the gangs."
                             : "Every officer and soldier is down. Enemy troops hold the city.");
@@ -2965,11 +2973,18 @@ final class World {
 
     /** What the other side is called in counts and labels. */
     String enemyLabel() {
-        return mode() == CityConfig.MODE_GANGS ? "Gangs" : mode() == CityConfig.MODE_ARMY ? "Enemy" : heistMode() ? "Robbers" : prisonMode() ? "Rioters" : "Zombies";
+        if (alienMode()) return "Aliens";
+        if (cartelMode()) return "Cartel";
+        return gangLike() ? "Gangs" : armyLike() ? "Enemy" : heistMode() ? "Robbers" : prisonMode() ? "Rioters"
+                : cartelMode() ? "Cartel" : terrorMode() ? "Terrorists" : disasterMode() ? "Hazards" : alienMode() ? "Aliens" : "Zombies";
     }
 
     /** What a gang member or enemy soldier is, for the card about them. */
     String hostileTitle(Entity e) {
+        if (e.type == Entity.GANGSTER && e.squad >= TERROR_SQUAD && terrorMode()) return TERROR_KITS[Math.max(0, Math.min(1, e.kit))] + ", cell " + (e.squad - TERROR_SQUAD + 1);
+        if (e.type == Entity.INVADER && alienMode()) return ALIEN_KITS[Math.max(0, Math.min(2, e.kit))];
+        if (e.type == Entity.GANGSTER && cartelMode() && e.squad < HEIST_SQUAD)
+            return (e.kit == 3 ? "Jefe" : CARTEL_KITS[Math.max(0, Math.min(2, e.kit))]) + ", " + reword(GANG_NAMES[fmod(e.squad, GANG_NAMES.length)]);
         if (e.type == Entity.GANGSTER && e.squad == RIOT_SQUAD) return RIOT_KITS[Math.max(0, Math.min(2, e.kit))] + ", an inmate";
         if (e.type == Entity.GANGSTER && heistMode())
             return HEIST_KITS[Math.max(0, Math.min(2, e.kit))] + (e.squad >= HEIST_SQUAD ? ", the " + crewName(e.squad) : "");
@@ -2998,10 +3013,32 @@ final class World {
             {"the dead", "the rioters"}, {"The infected", "The rioters"}, {"the infected", "the rioters"}, {"Outbreak", "Prison break"},
             {"outbreak", "prison break"}, {"hordes", "mobs"}, {"horde", "mob"}, {"Horde", "Mob"}};
 
+    private static final String[][] CARTEL_WORDS = {{"THE GANGS ARE BROKEN", "THE CARTEL IS BROKEN"}, {"THE GANGS RULE THE STREETS", "THE CARTEL RULES THE STREETS"},
+            {"THE DEAD", "THE CARTEL"}, {"OUTBREAK", "CARTEL WAR"}, {"Zombies", "Sicarios"}, {"zombies", "sicarios"}, {"Zombie", "Sicario"},
+            {"zombie", "sicario"}, {"The dead", "The cartel"}, {"the dead", "the cartel"}, {"The infected", "The cartel"}, {"the infected", "the cartel"},
+            {"Outbreak", "Cartel war"}, {"outbreak", "cartel war"}, {"hordes", "crews"}, {"horde", "crew"}, {"Horde", "Crew"},
+            {"gang members", "sicarios"}, {"gang member", "sicario"}, {"The gangs", "The cartel"}, {"the gangs", "the cartel"}, {"Gang war", "Cartel war"},
+            {"gang war", "cartel war"}, {"gangs", "cartel cells"}, {"gang", "cartel cell"},
+            {"Red Kings", "Cartel del Norte"}, {"Eastside Blues", "Los Halcones"}, {"Violet Crowns", "La Familia"}, {"Southside Lobos", "Cartel del Golfo"},
+            {"Gold Saints", "Los Zetas Nuevos"}};
+    private static final String[][] TERROR_WORDS = {{"THE DEAD", "THE ATTACKERS"}, {"OUTBREAK", "ATTACK"}, {"Zombies", "Gunmen"}, {"zombies", "gunmen"},
+            {"Zombie", "Gunman"}, {"zombie", "gunman"}, {"The dead", "The attackers"}, {"the dead", "the attackers"}, {"The infected", "The attackers"},
+            {"the infected", "the attackers"}, {"Outbreak", "Attack"}, {"outbreak", "attack"}, {"hordes", "cells"}, {"horde", "cell"}, {"Horde", "Cell"}};
+    private static final String[][] DISASTER_WORDS = {{"THE DEAD", "THE DISASTER"}, {"OUTBREAK", "DISASTER"}, {"The dead", "The disaster"},
+            {"the dead", "the disaster"}, {"Outbreak", "Disaster"}, {"outbreak", "disaster"}};
+    private static final String[][] ALIEN_WORDS = {{"THE INVASION IS DEFEATED", "THE ALIENS ARE DEFEATED"}, {"THE DEAD", "THE ALIENS"},
+            {"OUTBREAK", "INVASION"}, {"Zombies", "Aliens"}, {"zombies", "aliens"}, {"Zombie", "Alien"}, {"zombie", "alien"}, {"The dead", "The aliens"},
+            {"the dead", "the aliens"}, {"The infected", "The aliens"}, {"the infected", "the aliens"}, {"Outbreak", "Invasion"}, {"outbreak", "invasion"},
+            {"hordes", "swarms"}, {"horde", "swarm"}, {"Horde", "Swarm"}, {"Enemy troops", "Alien drones"}, {"enemy troops", "alien drones"},
+            {"Enemy soldier", "Alien drone"}, {"enemy soldier", "alien drone"}, {"Enemy troops hold the city", "The aliens hold the city"},
+            {"The enemy", "The aliens"}, {"the enemy", "the aliens"}, {"Enemy", "Alien"}};
+
     String reword(String s) {
         if (s == null || city == null || city.cfg.mode == CityConfig.MODE_ZOMBIES) return s;
-        String[][] words = city.cfg.mode == CityConfig.MODE_GANGS ? GANG_WORDS : city.cfg.mode == CityConfig.MODE_HEIST ? HEIST_WORDS
-                : city.cfg.mode == CityConfig.MODE_PRISON ? PRISON_WORDS : ARMY_WORDS;
+        int md = city.cfg.mode;
+        String[][] words = md == CityConfig.MODE_GANGS ? GANG_WORDS : md == CityConfig.MODE_HEIST ? HEIST_WORDS
+                : md == CityConfig.MODE_PRISON ? PRISON_WORDS : md == CityConfig.MODE_CARTEL ? CARTEL_WORDS : md == CityConfig.MODE_TERROR ? TERROR_WORDS
+                : md == CityConfig.MODE_DISASTER ? DISASTER_WORDS : md == CityConfig.MODE_ALIENS ? ALIEN_WORDS : ARMY_WORDS;
         for (String[] w : words) if (s.indexOf(w[0]) >= 0) s = s.replace(w[0], w[1]);
         return s;
     }
@@ -3067,7 +3104,11 @@ final class World {
             toolGroup = RIOT_SQUAD;
             return;
         }
-        if (mode() == CityConfig.MODE_GANGS) {
+        if (terrorMode()) {
+            toolGroup = TERROR_SQUAD + cells++;
+            return;
+        }
+        if (gangLike()) {
             int g = 0;
             float bd = Float.MAX_VALUE;
             for (int k = 0; k < GANG_NAMES.length; k++) {
@@ -3084,11 +3125,26 @@ final class World {
 
     /** A gang member or an enemy soldier (as the game's mode has it) with the kit asked for. */
     Entity spawnHostile(int kit, float x, float y) {
-        boolean gangs = mode() == CityConfig.MODE_GANGS;
+        boolean gangs = gangLike();
         if (toolGroup < 0) newHostileGroup(x, y);
         if (heistMode()) {
             Entity r = spawn(Entity.GANGSTER, x, y);
             if (r != null) kitRobber(r, kit, toolGroup);
+            return r;
+        }
+        if (terrorMode()) {
+            Entity r = spawn(Entity.GANGSTER, x, y);
+            if (r != null) {
+                outbreak = true;
+                if (kit == 2) {
+                    // A bomber: leaves a device where they're put.
+                    r.dead = true;
+                    r.removed = true;
+                    plantBomb(x, y);
+                    return null;
+                }
+                kitTerrorist(r, kit, toolGroup);
+            }
             return r;
         }
         if (prisonMode()) {
@@ -3104,6 +3160,7 @@ final class World {
         if (gangs && kit == 3 && gangBoss[fmod(toolGroup, GANG_NAMES.length)] != null && !gangBoss[fmod(toolGroup, GANG_NAMES.length)].dead
                 && gangBoss[fmod(toolGroup, GANG_NAMES.length)].type == Entity.GANGSTER) kit = 2;
         Entity e = spawn(gangs ? Entity.GANGSTER : Entity.INVADER, x, y);
+        // ((18.3) A drone dropped from the mothership.)
         if (e == null) return null;
         kitOut(e, kit, toolGroup);
         if (gangs && e.kit == 3) gangBoss[fmod(toolGroup, GANG_NAMES.length)] = e;
@@ -3137,8 +3194,8 @@ final class World {
             e.postX = t[0];
             e.postY = t[1];
         } else {
-            e.body = ARMY_BODY;
-            e.head = ARMY_HELMET;
+            e.body = alienMode() ? 0xFF59D18C : ARMY_BODY;
+            e.head = alienMode() ? 0xFF1C3A2A : ARMY_HELMET;
             setGun(e, e.kit == 2 ? Entity.W_DMR : Entity.W_RIFLE, e.kit == 1 ? 400 : e.kit == 2 ? 80 : 210);
             if (e.kit == 1) {
                 e.magSize = 100;
@@ -3163,6 +3220,21 @@ final class World {
     /** The game's own gang crews or invading squads, in place of the dead at the start. */
     private void startHostiles(int n) {
         if (n <= 0) return;
+        if (terrorMode() || disasterMode()) {
+            // ((18.3) Attacks, or disasters, to come: a mission's own number, otherwise one for every ten of the setting.)
+            int k = city.cfg.mission >= 0 ? n : Math.max(3, Math.min(8, n / 10));
+            hostileStart = k;
+            hostileReserve = k;
+            if (terrorMode())
+                for (City.Facility f : city.facilities)
+                    if (f.kind == City.FACILITY_POLICE && !f.fed)
+                        for (int j = 0; j < 2; j++) {
+                            float[] q = city.findWalkable(f.gateX + j * 8, f.gateY);
+                            if (q != null) spawnCop(Entity.ROLE_BOMB_TECH, q[0], q[1]);
+                        }
+            return;
+        }
+        if (alienMode()) placeMothership(n);
         if (prisonMode()) {
             // ((18.2) No one to come from outside: the riot is the prison's own inmates (a mission's number of them at first).)
             riotPlanned = city.cfg.mission >= 0 ? n : -1;
@@ -3182,8 +3254,8 @@ final class World {
         // biggest more of them than of the city's defenders.)
         n = Math.max(1, Math.min(city.cfg.mission >= 0 ? n : hostilePlanned(n, counts[Entity.COP] + counts[Entity.SOLDIER]), maxEntities - entities.size() - 100));
         hostileStart = n;
-        hostileReserve = Math.round(n * (mode() == CityConfig.MODE_GANGS ? GANG_RESERVE : HOSTILE_RESERVE));
-        if (mode() == CityConfig.MODE_GANGS) {
+        hostileReserve = Math.round(n * (gangLike() ? GANG_RESERVE : alienMode() ? 3 : HOSTILE_RESERVE));
+        if (gangLike()) {
             int gangs = Math.min(GANG_NAMES.length, 2 + n / 60);
             for (int g = 0; g < gangs; g++) {
                 float[] t = gangTurf(g);
@@ -3218,12 +3290,12 @@ final class World {
         // The enemy comes in from the edge of the map, a squad at a time, from one or two places.
         float[][] entry = new float[1 + (n > 60 ? 1 : 0)][];
         for (int k = 0; k < entry.length; k++) {
-            entry[k] = enemyEntry();
+            entry[k] = alienMode() ? motherSpot() : enemyEntry();
         }
         entryX = entry[0][0];
         entryY = entry[0][1];
         // ((17.4) Armour with them: a tank for every two hundred or so.)
-        for (int k = 0; k < Math.max(1, n / 200); k++) {
+        for (int k = 0; k < (alienMode() ? 0 : Math.max(1, n / 200)); k++) {
             float[] p = entry[k % entry.length], goal = enemyObjective(p[0], p[1]);
             if (goal != null) fleet.enemyIn(Fleet.ENEMY_TANK, p[0] + k * 20, p[1], goal[0], goal[1]);
         }
@@ -3247,11 +3319,11 @@ final class World {
      * gang's new recruits out on its turf - until there are no more to come.
      */
     private void hostileWaves() {
-        if (hostileReserve <= 0 || !hostileMode() || heistMode() || prisonMode()) return;
+        if (hostileReserve <= 0 || !hostileMode() || ownEnding()) return;
         waveCd -= 1;
         int now = counts[Entity.GANGSTER] + counts[Entity.INVADER];
         if (waveCd > 0 || now >= hostileStart * 0.7f) return;
-        boolean gangs = mode() == CityConfig.MODE_GANGS;
+        boolean gangs = gangLike();
         waveCd = gangs ? 12 : 16;
         int size = Math.min(hostileReserve, gangs ? 8 : 12);
         float[] p;
@@ -3283,7 +3355,7 @@ final class World {
             float a = rnd.nextFloat() * TAU, r = 60 + rnd.nextFloat() * 120;
             p = new float[]{t[0] + (float) Math.cos(a) * r, t[1] + (float) Math.sin(a) * r};
         } else {
-            p = enemyEntry();
+            p = alienMode() ? motherSpot() : enemyEntry();
             group = 100 + squadsMade++;
             if (entryX < 0) {
                 entryX = p[0];
@@ -3300,6 +3372,7 @@ final class World {
                 if (v.type == Fleet.HELI) helis++;
                 if (v.kind == Fleet.K_APC) apcs++;
             }
+            if (alienMode()) goal = null;
             if (goal != null && waveN % 6 == 0 && helis == 0) {
                 float ww = city.worldW(), hh = city.worldH();
                 float hx = p[0] < ww / 2 ? -100 : ww + 100, hy = Math.max(100, Math.min(hh - 100, p[1]));
@@ -3469,6 +3542,8 @@ final class World {
     private void thinkHostile(Entity e, float dt) {
         // ((18.1) A heist crew's on a job.)
         if (e.type == Entity.GANGSTER && heistMode() && heistRobber(e, dt)) return;
+        // ((18.3) A terrorist gunman.)
+        if (e.type == Entity.GANGSTER && e.squad >= TERROR_SQUAD && terrorMode() && terroristStep(e, dt)) return;
         // ((18.2) A prison rioter.)
         if (e.type == Entity.GANGSTER && e.squad == RIOT_SQUAD && rioterStep(e, dt)) return;
         boolean army = e.type == Entity.INVADER;
@@ -5413,6 +5488,710 @@ final class World {
         return true;
     }
 
+    // ------------------------------------------------------------------ (18.3) cartel, terror, disasters, aliens
+
+    boolean cartelMode() {
+        return mode() == CityConfig.MODE_CARTEL;
+    }
+
+    boolean terrorMode() {
+        return mode() == CityConfig.MODE_TERROR;
+    }
+
+    boolean disasterMode() {
+        return mode() == CityConfig.MODE_DISASTER;
+    }
+
+    boolean alienMode() {
+        return mode() == CityConfig.MODE_ALIENS;
+    }
+
+    /** Street gangs, or a cartel: turf, bosses in their hideouts (safe houses), recruits, robberies, stolen cars. */
+    boolean gangLike() {
+        return mode() == CityConfig.MODE_GANGS || cartelMode();
+    }
+
+    /** The enemy army, or the aliens: squads marching on the stations, bases and city hall. */
+    boolean armyLike() {
+        return mode() == CityConfig.MODE_ARMY || alienMode();
+    }
+
+    /** A mode whose end is worked out by its own life (not the last of the other side going down). */
+    boolean ownEnding() {
+        return heistMode() || prisonMode() || terrorMode() || disasterMode();
+    }
+
+    // ---- The cartel: convoys, and officers on the take ----
+
+    static final String[] CARTEL_KITS = {"Halcón", "Sicario", "Enforcer", "Jefe"};
+    /** Convoys of product through the city: those that got out of town, those seized; and officers bought. */
+    int shipments, convoysSeized, corruptCops;
+    private float convoyCd = 50, bribeCd = 100;
+    private int cartelStall;
+    private final ArrayList<Fleet.Vehicle> convoys = new ArrayList<Fleet.Vehicle>();
+    /** Five convoys through, and the cartel has won. */
+    static final int CARTEL_SHIPMENTS = 5;
+
+    private void cartelLife() {
+        if (warResult != 0) return;
+        // A convoy: a car with three sicarios and the product, from one of the cartel's safe houses out of town.
+        convoyCd -= 1;
+        if (convoyCd <= 0) {
+            convoyCd = 70 + rnd.nextFloat() * 40;
+            startConvoy();
+        }
+        for (int i = convoys.size() - 1; i >= 0; i--) {
+            Fleet.Vehicle v = convoys.get(i);
+            if (v.removedFromFleet || v.broken || v.gang < 0 || v.riders.isEmpty()) {
+                convoys.remove(i);
+                if (v.broken || v.riders.isEmpty()) {
+                    convoysSeized++;
+                    dispatch.say(Dispatch.WHO_POLICE, null, "Feds: Convoy stopped on " + city.placeName(v.x, v.y) + ". The product's seized.", v.x, v.y, true);
+                    timeline("Cartel convoy seized", v.x, v.y);
+                }
+                if (!v.removedFromFleet && v.gang >= 0) fleet.gangOut(v);
+                continue;
+            }
+            if (((int) time) % 5 == 0) dispatch.sighting(v.x, v.y, null);
+            float edge = 5 * City.T;
+            if (v.x < edge || v.y < edge || v.x > city.worldW() - edge || v.y > city.worldH() - edge) {
+                convoys.remove(i);
+                v.riders.clear();
+                fleet.discard(v);
+                shipments++;
+                dispatch.say(Dispatch.WHO_POLICE, null, "Feds: A convoy got out of the city. That's " + shipments + " shipment" + (shipments == 1 ? "" : "s")
+                        + " through.", v.x, v.y, true);
+                timeline("A cartel convoy got through");
+                if (shipments >= CARTEL_SHIPMENTS) {
+                    outbreak = false;
+                    warResult = 2;
+                    timeline("The cartel's product is flooding the country");
+                    banner("THE CARTEL RUNS THE CITY", shipments + " convoys got through. The supply routes are theirs.");
+                    startAftermath(AFTER_FALLEN);
+                }
+            }
+        }
+        // Every cell broken: whoever's left of them gets out of town.
+        boolean any = false;
+        for (int k = 0; k < GANG_NAMES.length; k++) if ((gangHadBoss >> k & 1) != 0 && !gangBrokenUp(k)) any = true;
+        if (!any && gangHadBoss != 0) {
+            if (counts[Entity.GANGSTER] > 0 && counts[Entity.GANGSTER] <= 3 && ++cartelStall > 60)
+                for (int i = 0, n = entities.size(); i < n; i++) {
+                    Entity e = entities.get(i);
+                    if (!e.dead && e.type == Entity.GANGSTER && e.arrested == 0) {
+                        e.dead = true;
+                        e.removed = true;
+                    }
+                }
+            return;
+        }
+        cartelStall = 0;
+        // An officer bought: they quietly change sides.
+        bribeCd -= 1;
+        if (bribeCd <= 0) {
+            bribeCd = 110 + rnd.nextFloat() * 60;
+            Entity cop = null;
+            for (int k = 0; k < 30 && cop == null; k++) {
+                Entity e = entities.get(rnd.nextInt(entities.size()));
+                if (!e.dead && e.type == Entity.COP && e.agency == 0 && e.role == 0 && e.ride == null && e.arrested == 0 && e.bleedT == 0) cop = e;
+            }
+            if (cop != null) {
+                int g = 0;
+                float bd = Float.MAX_VALUE;
+                for (int k = 0; k < GANG_NAMES.length; k++) {
+                    if (gangBrokenUp(k)) continue;
+                    float[] t = gangTurf(k);
+                    float d = (float) World.hypot(t[0] - cop.x, t[1] - cop.y);
+                    if (d < bd) {
+                        bd = d;
+                        g = k;
+                    }
+                }
+                int body = cop.body;
+                cop.type = Entity.GANGSTER;
+                cop.task = Dispatch.T_NONE;
+                kitOut(cop, 0, g);
+                cop.body = body;
+                setGun(cop, Entity.W_PISTOL, 60);
+                corruptCops++;
+                recountLive();
+                dispatch.say(Dispatch.WHO_POLICE, null, "Internal Affairs: An officer near " + city.placeName(cop.x, cop.y) + " has been bought by the "
+                        + GANG_NAMES[g] + ". Treat them as hostile.", cop.x, cop.y, true);
+                timeline("A dirty cop", cop.x, cop.y);
+            }
+        }
+    }
+
+    private void startConvoy() {
+        int g = -1;
+        for (int k = 0; k < GANG_NAMES.length; k++) if ((gangHadBoss >> k & 1) != 0 && !gangBrokenUp(k)) g = g < 0 || rnd.nextBoolean() ? k : g;
+        if (g < 0) return;
+        City.Building hb = hideout(g);
+        float[] from = hb != null ? new float[]{hb.doorX, hb.doorY} : gangTurf(g);
+        float[] p = city.nearestDrivable(from[0], from[1]);
+        if (p == null) return;
+        Fleet.Vehicle v = fleet.stealCar(p[0], p[1]);
+        if (v == null) return;
+        int seated = 0;
+        for (int k = 0; k < 3; k++) {
+            Entity e = spawn(Entity.GANGSTER, p[0], p[1]);
+            if (e == null) break;
+            kitOut(e, k == 0 ? 2 : 1, g);
+            aboard(v, e);
+            seated++;
+        }
+        boolean going = false;
+        for (int tries = 0; tries < 6 && seated > 0 && !going; tries++) {
+            float[] to = tries == 5 ? roadOut(p[0], p[1]) : roadOut(rnd.nextFloat() * city.worldW(), rnd.nextFloat() * city.worldH());
+            going = to != null && fleet.gangDrive(v, g, to[0], to[1]);
+        }
+        if (!going) {
+            fleet.gangOut(v);
+            return;
+        }
+        v.getaway = true;
+        convoys.add(v);
+        // ((The tip-off: someone saw them load up.))
+        dispatch.say(Dispatch.WHO_911, null, "911 tip: \"A car just left a house on " + city.placeName(p[0], p[1]) + " full of guys with guns and packages. "
+                + "They're heading out of town.\"", p[0], p[1], true);
+        timeline("A cartel convoy sets off", p[0], p[1]);
+    }
+
+    // ---- Terror: gunmen and bombs ----
+
+    static final int TERROR_SQUAD = 400;
+    static final String[] TERROR_KITS = {"Gunman", "Gunman (rifle)", "Bomber"};
+    /** Bombs left about the city: {x, y, seconds left, how far it's been defused}. */
+    final ArrayList<float[]> bombs = new ArrayList<float[]>();
+    int bombsPlanted, bombsDefused, bombsExploded, attacksMade;
+    private float terrorCd = 25;
+    private int cells;
+    /** Seconds a bomb technician takes to make one safe (anyone else four times as long). */
+    static final float DEFUSE = 8;
+
+    private void kitTerrorist(Entity e, int kit, int squad) {
+        e.type = Entity.GANGSTER;
+        e.kit = Math.max(0, Math.min(2, kit));
+        e.squad = squad;
+        e.hasGun = true;
+        e.body = 0xFF2C2E30;
+        e.head = 0xFF1A1A1A;
+        setGun(e, e.kit == 1 ? Entity.W_RIFLE : Entity.W_SMG, e.kit == 1 ? 210 : 150);
+        e.hp = e.maxHp = 110;
+        e.aware = true;
+    }
+
+    private void terrorLife() {
+        if (warResult != 0) return;
+        terrorCd -= 1;
+        if (terrorCd <= 0 && hostileReserve > 0) {
+            terrorCd = 55 + rnd.nextFloat() * 40;
+            hostileReserve--;
+            attacksMade++;
+            outbreak = true;
+            if (attacksMade % 2 == 1 || rnd.nextFloat() < 0.3f) plantBomb(-1, -1);
+            else gunmen(-1, -1, 3 + rnd.nextInt(3));
+        }
+        // The bombs: ticking, the bomb squad sent, made safe or gone off.
+        for (int i = bombs.size() - 1; i >= 0; i--) {
+            float[] b = bombs.get(i);
+            b[2] -= 1;
+            if (b[2] == 84) {
+                dispatch.say(Dispatch.WHO_911, null, "911: \"There's a bag left on " + city.placeName(b[0], b[1]) + " and it's ticking!\"", b[0], b[1], true);
+                dispatch.sighting(b[0], b[1], null);
+            }
+            Entity tech = null, other = null;
+            float td = 400, od = 16;
+            for (int k = 0, m = gatherArmed(b[0], b[1], 400); k < m; k++) {
+                Entity o = gathered[k];
+                if (o.dead || o.hp <= 0 || o.type != Entity.COP && o.type != Entity.SOLDIER) continue;
+                float d = (float) World.hypot(o.x - b[0], o.y - b[1]);
+                if (o.role == Entity.ROLE_BOMB_TECH && d < td) {
+                    td = d;
+                    tech = o;
+                }
+                if (d < od) {
+                    od = d;
+                    other = o;
+                }
+            }
+            if (tech != null && td < 16) b[3] += 1;
+            else if (other != null) b[3] += 0.25f;
+            else if (b[2] < 84) {
+                // Someone sent to it: the bomb squad if they're anywhere near, otherwise the nearest officer.
+                Entity go = tech;
+                if (go == null) {
+                    float nd = Float.MAX_VALUE;
+                    for (int k = 0, m = gatherArmed(b[0], b[1], 500); k < m; k++) {
+                        Entity o = gathered[k];
+                        if (o.dead || o.hp <= 0 || o.ride != null || (o.type != Entity.COP && o.type != Entity.SOLDIER)) continue;
+                        float d = (float) World.hypot(o.x - b[0], o.y - b[1]);
+                        if (d < nd) {
+                            nd = d;
+                            go = o;
+                        }
+                    }
+                }
+                if (go != null && (go.task != Dispatch.T_MOVE || World.hypot(go.postX - b[0], go.postY - b[1]) > 20)) {
+                    ArrayList<Entity> one = new ArrayList<Entity>();
+                    one.add(go);
+                    dispatch.order(one, b[0], b[1]);
+                }
+            }
+            // Everyone near clears off once the police are on it.
+            if (b[2] < 84 && ((int) b[2]) % 4 == 0) panic(b[0], b[1]);
+            if (b[3] >= DEFUSE) {
+                bombs.remove(i);
+                bombsDefused++;
+                dispatch.say(Dispatch.WHO_POLICE, null, "Bomb Squad: Device on " + city.placeName(b[0], b[1]) + " made safe.", b[0], b[1], true);
+                timeline("Bomb defused", b[0], b[1]);
+            } else if (b[2] <= 0) {
+                bombs.remove(i);
+                bombsExploded++;
+                explode(b[0], b[1], 90, 900);
+                shake = Math.max(shake, 1.5f);
+                dispatch.say(Dispatch.WHO_POLICE, null, "All units: Explosion on " + city.placeName(b[0], b[1]) + "! The bomb's gone off!", b[0], b[1], true);
+                timeline("A bomb went off", b[0], b[1]);
+            }
+        }
+        int gunmen = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.type == Entity.GANGSTER && e.squad >= TERROR_SQUAD) gunmen++;
+        }
+        if (hostileReserve <= 0 && bombs.isEmpty() && gunmen == 0 && attacksMade > 0) {
+            boolean held = bombsExploded * 2 <= bombsPlanted;
+            outbreak = false;
+            warResult = held ? 1 : 2;
+            timeline(held ? "The attacks are over" : "The city was hit hard");
+            banner(held ? "THE CITY STANDS" : "A DAY OF TERROR", bombsDefused + " of " + bombsPlanted + " bombs made safe, " + bombsExploded
+                    + " went off; " + count(civiliansLost, "civilian", "civilians") + " lost.");
+            startAftermath(held ? AFTER_RECOVERY : AFTER_FALLEN);
+            if (held) calmDown();
+        }
+    }
+
+    /** Somewhere busy: where a lot of people are out on the street. */
+    private float[] busySpot() {
+        Entity best = null;
+        int most = -1;
+        for (int k = 0; k < 24; k++) {
+            Entity e = entities.get(rnd.nextInt(entities.size()));
+            if (e.dead || e.type != Entity.CIVILIAN || e.ride != null || city.insideOf(e.x, e.y) != null) continue;
+            int n = 0;
+            for (int j = 0; j < 60; j++) {
+                Entity o = entities.get(rnd.nextInt(entities.size()));
+                if (!o.dead && o.type == Entity.CIVILIAN && World.hypot(o.x - e.x, o.y - e.y) < 120) n++;
+            }
+            if (n > most) {
+                most = n;
+                best = e;
+            }
+        }
+        if (best != null) return new float[]{best.x, best.y};
+        return city.randomWalkableInTown(rnd);
+    }
+
+    void plantBomb(float x, float y) {
+        float[] p = x < 0 ? busySpot() : city.findWalkable(x, y);
+        if (p == null) return;
+        bombs.add(new float[]{p[0], p[1], 90, 0});
+        bombsPlanted++;
+        timeline("A bomb left on " + city.placeName(p[0], p[1]), p[0], p[1]);
+    }
+
+    void gunmen(float x, float y, int n) {
+        float[] c = x < 0 ? busySpot() : new float[]{x, y};
+        if (c == null) return;
+        int squad = TERROR_SQUAD + cells++;
+        int made = 0;
+        for (int i = 0; i < n; i++) {
+            float a = rnd.nextFloat() * TAU;
+            float[] p = city.findWalkable(c[0] + (float) Math.cos(a) * 50, c[1] + (float) Math.sin(a) * 50);
+            if (p == null) continue;
+            Entity e = spawn(Entity.GANGSTER, p[0], p[1]);
+            if (e == null) continue;
+            kitTerrorist(e, i % 2, squad);
+            made++;
+        }
+        if (made == 0) return;
+        noise(c[0], c[1], 300);
+        dispatch.say(Dispatch.WHO_911, null, "911: \"Gunmen on " + city.placeName(c[0], c[1]) + "! They're shooting at everyone!\"", c[0], c[1], true);
+        dispatch.sighting(c[0], c[1], null);
+        timeline("Gunmen attack on " + city.placeName(c[0], c[1]), c[0], c[1]);
+    }
+
+    /** A gunman: at whoever's nearest, police or not. False to fight as the hostile do (nobody close to hand). */
+    private boolean terroristStep(Entity e, float dt) {
+        e.foeT -= dt;
+        if (e.foeT <= 0 || e.foe == null || e.foe.dead || e.foe.hp <= 0) {
+            e.foeT = 0.4f + rnd.nextFloat() * 0.3f;
+            Entity armed = hostileTarget(e, 160);
+            Entity anyone = nearest(e, 120, false, true);
+            e.foe = armed != null ? armed : anyone;
+        }
+        Entity t = e.foe;
+        if (t == null || t.dead) {
+            e.aiming = false;
+            if (e.roamX == 0 || World.hypot(e.roamX - e.x, e.roamY - e.y) < 30) {
+                float[] p = busySpot();
+                if (p != null) {
+                    e.roamX = p[0];
+                    e.roamY = p[1];
+                }
+            }
+            walkToSpot(e, e.roamX, e.roamY, e.runSpeed * 0.7f);
+            return true;
+        }
+        float d = (float) World.hypot(t.x - e.x, t.y - e.y);
+        if (d > hostileRange(e) || !city.los(e.x, e.y, t.x, t.y)) {
+            e.aiming = false;
+            walkToSpot(e, t.x, t.y, e.runSpeed * 0.8f);
+            return true;
+        }
+        aimAndFire(e, t, d, hostileRange(e), dt);
+        steer(e, 0, 0, 0);
+        return true;
+    }
+
+    // ---- Natural disasters ----
+
+    static final int HZ_TORNADO = 0, HZ_QUAKE = 1, HZ_FLOOD = 2, HZ_FIRE = 3;
+    static final String[] DISASTER_NAMES = {"Tornado", "Earthquake", "Flood", "Wildfire"};
+
+    /** Something the weather or the ground is doing to the city: where, how big, which way, how long it's had. */
+    static final class Hazard {
+        int kind;
+        float x, y, r, vx, vy, t, life, peak;
+    }
+
+    final ArrayList<Hazard> hazards = new ArrayList<Hazard>();
+    int disastersDone, disasterCivStart;
+    private float disasterCd = 20;
+    private int disasterNext;
+
+    private void disasterLife() {
+        if (warResult != 0) return;
+        if (hazards.isEmpty()) {
+            disasterCd -= 1;
+            if (disasterCd <= 0 && hostileReserve > 0) {
+                hostileReserve--;
+                startDisaster((disasterNext++ + (int) (city.cfg.seed % 4)) % 4, -1, -1);
+                disasterCd = 35;
+            } else if (hostileReserve <= 0 && disastersDone > 0 && disasterCd <= -20) {
+                boolean held = civiliansLost * 12 < Math.max(60, disasterCivStart);
+                outbreak = false;
+                warResult = held ? 1 : 2;
+                timeline(held ? "The city came through the disasters" : "The disasters devastated the city");
+                banner(held ? "THE CITY CAME THROUGH" : "A CITY IN RUINS", disastersDone + " disasters, " + count(civiliansLost, "life", "lives")
+                        + " lost, " + woundedSaved + " of the hurt saved, " + collapsedCount + " buildings down.");
+                startAftermath(held ? AFTER_RECOVERY : AFTER_FALLEN);
+                if (held) calmDown();
+            }
+        }
+        for (int i = hazards.size() - 1; i >= 0; i--) {
+            Hazard h = hazards.get(i);
+            h.t += 1;
+            hazardHurts(h);
+            boolean over;
+            switch (h.kind) {
+                case HZ_TORNADO:
+                    over = h.x < -100 || h.y < -100 || h.x > city.worldW() + 100 || h.y > city.worldH() + 100 || h.t > h.life;
+                    break;
+                case HZ_FLOOD:
+                    h.r = h.t < 50 ? h.peak * h.t / 50 : h.t < 100 ? h.peak : h.peak * Math.max(0, 1 - (h.t - 100) / 40);
+                    over = h.t > 140;
+                    break;
+                case HZ_FIRE:
+                    h.r = Math.min(h.peak, h.r + 1.5f);
+                    // It spreads.
+                    if (((int) h.t) % 6 == 0 && h.t < 50 && h.peak > 30 && hazards.size() < 16) {
+                        float a = rnd.nextFloat() * TAU;
+                        Hazard s = new Hazard();
+                        s.kind = HZ_FIRE;
+                        s.x = h.x + (float) Math.cos(a) * h.r * 1.4f;
+                        s.y = h.y + (float) Math.sin(a) * h.r * 1.4f;
+                        s.r = 8;
+                        s.peak = h.peak * 0.85f;
+                        s.life = 55;
+                        if (city.findWalkable(s.x, s.y) != null) hazards.add(s);
+                    }
+                    over = h.t > h.life;
+                    break;
+                default:
+                    over = h.t > h.life;
+            }
+            if (over) {
+                hazards.remove(i);
+                boolean last = true;
+                for (Hazard o : hazards) if (o.kind == h.kind) last = false;
+                if (last) {
+                    disastersDone++;
+                    dispatch.say(Dispatch.WHO_INFO, null, "Emergency services: the " + DISASTER_NAMES[h.kind].toLowerCase(java.util.Locale.US)
+                            + " is over. Search for the injured.", h.x, h.y);
+                }
+            }
+        }
+    }
+
+    /** Moving a tornado along, a frame at a time. */
+    private void hazardsMove(float dt) {
+        for (int i = 0, n = hazards.size(); i < n; i++) {
+            Hazard h = hazards.get(i);
+            if (h.kind != HZ_TORNADO) continue;
+            h.x += h.vx * dt;
+            h.y += h.vy * dt;
+            // A wobble.
+            h.vx += (rnd.nextFloat() - 0.5f) * 40 * dt;
+            h.vy += (rnd.nextFloat() - 0.5f) * 40 * dt;
+        }
+    }
+
+    /** A disaster begins: where (x < 0 for the game to choose). */
+    void startDisaster(int kind, float x, float y) {
+        if (disasterCivStart == 0) disasterCivStart = Math.max(1, counts[Entity.CIVILIAN]);
+        outbreak = true;
+        float[] at = x >= 0 ? new float[]{x, y} : city.randomWalkableInTown(rnd);
+        if (at == null) return;
+        Hazard h = new Hazard();
+        h.kind = kind;
+        h.x = at[0];
+        h.y = at[1];
+        String line;
+        switch (kind) {
+            case HZ_TORNADO: {
+                // In from an edge (or where tapped), across the town.
+                if (x < 0) {
+                    boolean side = rnd.nextBoolean();
+                    h.x = side ? -40 : rnd.nextFloat() * city.worldW();
+                    h.y = side ? rnd.nextFloat() * city.worldH() : -40;
+                }
+                float tx = city.worldW() / 2 + (rnd.nextFloat() - 0.5f) * city.worldW() * 0.4f, ty = city.worldH() / 2 + (rnd.nextFloat() - 0.5f) * city.worldH() * 0.4f;
+                float dx = tx - h.x, dy = ty - h.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 1;
+                if (x >= 0) {
+                    float a = rnd.nextFloat() * TAU;
+                    dx = (float) Math.cos(a);
+                    dy = (float) Math.sin(a);
+                    d = 1;
+                }
+                h.vx = dx / d * 32;
+                h.vy = dy / d * 32;
+                h.r = 42;
+                h.life = 200;
+                line = "Tornado warning! A tornado is tearing through the city near " + city.placeName(Math.max(0, h.x), Math.max(0, h.y)) + ". Take cover!";
+                break;
+            }
+            case HZ_QUAKE:
+                h.r = 650;
+                h.life = 4;
+                shake = 3;
+                quake(h.x, h.y, h.r, 1);
+                line = "Earthquake! A strong quake centred under " + city.placeName(h.x, h.y) + ". Buildings are down.";
+                break;
+            case HZ_FLOOD:
+                h.peak = 220 + rnd.nextFloat() * 80;
+                h.r = 0;
+                h.life = 140;
+                line = "Flash flood! Water rising fast around " + city.placeName(h.x, h.y) + ". Get to high ground!";
+                break;
+            default:
+                h.peak = 45;
+                h.r = 10;
+                h.life = 60;
+                line = "Wildfire! A fire is spreading near " + city.placeName(h.x, h.y) + ". Evacuate the area!";
+        }
+        hazards.add(h);
+        emit(Sfx.ALARM, h.x, h.y);
+        dispatch.say(Dispatch.WHO_INFO, null, "Emergency alert: " + line, Math.max(0, h.x), Math.max(0, h.y), true);
+        timeline(DISASTER_NAMES[kind] + " near " + city.placeName(Math.max(0, h.x), Math.max(0, h.y)), Math.max(0, h.x), Math.max(0, h.y));
+        banner(DISASTER_NAMES[kind].toUpperCase(java.util.Locale.US), line);
+        if (kind == HZ_QUAKE) {
+            // An aftershock to come.
+            Hazard after = new Hazard();
+            after.kind = HZ_QUAKE;
+            after.x = h.x;
+            after.y = h.y;
+            after.r = 0;
+            after.life = 24;
+            after.peak = 1;
+            hazards.add(after);
+        }
+    }
+
+    /** The ground shaking: buildings near the middle of it come down, the rest cracked; people hurt by falling masonry. */
+    private void quake(float x, float y, float r, float strength) {
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            if (b.collapsed) continue;
+            float bx = (b.x0 + b.x1) / 2, by = (b.y0 + b.y1) / 2;
+            float d = (float) World.hypot(bx - x, by - y);
+            if (d > r) continue;
+            float f = 1 - d / r;
+            if (rnd.nextFloat() < 0.6f) blastBuilding(b, bx, by, 40, (60 + rnd.nextFloat() * 260) * f * strength * (b.maxHp / 300f + 0.4f));
+        }
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.ride != null || World.hypot(e.x - x, e.y - y) > r * 0.6f || rnd.nextFloat() > 0.08f * strength) continue;
+            e.hp -= 30 + rnd.nextFloat() * 50;
+        }
+    }
+
+    /** A second of a disaster: who and what it hurts, and who runs from it. */
+    private void hazardHurts(Hazard h) {
+        if (h.kind == HZ_QUAKE) {
+            if (h.peak > 0 && h.t == 20) {
+                shake = 1.5f;
+                quake(h.x, h.y, 450, 0.45f);
+                dispatch.say(Dispatch.WHO_INFO, null, "Emergency alert: Aftershock!", h.x, h.y);
+            }
+            return;
+        }
+        float r = h.r;
+        if (r <= 1) return;
+        float dmg = h.kind == HZ_TORNADO ? 22 : h.kind == HZ_FIRE ? 14 : 3;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.ride != null) continue;
+            float dx = e.x - h.x, dy = e.y - h.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            if (d < r) {
+                e.hp -= dmg * (h.kind == HZ_FLOOD && city.insideOf(e.x, e.y) != null ? 0.3f : 1);
+                if (h.kind == HZ_TORNADO) {
+                    e.vx += dx / d * 120 + (rnd.nextFloat() - 0.5f) * 80;
+                    e.vy += dy / d * 120 + (rnd.nextFloat() - 0.5f) * 80;
+                }
+            }
+            if (d < r * 2.6f + 40 && e.type == Entity.CIVILIAN && e.bleedT == 0 && e.arrested == 0) {
+                e.fleeTimer = 4;
+                e.threatX = h.x;
+                e.threatY = h.y;
+            }
+        }
+        // Buildings: torn apart, burnt; a flood only soaks them.
+        if (h.kind != HZ_FLOOD) {
+            int bx0 = Math.max(0, (int) ((h.x - r) / City.T)), bx1 = Math.min(city.w - 1, (int) ((h.x + r) / City.T));
+            int by0 = Math.max(0, (int) ((h.y - r) / City.T)), by1 = Math.min(city.h - 1, (int) ((h.y + r) / City.T));
+            for (int ty = by0; ty <= by1; ty++)
+                for (int tx = bx0; tx <= bx1; tx++) {
+                    int bi = city.buildingAt.get(ty * city.w + tx);
+                    if (bi < 0) continue;
+                    City.Building b = city.buildings.get(bi);
+                    if (b.collapsed || hitBuildings.contains(b)) continue;
+                    hitBuildings.add(b);
+                }
+            for (int i = 0; i < hitBuildings.size(); i++) blastBuilding(hitBuildings.get(i), h.x, h.y, r, h.kind == HZ_TORNADO ? 160 : 45);
+            hitBuildings.clear();
+        }
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.broken || v.type == Fleet.HELI || v.type == Fleet.TRAIN || v.type == Fleet.BOAT) continue;
+            if (World.hypot(v.x - h.x, v.y - h.y) < r) fleet.damage(v, h.kind == HZ_TORNADO ? 60 : h.kind == HZ_FIRE ? 20 : 8, false);
+        }
+        if (((int) h.t) % 8 == 1) dispatch.sighting(h.x, h.y, null);
+    }
+
+    // ---- Aliens: the mothership ----
+
+    static final String[] ALIEN_KITS = {"Alien drone", "Heavy drone", "Stalker"};
+    float motherX = -1, motherY = -1, motherHp, motherMax, beamX, beamY, beamT;
+    boolean motherAlive;
+    private float beamCd = 25;
+
+    private void placeMothership(int n) {
+        float[] c = city.randomWalkableInTown(rnd);
+        float cx = city.worldW() / 2, cy = city.worldH() / 2;
+        motherX = c != null ? (c[0] + cx) / 2 : cx;
+        motherY = c != null ? (c[1] + cy) / 2 : cy;
+        // (Tougher the more there are to shoot at it.)
+        motherMax = motherHp = 1200 + n * 20 + (counts[Entity.COP] + counts[Entity.SOLDIER]) * 20;
+        motherAlive = true;
+    }
+
+    float[] motherSpot() {
+        float a = rnd.nextFloat() * TAU, r = 20 + rnd.nextFloat() * 70;
+        float[] p = city.findWalkable(motherX + (float) Math.cos(a) * r, motherY + (float) Math.sin(a) * r);
+        return p != null ? p : city.randomWalkableInTown(rnd);
+    }
+
+    private void alienLife() {
+        if (!motherAlive) {
+            // Without the ship, its drones power down one by one.
+            if (motherMax > 0)
+                for (int i = 0, n = entities.size(); i < n; i++) {
+                    Entity e = entities.get(i);
+                    if (!e.dead && e.type == Entity.INVADER && rnd.nextFloat() < 0.05f) {
+                        e.hp = 0;
+                        particle(e.x, e.y, 0, 0, 0.3f, 4, 0xFF8CFFB0, P_FLASH);
+                    }
+                }
+            return;
+        }
+        // (While it's up there, it keeps on dropping them.)
+        if (hostileReserve < 12) hostileReserve += 12;
+        if (((int) time) % 15 == 0) dispatch.sighting(motherX, motherY, null);
+        beamT = Math.max(0, beamT - 1);
+        // Drifting towards the nearest of the city's strongholds not yet taken.
+        {
+            int o = nextObjective(motherX, motherY);
+            float dx = objX[o] - motherX, dy = objY[o] - motherY, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            if (d > 120) {
+                motherX += dx / d * 5;
+                motherY += dy / d * 5;
+            }
+        }
+        // The city's fire: everyone in range shoots at it; rockets and tank shells hurt it most.
+        float dmg = 0;
+        int shooters = 0;
+        for (int k = 0, m = gatherArmed(motherX, motherY, 300); k < m; k++) {
+            Entity e = gathered[k];
+            if (e.dead || e.hp <= 0 || e.ammo + e.reserve <= 0 || (e.type != Entity.COP && e.type != Entity.SOLDIER && !e.hasGun) || e.isZombie()) continue;
+            dmg += e.type == Entity.SOLDIER ? 3 : 1.5f;
+            if (e.type == Entity.SOLDIER && e.grenades > 0 && rnd.nextFloat() < 0.3f) {
+                e.grenades--;
+                dmg += 90;
+                tracer(e.x, e.y, motherX, motherY);
+                emit(Sfx.LAUNCHER, e.x, e.y);
+            } else if (shooters++ < 5 && rnd.nextFloat() < 0.5f) tracer(e.x, e.y, motherX + rnd.nextFloat() * 40 - 20, motherY + rnd.nextFloat() * 40 - 20);
+        }
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.enemy || v.broken || World.hypot(v.x - motherX, v.y - motherY) > 320) continue;
+            if (v.type == Fleet.TANK) dmg += 120;
+            else if (v.type == Fleet.HELI && v.alt > 0.3f) dmg += 60;
+        }
+        motherHp -= dmg;
+        // Its beam: down on the city's forces (or a building), every half minute or so.
+        beamCd -= 1;
+        if (beamCd <= 0) {
+            beamCd = 22 + rnd.nextFloat() * 12;
+            Entity t = null;
+            for (int k = 0, m = gatherArmed(motherX, motherY, 450); k < m && t == null; k++) {
+                Entity e = gathered[k];
+                if (!e.dead && (e.type == Entity.COP || e.type == Entity.SOLDIER) && rnd.nextFloat() < 0.3f) t = e;
+            }
+            float[] p = t != null ? new float[]{t.x, t.y} : city.findWalkable(motherX + rnd.nextFloat() * 400 - 200, motherY + rnd.nextFloat() * 400 - 200);
+            if (p != null) {
+                beamX = p[0];
+                beamY = p[1];
+                beamT = 2;
+                explode(p[0], p[1], 60, 500);
+                shake = Math.max(shake, 0.8f);
+            }
+        }
+        if (motherHp <= 0) {
+            motherAlive = false;
+            hostileReserve = 0;
+            explode(motherX, motherY, 130, 700);
+            shake = 3;
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (!e.dead && e.type == Entity.INVADER) e.hp *= 0.5f;
+            }
+            banner("THE MOTHERSHIP IS DOWN", "It's come down in flames over " + city.placeName(motherX, motherY) + ". Its drones are faltering: finish them.");
+            dispatch.say(Dispatch.WHO_MILITARY, null, "Military: The mothership is down! Mop up the rest of them!", motherX, motherY, true);
+            timeline("The mothership shot down", motherX, motherY);
+        }
+    }
+
     /** Is any of the city's police or soldiers within r of (x, y)? */
     boolean cityForceNear(float x, float y, float r) {
         int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
@@ -5654,7 +6433,7 @@ final class World {
         boolean fighting = outbreakTime > 45;
         // Recon drones: up to two over the front, looking for the city's soldiers.
         droneCd -= 1;
-        if (droneCd <= 0 && fighting && enemyDrones.size() < 2) {
+        if (droneCd <= 0 && fighting && enemyDrones.size() < 2 && !alienMode()) {
             droneCd = 50 + rnd.nextFloat() * 30;
             Entity at = frontSoldier();
             if (at != null) enemyDrones.add(new float[]{at.x, at.y, at.x, at.y, 0});
@@ -5683,7 +6462,7 @@ final class World {
         }
         // Artillery from beyond the edge of the map: on what the drones see first, otherwise the front.
         artCd -= 1;
-        if (artCd <= 0 && fighting) {
+        if (artCd <= 0 && fighting && !alienMode()) {
             Entity t = null;
             for (float[] d : enemyDrones) if (t == null) t = cityTarget(d[0], d[1], 160, true);
             if (t == null && rnd.nextFloat() < 0.5f) t = frontSoldier();
@@ -5708,7 +6487,7 @@ final class World {
         }
         // Paratroopers: a squad dropped behind the city's lines, near something of the city's not yet taken.
         paraCd -= 1;
-        if (paraCd <= 0 && fighting && hostileReserve >= 6) {
+        if (paraCd <= 0 && fighting && hostileReserve >= 6 && !alienMode()) {
             paraCd = 110 + rnd.nextFloat() * 60;
             int o = farObjective();
             if (o >= 0) {
@@ -5818,7 +6597,7 @@ final class World {
 
     /** The places the enemy has taken and holds with a checkpoint, as {x, y} after each other. */
     float[] checkpoints() {
-        if (objX == null || mode() != CityConfig.MODE_ARMY) return new float[0];
+        if (objX == null || !armyLike()) return new float[0];
         int n = 0;
         for (boolean t : objTaken) if (t) n++;
         float[] out = new float[n * 2];
@@ -5831,7 +6610,7 @@ final class World {
     }
 
     boolean enemyHolds(float x, float y) {
-        if (districtOwner == null || mode() != CityConfig.MODE_ARMY) return false;
+        if (districtOwner == null || !armyLike()) return false;
         int d = city.districtIndex(x, y);
         return d >= 0 && d < districtOwner.length && districtOwner[d] == 0;
     }
@@ -9912,6 +10691,12 @@ final class World {
     /** A jet flies over and drops a line of bombs across (x, y). */
     void airstrike(float x, float y) {
         fleet.sendJet(x, y);
+        // ((18.3) Called in on the mothership: the jets go for it.)
+        if (motherAlive && World.hypot(x - motherX, y - motherY) < 220) {
+            motherHp -= Math.max(600, motherMax * 0.12f);
+            emit(Sfx.EXPLOSION, motherX, motherY);
+            dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Direct hit on the mothership!", motherX, motherY);
+        }
         dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Airstrike inbound on " + city.placeName(x, y)
                 + ". Everyone clear the area!", x, y);
     }
@@ -10440,9 +11225,13 @@ final class World {
         hostileWaves();
         if (WALK_IN) countInside();
         if (WOUNDS) rescueLife();
-        if (mode() == CityConfig.MODE_GANGS) gangLife();
-        if (mode() == CityConfig.MODE_ARMY) armyLife();
+        if (gangLike()) gangLife();
+        if (armyLike()) armyLife();
         if (heistMode()) heistLife();
+        if (cartelMode()) cartelLife();
+        if (terrorMode()) terrorLife();
+        if (disasterMode()) disasterLife();
+        if (alienMode()) alienLife();
         if (city.cfg.mission >= 0) Campaign.tick(this);
         fieldHospital();
         militias();
@@ -12753,7 +13542,7 @@ final class World {
      */
     private boolean mortarStep(Entity e, float dt) {
         // ((17.0) Nobody shells their own city's streets over a gang war.)
-        if (mode() == CityConfig.MODE_GANGS || heistMode() || prisonMode()) return false;
+        if (gangLike() || heistMode() || prisonMode()) return false;
         if (e.grenades <= 0) {
             if (e.task == Dispatch.T_POST) {
                 e.task = Dispatch.T_NONE;
@@ -14971,6 +15760,9 @@ final class World {
      * (14.2) Two minutes into the recovery, the fallen buildings go back up one at a time: a fenced-off site with
      * the work going on, then the building as it was, with room for people again. Not while anyone's on the site.
      */
+    private final java.util.HashSet<Entity> siteSeen = new java.util.HashSet<Entity>();
+    private int siteWait;
+
     private void rebuilding() {
         City.Building site = null;
         for (int i = 0, n = city.buildings.size(); i < n; i++) {
@@ -14980,9 +15772,36 @@ final class World {
             b.rebuildT -= 1;
             if (b.rebuildT > 0 || !b.collapsed) break;
             if (peopleOn(b)) {
-                b.rebuildT = 2;
-                break;
+                // ((18.3) Someone standing there holds the work up; a stream of people just passing through only for a
+                // while: then the crew shoos them off and builds.)
+                java.util.HashSet<Entity> now = new java.util.HashSet<Entity>();
+                for (int k = 0, m = gatherLiving((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, Math.max(b.x1 - b.x0, b.y1 - b.y0)); k < m; k++) {
+                    Entity e = gathered[k];
+                    if (!e.dead && e.x > b.x0 - e.radius && e.x < b.x1 + e.radius && e.y > b.y0 - e.radius && e.y < b.y1 + e.radius) now.add(e);
+                }
+                boolean standing = false;
+                for (Entity e : now) standing |= siteSeen.contains(e);
+                siteSeen.clear();
+                siteSeen.addAll(now);
+                siteWait = standing ? 0 : siteWait + 1;
+                if (standing || siteWait < 10 || now.isEmpty()) {
+                    b.rebuildT = 2;
+                    break;
+                }
+                for (Entity e : now) {
+                    float[] q = city.findWalkable(b.doorX, b.doorY + 12);
+                    if (q != null) {
+                        e.x = q[0];
+                        e.y = q[1];
+                    }
+                }
+                if (peopleOn(b)) {
+                    b.rebuildT = 2;
+                    break;
+                }
             }
+            siteWait = 0;
+            siteSeen.clear();
             if (city.rebuild(b)) {
                 rebuilt++;
                 // (Any bodies left in the rubble taken away first.)
@@ -17761,6 +18580,9 @@ final class World {
     }
 
     void explode(float x, float y, float radius, float damage) {
+        // ((18.3) An air strike (or any big enough blast) under the mothership hurts it.)
+        if (motherAlive && damage >= 200 && World.hypot(x - motherX, y - motherY) < radius + 75 && World.hypot(x - beamX, y - beamY) > 1)
+            motherHp -= damage * 0.8f;
         // ((13.5) From the grid as it stands, with room for the steps since it was made, and anyone come into the world
         // since: the whole grid was made again for every grenade, rocket and shell, which in a big fight on a big map
         // was a fifth of the time.)

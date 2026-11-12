@@ -36,6 +36,16 @@ final class Dispatch {
             "Somebody just got shot outside my building on %s!",
             "Gang members are shooting at the police on %s!",
     };
+    private static final String[] ALIEN_CALLS = {
+            "There are things on %s! Not people! Green, with guns that shoot light!",
+            "The ship's beam just hit %s! Everything's on fire!",
+            "I can see %d of them near %s, marching. Please, send someone!",
+    };
+    private static final String[] TERROR_CALLS = {
+            "Someone's shooting people on %s! Just shooting everyone!",
+            "Gunmen on %s, they're dressed in black!",
+            "I can see %d of them near %s with rifles. Hurry, please!",
+    };
     private static final String[] PRISON_CALLS = {
             "There are prisoners on %s! In orange, the lot of them!",
             "Escaped inmates on %s, they're smashing everything!",
@@ -624,7 +634,8 @@ final class Dispatch {
         }
         Incident inc = newIncident(zombie.x, zombie.y, count);
         if (inc == null) return;
-        String[] calls = w.mode() == CityConfig.MODE_GANGS ? GANG_CALLS : w.mode() == CityConfig.MODE_ARMY ? ARMY_CALLS
+        String[] calls = w.mode() == CityConfig.MODE_GANGS || w.mode() == CityConfig.MODE_CARTEL ? GANG_CALLS : w.mode() == CityConfig.MODE_ALIENS ? ALIEN_CALLS
+                : w.mode() == CityConfig.MODE_TERROR ? TERROR_CALLS : w.mode() == CityConfig.MODE_ARMY ? ARMY_CALLS
                 : w.mode() == CityConfig.MODE_HEIST ? HEIST_CALLS : w.mode() == CityConfig.MODE_PRISON ? PRISON_CALLS : CALLS;
         String line = calls[rnd.nextInt(calls.length)];
         String text = line.contains("%d") ? String.format(java.util.Locale.US, line, count, inc.place) : String.format(java.util.Locale.US, line, inc.place);

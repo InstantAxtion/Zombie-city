@@ -2424,7 +2424,7 @@ public final class GameTests {
                 // The new roles.
                 // ((14.0) And the combat engineers and the mortar teams.)
                 // ((18.1) And the negotiator.)
-                check(Entity.ROLE_NAMES.length == 22 && "Negotiator".equals(Entity.ROLE_NAMES[Entity.ROLE_NEGOTIATOR]) && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
+                check(Entity.ROLE_NAMES.length == 23 && "Negotiator".equals(Entity.ROLE_NAMES[Entity.ROLE_NEGOTIATOR]) && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
                         && "Combat engineer".equals(Entity.ROLE_NAMES[Entity.ROLE_ENGINEER]) && "Mortar team".equals(Entity.ROLE_NAMES[Entity.ROLE_MORTAR]), "every role named");
             }
         });
@@ -5720,6 +5720,165 @@ public final class GameTests {
                     w.evCount = 0;
                 }
                 check(w.warResult == 1, "the riot's over and the city held (" + w.warResult + ", " + w.prisonEscaped + " of " + w.riotTotal + " away)");
+            }
+        });
+        test("18.3: cartel convoys and dirty cops; terror bombs made safe or going off; disasters; the alien mothership; saves; drawing", new Check() {
+            public void run() throws Exception {
+                // The cartel: a convoy sets off, an officer's bought.
+                CityConfig c = new CityConfig();
+                c.mode = CityConfig.MODE_CARTEL;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                c.seed = 21;
+                World w = new World(c);
+                w.setMaxPopulation(4000);
+                w.populate(c);
+                check(w.gangLike() && w.counts[Entity.GANGSTER] > 0 && w.gangHadBoss != 0, "cartel cells on their turf, with jefes");
+                java.lang.reflect.Method convoy = World.class.getDeclaredMethod("startConvoy");
+                convoy.setAccessible(true);
+                convoy.invoke(w);
+                boolean drove = false;
+                for (Fleet.Vehicle v : w.fleet.vehicles) drove |= v.getaway && v.gang >= 0 && !v.riders.isEmpty();
+                check(drove, "a convoy on the road");
+                java.lang.reflect.Field bribe = World.class.getDeclaredField("bribeCd");
+                bribe.setAccessible(true);
+                bribe.setFloat(w, 0);
+                java.lang.reflect.Method life = World.class.getDeclaredMethod("cartelLife");
+                life.setAccessible(true);
+                life.invoke(w);
+                check(w.corruptCops == 1, "an officer bought");
+                check(w.reword("THE GANGS ARE BROKEN").equals("THE CARTEL IS BROKEN"), "cartel words");
+                // Terror: a bomb made safe by the bomb squad; one left alone goes off.
+                CityConfig tc = new CityConfig();
+                tc.mode = CityConfig.MODE_TERROR;
+                tc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                tc.v[CityConfig.OPT_ZOMBIES] = 3;
+                tc.seed = 22;
+                World tw = new World(tc);
+                tw.setMaxPopulation(4000);
+                tw.populate(tc);
+                int techs = 0;
+                for (Entity e : tw.entities) if (!e.dead && e.role == Entity.ROLE_BOMB_TECH) techs++;
+                check(techs > 0 && tw.hostileReserve >= 3, "bomb squads at the stations, attacks to come");
+                float[] spot = tw.city.randomWalkableInTown(tw.rnd);
+                tw.plantBomb(spot[0], spot[1]);
+                float[] bomb = tw.bombs.get(0);
+                Entity tech = tw.spawnCop(Entity.ROLE_BOMB_TECH, bomb[0] + 3, bomb[1]);
+                tech.task = Dispatch.T_POST;
+                tech.postX = bomb[0];
+                tech.postY = bomb[1];
+                java.lang.reflect.Method tl = World.class.getDeclaredMethod("terrorLife");
+                tl.setAccessible(true);
+                java.lang.reflect.Field tcd = World.class.getDeclaredField("terrorCd");
+                tcd.setAccessible(true);
+                for (int s = 0; s < 12; s++) {
+                    tcd.setFloat(tw, 1000);
+                    tech.x = bomb[0] + 3;
+                    tech.y = bomb[1];
+                    tw.recount();
+                    tw.update(1 / 30f);
+                    tl.invoke(tw);
+                }
+                check(tw.bombsDefused == 1 && tw.bombs.isEmpty(), "made safe (" + tw.bombsDefused + ")");
+                tech.dead = true;
+                float[] far = tw.city.randomWalkableInTown(tw.rnd);
+                tw.plantBomb(far[0], far[1]);
+                tw.bombs.get(0)[2] = 1;
+                for (Entity e : tw.entities) if (e.type == Entity.COP || e.type == Entity.SOLDIER) e.dead = true;
+                tw.recount();
+                tl.invoke(tw);
+                check(tw.bombsExploded == 1, "and one left alone goes off");
+                tw.gunmen(far[0], far[1], 3);
+                int gm = 0;
+                for (Entity e : tw.entities) if (!e.dead && e.squad >= World.TERROR_SQUAD && e.type == Entity.GANGSTER) gm++;
+                check(gm >= 2, "gunmen");
+                // Disasters: each kind, buildings and people hurt; it ends.
+                CityConfig dc = new CityConfig();
+                dc.mode = CityConfig.MODE_DISASTER;
+                dc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                dc.v[CityConfig.OPT_ZOMBIES] = 3;
+                dc.seed = 23;
+                World dw = new World(dc);
+                dw.setMaxPopulation(4000);
+                dw.populate(dc);
+                check(dw.zombieCount() == 0 && dw.hostileReserve >= 3, "no enemy, disasters to come");
+                float[] mid = {dw.city.worldW() / 2, dw.city.worldH() / 2};
+                for (int k = 0; k < 4; k++) dw.startDisaster(k, mid[0], mid[1]);
+                float hp0 = 0;
+                for (City.Building b : dw.city.buildings) if (!b.collapsed) hp0 += b.hp;
+                for (int f = 0; f < 30 * 20; f++) {
+                    dw.update(1 / 30f);
+                    dw.evCount = 0;
+                }
+                float hp1 = 0;
+                for (City.Building b : dw.city.buildings) if (!b.collapsed) hp1 += b.hp;
+                check(hp1 < hp0, "buildings damaged");
+                boolean kinds[] = new boolean[4];
+                for (World.Hazard h : dw.hazards) kinds[h.kind] = true;
+                check(kinds[World.HZ_TORNADO] || dw.disastersDone > 0, "a tornado about");
+                dw.hostileReserve = 0;
+                for (int f = 0; f < 30 * 400 && dw.warResult == 0; f++) {
+                    dw.update(1 / 30f);
+                    dw.evCount = 0;
+                }
+                check(dw.warResult != 0 && dw.disastersDone >= 4, "the disasters end (" + dw.warResult + ", " + dw.disastersDone + ")");
+                // Aliens: the mothership, drones dropping under it; shot down, the drones power down.
+                CityConfig ac = new CityConfig();
+                ac.mode = CityConfig.MODE_ALIENS;
+                ac.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                ac.v[CityConfig.OPT_ZOMBIES] = 3;
+                ac.seed = 24;
+                World aw = new World(ac);
+                aw.setMaxPopulation(4000);
+                aw.populate(ac);
+                check(aw.motherAlive && aw.motherHp > 0 && aw.counts[Entity.INVADER] > 0, "the mothership and its drones");
+                aw.airstrike(aw.motherX, aw.motherY);
+                check(aw.motherHp < aw.motherMax, "an airstrike on it hurts it");
+                // Saved and loaded.
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(aw, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.motherAlive && Math.abs(l.motherHp - aw.motherHp) < 1 && l.mode() == CityConfig.MODE_ALIENS, "the mothership's kept in a save");
+                aw.motherHp = 1;
+                for (int f = 0; f < 30 * 120 && aw.warResult == 0; f++) {
+                    aw.update(1 / 30f);
+                    aw.evCount = 0;
+                }
+                check(!aw.motherAlive && aw.warResult == 1, "shot down, and its drones power down (" + aw.warResult + ", " + aw.counts[Entity.INVADER] + ")");
+                File f2 = File.createTempFile("zcs", ".dat");
+                SaveGame.save(tw, f2);
+                World l2 = SaveGame.load(f2);
+                f2.delete();
+                check(l2.bombsDefused == 1 && l2.bombsExploded == 1, "the bombs kept in a save");
+                // Every new mode drawn, with its disasters, bombs and mothership on screen.
+                for (int m = CityConfig.MODE_CARTEL; m <= CityConfig.MODE_ALIENS; m++) {
+                    GameView v = new GameView(new android.app.Activity());
+                    int[] size = {1080, 2000};
+                    v.layout(size[0], size[1]);
+                    Menu menu = (Menu) field(v, "menu");
+                    CityConfig vc = new CityConfig();
+                    vc.mode = m;
+                    vc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                    vc.v[CityConfig.OPT_ZOMBIES] = 2;
+                    v.startGame(vc);
+                    v.awaitLoad();
+                    for (int k = 0; k < 3; k++) draw(v, size);
+                    menu.screen = Menu.NONE;
+                    World gw = (World) field(v, "world");
+                    if (m == CityConfig.MODE_DISASTER) for (int k = 0; k < 4; k++) gw.startDisaster(k, gw.city.worldW() / 2, gw.city.worldH() / 2);
+                    if (m == CityConfig.MODE_TERROR) gw.plantBomb(gw.city.worldW() / 2, gw.city.worldH() / 2);
+                    float fx = m == CityConfig.MODE_ALIENS ? gw.motherX : gw.city.worldW() / 2, fy = m == CityConfig.MODE_ALIENS ? gw.motherY : gw.city.worldH() / 2;
+                    v.jumpTo(fx, fy);
+                    for (int k = 0; k < 60; k++) {
+                        gw.update(1 / 30f);
+                        gw.evCount = 0;
+                    }
+                    for (int k = 0; k < 3; k++) draw(v, size);
+                    menu.open(Menu.REPORT);
+                    draw(v, size);
+                    check(v.drawErrors == 0, CityConfig.MODES[m] + " drawn without an error (" + v.drawErrors + ")");
+                }
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {

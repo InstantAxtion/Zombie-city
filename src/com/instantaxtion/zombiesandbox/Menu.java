@@ -688,7 +688,8 @@ final class Menu {
         }
         // Each side's losses, side by side.
         String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : mode == CityConfig.MODE_HEIST ? "The crews"
-                : mode == CityConfig.MODE_PRISON ? "The rioters" : "The dead";
+                : mode == CityConfig.MODE_PRISON ? "The rioters" : mode == CityConfig.MODE_CARTEL ? "The cartel" : mode == CityConfig.MODE_TERROR ? "The attackers"
+                : mode == CityConfig.MODE_DISASTER ? "The disasters" : mode == CityConfig.MODE_ALIENS ? "The aliens" : "The dead";
         String[][] ours = {
                 {"Police officers lost", String.valueOf(world.copsLost)},
                 {"Soldiers lost", String.valueOf(world.soldiersLost)},
@@ -705,6 +706,36 @@ final class Menu {
                     {"Arrested", String.valueOf(world.arrests)},
                     {"Gangs broken", String.valueOf(Integer.bitCount(world.gangBroken))},
                     {"Still on the street", String.valueOf(world.zombieCount())},
+            };
+        } else if (mode == CityConfig.MODE_CARTEL) {
+            theirs = new String[][]{
+                    {"Convoys through", world.shipments + " of " + World.CARTEL_SHIPMENTS},
+                    {"Convoys seized", String.valueOf(world.convoysSeized)},
+                    {"Officers bought", String.valueOf(world.corruptCops)},
+                    {"Cells broken", String.valueOf(Integer.bitCount(world.gangBroken))},
+                    {"Arrested", String.valueOf(world.arrests)},
+                    {"Taken out", String.valueOf(world.zombiesKilled)},
+            };
+        } else if (mode == CityConfig.MODE_TERROR) {
+            theirs = new String[][]{
+                    {"Attacks", String.valueOf(world.attacksMade)},
+                    {"Bombs made safe", world.bombsDefused + " of " + world.bombsPlanted},
+                    {"Bombs that went off", String.valueOf(world.bombsExploded)},
+                    {"Gunmen taken out", String.valueOf(world.zombiesKilled)},
+            };
+        } else if (mode == CityConfig.MODE_DISASTER) {
+            theirs = new String[][]{
+                    {"Disasters", String.valueOf(world.disastersDone)},
+                    {"Buildings down", String.valueOf(world.collapsedCount)},
+                    {"Civilians lost", String.valueOf(world.civiliansLost)},
+                    {"Injured saved", String.valueOf(world.woundedSaved)},
+            };
+        } else if (mode == CityConfig.MODE_ALIENS) {
+            theirs = new String[][]{
+                    {"Mothership", world.motherAlive ? (int) (100 * world.motherHp / Math.max(1, world.motherMax)) + "% left" : "Shot down"},
+                    {"Drones destroyed", String.valueOf(world.zombiesKilled)},
+                    {"Places taken", String.valueOf(world.checkpoints().length / 2)},
+                    {"Still fighting", String.valueOf(world.zombieCount())},
             };
         } else if (mode == CityConfig.MODE_PRISON) {
             theirs = new String[][]{
@@ -932,7 +963,7 @@ final class Menu {
         c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
                 + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
         y += 28 * dp;
-        String[] modes = {"Zombies", "Gangs", "Enemy army", "Heist", "Prison break"};
+        String[] modes = CityConfig.MODES;
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
             Campaign.Mission m = Campaign.MISSIONS[i];
             boolean open = records == null || records.unlocked(i);
@@ -1885,7 +1916,11 @@ final class Menu {
                 "Gangs: armed street gangs hold their turf and take on the police and the army. No zombies: civilians run from the shooting, and can be caught in it.",
                 "Enemy army: an invading army's squads march on the city's police stations and bases, more coming in waves. No zombies: civilians run from the fighting, and can be caught in it.",
                 "Heist: armed crews hit the city's banks and shops one after another, taking hostages. Box them in for a standoff and talk them out, or chase the getaway car before it reaches the edge of town.",
-                "Prison break (on the Prison Island): the inmates riot and go for the guards, take their guns, and break out over the causeway into the city. Hold them on the causeway and round them up before they get clear of town."};
+                "Prison break (on the Prison Island): the inmates riot and go for the guards, take their guns, and break out over the causeway into the city. Hold them on the causeway and round them up before they get clear of town.",
+                "Cartel: cartel cells hold their turf and run convoys of product out of town from their safe houses, and buy off police officers. Stop five convoys getting through, take down the jefes, and break the cartel.",
+                "Terror: one attack after another - gunmen opening fire in busy streets, and bombs left in crowds. The bomb squad has 90 seconds to make each one safe.",
+                "Disasters: no enemy, just a tornado, an earthquake, a flash flood and a wildfire, one after another. Get the injured out and keep the death toll down.",
+                "Aliens: a mothership hovers over the city, dropping drones that march on the stations and bases, and burning the streets with its beam. Bring it down with rockets, tanks and helicopters."};
         for (String line : wrap(modeInfo[Math.max(0, Math.min(modeInfo.length - 1, config.mode))], lw - 4 * dp, plain)) {
             c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;

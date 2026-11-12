@@ -53,9 +53,11 @@ final class Entity {
     static final int ROLE_PRISON_GUARD = 20;
     /** ((18.1) A police negotiator: talks robbers in a standoff out (three times as fast as any other officer). */
     static final int ROLE_NEGOTIATOR = 21;
+    /** ((18.3) The bomb squad: makes a bomb safe in seconds (anyone else takes four times as long). */
+    static final int ROLE_BOMB_TECH = 22;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard", "Negotiator"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard", "Negotiator", "Bomb technician"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how

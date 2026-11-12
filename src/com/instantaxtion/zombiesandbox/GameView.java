@@ -41,9 +41,9 @@ final class GameView extends View implements Menu.Host {
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
-            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_NEGOTIATOR};
+            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_NEGOTIATOR, Entity.ROLE_BOMB_TECH};
     private static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
-            "Park ranger", "Search & rescue", "Negotiator"};
+            "Park ranger", "Search & rescue", "Negotiator", "Bomb squad"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
     private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
@@ -59,7 +59,8 @@ final class GameView extends View implements Menu.Host {
             "Scoped rifle: picks off the dead from a long way off", "State trooper: works the highways, backs up the town",
             "County deputy: patrols the back roads", "Patrols the trails and dirt roads, guards the ranger station",
             "Rescue specialist: finds the cut-off and gets them out",
-            "Talks robbers in a standoff out three times as fast: hostages let go, then the crew gives up"};
+            "Talks robbers in a standoff out three times as fast: hostages let go, then the crew gives up",
+            "Makes a bomb safe in seconds (anyone else takes four times as long); goes to bombs by themselves"};
     private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
@@ -69,6 +70,12 @@ final class GameView extends View implements Menu.Host {
             "Shotgun: tough, charges in and doesn't break", "One to a gang: tough, a big revolver, guarded; the gang falls apart without them"};
     private static final String[] HEIST_INFO = {"Pistol and a mask: a crew of them goes for the nearest bank or shop",
             "Submachine gun: sprays the street on the way out", "Body armour and a rifle: holds the door"};
+    private static final String[] CARTEL_INFO = {"A lookout with a pistol: watches the corners", "A sicario with a submachine gun",
+            "A shotgun enforcer who doesn't break", "The jefe: tough, guarded; the cell falls apart without them"};
+    private static final String[] TERROR_INFO = {"A gunman with a submachine gun: shoots anyone", "A gunman with a rifle", "A bomb left where you tap: the bomb squad has 90 seconds"};
+    private static final String[] DISASTER_INFO = {"A tornado touches down and tears across town", "An earthquake under the spot, with an aftershock",
+            "A flash flood: the water rises, holds, then drains away", "A wildfire that spreads"};
+    private static final String[] ALIEN_INFO = {"A drone: a beam rifle; marches on the stations and bases", "A heavy drone: a sweeping beam gun", "A stalker: picks off officers from a long way off"};
     private static final String[] RIOT_INFO = {"An inmate in orange, fists and whatever's to hand: goes for the guards",
             "An inmate with a shotgun taken off a guard", "A ringleader: big, tough, hits hard"};
     private static final String[] ARMY_INFO = {"Assault rifle in bursts; advances on the stations and bases",
@@ -77,7 +84,8 @@ final class GameView extends View implements Menu.Host {
     /** ((17.0) What the enemy tool makes in this game: the dead, a gang or the enemy army. */
     private int enemyType() {
         int m = world.mode();
-        return m == CityConfig.MODE_GANGS || m == CityConfig.MODE_HEIST || m == CityConfig.MODE_PRISON ? Entity.GANGSTER : m == CityConfig.MODE_ARMY ? Entity.INVADER
+        return m == CityConfig.MODE_GANGS || m == CityConfig.MODE_HEIST || m == CityConfig.MODE_PRISON || m == CityConfig.MODE_CARTEL
+                || m == CityConfig.MODE_TERROR ? Entity.GANGSTER : m == CityConfig.MODE_ALIENS ? Entity.INVADER : m == CityConfig.MODE_ARMY ? Entity.INVADER
                 : ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
     }
 
@@ -87,6 +95,10 @@ final class GameView extends View implements Menu.Host {
         if (m == CityConfig.MODE_ARMY) return World.ARMY_KITS;
         if (m == CityConfig.MODE_HEIST) return World.HEIST_KITS;
         if (m == CityConfig.MODE_PRISON) return World.RIOT_KITS;
+        if (m == CityConfig.MODE_CARTEL) return World.CARTEL_KITS;
+        if (m == CityConfig.MODE_TERROR) return World.TERROR_KITS;
+        if (m == CityConfig.MODE_DISASTER) return World.DISASTER_NAMES;
+        if (m == CityConfig.MODE_ALIENS) return World.ALIEN_KITS;
         String[] n = new String[ZOMBIE_VARIANTS.length];
         for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
         return n;
@@ -110,6 +122,10 @@ final class GameView extends View implements Menu.Host {
             if (m == CityConfig.MODE_ARMY) return "Enemy army";
             if (m == CityConfig.MODE_HEIST) return "Robbers";
             if (m == CityConfig.MODE_PRISON) return "Rioters";
+            if (m == CityConfig.MODE_CARTEL) return "Cartel";
+            if (m == CityConfig.MODE_TERROR) return "Terrorists";
+            if (m == CityConfig.MODE_DISASTER) return "Disasters";
+            if (m == CityConfig.MODE_ALIENS) return "Aliens";
         }
         return TOOL_NAMES[t];
     }
@@ -3340,6 +3356,7 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(followV.x, followV.y, followV.length() + 5 + (float) Math.sin(world.time * 6), stroke);
         }
 
+        drawHazards(c);
         // ((17.4) The enemy's recon drones: dark, a red light, and the ground they're watching for their guns.)
         for (int i = 0, n = world.enemyDrones.size(); i < n; i++) {
             float[] d = world.enemyDrones.get(i);
@@ -3430,9 +3447,92 @@ final class GameView extends View implements Menu.Host {
     private final Rect turfSrc = new Rect();
     private final RectF turfDst = new RectF();
 
+    /** ((18.3) Disasters on the ground, bombs left about, and the mothership overhead. */
+    private void drawHazards(Canvas c) {
+        float tm = world.time;
+        for (int i = 0, n = world.hazards.size(); i < n; i++) {
+            World.Hazard h = world.hazards.get(i);
+            if (h.r <= 1) continue;
+            switch (h.kind) {
+                case World.HZ_TORNADO: {
+                    for (int k = 5; k >= 0; k--) {
+                        float rr = h.r * (0.3f + k * 0.14f);
+                        fill.setColor(((60 - k * 8) << 24) | 0x5A5F66);
+                        c.drawCircle(h.x + (float) Math.cos(tm * 3 + k) * 4, h.y + (float) Math.sin(tm * 3 + k) * 4, rr, fill);
+                    }
+                    stroke.setColor(0x90C8CCD2);
+                    stroke.setStrokeWidth(2f);
+                    for (int k = 0; k < 4; k++) {
+                        float a = tm * 5 + k * 1.57f;
+                        c.drawArc(new RectF(h.x - h.r * 0.7f, h.y - h.r * 0.7f, h.x + h.r * 0.7f, h.y + h.r * 0.7f), (float) Math.toDegrees(a), 60, false, stroke);
+                    }
+                    break;
+                }
+                case World.HZ_FLOOD:
+                    fill.setColor(0x704A8FD8);
+                    c.drawCircle(h.x, h.y, h.r, fill);
+                    fill.setColor(0x405FA8F0);
+                    c.drawCircle(h.x, h.y, h.r * (0.85f + 0.05f * (float) Math.sin(tm * 2)), fill);
+                    break;
+                case World.HZ_FIRE: {
+                    float fl = 0.85f + 0.15f * (float) Math.sin(tm * 9 + i);
+                    fill.setColor(0x60FF5A10);
+                    c.drawCircle(h.x, h.y, h.r * 1.25f * fl, fill);
+                    fill.setColor(0x90FF9A20);
+                    c.drawCircle(h.x, h.y, h.r * 0.8f * fl, fill);
+                    fill.setColor(0xA0FFE070);
+                    c.drawCircle(h.x, h.y, h.r * 0.35f * fl, fill);
+                    break;
+                }
+            }
+        }
+        for (int i = 0, n = world.bombs.size(); i < n; i++) {
+            float[] b = world.bombs.get(i);
+            boolean on = ((int) (tm * (b[2] < 20 ? 6 : 2))) % 2 == 0;
+            fill.setColor(on ? 0xFFFF2A2A : 0xFF6A1010);
+            c.drawCircle(b[0], b[1], 4, fill);
+            stroke.setColor(0xC0FF4040);
+            stroke.setStrokeWidth(1.2f);
+            c.drawCircle(b[0], b[1], 14 + (on ? 3 : 0), stroke);
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(Math.max(7, 11 / Math.max(0.6f, scale)));
+            text.setColor(0xFFFFE0E0);
+            c.drawText("BOMB " + World.clock((int) Math.max(0, b[2])) + (b[3] > 0 ? "  " + (int) (b[3] * 100 / World.DEFUSE) + "%" : ""), b[0], b[1] - 18, text);
+        }
+        if (world.motherAlive) {
+            float mx = world.motherX, my = world.motherY, r = 75;
+            fill.setColor(0x40000000);
+            c.drawCircle(mx + 30, my + 40, r, fill);
+            if (world.beamT > 0) {
+                stroke.setColor(0xB060FF90);
+                stroke.setStrokeWidth(10);
+                c.drawLine(mx, my, world.beamX, world.beamY, stroke);
+                stroke.setColor(0xFFE0FFE8);
+                stroke.setStrokeWidth(3);
+                c.drawLine(mx, my, world.beamX, world.beamY, stroke);
+            }
+            fill.setColor(0xFF2A3036);
+            c.drawCircle(mx, my, r, fill);
+            fill.setColor(0xFF3C454E);
+            c.drawCircle(mx, my, r * 0.72f, fill);
+            fill.setColor(0xFF59D18C);
+            c.drawCircle(mx, my, r * 0.22f + 3 * (float) Math.sin(tm * 3), fill);
+            for (int k = 0; k < 12; k++) {
+                float a = k * (float) Math.PI / 6 + tm * 0.6f;
+                fill.setColor(k % 2 == 0 ? 0xFF8CFFB0 : 0xFFFFD86B);
+                c.drawCircle(mx + (float) Math.cos(a) * r * 0.86f, my + (float) Math.sin(a) * r * 0.86f, 3.2f, fill);
+            }
+            float f = Math.max(0, world.motherHp / world.motherMax);
+            fill.setColor(0xC0000000);
+            c.drawRect(mx - r, my - r - 14, mx + r, my - r - 8, fill);
+            fill.setColor(0xFF59D18C);
+            c.drawRect(mx - r, my - r - 14, mx - r + 2 * r * f, my - r - 8, fill);
+        }
+    }
+
     private void drawTurf(Canvas c) {
         if (world.mode() == CityConfig.MODE_ZOMBIES || world.districtOwner == null) return;
-        boolean army = world.mode() == CityConfig.MODE_ARMY;
+        boolean army = world.armyLike();
         City city = world.city;
         if (turfVer != world.turfVersion || turfBmp == null) {
             turfVer = world.turfVersion;
@@ -8636,7 +8736,9 @@ final class GameView extends View implements Menu.Host {
             case TOOL_COP: return COP_INFO;
             case TOOL_MIL: return MIL_INFO;
             case TOOL_ZOMBIE: return world.mode() == CityConfig.MODE_GANGS ? GANG_INFO : world.mode() == CityConfig.MODE_ARMY ? ARMY_INFO
-                    : world.mode() == CityConfig.MODE_HEIST ? HEIST_INFO : world.mode() == CityConfig.MODE_PRISON ? RIOT_INFO : ZOMBIE_INFO;
+                    : world.mode() == CityConfig.MODE_HEIST ? HEIST_INFO : world.mode() == CityConfig.MODE_PRISON ? RIOT_INFO
+                    : world.mode() == CityConfig.MODE_CARTEL ? CARTEL_INFO : world.mode() == CityConfig.MODE_TERROR ? TERROR_INFO
+                    : world.mode() == CityConfig.MODE_DISASTER ? DISASTER_INFO : world.mode() == CityConfig.MODE_ALIENS ? ALIEN_INFO : ZOMBIE_INFO;
             case TOOL_PLACE: return PLACE_INFO;
             case TOOL_BUILD: return BUILD_INFO;
             default: return EVENT_INFO;
@@ -9846,6 +9948,11 @@ final class GameView extends View implements Menu.Host {
     private void spawnBrush(float wx, float wy) {
         int type = tool == TOOL_ZOMBIE ? enemyType() : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
         int n = BRUSHES[brushIdx];
+        // ((18.3) In the disasters mode, the button sets one off where you tap.)
+        if (tool == TOOL_ZOMBIE && world.disasterMode()) {
+            world.startDisaster(Math.min(zombieVariant, 3), wx, wy);
+            return;
+        }
         boolean foes = tool == TOOL_ZOMBIE && world.hostileMode();
         // ((17.0) A gang crew or an enemy squad: each lot together, as one gang or one squad.)
         if (foes) world.newHostileGroup(wx, wy);
