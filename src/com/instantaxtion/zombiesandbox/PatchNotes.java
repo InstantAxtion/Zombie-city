@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.2";
-    static final int VERSION_CODE = 172;
+    static final String VERSION = "17.3";
+    static final int VERSION_CODE = 173;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.3  -  Fixes: the war bar, and memory while loading",
+                    "The war bar at the top tells it as it is. It weighs each side's fighting strength: the police and soldiers whether on foot or riding in a car or truck (half of them weren't counted), tanks, anyone with a gun, the gang members and enemy soldiers (who weren't counted at all), and the help still to come on each side. Unarmed people count only a little - twenty thousand of them used to outweigh the whole army, which kept the bar at 97 per cent. The two numbers always add up to 100, they're no longer held at 97 and 3, and the bar starts where things stand rather than at halfway.",
+                    "Memory: the city behind the main menu was already let go of once a game started, but it, or the game you'd been playing, was kept in memory the whole time a new city was being built: two cities at once, the worst moment for memory on the biggest maps. Now the old one (saved first, if it was a game) is let go of as soon as the new one starts building, along with the minimap, map pictures and the rest kept from it. If a city can't be built, the menu's city is put back up.",
+            },
             {
                     "17.2  -  Gang life, and open interiors",
                     "Open interiors: shops, cafés, offices, schools, halls, warehouses and the like are now one open floor inside (still furnished), with no inside walls or doorways to squeeze through. Homes, flats, hotels and dorms keep their rooms. The outside walls and front door stay.",

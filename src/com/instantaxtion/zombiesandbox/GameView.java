@@ -300,7 +300,16 @@ final class GameView extends View implements Menu.Host {
         menu = new Menu(this, settings, dp);
         records = new Records(context);
         menu.records = records;
-        // The main menu shows a live demo city in the background.
+        menuCity();
+        applySettings();
+        // ((12.0) For a keyboard and mouse: a Chromebook, or a phone with a keyboard plugged in.)
+        setFocusable(true);
+        setFocusableInTouchMode(true);
+        requestFocus();
+    }
+
+    /** The main menu's live demo city in the background: a Tiny one. */
+    private void menuCity() {
         CityConfig demo = new CityConfig();
         // (Not the Islands: it's too big to build behind the menu.)
         do demo.v[CityConfig.OPT_PRESET] = rnd.nextInt(CityConfig.ISLANDS);
@@ -319,11 +328,6 @@ final class GameView extends View implements Menu.Host {
             System.gc();
             loadWorld(demo);
         }
-        applySettings();
-        // ((12.0) For a keyboard and mouse: a Chromebook, or a phone with a keyboard plugged in.)
-        setFocusable(true);
-        setFocusableInTouchMode(true);
-        requestFocus();
     }
 
     // ------------------------------------------------------------------ (12.0) keyboard and mouse
@@ -554,7 +558,7 @@ final class GameView extends View implements Menu.Host {
 
     @Override
     public boolean saveSlot(int slot) {
-        if (!hasGame) return false;
+        if (!hasGame || world == null) return false;
         slotKnown[slot] = false;
         try {
             SaveGame.save(world, slotFile(slot));
@@ -777,6 +781,40 @@ final class GameView extends View implements Menu.Host {
         City.progress(0, save ? "Loading the save" : "");
         built = null;
         buildError = null;
+        // ((17.3) The city on screen - the menu's demo city, or the game you were in (saved first) - is let go of now,
+        // not kept until the new one's ready: two cities in memory at once was the peak, and the biggest maps on a
+        // phone came close to its limit there.)
+        if (world != null) {
+            if (hasGame) saveGame();
+            world.freeMemory();
+            world = null;
+        }
+        hasGame = false;
+        chunks.clear();
+        turfBmp = null;
+        // (And what was kept from it: the minimap's picture and the map-picture renderer's hold on it.)
+        miniWorld = null;
+        miniMap = null;
+        chunkCity = null;
+        hotWorld = null;
+        tacWorld = null;
+        miniCountWorld = null;
+        labelCity = null;
+        java.util.Arrays.fill(visible, null);
+        onScreen.clear();
+        plans.clear();
+        loose.clear();
+        roofLabels.clear();
+        byDoor.clear();
+        records.forget();
+        follow = null;
+        followV = null;
+        inspectB = null;
+        inspectZ = null;
+        selection.clear();
+        lastAction.clear();
+        pinned.clear();
+        System.gc();
         loader = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -927,6 +965,7 @@ final class GameView extends View implements Menu.Host {
     }
 
     private void centerCamera() {
+        if (world == null) return;
         scale = Math.max(getWidth(), getHeight()) / (34f * City.T);
         camX = world.city.worldW() / 2 - getWidth() / scale / 2;
         camY = world.city.worldH() / 2 - getHeight() / scale / 2;
@@ -1001,7 +1040,7 @@ final class GameView extends View implements Menu.Host {
         }
         if (oldw == 0) {
             centerCamera();
-        } else {
+        } else if (world != null) {
             // Keep the same spot in the middle of the screen when the phone rotates.
             camX += (oldw - w) / 2f / scale;
             camY += (oldh - h) / 2f / scale;
@@ -1037,6 +1076,7 @@ final class GameView extends View implements Menu.Host {
     void trimMemory() {
         memoryFreedAgo = 0;
         chunks.clear();
+        turfBmp = null;
         if (world != null) world.freeMemory();
     }
 
@@ -1150,6 +1190,13 @@ final class GameView extends View implements Menu.Host {
                 loadFailedTime = 6;
                 buildError = null;
                 System.gc();
+                // ((17.3) Back to the menu, with its demo city put back up.)
+                if (world == null) {
+                    menuCity();
+                    applySettings();
+                    centerCamera();
+                    menu.open(Menu.MAIN);
+                }
             } else {
                 drawLoading(c);
                 if (running) postInvalidateOnAnimation();
@@ -7146,10 +7193,12 @@ final class GameView extends View implements Menu.Host {
             text.setTextSize(10 * dp);
             text.setTextAlign(Paint.Align.LEFT);
             text.setColor(0xFFB8C8F0);
-            c.drawText("PEOPLE " + (int) (b * 100) + "%", bx0, top + 11 * dp, text);
+            // ((17.3) The two always add up to 100, and say it as it is: not held at 97 and 3.)
+            int pp = Math.round(Math.max(0, Math.min(1, world.warBalance)) * 100);
+            c.drawText("PEOPLE " + pp + "%", bx0, top + 11 * dp, text);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setColor(0xFFB8E09A);
-            c.drawText((int) ((1 - b) * 100) + "% " + world.enemyLabel().toUpperCase(), bx1, top + 11 * dp, text);
+            c.drawText((100 - pp) + "% " + world.enemyLabel().toUpperCase(), bx1, top + 11 * dp, text);
         }
     }
 

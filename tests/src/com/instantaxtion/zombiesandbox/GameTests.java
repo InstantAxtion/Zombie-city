@@ -5123,6 +5123,61 @@ public final class GameTests {
                 check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
             }
         });
+        test("17.3: the menu's city and the last game are let go of while the next one loads; the war bar adds up", new Check() {
+            public void run() throws Exception {
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1200, 900};
+                v.layout(size[0], size[1]);
+                for (int k = 0; k < 3; k++) draw(v, size);
+                java.lang.ref.WeakReference<Object> menuCity = new java.lang.ref.WeakReference<Object>(((World) field(v, "world")).city);
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 2;
+                v.startGame(c);
+                for (int i = 0; i < 4 && menuCity.get() != null; i++) {
+                    System.gc();
+                    Thread.sleep(100);
+                }
+                check(menuCity.get() == null, "the menu's city is let go of as soon as the game starts building");
+                v.awaitLoad();
+                Menu m = (Menu) field(v, "menu");
+                for (int k = 0; k < 10; k++) draw(v, size);
+                m.screen = Menu.NONE;
+                for (int k = 0; k < 10; k++) draw(v, size);
+                java.lang.ref.WeakReference<Object> first = new java.lang.ref.WeakReference<Object>(field(v, "world"));
+                CityConfig c2 = new CityConfig();
+                c2.v[CityConfig.OPT_ZOMBIES] = 4;
+                c2.mode = CityConfig.MODE_GANGS;
+                v.startGame(c2);
+                for (int i = 0; i < 4 && first.get() != null; i++) {
+                    System.gc();
+                    Thread.sleep(100);
+                }
+                check(first.get() == null, "and the last game, once saved, while the next one builds");
+                v.awaitLoad();
+                for (int k = 0; k < 10; k++) draw(v, size);
+                m.screen = Menu.NONE;
+                for (int k = 0; k < 10; k++) draw(v, size);
+                check(v.drawErrors == 0, "drew without an error");
+                // The war bar: the gangs count, and the police in their cars; not swamped by the crowd.
+                World w = (World) field(v, "world");
+                w.recount();
+                for (int i = 0; i < 30 * 3; i++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.outbreak, "the war's on");
+                check(w.warBalance > 0.2f && w.warBalance < 0.9f, "the bar shows a fight, not 97 to 3 (" + w.warBalance + ")");
+                // All of the other side gone: it says so.
+                for (int i = 0; i < 30 * 8; i++) {
+                    w.hostileReserve = 0;
+                    for (Entity e : w.entities) if (e.isHostile()) e.hp = 0;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (!w.outbreak) break;
+                }
+                check(w.warBalance > 0.9f || !w.outbreak, "and the city's side ahead once they're down (" + w.warBalance + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

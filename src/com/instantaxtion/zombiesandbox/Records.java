@@ -41,6 +41,11 @@ final class Records {
     private int lastKilled;
     private World lastWorld;
 
+    /** ((17.3) A new city's on the way: the last game's let go of. */
+    void forget() {
+        lastWorld = null;
+    }
+
     /** Checks the current game against the records. */
     void check(World w) {
         if (w != lastWorld) {

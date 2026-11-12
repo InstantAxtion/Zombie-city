@@ -398,6 +398,7 @@ final class World {
     int bites;
     /** Share of the fighting strength on the people's side (0 to 1), and who is ahead: 1 people, -1 zombies. */
     float warBalance = 0.5f;
+    private boolean warFresh = true;
     int warLead;
     /** How the last war ended: 0 not yet, 1 the city survived, 2 the city fell. */
     int warResult;
@@ -585,15 +586,20 @@ final class World {
             reveal(TR_KEEN);
             reveal(TR_DULL);
         }
-        float hs = 0, zs = 0;
+        // ((17.3) The fighting strength of each side. The police and soldiers counted whether on foot or riding in a car or
+        // truck (half of them were left out); the unarmed only a little (twenty thousand of them outweighed the whole
+        // army before, and the bar sat at 97 per cent); gang members and enemy soldiers counted at all (they weren't);
+        // and the help still to come on each side, at half.)
+        float hs = counts[Entity.COP] * 3 + counts[Entity.SOLDIER] * 4, zs = 0;
+        hs += (dispatch.policeReserve * 3 + dispatch.squadReserve * 4) * 0.5f;
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
             if (e.dead) continue;
             switch (e.type) {
-                case Entity.COP: hs += e.role == Entity.ROLE_RIOT ? 4 : 3; break;
-                case Entity.SOLDIER: hs += e.role == Entity.ROLE_COMMANDER ? 5 : 4; break;
-                case Entity.CIVILIAN: hs += e.hasGun ? 1.2f : 0.15f; break;
-                case Entity.DOG: hs += 0.3f; break;
+                case Entity.CIVILIAN: hs += e.hasGun ? 1.2f : 0.03f; break;
+                case Entity.DOG: hs += 0.05f; break;
+                case Entity.GANGSTER: zs += e.kit == 3 ? 6 : e.kit == 2 ? 3 : e.kit == 1 ? 2.5f : 2; break;
+                case Entity.INVADER: zs += e.kit == 1 ? 5 : e.kit == 2 ? 4.5f : 4; break;
                 case Entity.ZOMBIE: case Entity.ZOMBIE_DOG: zs += 1; break;
                 case Entity.RUNNER: zs += 1.4f; break;
                 case Entity.BRUTE: zs += 4; break;
@@ -605,12 +611,19 @@ final class World {
         }
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++)
             if (fleet.vehicles.get(i).type == Fleet.TANK && !fleet.vehicles.get(i).broken) hs += 12;
-        hs += hiding * 0.1f;
+        hs += hiding * 0.02f;
         zs += lurking;
+        // (Gang members out in a stolen car, and the other side's fighters still to come.)
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) if (fleet.vehicles.get(i).gang >= 0) zs += fleet.vehicles.get(i).riders.size() * 2;
+        if (hostileMode()) zs += hostileReserve * (mode() == CityConfig.MODE_GANGS ? 2 : 4) * 0.5f;
         if (trait[TR_TOUGH]) zs *= 1.25f;
         if (trait[TR_FRAIL]) zs *= 0.8f;
         float b = hs + zs > 0 ? hs / (hs + zs) : 0.5f;
-        warBalance += (b - warBalance) * 0.25f;
+        // ((17.3) Straight to where it stands when the fighting starts, not eased up from halfway.)
+        if (warFresh) {
+            warFresh = false;
+            warBalance = b;
+        } else warBalance += (b - warBalance) * 0.25f;
         if (warBalance > 0.62f && warLead != 1) {
             if (warLead == -1) banner("THE TIDE IS TURNING", "People are fighting back. The dead are losing ground.");
             warLead = 1;
@@ -2411,6 +2424,7 @@ final class World {
             startHumans = h;
             warLead = 0;
             warBalance = 0.5f;
+            warFresh = true;
         }
         startHumans = Math.max(startHumans, h);
         if (outbreak) {
