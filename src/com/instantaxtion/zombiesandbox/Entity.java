@@ -211,6 +211,11 @@ final class Entity {
     float bleedT;
     transient Entity rescuer, rescueOf;
     transient float rescueT;
+    /**
+     * ((17.6) Cover: where the one they're trading shots with is and when they last fired, the spot they're making for
+     * (coverX -1 for none) and when they next look for one; and how pinned down they are by fire coming their way (0-1).
+     */
+    transient float coverFromX, coverFromY, lastAimT = -99, coverT, coverX = -1, coverY, suppress;
     /** ((17.4) An enemy paratrooper still coming down (seconds). */
     transient float paraT;
     transient float raidT;

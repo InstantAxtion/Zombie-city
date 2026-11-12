@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.5";
-    static final int VERSION_CODE = 175;
+    static final String VERSION = "17.6";
+    static final int VERSION_CODE = 176;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.6  -  Cover and suppressing fire",
+                    "Gunfights use cover. Anyone trading shots with an armed enemy - police, soldiers, gang members, enemy soldiers, armed civilians - looks for a spot close by with something solid between them and the enemy (a parked car, a wall, a tree, the corner of a building they can lean out round) and moves there, firing as they go. Someone behind cover is half as easy to hit.",
+                    "Suppressing fire: rounds that only just miss keep heads down. Pinned down, a fighter shoots worse, dives for cover at once, and without any creeps instead of advancing. A machine gun's bursts pin people down three times as fast as single shots. It wears off within a few seconds of the fire stopping.",
+                    "None of this against the dead: they don't shoot back, so nobody hides from them.",
+                    "Fixed: helicopters couldn't be hurt by gunfire at all - shots at them, police and army helicopters and the enemy's attack helicopters alike, did nothing (they were left out of vehicle damage along with trains and boats, and the city's own had 1 point of health). Now rifles and machine guns wear them down and rockets badly hurt them; one that's shot down spins out and crashes with its crew aboard, and it's on the radio and the timeline. Blasts on the ground still don't reach one up in the air.",
+                    "Fixed: a city tank's main gun could stop firing at enemy armour when its turret angle wrapped round (it compared angles without allowing for the wrap).",
+            },
             {
                     "17.5  -  The wounded, and the after-action report",
                     "The wounded: civilians, police and soldiers who are shot or caught in a blast often go down hurt instead of dying outright - lying in a spreading pool of blood with a red cross over them, bleeding out over half a minute to a minute. (The bitten don't: they die and turn, as before. Nor does anyone blown apart or riddled with bullets.) The other side leaves them be, though the dead don't.",

@@ -4808,7 +4808,7 @@ final class World {
                 e.ammo--;
                 shotsFired++;
                 tracer(e.x + (float) Math.cos(e.angle) * 5, e.y + (float) Math.sin(e.angle) * 5, v.x + rnd.nextFloat() * 6 - 3, v.y + rnd.nextFloat() * 6 - 3);
-                if (rnd.nextFloat() < 0.6f) fleet.damage(v, armour ? 0.6f : e.type == Entity.SOLDIER ? 5 : 3.5f, false);
+                if (rnd.nextFloat() < (air ? 0.4f : 0.6f)) fleet.damage(v, armour ? 0.6f : e.type == Entity.SOLDIER ? 5 : 3.5f, false);
                 if (rnd.nextFloat() < 0.3f) emit(e.type == Entity.SOLDIER ? Sfx.RIFLE : Sfx.PISTOL, e.x, e.y);
             }
             if (v.broken) {
@@ -5259,6 +5259,83 @@ final class World {
         return true;
     }
 
+
+    // ------------------------------------------------------------------ (17.6) cover and suppression
+
+    /** Gunfights use cover: walls, buildings, parked cars and trees between a shooter and the one shooting at them. */
+    static final boolean COVER = true;
+
+    /** Is something solid just in front of them (a car, a wall, a tree, the corner of a building) towards (fx, fy)? */
+    boolean inCover(Entity e, float fx, float fy) {
+        float dx = fx - e.x, dy = fy - e.y, d = (float) Math.sqrt(dx * dx + dy * dy);
+        if (d < 30) return false;
+        float ux = dx / d, uy = dy / d;
+        for (float st = 5; st <= 13; st += 4) {
+            float px = e.x + ux * st, py = e.y + uy * st;
+            if (city.solidAt(px, py)) return true;
+            int ti = city.tileIndex(px, py);
+            if (ti >= 0 && (city.tiles[ti] == City.CAR || city.tiles[ti] == City.TREE)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Someone trading shots with an armed enemy: every couple of seconds, unless they're in cover already, a spot close
+     * by with something solid between them and the enemy and still a line to shoot along - and there they go, firing
+     * as they move. Pinned down by fire they keep their heads down: to cover at once, or slower without it. Close in
+     * (a fight at arm's length) there's no time for it.
+     */
+    private void coverStep(Entity e, float dt) {
+        if (e.suppress > 0) e.suppress = Math.max(0, e.suppress - dt * 0.35f);
+        if (e == controlled || e.ride != null || e.isUndead() || e.bleedT > 0 || time - e.lastAimT > 0.6f) {
+            e.coverX = -1;
+            return;
+        }
+        float fx = e.coverFromX, fy = e.coverFromY;
+        float d = (float) World.hypot(fx - e.x, fy - e.y);
+        if (d < 50) {
+            e.coverX = -1;
+            return;
+        }
+        e.coverT -= dt;
+        if (e.suppress > 0.6f && e.coverX < 0 && e.coverT > 0.5f) e.coverT = 0.5f;
+        if (e.coverT <= 0) {
+            e.coverT = 2 + rnd.nextFloat();
+            if (!inCover(e, fx, fy)) {
+                e.coverX = -1;
+                float best = Float.MAX_VALUE;
+                float px = -(fy - e.y) / d * 7, py = (fx - e.x) / d * 7;
+                for (int k = 0; k < 20; k++) {
+                    float a = rnd.nextFloat() * TAU, r = 8 + rnd.nextFloat() * 38;
+                    float cx = e.x + (float) Math.cos(a) * r, cy = e.y + (float) Math.sin(a) * r;
+                    // (Not towards them.)
+                    if ((cx - e.x) * (fx - e.x) + (cy - e.y) * (fy - e.y) > r * d * 0.6f) continue;
+                    if (city.circleBlocked(cx, cy, e.radius)) continue;
+                    // (A line to shoot along from there - or from a step to either side, leaning out round a corner.)
+                    if (!city.los(cx, cy, fx, fy) && !city.los(cx + px, cy + py, fx, fy) && !city.los(cx - px, cy - py, fx, fy)) continue;
+                    Entity probe = coverProbe;
+                    probe.x = cx;
+                    probe.y = cy;
+                    if (!inCover(probe, fx, fy)) continue;
+                    if (r < best) {
+                        best = r;
+                        e.coverX = cx;
+                        e.coverY = cy;
+                    }
+                }
+            }
+        }
+        if (e.coverX >= 0) {
+            float cx = e.coverX - e.x, cy = e.coverY - e.y, cd = (float) Math.sqrt(cx * cx + cy * cy);
+            if (cd > 2.5f) {
+                e.mx = cx / cd;
+                e.my = cy / cd;
+                e.want = Math.max(e.want, e.suppress > 0.5f ? e.runSpeed * 0.8f : e.speed);
+            } else e.want = 0;
+        } else if (e.suppress > 0.6f) e.want *= 0.4f;
+    }
+
+    private final Entity coverProbe = new Entity();
 
     /** The enemy's beaten: none of its troops left, and none to come. */
     boolean enemyBeaten() {
@@ -14494,6 +14571,12 @@ final class World {
     /** Aims and shoots. Returns false if the shot is blocked by someone standing in the way. */
     private boolean aimAndFire(Entity e, Entity t, float d, float range, float dt) {
         e.aiming = true;
+        // ((17.6) Trading shots with someone who can shoot back: cover counts.)
+        if (t.isHostile() || t.isArmed() || t.hasGun) {
+            e.coverFromX = t.x;
+            e.coverFromY = t.y;
+            e.lastAimT = time;
+        }
         e.angle = turn(e.angle, (float) Math.atan2(t.y - e.y, t.x - e.x), dt * 14);
         if (e.ammo <= 0) {
             if (e.reload <= 0 && e.reserve > 0) {
@@ -14891,6 +14974,9 @@ final class World {
         boolean scoped = e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e.weapon == Entity.W_DMR;
         float hit = accuracy * (1 - (scoped ? 0.1f : 0.4f) * d / range) + (t.type == Entity.BRUTE ? 0.1f : 0);
         if (t.type == Entity.CRAWLER) hit *= 0.6f;
+        // ((17.6) Behind cover, half as easy to hit; pinned down by fire, a worse shot.)
+        if (COVER && !t.isUndead() && inCover(t, e.x, e.y)) hit *= 0.5f;
+        if (COVER) hit *= 1 - 0.45f * e.suppress;
         if (rnd.nextFloat() < hit) {
             boolean wasUp = t.hp > 0;
             // Only a hit to the head really stops a zombie; body shots just wear it down.
@@ -14923,6 +15009,8 @@ final class World {
             tracer(mx, my, t.x + rnd.nextFloat() * 2 - 1, t.y + rnd.nextFloat() * 2 - 1);
             tryMove(t, nx * 1.2f / t.mass, ny * 1.2f / t.mass);
         } else {
+            // ((17.6) Close enough to keep their head down: a machine gun's bursts most of all.)
+            if (COVER && !t.isUndead()) t.suppress = Math.min(1, t.suppress + (e.role == Entity.ROLE_GUNNER || (e.type == Entity.INVADER && e.kit == 1) ? 0.3f : 0.12f));
             float a = (float) Math.atan2(t.y - my, t.x - mx) + (rnd.nextBoolean() ? 1 : -1) * (0.05f + rnd.nextFloat() * 0.1f);
             float len = d + 20 + rnd.nextFloat() * 40;
             float ex = mx, ey = my;
@@ -16060,6 +16148,8 @@ final class World {
     // ------------------------------------------------------------------ movement
 
     private void move(Entity e, float dt) {
+        // ((17.6) In a gunfight: to cover, and pinned down by fire.)
+        if (COVER) coverStep(e, dt);
         // (10.51) Halfway over a fence or the highway barrier: nothing else until they're down the other side.
         if (e.vaultT > 0) {
             e.vaultT -= dt;
@@ -16854,7 +16944,8 @@ final class World {
             Fleet.Vehicle v = fleet.vehicles.get(i);
             if (Fleet.offRoad(v)) continue;
             float d = (float) World.hypot(v.x - x, v.y - y);
-            if (d < radius) fleet.damage(v, damage * (1.1f - d / radius), d < radius * 0.5f);
+            // ((17.6) Not a helicopter up in the air: a blast on the ground doesn't reach it.)
+            if (d < radius && !(v.type == Fleet.HELI && v.alt > 0.3f)) fleet.damage(v, damage * (1.1f - d / radius), d < radius * 0.5f);
         }
         // Buildings: scorched walls, and enough of a hit brings one down.
         int bx0 = Math.max(0, (int) ((x - radius) / City.T)), bx1 = Math.min(city.w - 1, (int) ((x + radius) / City.T));

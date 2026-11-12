@@ -30,7 +30,8 @@ final class Fleet {
             PATROL = 14, SCENE = 15, RECALL = 16, IDLE = 17, MUSTER = 18, HOVER = 19, STANDBY = 20, DROP = 21, PICKUP = 22;
     private static final int[] CAR_COLORS = {0xFFB03A2E, 0xFF2E5FB0, 0xFFE0E0E0, 0xFF222428, 0xFFD4A21C, 0xFF3C8A4E,
             0xFF8A8F96, 0xFF6B2E8A, 0xFFE07A2E};
-    private static final float[] MAX_HP = {160, 260, 1, 100, 240, 700, 160, 1, 1, 1};
+    // ((17.6) A helicopter can be shot down now: 220, from 1 - nothing could hurt one before.)
+    private static final float[] MAX_HP = {160, 260, 220, 100, 240, 700, 160, 1, 1, 1};
     /** Most people a car will squeeze in. */
     static final int SEATS = 4;
     /**
@@ -2346,6 +2347,23 @@ final class Fleet {
         return false;
     }
 
+    /** ((17.6) One of the city's helicopters shot down: spinning, losing height, and a fireball where it comes down. */
+    private boolean heliCrash(Vehicle v, float dt) {
+        v.angle += dt * 5;
+        v.x += (float) Math.cos(v.angle) * 20 * dt;
+        v.y += (float) Math.sin(v.angle) * 20 * dt;
+        v.alt = Math.max(0, v.alt - dt * 0.5f);
+        if (v.alt > 0) return false;
+        v.crew.clear();
+        v.riders.clear();
+        v.driver = null;
+        w.explode(v.x, v.y, 40, 150);
+        w.dispatch.say(Dispatch.WHO_MILITARY, null, (v.kind == K_POLICE_HELI || v.kind == K_RESCUE_HELI ? "Police: " : "Military: ")
+                + "Helicopter down on " + city.placeName(v.x, v.y) + "!", v.x, v.y, true);
+        w.timeline("Helicopter shot down", v.x, v.y);
+        return true;
+    }
+
     /** (17.2) A car taken from a lot, ready for a gang to drive off in (not given anywhere to go yet). */
     Vehicle stealCar(float x, float y) {
         float[] p = city.nearestDrivable(x, y);
@@ -3072,6 +3090,7 @@ final class Fleet {
             boolean done;
             if (v.player != null) done = updatePlayerVehicle(v, vdt);
             else if (v.enemy) done = updateEnemy(v, vdt);
+            else if (v.type == HELI && v.broken) done = heliCrash(v, vdt);
             else if (v.type == HELI) done = updateHeli(v, vdt);
             else if (v.type == JET) done = updateJet(v, vdt);
             else if (v.type == TRAIN) done = updateTrain(v, vdt);
@@ -3265,7 +3284,9 @@ final class Fleet {
 
     /** Hurts a vehicle; at zero it breaks down and everyone inside gets out. */
     void damage(Vehicle v, float amount, boolean blast) {
-        if (offRoad(v) || amount <= 0) return;
+        // ((17.6) Helicopters included: they were left out with the trains and boats, and gunfire never touched them.)
+        if ((offRoad(v) && v.type != HELI) || amount <= 0) return;
+        if (v.type == HELI && v.broken) return;
         // (Armour: the dead can claw at an APC or the riot van all day.)
         if (!blast && (v.kind == K_APC || v.kind == K_RIOT_VAN)) amount *= 0.3f;
         v.hp -= amount;
@@ -3278,9 +3299,9 @@ final class Fleet {
         v.parked = true;
         w.carsWrecked++;
         if (v.enemy) w.enemyVehiclesLost++;
-        // The crew bails out (and the driver).
-        if (!v.crew.isEmpty()) crewOut(v, true);
-        if (v.driver != null) driverOut(v, true);
+        // The crew bails out (and the driver). ((17.6) Not from a helicopter in the air: they go down with it.)
+        if (v.type != HELI && !v.crew.isEmpty()) crewOut(v, true);
+        if (v.type != HELI && v.driver != null) driverOut(v, true);
         v.speed = 0;
         v.field = null;
         w.emit(Sfx.THUD, v.x, v.y);
@@ -7687,7 +7708,7 @@ final class Fleet {
         if (ev != null) {
             float ea = (float) Math.atan2(ev.y - v.y, ev.x - v.x);
             v.turret = turnTo(v.turret, ea, dt * 1.8f);
-            if (v.cannonCd <= 0 && Math.abs(ea - v.turret) < 0.2f) {
+            if (v.cannonCd <= 0 && Math.abs(World.angleDiff(v.turret, ea)) < 0.2f) {
                 v.cannonCd = 3.5f;
                 w.tankShell(v.x + (float) Math.cos(v.turret) * 14, v.y + (float) Math.sin(v.turret) * 14, ev.x, ev.y);
                 damage(ev, ev.type == TANK ? 300 : 500, true);

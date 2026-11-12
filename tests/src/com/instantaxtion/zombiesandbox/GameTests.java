@@ -3006,6 +3006,12 @@ public final class GameTests {
                 // Air strikes: a first, then another.
                 java.lang.reflect.Method as = World.class.getDeclaredMethod("callAirStrike", int.class, boolean.class);
                 as.setAccessible(true);
+                // (The pack still there: the police may have thinned it out by now.)
+                for (int z = 0; z < 14; z++) {
+                    float[] p = w.city.findWalkable(q[0] + (z % 5) * 6, q[1] + (z / 5) * 6);
+                    w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                }
+                w.recount();
                 check((Boolean) as.invoke(w, 8, true) && w.firebombTime > 0, "an air strike called on the pack");
                 w.firebombTime = 0;
                 check((Boolean) as.invoke(w, 8, false) && w.firebombTime > 0, "and another");
@@ -4997,6 +5003,8 @@ public final class GameTests {
                 }
                 check(cop != null && thug != null, "an officer and a gang member");
                 w.surrender(thug);
+                // (Somewhere quiet for it: the officer would rightly see to a gunfight first.)
+                for (Entity e : w.entities) if (!e.dead && e.isHostile() && Math.hypot(e.x - thug.x, e.y - thug.y) < 350) { e.dead = true; e.removed = true; }
                 check(thug.type == Entity.CIVILIAN && thug.arrested == 1 && !thug.hasGun && w.arrests >= 1, "hands up, unarmed, not the enemy any more");
                 float[] near = city.findWalkable(thug.x + 20, thug.y);
                 cop.x = near[0];
@@ -5448,6 +5456,121 @@ public final class GameTests {
                     draw(v, size);
                 }
                 check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
+        test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 26;
+                World w = new World(c);
+                w.rnd.setSeed(26);
+                w.populate(c);
+                w.recount();
+                City city = w.city;
+                // A spot right behind a building's wall, the shooter out in the open beyond it.
+                Entity probe = new Entity();
+                float[] spot = null, from = null;
+                for (City.Building b : city.buildings) {
+                    if (b.collapsed || city.enterable(b)) continue;
+                    float x = b.x1 + 7, y = (b.y0 + b.y1) / 2;
+                    float fx = b.x0 - 120, fy = y;
+                    if (city.circleBlocked(x, y, 4) || city.solidAt(fx, fy)) continue;
+                    probe.x = x;
+                    probe.y = y;
+                    if (w.inCover(probe, fx, fy)) {
+                        spot = new float[]{x, y};
+                        from = new float[]{fx, fy};
+                        break;
+                    }
+                }
+                check(spot != null, "a wall to hide behind");
+                probe.x = spot[0] + 200;
+                probe.y = spot[1];
+                float[] open = city.findWalkable(probe.x, probe.y);
+                probe.x = open[0];
+                probe.y = open[1];
+                // Shots at someone behind cover hit half as often as at someone out in the open.
+                Entity shooter = w.spawn(Entity.COP, from[0], from[1]);
+                Entity hid = w.spawn(Entity.GANGSTER, spot[0], spot[1]);
+                hid.hp = hid.maxHp = 1e9f;
+                java.lang.reflect.Method fire = World.class.getDeclaredMethod("fire", Entity.class, Entity.class, float.class, float.class);
+                fire.setAccessible(true);
+                int hitsHid = 0, hitsOpen = 0;
+                for (int k = 0; k < 400; k++) {
+                    hid.x = spot[0];
+                    hid.y = spot[1];
+                    float before = hid.hp;
+                    shooter.ammo = 30;
+                    shooter.suppress = 0;
+                    fire.invoke(w, shooter, hid, (float) Math.hypot(hid.x - shooter.x, hid.y - shooter.y), 300f);
+                    if (hid.hp < before) hitsHid++;
+                    hid.x = shooter.x + 60;
+                    hid.y = shooter.y;
+                    hid.suppress = 0;
+                    before = hid.hp;
+                    shooter.ammo = 30;
+                    fire.invoke(w, shooter, hid, 60f, 300f);
+                    if (hid.hp < before) hitsOpen++;
+                }
+                check(hitsHid < hitsOpen * 0.75f, "harder to hit behind cover (" + hitsHid + " vs " + hitsOpen + " in the open)");
+                // Misses pin the target down, and it wears off.
+                hid.suppress = 0;
+                for (int k = 0; k < 60; k++) {
+                    shooter.ammo = 30;
+                    fire.invoke(w, shooter, hid, 60f, 300f);
+                }
+                check(hid.suppress > 0.5f, "pinned down by fire (" + hid.suppress + ")");
+                java.lang.reflect.Method cs = World.class.getDeclaredMethod("coverStep", Entity.class, float.class);
+                cs.setAccessible(true);
+                hid.lastAimT = -99;
+                for (int k = 0; k < 90; k++) cs.invoke(w, hid, 1 / 30f);
+                check(hid.suppress < 0.4f, "and it wears off");
+                // In a real gunfight, some of them make for cover, and get there.
+                CityConfig g = new CityConfig();
+                g.v[CityConfig.OPT_ZOMBIES] = 4;
+                g.mode = CityConfig.MODE_GANGS;
+                g.seed = 27;
+                World gw = new World(g);
+                gw.populate(g);
+                int going = 0, inCover = 0;
+                for (int f = 0; f < 30 * 25; f++) {
+                    gw.update(1 / 30f);
+                    gw.evCount = 0;
+                    if (f % 15 != 0) continue;
+                    for (Entity e : gw.entities) {
+                        if (e.dead || gw.time - e.lastAimT > 0.6f) continue;
+                        if (e.coverX >= 0) going++;
+                        if (gw.inCover(e, e.coverFromX, e.coverFromY)) inCover++;
+                    }
+                }
+                check(going > 10 && inCover > 10, "fighters make for cover and fight from it (" + going + " heading, " + inCover + " in cover)");
+                // Helicopters can be shot down: an enemy one over soldiers, a city one under gang fire.
+                CityConfig ac = new CityConfig();
+                ac.v[CityConfig.OPT_ZOMBIES] = 1;
+                ac.mode = CityConfig.MODE_ARMY;
+                ac.seed = 28;
+                World aw = new World(ac);
+                aw.populate(ac);
+                Entity sol = null;
+                for (Entity e : aw.entities) if (!e.dead && e.type == Entity.SOLDIER && e.ride == null) { sol = e; break; }
+                Fleet.Vehicle eh = aw.fleet.enemyIn(Fleet.ENEMY_HELI, sol.x - 60, sol.y, sol.x, sol.y);
+                float hp0 = eh.hp;
+                for (Entity e : aw.entities) if (!e.dead && e.type == Entity.SOLDIER && e.ride == null && Math.hypot(e.x - sol.x, e.y - sol.y) < 400) e.hp = e.maxHp = 1e6f;
+                for (int f = 0; f < 30 * 20 && !eh.broken; f++) {
+                    eh.x = sol.x + 40;
+                    eh.y = sol.y;
+                    aw.update(1 / 30f);
+                    aw.evCount = 0;
+                }
+                check(eh.hp < hp0, "soldiers' rifles hurt an enemy helicopter (" + eh.hp + " of " + hp0 + ")");
+                Fleet.Vehicle mine = null;
+                for (Fleet.Vehicle v : aw.fleet.vehicles) if (v.type == Fleet.HELI && !v.enemy) { mine = v; break; }
+                if (mine != null) {
+                    float m0 = mine.hp;
+                    aw.fleet.damage(mine, 10, false);
+                    check(mine.hp < m0 && mine.hp > 0, "and gunfire hurts the city's own helicopters, which take more than one round");
+                }
             }
         });
         test("every screen draws", new Check() {
