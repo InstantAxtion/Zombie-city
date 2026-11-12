@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.0";
-    static final int VERSION_CODE = 170;
+    static final String VERSION = "17.1";
+    static final int VERSION_CODE = 171;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.1  -  Walk-in buildings",
+                    "Interiors are back, and this time people really go inside. They walk up to the door, through the doorway and from room to room, and they're there inside the whole time, to be seen and found. Nobody vanishes into a building or pops out of one any more.",
+                    "Every building with an inside (homes, flats, shops, cafés, offices, schools, halls and the rest) has real walls: the outside walls with a doorway on the street side, and walls between the rooms with doorways through them. Everyone walks round the walls and through the doorways; cars still can't get in.",
+                    "People go in on errands, to work and to go home, spend a while there moving between the places people sit and stand (a desk, the counter, the sofa, a shelf), then walk back out. Families go in together. How many fit at once depends on the floor space: a busy place is full and the rest go elsewhere.",
+                    "Hiding is back too, on foot: with the dead about, people run into a building nearby and keep away from the door at the back of the rooms until it's clear. Anyone inside who sees one of the dead come in gets out. The dead follow people they're chasing in through the door and from room to room, but can't bite through a wall.",
+                    "You only see in through a doorway: walls block sight and bullets, so nobody spots or shoots anyone inside except through the door.",
+                    "Seeing them: a building with people in it turns see-through from a middling zoom, showing its floors, rooms, furniture and the people moving about in it; zoomed right in, every building does. Tap someone inside to follow them as usual.",
+                    "Anyone who ends up in a building with no reason to be there (shoved in by a crowd, say) walks back out through the door.",
+            },
             {
                     "17.0  -  Gang wars and invasions",
                     "Two new game modes, picked on the New Game screen under Game mode: Gangs and Enemy army. There are no zombies in either. Zombies is still there, as before.",

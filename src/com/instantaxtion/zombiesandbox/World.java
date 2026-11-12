@@ -2861,6 +2861,8 @@ final class World {
             if (e.task == Dispatch.T_NONE) afterRide(e, e.rideFrom);
             e.rideFrom = null;
         }
+        // ((17.1) Going into a building, spending time in one, or getting out of one.)
+        if (WALK_IN && indoorThink(e, dt)) return;
         if (e.task == Dispatch.T_BOARD) {
             // (10.37) Police and soldiers on their way to a vehicle stop to deal with one of the dead that gets
             // close, instead of walking on with it biting them.
@@ -3874,6 +3876,8 @@ final class World {
             float ddx = t.x - z.x, ddy = t.y - z.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
             float ax = ddx / d, ay = ddy / d;
+            // ((17.1) After someone in a building, or from one: by the doors and through the rooms.)
+            if (WALK_IN && d > z.radius + t.radius + 2 && indoorMove(z, t.x, t.y, chaseSpeed(z, d))) return;
             // Each zombie comes at its prey from its own angle, so a crowd closes in from all sides.
             if (d > 12 && d < 100) {
                 float a = z.flank * Math.min(1, (d - 12) / 40f) * 0.7f;
@@ -3920,6 +3924,11 @@ final class World {
             float ddx = z.lastX - z.x, ddy = z.lastY - z.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
             City.Building hid = occupiedNear(z.lastX, z.lastY, 40);
+            // ((17.1) Last seen going into a building (or in one): in after them.)
+            if (WALK_IN && d >= 6 && (city.insideOf(z.lastX, z.lastY) != null || city.insideOf(z.x, z.y) != null)) {
+                indoorMove(z, z.lastX, z.lastY, z.speed * 1.2f);
+                return;
+            }
             if (hid != null) {
                 // They got inside: on to the door, with the rest of the dead (below).
                 z.memory = 0;
@@ -4682,6 +4691,8 @@ final class World {
     }
 
     private void bite(Entity z, Entity t, float nx, float ny) {
+        // ((17.1) Not through a wall.)
+        if (WALK_IN && city.insideOf(z.x, z.y) != city.insideOf(t.x, t.y) && !city.los(z.x, z.y, t.x, t.y)) return;
         // Body armour stops a lot of bites, from any side.
         if (t.type == Entity.COP && t.role == Entity.ROLE_SWAT && rnd.nextFloat() < 0.45f) {
             z.biteCd = 0.8f;
@@ -5593,7 +5604,7 @@ final class World {
         // Hide indoors: unarmed, a building with room close by, and the dead not already at its door.
         // ((12.0) Someone whose leader has gone indoors without them, or died, hides on their own: they used to wander
         // about for good, set on hiding and never going.)
-        if (!NO_INDOORS && !armed && !apocalypse() && ((threat != null && e.taskTimer <= 0 && idle) || e.task == Dispatch.T_HIDE) && threatDist > 30 && (e.leader == null || e.leader.dead)) {
+        if ((WALK_IN || !NO_INDOORS) && !armed && !apocalypse() && ((threat != null && e.taskTimer <= 0 && idle) || e.task == Dispatch.T_HIDE) && threatDist > 30 && (e.leader == null || e.leader.dead)) {
             City.Building b = e.task == Dispatch.T_HIDE ? e.building : null;
             if (b == null || b.occupants.size() >= b.capacity || b.barricade <= 0 || b.collapsed) b = hidingPlace(e);
             if (b != null && countZombiesNear(b.doorX, b.doorY, 35) == 0) {
@@ -5736,7 +5747,7 @@ final class World {
     /** Somewhere to hide: home first if it's close, has room and is shut up, else the nearest with room. */
     private City.Building hidingPlace(Entity e) {
         City.Building home = homeOf(e);
-        if (home != null && home.occupants.size() < home.capacity && home.barricade >= 40 && !home.collapsed
+        if (home != null && home.occupants.size() < home.capacity && home.barricade >= 40 && !home.collapsed && (!WALK_IN || city.enterable(home))
                 && (home.doorX - e.x) * (home.doorX - e.x) + (home.doorY - e.y) * (home.doorY - e.y) < 220 * 220
                 && countZombiesNear(home.doorX, home.doorY, 35) == 0) return home;
         return shelterNear(e);
@@ -5872,12 +5883,12 @@ final class World {
         // (Some other plan by now - a place in a zone, say: that's left alone.)
         if (e.task != Dispatch.T_HIDE) return false;
         // ((16.14) Nowhere to hide indoors: think again - run, make for a safe zone, or stand and fight.)
-        if (NO_INDOORS) {
+        if (NO_INDOORS && !(WALK_IN && b != null && city.enterable(b))) {
             dropTask(e);
             e.goalCd = 0;
             return false;
         }
-        if (b == null || b.occupants.size() >= b.capacity || b.barricade <= 0) {
+        if (b == null || b.occupants.size() + b.inside >= room(b) * 3 / 2 || b.barricade <= 0) {
             dropTask(e);
             return false;
         }
@@ -6281,6 +6292,16 @@ final class World {
         // ((16.14) Nobody goes into a building any more: at the door a moment, then on to the next thing.)
         if (NO_INDOORS) {
             e.errandTimer = 3 + rnd.nextFloat() * 10;
+            // ((17.1) In through the door on their own feet, the family with them.)
+            if (WALK_IN && !(apocalypse() && e.type == Entity.CIVILIAN) && city.enterable(b) && b.inside < room(b)) {
+                beginStay(e, b, stay, false);
+                if (e.followerFrame == hashFrame)
+                    for (int i = 0, n = gatherLiving(b.doorX, b.doorY, 60); i < n; i++) {
+                        Entity o = gathered[i];
+                        if (o.dead || o.leader != e || o.type != Entity.CIVILIAN) continue;
+                        beginStay(o, b, stay, false);
+                    }
+            }
             return;
         }
         // ((12.4) And no errands indoors while the dead are about.)
@@ -6311,6 +6332,212 @@ final class World {
      * shut inside one. Everyone stays out in the streets.
      */
     static final boolean NO_INDOORS = true;
+
+    /**
+     * ((17.1) People walk into buildings and out again on their own feet - through the door, from room to room - and
+     * are there inside, to be seen and to be found, the whole time. (NO_INDOORS stays: nobody vanishes into one.)
+     */
+    static final boolean WALK_IN = true;
+
+    /** Buildings someone was in at the last count. */
+    final ArrayList<City.Building> occupied = new ArrayList<City.Building>();
+
+    /** (17.1) How many are in each building right now (once a second): for room to spare, and for the roofs drawn. */
+    void countInside() {
+        for (int i = 0, n = occupied.size(); i < n; i++) occupied.get(i).inside = 0;
+        occupied.clear();
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead) continue;
+            City.Building b = city.insideOf(e.x, e.y);
+            // (Those on their way in count too: the room is theirs.)
+            if (b == null) b = e.stayIn;
+            if (b == null) continue;
+            if (b.inside++ == 0) occupied.add(b);
+        }
+    }
+
+    /** Starts a stay inside: on an errand, at work or home (hide false), or hiding from the dead (hide true). */
+    /** (17.1) How many fit in a building at once, on its one floor: a person for every so much floor. */
+    static int room(City.Building b) {
+        return Math.max(4, (int) ((b.x1 - b.x0) * (b.y1 - b.y0) / 280));
+    }
+
+    void beginStay(Entity e, City.Building b, float stay, boolean hide) {
+        if (!city.enterable(b) || b.inside >= room(b) + (hide ? room(b) / 2 : 0)) return;
+        if (b.inside++ == 0) occupied.add(b);
+        e.stayIn = b;
+        e.stayT = stay;
+        e.stayWalk = 0;
+        e.stayHide = hide;
+        e.inSpotT = 0;
+        e.errand = null;
+        e.errandTimer = stay + 60;
+    }
+
+    /** The way to a spot, in or out of a building or through one: true if this took care of the step. */
+    boolean indoorMove(Entity e, float tx, float ty, float speed) {
+        City.Building from = city.insideOf(e.x, e.y), to = city.insideOf(tx, ty);
+        if (from == null && to == null) return false;
+        e.inT = time;
+        if (from != null && from == to) {
+            followRoute(e, from, tx, ty, speed);
+            return true;
+        }
+        if (from != null) {
+            // Out: through the rooms to the entrance, then out of the door.
+            if (World.hypot(e.x - from.inX, e.y - from.inY) < 6 || World.hypot(e.x - from.gapX, e.y - from.gapY) < 7) {
+                float ox = from.doorX - e.x, oy = from.doorY - e.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
+                steer(e, ox / od, oy / od, speed);
+            } else followRoute(e, from, from.inX, from.inY, speed);
+            return true;
+        }
+        // In: to the door, through the doorway, then through the rooms.
+        float dd = (float) World.hypot(e.x - to.doorX, e.y - to.doorY);
+        float gd = (float) World.hypot(e.x - to.gapX, e.y - to.gapY);
+        if (dd > 9 && gd > 9) {
+            walkToSpot(e, to.doorX, to.doorY, speed);
+            return true;
+        }
+        float ix = to.inX - e.x, iy = to.inY - e.y, id = (float) Math.sqrt(ix * ix + iy * iy) + 0.001f;
+        steer(e, ix / id, iy / id, speed);
+        return true;
+    }
+
+    /** Through a building's rooms, doorway by doorway, to a spot in it. */
+    private void followRoute(Entity e, City.Building b, float tx, float ty, float speed) {
+        if (e.route == null || e.routeB != b || Math.abs(e.routeTx - tx) > 3 || Math.abs(e.routeTy - ty) > 3 || (e.blocked && rnd.nextFloat() < 0.05f)) {
+            e.route = city.roomRoute(b, e.x, e.y, tx, ty);
+            e.routeI = 0;
+            e.routeB = b;
+            e.routeTx = tx;
+            e.routeTy = ty;
+            e.blocked = false;
+        }
+        float[] r = e.route;
+        while (e.routeI < r.length / 2 - 1 && World.hypot(r[e.routeI * 2] - e.x, r[e.routeI * 2 + 1] - e.y) < 4) e.routeI++;
+        float px = r[e.routeI * 2], py = r[e.routeI * 2 + 1];
+        float dx = px - e.x, dy = py - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        boolean last = e.routeI >= r.length / 2 - 1;
+        if (last && d < 2.5f) {
+            steer(e, 0, 0, 0);
+            return;
+        }
+        steer(e, dx / d, dy / d, last ? Math.min(speed, d * 3 + 2) : speed);
+    }
+
+    /** Somewhere to be in a building: one of the places people sit or stand, or anywhere in one of its rooms. */
+    private void pickSpot(Entity e, City.Building b) {
+        Interiors.Plan p = city.planOf(b);
+        if (p == null) return;
+        float[] best = null;
+        if (!p.spots.isEmpty()) {
+            if (e.stayHide) {
+                // Hiding: as far from the door as there is.
+                float bd = -1;
+                for (int k = 0; k < 6; k++) {
+                    float[] sp = p.spots.get(rnd.nextInt(p.spots.size()));
+                    float d = (float) World.hypot(sp[0] - b.inX, sp[1] - b.inY);
+                    if (d > bd) {
+                        bd = d;
+                        best = sp;
+                    }
+                }
+            } else best = p.spots.get(rnd.nextInt(p.spots.size()));
+        }
+        if (best != null) {
+            e.inSpotX = best[0] + rnd.nextFloat() * 2 - 1;
+            e.inSpotY = best[1] + rnd.nextFloat() * 2 - 1;
+            e.inSpotA = best[3];
+        } else {
+            float[] room = p.rooms.get(rnd.nextInt(p.rooms.size()));
+            e.inSpotX = room[0] + 5 + rnd.nextFloat() * Math.max(1, room[2] - room[0] - 10);
+            e.inSpotY = room[1] + 5 + rnd.nextFloat() * Math.max(1, room[3] - room[1] - 10);
+            e.inSpotA = rnd.nextFloat() * TAU;
+        }
+        e.inSpotT = e.stayHide ? 40 : 8 + rnd.nextFloat() * 22;
+    }
+
+    /**
+     * A civilian spending time in a building: from place to place in it, sitting, standing, browsing. The dead in
+     * the building with them: out, now. The dead outside: they stay in, away from the door, until it's clear.
+     * False when they're done here (or must get out), for the rest of think to take over.
+     */
+    private boolean indoorVisit(Entity e, City.Building b, float dt) {
+        e.stayT -= dt;
+        Entity z = nearest(e, 90, true, true);
+        if (z != null && city.insideOf(z.x, z.y) == b) {
+            // In here with them: get out.
+            e.stayIn = null;
+            e.goal = G_FLEE;
+            e.fleeTimer = Math.max(e.fleeTimer, 4);
+            e.threatX = z.x;
+            e.threatY = z.y;
+            return false;
+        }
+        if (e.stayT <= 0) {
+            // The dead about outside: wait it out a while longer.
+            if (zombieWithin(b.doorX, b.doorY, 110) && e.stayT > -120) e.stayT = 6;
+            else {
+                e.stayIn = null;
+                e.stayHide = false;
+                e.errandTimer = 2 + rnd.nextFloat() * 6;
+                return false;
+            }
+        }
+        // (Seen, or known to be about - shots, screams - while they're in here: they're hiding now.)
+        boolean danger = z != null || ((e.fleeTimer > 0 || e.fear > 15) && countZombiesNear(e.x, e.y, 150) > 0);
+        if (danger) e.goal = G_HIDE;
+        if (danger && !e.stayHide) {
+            // Seen through the door: back from it, and stay put.
+            e.stayHide = true;
+            e.inSpotT = 0;
+            e.stayT = Math.max(e.stayT, 20);
+        }
+        e.inSpotT -= dt;
+        if (e.inSpotT <= 0) pickSpot(e, b);
+        float d = (float) World.hypot(e.inSpotX - e.x, e.inSpotY - e.y);
+        if (d < 2.5f) {
+            steer(e, 0, 0, 0);
+            e.angle = turn(e.angle, e.inSpotA, dt * 4);
+        } else indoorMove(e, e.inSpotX, e.inSpotY, e.stayHide ? e.runSpeed * 0.6f : e.speed * 0.7f);
+        return true;
+    }
+
+    /**
+     * (17.1) Who's in which building, as they walk about: on their way in, spending time in one, or there by mistake (on
+     * a chase, or shoved in) and on their way out. True when this took care of their step.
+     */
+    private boolean indoorThink(Entity e, float dt) {
+        City.Building in = city.insideOf(e.x, e.y);
+        if (in != null) {
+            if (e.type == Entity.CIVILIAN && e.stayIn == in && e.stayT > -200) {
+                if (indoorVisit(e, in, dt)) return true;
+            }
+            // Chasing someone in here, or after someone who's in here: that's their business (thinkZombie, thinkHostile).
+            if (e.isUndead() && e.memory > 0) return false;
+            if (e.isHostile() && e.foe != null && city.insideOf(e.foe.x, e.foe.y) == in) return false;
+            if (e.isArmed() && e.aiming) return false;
+            // Nothing to do in here: out.
+            e.aiming = false;
+            indoorMove(e, in.doorX, in.doorY, e.fleeTimer > 0 || e.isUndead() ? e.runSpeed * 0.8f : e.speed);
+            return true;
+        }
+        if (e.stayIn != null && e.type == Entity.CIVILIAN) {
+            // On the way in: given up if it's taking too long, or the dead are close (unless that's why they're going in).
+            e.stayWalk += dt;
+            boolean danger = !e.stayHide && zombieWithin(e.x, e.y, 90);
+            if (e.stayWalk > 70 || danger || e.stayIn.collapsed || !city.enterable(e.stayIn)) {
+                e.stayIn = null;
+                e.stayHide = false;
+                e.errandTimer = 3 + rnd.nextFloat() * 5;
+                return false;
+            }
+            indoorMove(e, e.stayIn.inX, e.stayIn.inY, e.stayHide ? e.runSpeed : e.speed);
+            return true;
+        }
+        return false;
+    }
 
     /**
      * ((16.14) Everyone in a building - sheltering, on an errand, or the dead shut in - out in the street at its door: for
@@ -7587,6 +7814,7 @@ final class World {
         fieldSupplies();
         raiders();
         hostileWaves();
+        if (WALK_IN) countInside();
         fieldHospital();
         militias();
         if (outbreak) updateWar();
@@ -13034,6 +13262,7 @@ final class World {
         for (int i = 0, n = city.buildings.size(); i < n; i++) {
             City.Building b = city.buildings.get(i);
             if (b.capacity == 0 || b.occupants.size() >= b.capacity || b.barricade < 40) continue;
+            if (WALK_IN && (!city.enterable(b) || b.inside >= room(b) * 3 / 2)) continue;
             float ddx = b.doorX - e.x, ddy = b.doorY - e.y, d2 = ddx * ddx + ddy * ddy;
             if (d2 < bd && countZombiesNear(b.doorX, b.doorY, 35) == 0 && !backTowardsIt(e, b.doorX, b.doorY)) {
                 bd = d2;
@@ -13044,8 +13273,14 @@ final class World {
     }
 
     private void enterBuilding(Entity e, City.Building b) {
-        // ((16.14) Nobody goes in.)
-        if (NO_INDOORS) return;
+        // ((16.14) Nobody vanishes in. (17.1) They walk in, and hide there.)
+        if (NO_INDOORS) {
+            if (WALK_IN && e != controlled) {
+                beginStay(e, b, 35 + rnd.nextFloat() * 45, true);
+                if (e.task == Dispatch.T_HIDE) e.task = Dispatch.T_NONE;
+            }
+            return;
+        }
         e.task = Dispatch.T_NONE;
         e.building = null;
         // ((12.4) Nobody hides indoors in an outbreak: they run, or make for a safe zone.)
@@ -14430,6 +14665,9 @@ final class World {
                         if (o == e || o.dead) continue;
                         float ddx = e.x - o.x, ddy = e.y - o.y;
                         float min = e.radius + o.radius;
+                        // ((17.1) Indoors, in the doorways and between the desks, people squeeze past each other rather
+                        // than jam solid (not past the dead).)
+                        if (time - e.inT < 1 && time - o.inT < 1 && e.isZombie() == o.isZombie()) min *= 0.35f;
                         float d2 = ddx * ddx + ddy * ddy;
                         if (d2 >= min * min) continue;
                         float d = (float) Math.sqrt(d2);
@@ -15419,6 +15657,8 @@ final class World {
 
     /** Walks to a spot by a planned route (round buildings and water), or straight there when it's close. */
     private void walkToSpot(Entity e, float x, float y, float speed) {
+        // ((17.1) Into, out of or through a building: by its doors.)
+        if (WALK_IN && indoorMove(e, x, y, speed)) return;
         float dx = x - e.x, dy = y - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
         // ((12.0) Arriving: easing off over the last few steps and stopping on the spot, instead of running round and
         // round it at full speed; and a spot right up against a wall counts as reached once they're against it.)

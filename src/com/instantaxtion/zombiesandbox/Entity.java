@@ -178,6 +178,19 @@ final class Entity {
     transient int squadSlot;
     /** (14.2) One of a gang of armed looters (its leader has no leader). */
     boolean raider;
+    /**
+     * ((17.1) Inside a building: the one they mean to spend time in (on an errand, at work or home, or hiding) and for
+     * how long; how long they've been on the way there; where in it they're making for; and the way through its rooms.
+     */
+    transient City.Building stayIn;
+    transient float stayT, stayWalk, inSpotX, inSpotY, inSpotT, inSpotA;
+    transient boolean stayHide;
+    transient float[] route;
+    transient int routeI;
+    transient float routeTx, routeTy;
+    transient City.Building routeB;
+    /** ((17.1) When they were last finding their way in, out of or round a building: they squeeze past each other there. */
+    transient float inT = -9;
     /** ((17.0) A gang member's or enemy soldier's kit: 0 the basic one, 1 the automatic, 2 the heavy or the scoped. */
     int kit;
     /** ((17.0) Who they're fighting, looked for again every so often (foeT). */

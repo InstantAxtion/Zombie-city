@@ -843,7 +843,9 @@ public final class GameTests {
                     scare.dead = true;
                     scare.removed = true;
                     for (int f = 0; f < 30 * 6; f++) w.update(1 / 30f);
-                    check(runner.dead || runner.task != Dispatch.T_NONE || runner.fleeTimer > 0 || Math.hypot(runner.x - sx, runner.y - sy) > 90,
+                    // ((17.1) Or gone into a building to hide.)
+                    check(runner.dead || runner.task != Dispatch.T_NONE || runner.fleeTimer > 0 || Math.hypot(runner.x - sx, runner.y - sy) > 90
+                                    || runner.stayIn != null || w.city.insideOf(runner.x, runner.y) != null,
                             "still getting away six seconds after it's out of sight (" + (int) Math.hypot(runner.x - sx, runner.y - sy) + " away)");
                 }
             }
@@ -1085,7 +1087,8 @@ public final class GameTests {
                 hid.task = Dispatch.T_HIDE;
                 hid.building = home;
                 for (int f = 0; f < 30; f++) w.update(1 / 30f);
-                check(hid.task != Dispatch.T_HIDE && home.occupants.isEmpty(), "and anyone told to hide thinks again");
+                // ((17.1) Hiding is walking in and staying: nobody vanishes into the house's list.)
+                check(home.occupants.isEmpty() && (hid.task != Dispatch.T_HIDE || hid.stayIn == home), "and anyone told to hide walks in, or thinks again");
                 // Supply trucks after it's over: they come in and fill the shelves and armouries.
                 City.Facility station = null;
                 for (City.Facility f : ww.city.facilities) if (f.kind == City.FACILITY_POLICE) station = f;
@@ -3756,13 +3759,17 @@ public final class GameTests {
                         float[] near = city.findWalkable(dx, dy);
                         Entity e = w.spawn(Entity.CIVILIAN, sx, sy);
                         float best = 999;
+                        // ((17.1) Or, a spot in a building people walk into, in through its door to it.)
+                        City.Building inB = city.insideOf(dx, dy);
+                        boolean gotIn = false;
                         for (int f = 0; f < 30 * 12; f++) {
                             budget.setFloat(w, 3);
                             walk.invoke(w, e, dx, dy, e.speed);
                             move.invoke(w, e, 1 / 30f);
                             best = Math.min(best, (float) Math.hypot(e.x - near[0], e.y - near[1]));
+                            if (inB != null && city.insideOf(e.x, e.y) == inB) gotIn = true;
                         }
-                        if (best < 12) out++;
+                        if (best < 12 || gotIn) out++;
                         e.dead = true;
                         e.removed = true;
                     }
@@ -4819,6 +4826,120 @@ public final class GameTests {
                     draw(v, size);
                     check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
                 }
+            }
+        });
+        test("17.1: walk-in buildings - walls with doorways, sight through doors only, in and out on foot, visits, the dead follow", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 41;
+                World w = new World(c);
+                w.rnd.setSeed(41);
+                w.populate(c);
+                City city = w.city;
+                // A building people can walk into, with a room or two.
+                City.Building b = null;
+                int enterable = 0;
+                for (City.Building o : city.buildings)
+                    if (city.enterable(o)) {
+                        enterable++;
+                        if (b == null && city.planOf(o).rooms.size() >= 3 && o.x1 - o.x0 < 140 && o.y1 - o.y0 < 140) b = o;
+                    }
+                check(enterable > city.buildings.size() / 3, "most buildings can be walked into (" + enterable + " of " + city.buildings.size() + ")");
+                check(b != null && b.walls != null && b.walls.length >= 20, "with walls round it and between its rooms");
+                // The walls are in the way; the doorway isn't.
+                check(!city.circleBlocked(b.inX, b.inY, 3.8f) && !city.circleBlocked(b.gapX, b.gapY, 3.8f), "the doorway is open");
+                float wx = (b.x0 + b.x1) / 2, wy = b.y0 + 1;
+                if (Math.abs(b.gapY - (b.y0 + 1)) < 2 && Math.abs(b.gapX - wx) < 12) wy = b.y1 - 1;
+                check(city.circleBlocked(wx, wy, 3.8f), "a wall is in the way");
+                check(city.solidAt(b.x0 + 1, (b.y0 + b.y1) / 2) && !city.solidAt(b.inX, b.inY), "solid where the walls are, not inside");
+                Interiors.Plan p = city.planOf(b);
+                float[] far = null;
+                for (float[] sp : p.spots) if (far == null || Math.hypot(sp[0] - b.inX, sp[1] - b.inY) > Math.hypot(far[0] - b.inX, far[1] - b.inY)) far = sp;
+                check(far != null && city.insideOf(far[0], far[1]) == b, "a place to be inside it");
+                // Seen through the doorway, not through the walls.
+                check(city.los(b.doorX, b.doorY, b.inX, b.inY), "seen through the door");
+                float ox = b.doorX < b.x0 ? b.x0 - 20 : b.x1 + 20, oy = (b.y0 + b.y1) / 2;
+                if (b.doorX >= b.x0 && b.doorX <= b.x1) ox = b.x0 - 20;
+                check(!city.los(ox, oy, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2), "not through the wall");
+                // Walking in from the street to the far room, and out again: every step a short one, never a jump.
+                java.lang.reflect.Method walk = World.class.getDeclaredMethod("walkToSpot", Entity.class, float.class, float.class, float.class);
+                walk.setAccessible(true);
+                java.lang.reflect.Method move = World.class.getDeclaredMethod("move", Entity.class, float.class);
+                move.setAccessible(true);
+                java.lang.reflect.Field budget = World.class.getDeclaredField("pathBudget");
+                budget.setAccessible(true);
+                float[] start = city.findWalkable(b.doorX + (b.doorX - (b.x0 + b.x1) / 2) * 0.6f, b.doorY + (b.doorY - (b.y0 + b.y1) / 2) * 0.6f);
+                Entity e = w.spawn(Entity.CIVILIAN, start[0], start[1]);
+                check(city.insideOf(e.x, e.y) == null, "starts outside");
+                float jump = 0;
+                boolean got = false;
+                for (int f = 0; f < 30 * 40 && !got; f++) {
+                    budget.setFloat(w, 3);
+                    float px = e.x, py = e.y;
+                    walk.invoke(w, e, far[0], far[1], e.speed);
+                    move.invoke(w, e, 1 / 30f);
+                    jump = Math.max(jump, (float) Math.hypot(e.x - px, e.y - py));
+                    got = Math.hypot(e.x - far[0], e.y - far[1]) < 5;
+                }
+                check(got, "walked in through the door to the far room (" + (int) Math.hypot(e.x - far[0], e.y - far[1]) + " short)");
+                boolean out = false;
+                for (int f = 0; f < 30 * 40 && !out; f++) {
+                    budget.setFloat(w, 3);
+                    float px = e.x, py = e.y;
+                    walk.invoke(w, e, start[0], start[1], e.speed);
+                    move.invoke(w, e, 1 / 30f);
+                    jump = Math.max(jump, (float) Math.hypot(e.x - px, e.y - py));
+                    out = Math.hypot(e.x - start[0], e.y - start[1]) < 5;
+                }
+                check(out, "and back out to the street");
+                check(jump < 3, "on foot all the way, no jumps (" + jump + ")");
+                e.dead = true;
+                e.removed = true;
+                // An ordinary day: people go in and out of buildings and are there inside, never taken off the map.
+                int entered = 0, left = 0, seenInside = 0;
+                java.util.IdentityHashMap<Entity, Boolean> was = new java.util.IdentityHashMap<Entity, Boolean>();
+                for (int f = 0; f < 30 * 60; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (f % 15 != 0) continue;
+                    for (Entity o : w.entities) {
+                        if (o.dead) continue;
+                        boolean in = city.insideOf(o.x, o.y) != null;
+                        Boolean prev = was.put(o, in);
+                        if (prev != null && !prev && in) entered++;
+                        if (prev != null && prev && !in) left++;
+                    }
+                }
+                for (Entity o : w.entities) if (!o.dead && city.insideOf(o.x, o.y) != null) seenInside++;
+                int listed = 0;
+                for (City.Building o : city.buildings) listed += o.visitors.size() + o.occupants.size();
+                check(entered > 30 && left > 10, "people walk in and out (" + entered + " in, " + left + " out)");
+                check(seenInside > 10 && listed == 0, "there inside, on the map (" + seenInside + "), nobody vanished into a building (" + listed + ")");
+                w.countInside();
+                int over = 0;
+                for (City.Building o : w.occupied) if (o.inside > World.room(o) * 2) over++;
+                check(over == 0, "no building packed past its room (" + over + ")");
+                // One of the dead after someone who's gone inside: in it goes after them.
+                Entity v = null;
+                for (Entity o : w.entities)
+                    if (!o.dead && o.type == Entity.CIVILIAN && o.stayIn != null && city.insideOf(o.x, o.y) == o.stayIn) {
+                        v = o;
+                        break;
+                    }
+                check(v != null, "someone inside");
+                City.Building vb = city.insideOf(v.x, v.y);
+                Entity z = w.spawn(Entity.ZOMBIE, vb.doorX, vb.doorY);
+                z.memory = 10;
+                z.lastX = v.x;
+                z.lastY = v.y;
+                boolean zin = false;
+                for (int f = 0; f < 30 * 15 && !zin && !z.dead; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    zin = city.insideOf(z.x, z.y) == vb;
+                }
+                check(zin, "the dead follow them in through the door");
             }
         });
         test("every screen draws", new Check() {

@@ -95,6 +95,16 @@ final class City {
         float builtHeight;
         int builtCapacity;
         transient float rebuildT;
+        /**
+         * ((17.1) Walking in: whether people can (0 not worked out yet, 1 yes, 2 no), its floor plan, its walls as
+         * {x0, y0, x1, y1} after each other (the outside walls with a gap for the door, and the rooms'), where the
+         * doorway is from inside and out, and how many are in it now.)
+         */
+        transient byte enter;
+        transient Interiors.Plan plan;
+        transient float[] walls;
+        transient float inX, inY, gapX, gapY;
+        transient int inside;
         final int roof, wall, seed, kind;
         /** Civilians can hide inside homes, offices and warehouses: the door, room and barricade. */
         float doorX, doorY, barricade = 100, calmTimer, releaseTimer;
@@ -12340,11 +12350,246 @@ final class City {
     }
 
     boolean solidAt(float x, float y) {
-        return solidTile(City.fl(x / T), City.fl(y / T));
+        int tx = City.fl(x / T), ty = City.fl(y / T);
+        if (!solidTile(tx, ty)) return false;
+        // ((17.1) Inside a building people can walk into: only where its walls are.)
+        if (tx >= 0 && ty >= 0 && tx < w && ty < h && tiles[ty * w + tx] == BUILDING) {
+            Building b = enterableTile(tx, ty);
+            if (b != null) return wallHit(b, x, y, 1.3f);
+        }
+        return true;
     }
 
     /** Radius of a tree trunk, for walking into. */
     static final float TRUNK = 2.5f;
+
+    // ------------------------------------------------------------------ (17.1) walking into buildings
+
+    /** The doorways: wide enough for anyone to get through, the biggest of the dead included. */
+    static final float DOOR_W = 13, WALL_HALF = 1.2f;
+
+    /**
+     * Can people walk into it: a building of its own (not a wing, not rubble) with an inside to it, big enough for a
+     * room or two. Its walls are worked out the first time it's asked.
+     */
+    boolean enterable(Building b) {
+        if (b == null || b.collapsed || b.main != null) return false;
+        if (b.enter == 0) {
+            boolean ok = b.capacity > 0 && b.x1 - b.x0 >= 28 && b.y1 - b.y0 >= 28 && Interiors.insideOf(b) >= 0 && b.doorX > 0;
+            if (ok) ok = buildWalls(b);
+            b.enter = ok ? (byte) 1 : (byte) 2;
+        }
+        return b.enter == 1;
+    }
+
+    /** The building whose inside (x, y) is in, if people can walk in there; else null. */
+    Building insideOf(float x, float y) {
+        int tx = City.fl(x / T), ty = City.fl(y / T);
+        if (tx < 0 || ty < 0 || tx >= w || ty >= h) return null;
+        int i = buildingAt.get(ty * w + tx);
+        if (i < 0) return null;
+        Building b = buildings.get(i);
+        if (!enterable(b) || x <= b.x0 + 1 || x >= b.x1 - 1 || y <= b.y0 + 1 || y >= b.y1 - 1) return null;
+        return b;
+    }
+
+    /** An enterable building on this tile, or null. */
+    private Building enterableTile(int tx, int ty) {
+        if (tx < 0 || ty < 0 || tx >= w || ty >= h) return null;
+        int i = buildingAt.get(ty * w + tx);
+        if (i < 0) return null;
+        Building b = buildings.get(i);
+        return enterable(b) ? b : null;
+    }
+
+    Interiors.Plan planOf(Building b) {
+        if (b.plan == null) {
+            int inside = Interiors.insideOf(b);
+            if (inside < 0) return null;
+            b.plan = Interiors.make(b, inside);
+        }
+        return b.plan;
+    }
+
+    /** The outside walls, with the doorway on the side the door is, and the walls between the rooms. */
+    private boolean buildWalls(Building b) {
+        Interiors.Plan p = planOf(b);
+        if (p == null) return false;
+        float x0 = b.x0 + 1, y0 = b.y0 + 1, x1 = b.x1 - 1, y1 = b.y1 - 1;
+        float dx = b.doorX, dy = b.doorY;
+        // Which side the door is on: the one it's furthest beyond.
+        float[] over = {y0 - dy, dy - y1, x0 - dx, dx - x1};
+        int side = 0;
+        for (int k = 1; k < 4; k++) if (over[k] > over[side]) side = k;
+        if (over[side] < -4) return false;
+        boolean across = side < 2;
+        float lo = (across ? x0 : y0) + DOOR_W / 2 + 2, hi = (across ? x1 : y1) - DOOR_W / 2 - 2;
+        if (hi < lo) return false;
+        float g = Math.max(lo, Math.min(hi, across ? dx : dy));
+        java.util.ArrayList<float[]> segs = new java.util.ArrayList<float[]>();
+        float[][] edges = {{x0, y0, x1, y0}, {x0, y1, x1, y1}, {x0, y0, x0, y1}, {x1, y0, x1, y1}};
+        for (int k = 0; k < 4; k++) {
+            float[] e = edges[k];
+            if (k != side) {
+                segs.add(e);
+                continue;
+            }
+            if (across) {
+                segs.add(new float[]{x0, e[1], g - DOOR_W / 2, e[1]});
+                segs.add(new float[]{g + DOOR_W / 2, e[1], x1, e[1]});
+            } else {
+                segs.add(new float[]{e[0], y0, e[0], g - DOOR_W / 2});
+                segs.add(new float[]{e[0], g + DOOR_W / 2, e[0], y1});
+            }
+        }
+        float nx = side == 2 ? -1 : side == 3 ? 1 : 0, ny = side == 0 ? -1 : side == 1 ? 1 : 0;
+        float ex = across ? g : side == 2 ? x0 : x1, ey = across ? (side == 0 ? y0 : y1) : g;
+        // (A room's wall that would close the doorway off is left short of it.)
+        float keep = DOOR_W / 2 + 4;
+        for (float[] wl : p.walls) {
+            float[] q = wl.clone();
+            for (int end = 0; end < 2; end++) {
+                int i = end * 2, o = 2 - i;
+                float ddx = q[i] - ex, ddy = q[i + 1] - ey;
+                if (ddx * ddx + ddy * ddy >= keep * keep) continue;
+                float lx = q[o] - q[i], ly = q[o + 1] - q[i + 1], len = (float) Math.sqrt(lx * lx + ly * ly);
+                if (len < 14) {
+                    q = null;
+                    break;
+                }
+                q[i] += lx / len * 11;
+                q[i + 1] += ly / len * 11;
+            }
+            if (q != null) segs.add(q);
+        }
+        float[] all = new float[segs.size() * 4];
+        for (int i = 0; i < segs.size(); i++) System.arraycopy(segs.get(i), 0, all, i * 4, 4);
+        b.walls = all;
+        b.gapX = ex;
+        b.gapY = ey;
+        b.inX = ex - nx * 7;
+        b.inY = ey - ny * 7;
+        return true;
+    }
+
+    private static float segDist2(float px, float py, float ax, float ay, float bx, float by) {
+        float vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
+        float t = l2 <= 0 ? 0 : ((px - ax) * vx + (py - ay) * vy) / l2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        float qx = ax + vx * t - px, qy = ay + vy * t - py;
+        return qx * qx + qy * qy;
+    }
+
+    /** Does a circle touch any of a building's walls? */
+    boolean wallHit(Building b, float x, float y, float r) {
+        float[] wl = b.walls;
+        float rr = (r + WALL_HALF) * (r + WALL_HALF);
+        for (int i = 0; i < wl.length; i += 4) {
+            float ax = wl[i], ay = wl[i + 1], bx = wl[i + 2], by = wl[i + 3];
+            if (x + r + 2 < Math.min(ax, bx) || x - r - 2 > Math.max(ax, bx) || y + r + 2 < Math.min(ay, by) || y - r - 2 > Math.max(ay, by)) continue;
+            if (segDist2(x, y, ax, ay, bx, by) < rr) return true;
+        }
+        return false;
+    }
+
+    /** Does the line between two points cross one of a building's walls? */
+    boolean wallCross(Building b, float x0, float y0, float x1, float y1) {
+        float[] wl = b.walls;
+        for (int i = 0; i < wl.length; i += 4) {
+            float ax = wl[i], ay = wl[i + 1], bx = wl[i + 2], by = wl[i + 3];
+            float d1 = (bx - ax) * (y0 - ay) - (by - ay) * (x0 - ax), d2 = (bx - ax) * (y1 - ay) - (by - ay) * (x1 - ax);
+            if ((d1 > 0) == (d2 > 0)) continue;
+            float d3 = (x1 - x0) * (ay - y0) - (y1 - y0) * (ax - x0), d4 = (x1 - x0) * (by - y0) - (y1 - y0) * (bx - x0);
+            if ((d3 > 0) != (d4 > 0)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The way from one point in a building to another through its doorways, as the points to walk to in turn (the
+     * last is the end). The building's own doorway counts as a point outside it ((gapX, gapY) pushed out).
+     */
+    float[] roomRoute(Building b, float sx, float sy, float tx, float ty) {
+        Interiors.Plan p = planOf(b);
+        java.util.ArrayList<float[]> a = toEntrance(b, p, sx, sy), c = toEntrance(b, p, tx, ty);
+        // Drop the shared tail: where the two ways to the entrance meet.
+        int ia = a.size() - 1, ic = c.size() - 1;
+        while (ia >= 0 && ic >= 0 && a.get(ia) == c.get(ic)) {
+            ia--;
+            ic--;
+        }
+        int n = (ia + 1) + (ic + 1) + 1;
+        float[] out = new float[n * 2];
+        int k = 0;
+        for (int i = 0; i <= ia; i++) {
+            out[k++] = a.get(i)[0];
+            out[k++] = a.get(i)[1];
+        }
+        for (int i = ic; i >= 0; i--) {
+            out[k++] = c.get(i)[0];
+            out[k++] = c.get(i)[1];
+        }
+        out[k++] = tx;
+        out[k] = ty;
+        return out;
+    }
+
+    /** The doorways from a point's room out to the building's entrance (the entrance itself last). */
+    private java.util.ArrayList<float[]> toEntrance(Building b, Interiors.Plan p, float x, float y) {
+        java.util.ArrayList<float[]> out = new java.util.ArrayList<float[]>();
+        float[] entrance = b.plan == p && p.entrance != null ? p.entrance : (p.entrance = new float[]{b.inX, b.inY});
+        for (int guard = 0; guard < 24; guard++) {
+            int r = roomAt(p, x, y);
+            if (r < 0) break;
+            float[] room = p.rooms.get(r);
+            if (p.doorOf == null) p.doorOf = new float[p.rooms.size()][];
+            if (p.doorOf[r] == null) p.doorOf[r] = new float[]{room[5], room[6]};
+            float[] d = p.doorOf[r];
+            // (This room's door is the building's own: out there.)
+            if (Math.abs(d[0] - clampX(b, b.doorX)) < 6 && Math.abs(d[1] - clampY(b, b.doorY)) < 6 || roomHasEntrance(b, room)) break;
+            out.add(d);
+            // Across the doorway, into the next room.
+            float cx = (room[0] + room[2]) / 2, cy = (room[1] + room[3]) / 2;
+            float ox = d[0] - cx, oy = d[1] - cy;
+            if (Math.abs(ox) * (room[3] - room[1]) > Math.abs(oy) * (room[2] - room[0])) {
+                x = d[0] + (ox > 0 ? 4 : -4);
+                y = d[1];
+            } else {
+                x = d[0];
+                y = d[1] + (oy > 0 ? 4 : -4);
+            }
+        }
+        out.add(entrance);
+        return out;
+    }
+
+    private static float clampX(Building b, float x) {
+        return Math.max(b.x0 + 6, Math.min(b.x1 - 6, x));
+    }
+
+    private static float clampY(Building b, float y) {
+        return Math.max(b.y0 + 6, Math.min(b.y1 - 6, y));
+    }
+
+    /** Is the building's entrance in this room's walls? */
+    private static boolean roomHasEntrance(Building b, float[] room) {
+        return b.inX >= room[0] - 1 && b.inX <= room[2] + 1 && b.inY >= room[1] - 1 && b.inY <= room[3] + 1;
+    }
+
+    static int roomAt(Interiors.Plan p, float x, float y) {
+        int best = -1;
+        float bd = Float.MAX_VALUE;
+        for (int i = 0, n = p.rooms.size(); i < n; i++) {
+            float[] r = p.rooms.get(i);
+            if (x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]) return i;
+            float ddx = Math.max(r[0] - x, Math.max(0, x - r[2])), ddy = Math.max(r[1] - y, Math.max(0, y - r[3]));
+            if (ddx + ddy < bd) {
+                bd = ddx + ddy;
+                best = i;
+            }
+        }
+        return best;
+    }
 
     /** True if a circle at (x, y) overlaps any solid tile or leaves the map. */
     boolean circleBlocked(float x, float y, float r) {
@@ -12359,9 +12604,20 @@ final class City {
         }
         int tx0 = City.fl((x - r) / T), tx1 = City.fl((x + r) / T);
         int ty0 = City.fl((y - r) / T), ty1 = City.fl((y + r) / T);
+        Building seen0 = null, seen1 = null;
         for (int ty = ty0; ty <= ty1; ty++) {
             for (int tx = tx0; tx <= tx1; tx++) {
                 if (!solidTile(tx, ty)) continue;
+                // ((17.1) A building people can walk into: only its walls are in the way.)
+                Building eb = tx >= 0 && ty >= 0 && tx < w && ty < h && tiles[ty * w + tx] == BUILDING ? enterableTile(tx, ty) : null;
+                if (eb != null) {
+                    if (eb != seen0 && eb != seen1) {
+                        if (wallHit(eb, x, y, r)) return true;
+                        if (seen0 == null) seen0 = eb;
+                        else seen1 = eb;
+                    }
+                    continue;
+                }
                 if (tx >= 0 && ty >= 0 && tx < w && ty < h && tiles[ty * w + tx] == TREE) {
                     // A tree is its trunk, not the whole tile: people slip between trees and slide round them.
                     float dx = x - (tx * T + T / 2f), dy = y - (ty * T + T / 2f), rr = r + TRUNK;
@@ -12432,10 +12688,20 @@ final class City {
         float dx = x1 - x0, dy = y1 - y0;
         float len = (float) Math.sqrt(dx * dx + dy * dy);
         int steps = (int) (len / 5f) + 1;
+        Building seen = null;
         for (int i = 1; i < steps; i++) {
             float f = i / (float) steps;
             int tx = City.fl((x0 + dx * f) / T), ty = City.fl((y0 + dy * f) / T);
-            if (tx < 0 || ty < 0 || tx >= w || ty >= h || opaque[ty * w + tx]) return false;
+            if (tx < 0 || ty < 0 || tx >= w || ty >= h) return false;
+            if (opaque[ty * w + tx]) {
+                // ((17.1) Into, out of or across a building people can walk into: through its doorways, not its walls.)
+                Building b = enterableTile(tx, ty);
+                if (b == null) return false;
+                if (b != seen) {
+                    seen = b;
+                    if (wallCross(b, x0, y0, x1, y1)) return false;
+                }
+            }
         }
         return true;
     }

@@ -2791,6 +2791,9 @@ final class GameView extends View implements Menu.Host {
             if (dotSeen == null || dotSeen.length < pw * ph) dotSeen = new int[pw * ph];
             dotFrame++;
         }
+        // ((17.1) The insides of buildings with people in them (and of every building, zoomed right in): floors, rooms
+        // and furniture, under the people walking about in them.)
+        if (detailed) drawInsides(c, vx0, vy0, vx1, vy1);
         // ((14.9) Mortar pits under their teams.)
         if (detailed)
             for (int i = 0, n = onScreen.size(); i < n; i++) {
@@ -3281,6 +3284,33 @@ final class GameView extends View implements Menu.Host {
     }
 
     /**
+     * (17.1) How see-through a building's roof and walls are: all buildings zoomed right in (as before), and any
+     * building people are in from a middling zoom, so you can watch them inside.
+     */
+    private float seeOf(City.Building b, float zoomSee) {
+        if (b.inside <= 0 || zoomSee >= 0.85f || b.enter != 1) return zoomSee;
+        return Math.max(zoomSee, 0.85f * Math.max(0, Math.min(1, (scale / dp - 1.1f) / 0.6f)));
+    }
+
+    private void drawInsides(Canvas c, float vx0, float vy0, float vx1, float vy1) {
+        float zoomSee = Math.max(0, Math.min(1, (scale / dp - 2.2f) / 1.3f));
+        if (zoomSee <= 0 && world.occupied.isEmpty()) return;
+        if (zoomSee > 0) {
+            for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
+                City.Building b = world.city.buildings.get(i);
+                if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
+                drawInterior(c, b, 1);
+            }
+            return;
+        }
+        for (int i = 0, n = world.occupied.size(); i < n; i++) {
+            City.Building b = world.occupied.get(i);
+            if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
+            if (seeOf(b, 0) > 0) drawInterior(c, b, 1);
+        }
+    }
+
+    /**
      * Draws trees and buildings standing up, GTA 2 style: a camera hangs above the middle of the screen,
      * so anything tall leans away from the centre and you see the walls that face the camera.
      */
@@ -3292,9 +3322,8 @@ final class GameView extends View implements Menu.Host {
         float camH = Math.max(Math.max(getWidth(), getHeight()) / scale * 0.9f,
                 Math.max(260f, world.city.maxHeight * 1.7f));
         boolean in3d = settings.buildings3d();
-        // ((16.13) No looking inside any more: the roofs and walls stay solid however close you zoom, and the trees
-        // don't fade. (It was where the floor plans and furniture were drawn.))
-        final float see = 0;
+        // Zoomed right in, roofs (and walls) turn see-through so you can look inside.
+        float see = Math.max(0, Math.min(1, (scale / dp - 2.2f) / 1.3f));
 
         float ts = in3d ? camH / (camH - City.TREE_HEIGHT) : 1f;
         // (The trees are sorted top to bottom: just the rows that can be on screen.)
@@ -3348,8 +3377,9 @@ final class GameView extends View implements Menu.Host {
                 if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
                 drawDamage(c, b, b.x0, b.y0, b.x1, b.y1, 1);
                 if (b.flash > 0) drawGunGlow(c, b, b.x0, b.y0, b.x1, b.y1);
+                // ((17.1) The inside is drawn under everyone now (drawInsides).)
                 // (The lettering isn't in the ground bitmap any more: it's drawn here, sharp at any zoom.)
-                drawRoofLabels(c, b, cx, cy, 1, 1 - 0.82f * see);
+                drawRoofLabels(c, b, cx, cy, 1, 1 - 0.82f * seeOf(b, see));
             }
             return;
         }
@@ -3392,6 +3422,9 @@ final class GameView extends View implements Menu.Host {
             float s = camH / (camH - b.height);
             float rx0 = cx + (b.x0 - cx) * s, rx1 = cx + (b.x1 - cx) * s;
             float ry0 = cy + (b.y0 - cy) * s, ry1 = cy + (b.y1 - cy) * s;
+            // ((17.1) Its inside was drawn under everyone (drawInsides); see-through by the building.)
+            float sb = seeOf(b, see);
+            wallFade = 1 - 0.55f * sb;
             if (cy < b.y0) drawWall(c, b, b.x0, b.y0, b.x1, b.y0, rx0, ry0, rx1, ry0, 0.8f, windows, 0);
             if (cy > b.y1) drawWall(c, b, b.x1, b.y1, b.x0, b.y1, rx1, ry1, rx0, ry1, 0.52f, windows, 1);
             if (cx < b.x0) drawWall(c, b, b.x0, b.y1, b.x0, b.y0, rx0, ry1, rx0, ry0, 0.9f, windows, 2);
@@ -3401,14 +3434,14 @@ final class GameView extends View implements Menu.Host {
             roofDst.set(rx0, ry0, rx1, ry1);
             // ((10.53) All the way off when zoomed right in: a faint ghost of the roof - its skylights and plant - lay
             // blurred over the rooms.)
-            float roofA = 1 - see;
+            float roofA = 1 - sb;
             bmpPaint.setAlpha((int) (255 * roofA));
             c.drawBitmap(world.city.bitmap, roofSrc, roofDst, bmpPaint);
             bmpPaint.setAlpha(255);
             if (roofA >= 0.999f) sharpRoof(c, b, s, cx, cy);
             drawDamage(c, b, rx0, ry0, rx1, ry1, roofA);
             if (b.flash > 0) drawGunGlow(c, b, rx0, ry0, rx1, ry1);
-            drawRoofLabels(c, b, cx, cy, s, 1 - 0.82f * see);
+            drawRoofLabels(c, b, cx, cy, s, 1 - 0.82f * sb);
         }
         wallFade = 1;
     }
@@ -3712,6 +3745,568 @@ final class GameView extends View implements Menu.Host {
         }
     }
 
+    /** What you see through a see-through roof: the floor, rooms, furniture and anyone hiding inside. */
+    private int ihash;
+    private float ia;
+
+    /** The next number from the building's own sequence, 0 to 1 (so its furniture never moves). */
+    private float irand() {
+        ihash = ihash * 1103515245 + 12345;
+        // ((16.12) Up to just under 1, never 1 itself: over 65535 it came to exactly 1 one time in 65536, and a pick
+        // from a list by it (the colours of the goods on a supermarket's shelves) went one past the end and the game
+        // stopped.)
+        return ((ihash >>> 8) & 0xFFFF) / 65536f;
+    }
+
+    private void box(Canvas c, float l, float t, float r, float b, int color) {
+        fill.setColor(alpha(color, ia));
+        c.drawRect(l, t, r, b, fill);
+    }
+
+    /**
+     * What you see through a see-through roof: the floor and furniture laid out for what the building is, the
+     * damage if it has been smashed or looted, and whoever (or whatever) is inside.
+     */
+    private void drawInterior(Canvas c, City.Building b, float a) {
+        float x0 = b.x0 + 1, y0 = b.y0 + 1, x1 = b.x1 - 1, y1 = b.y1 - 1, w = x1 - x0, h = y1 - y0;
+        ia = a;
+        ihash = b.seed * 69069 + 7;
+        boolean wide = w >= h;
+        int k = b.kind;
+        int floorCol;
+        switch (k) {
+            case City.HOUSE: case City.BARN: floorCol = 0xFFB8946A; break;
+            case City.APARTMENT: floorCol = 0xFFA88A6A; break;
+            case City.CHURCH: case City.SPIRE: case City.CRYPT: floorCol = 0xFF9C8C76; break;
+            case City.MARKET: case City.KIOSK: case City.PHARMACY: case City.MALL: floorCol = 0xFFDCDCD4; break;
+            case City.HOSPITAL: floorCol = 0xFFD8E2E6; break;
+            case City.WAREHOUSE: case City.POWER: case City.GARAGE: case City.FIRE_STATION: case City.WORKS: floorCol = 0xFF8A8A84; break;
+            case City.BARRACKS: case City.TOWER: floorCol = 0xFF7E806E; break;
+            case City.STATION: floorCol = 0xFFB4B8BE; break;
+            case City.SCHOOL: floorCol = 0xFFC8B89A; break;
+            case City.SHOP: floorCol = b.shopType == 2 ? 0xFFD8D0C0 : 0xFFC8C0B0; break;
+            default: floorCol = 0xFFC4BFB4; break;
+        }
+        box(c, x0, y0, x1, y1, floorCol);
+        int dark = City.darken(floorCol, 0.62f);
+        int inside = Interiors.insideOf(b);
+        Interiors.Plan plan = inside >= 0 ? planOf(b, inside) : null;
+        if (plan != null) {
+            planWalls = world.city.enterable(b) ? b.walls : null;
+            drawPlan(c, plan, a);
+            planWalls = null;
+            // (10.53) Windows along the outside walls, a pane every few steps (none on a warehouse or a barn).
+            if (k != City.WAREHOUSE && k != City.BARN && k != City.GARAGE) {
+                fill.setColor(alpha(0xFF9CC4DA, a));
+                float pane = 4.5f, step = 10;
+                for (float u = x0 + 4; u + pane < x1 - 3; u += step) {
+                    c.drawRect(u, y0 - 0.6f, u + pane, y0 + 0.9f, fill);
+                    c.drawRect(u, y1 - 0.9f, u + pane, y1 + 0.6f, fill);
+                }
+                for (float u = y0 + 4; u + pane < y1 - 3; u += step) {
+                    c.drawRect(x0 - 0.6f, u, x0 + 0.9f, u + pane, fill);
+                    c.drawRect(x1 - 0.9f, u, x1 + 0.6f, u + pane, fill);
+                }
+            }
+        }
+        else switch (k) {
+            case City.HOUSE: case City.APARTMENT: {
+                // Rooms: a kitchen, a living room with a sofa and rug, bedrooms, a bathroom.
+                float mx = x0 + w * (0.45f + irand() * 0.1f), my = y0 + h * (0.45f + irand() * 0.1f);
+                box(c, x0 + 2, y0 + 2, mx - 2, y0 + 5, 0xFFE8E4DA); // kitchen counter
+                box(c, x0 + 2, y0 + 2, x0 + 5, my - 2, 0xFFE8E4DA);
+                box(c, mx + 3, y0 + 3, Math.min(x1 - 3, mx + 12), y0 + 10, 0xFF8A3A3A); // rug
+                box(c, mx + 3, y0 + 2, Math.min(x1 - 3, mx + 12), y0 + 5, 0xFF4E5A7A); // sofa
+                box(c, x0 + 3, my + 3, x0 + 11, my + 13, 0xFFE8E8F0); // bed
+                box(c, x0 + 3, my + 3, x0 + 11, my + 6, 0xFFB0C0E0);
+                box(c, x1 - 9, y1 - 7, x1 - 2, y1 - 2, 0xFFF4F4F4); // bath
+                stroke.setColor(alpha(City.darken(b.wall, 0.7f), a));
+                stroke.setStrokeWidth(1.2f);
+                c.drawLine(mx, y0, mx, my - 4, stroke);
+                c.drawLine(mx, my + 4, mx, y1, stroke);
+                c.drawLine(x0, my, mx - 4, my, stroke);
+                c.drawLine(mx + 4, my, x1, my, stroke);
+                break;
+            }
+            case City.SHOP: case City.KIOSK: case City.PHARMACY: {
+                if (k == City.SHOP && b.shopType == 2) {
+                    // Diner: booths along the wall, a counter with stools.
+                    for (float t = 3; t < (wide ? w : h) - 8; t += 9) {
+                        float u = (wide ? x0 : y0) + t;
+                        if (wide) {
+                            box(c, u, y0 + 2, u + 7, y0 + 4, 0xFFB83A30);
+                            box(c, u + 1, y0 + 4, u + 6, y0 + 8, 0xFFE8E0D0);
+                            box(c, u, y0 + 8, u + 7, y0 + 10, 0xFFB83A30);
+                        } else {
+                            box(c, x0 + 2, u, x0 + 4, u + 7, 0xFFB83A30);
+                            box(c, x0 + 4, u + 1, x0 + 8, u + 6, 0xFFE8E0D0);
+                            box(c, x0 + 8, u, x0 + 10, u + 7, 0xFFB83A30);
+                        }
+                    }
+                    box(c, wide ? x0 + 3 : x1 - 6, wide ? y1 - 6 : y0 + 3, wide ? x1 - 3 : x1 - 3, wide ? y1 - 3 : y1 - 3, 0xFF6A4A30);
+                } else if (k == City.SHOP && b.shopType == 1) {
+                    // Gun store: display cases and racks of rifles on the walls.
+                    for (float t = 4; t < (wide ? w : h) - 4; t += 5) {
+                        float u = (wide ? x0 : y0) + t;
+                        if (b.stock > 0 || irand() < 0.2f) {
+                            if (wide) box(c, u, y0 + 2, u + 1, y0 + 9, 0xFF2A2A2A);
+                            else box(c, x0 + 2, u, x0 + 9, u + 1, 0xFF2A2A2A);
+                        }
+                    }
+                    box(c, x0 + w * 0.2f, y0 + h * 0.55f, x0 + w * 0.8f, y0 + h * 0.55f + 4, 0xFF9CC3D9);
+                } else {
+                    // Shelves round the walls, a counter and till by the door.
+                    int shelf = k == City.PHARMACY ? 0xFFF2F2F2 : dark;
+                    box(c, x0 + 2, y0 + 2, x1 - 2, y0 + 4, shelf);
+                    box(c, x0 + 2, y0 + 2, x0 + 4, y1 - 2, shelf);
+                    box(c, x1 - 4, y0 + 2, x1 - 2, y1 - 2, shelf);
+                    // Goods on the top shelf (fewer once the place has been looted).
+                    int[] goods = {0xFFE05050, 0xFF5080E0, 0xFFE0C050, 0xFF50B060};
+                    for (float u = x0 + 3; u < x1 - 3; u += 2.5f)
+                        if (!b.looted || irand() < 0.2f) box(c, u, y0 + 2.3f, u + 1.6f, y0 + 3.8f, goods[(int) (irand() * 4) % 4]);
+                    box(c, x0 + w * 0.3f, y1 - 7, x0 + w * 0.7f, y1 - 4, 0xFF6A4A30);
+                }
+                break;
+            }
+            case City.MARKET: case City.MALL: {
+                // Aisles of colourful shelves, checkouts at the front. The mall has a fountain in its atrium.
+                int[] goods = {0xFFE05050, 0xFF5080E0, 0xFFE0C050, 0xFF50B060, 0xFFE08840};
+                for (float t = y0 + 8; t < y1 - 12; t += 9) {
+                    box(c, x0 + 8, t, x1 - 8, t + 3, dark);
+                    for (float u = x0 + 9; u < x1 - 9; u += 3)
+                        box(c, u, t + 0.5f, u + 2, t + 2.5f, goods[(int) (irand() * goods.length)]);
+                }
+                for (float u = x0 + 8; u < x1 - 10; u += 12) box(c, u, y1 - 9, u + 6, y1 - 6, 0xFF5A5E66);
+                if (k == City.MALL) {
+                    float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+                    box(c, cx - 14, cy - 14, cx + 14, cy + 14, 0xFFE8E4DA);
+                    fill.setColor(alpha(0xFF6FA8DC, a));
+                    c.drawCircle(cx, cy, 8, fill);
+                }
+                break;
+            }
+            case City.HOSPITAL: {
+                // Wards: rows of beds with blue sheets, a nurses' station.
+                for (float t = y0 + 4; t < y1 - 10; t += 11)
+                    for (float u = x0 + 4; u < x1 - 8; u += 10) {
+                        box(c, u, t, u + 6, t + 8, 0xFFF4F4F4);
+                        box(c, u, t + 3, u + 6, t + 8, 0xFF7AA8D8);
+                    }
+                box(c, x0 + w * 0.4f, y1 - 8, x0 + w * 0.6f, y1 - 3, 0xFFD83A3A);
+                break;
+            }
+            case City.STATION: {
+                // Desks up front, holding cells with bars at the back.
+                for (float u = x0 + 5; u < x1 - 8; u += 10) box(c, u, y1 - 12, u + 6, y1 - 8, dark);
+                float cy = y0 + h * 0.35f;
+                box(c, x0 + 2, y0 + 2, x1 - 2, cy, 0xFF9A9EA4);
+                stroke.setColor(alpha(0xFF3A3E44, a));
+                stroke.setStrokeWidth(0.6f);
+                for (float u = x0 + 3; u < x1 - 2; u += 2.5f) c.drawLine(u, cy - 2, u, cy, stroke);
+                for (float u = x0 + w / 3; u < x1 - 2; u += w / 3) c.drawLine(u, y0 + 2, u, cy, stroke);
+                break;
+            }
+            case City.SCHOOL: {
+                // Classrooms of little desks facing the board.
+                for (float t = y0 + 6; t < y1 - 6; t += 7)
+                    for (float u = x0 + 6; u < x1 - 6; u += 7) box(c, u, t, u + 4, t + 3, 0xFFB08A5A);
+                box(c, x0 + 3, y0 + 2, x0 + w * 0.5f, y0 + 3.5f, 0xFF2E4A36);
+                break;
+            }
+            case City.CHURCH: case City.SPIRE: {
+                for (float t = 6; t < (wide ? w : h) - 8; t += 5) {
+                    if (wide) {
+                        box(c, x0 + t, y0 + 4, x0 + t + 2, y0 + h / 2 - 3, dark);
+                        box(c, x0 + t, y0 + h / 2 + 3, x0 + t + 2, y1 - 4, dark);
+                    } else {
+                        box(c, x0 + 4, y0 + t, x0 + w / 2 - 3, y0 + t + 2, dark);
+                        box(c, x0 + w / 2 + 3, y0 + t, x1 - 4, y0 + t + 2, dark);
+                    }
+                }
+                box(c, wide ? x1 - 6 : x0 + w / 2 - 4, wide ? y0 + h / 2 - 4 : y1 - 6, wide ? x1 - 3 : x0 + w / 2 + 4,
+                        wide ? y0 + h / 2 + 4 : y1 - 3, 0xFFE8D24A);
+                break;
+            }
+            case City.WAREHOUSE: case City.BARN: {
+                // Pallets and crates (hay bales in a barn), and a forklift.
+                int crate = k == City.BARN ? 0xFFD8B860 : 0xFFA0784A;
+                for (float t = y0 + 4; t < y1 - 8; t += 9)
+                    for (float u = x0 + 4; u < x1 - 8; u += 9)
+                        if (irand() < 0.7f) box(c, u, t, u + 6, t + 6, crate);
+                box(c, x0 + w * 0.6f, y1 - 9, x0 + w * 0.6f + 5, y1 - 4, 0xFFE8B830);
+                break;
+            }
+            case City.BARRACKS: {
+                for (float t = y0 + 3; t < y1 - 6; t += 7)
+                    for (float u = x0 + 3; u < x1 - 9; u += 11) {
+                        box(c, u, t, u + 8, t + 4, 0xFF5B6B3A);
+                        box(c, u, t, u + 2, t + 4, 0xFFE8E8E0);
+                    }
+                break;
+            }
+            case City.POWER: {
+                for (int n = 0; n < 3; n++) {
+                    fill.setColor(alpha(0xFF6A7078, a));
+                    c.drawCircle(x0 + w * (0.2f + n * 0.3f), (y0 + y1) / 2, Math.min(w, h) * 0.14f, fill);
+                    fill.setColor(alpha(0xFF9AA0A8, a));
+                    c.drawCircle(x0 + w * (0.2f + n * 0.3f), (y0 + y1) / 2, Math.min(w, h) * 0.07f, fill);
+                }
+                break;
+            }
+            default: {
+                // Offices: desk clusters with glowing screens, a meeting room and a few plants.
+                for (float t = y0 + 5; t < y1 - 8; t += 12)
+                    for (float u = x0 + 5; u < x1 - 10; u += 13) {
+                        if (irand() < 0.2f) continue;
+                        box(c, u, t, u + 8, t + 4, dark);
+                        box(c, u + 1, t + 0.5f, u + 3, t + 1.5f, 0xFF7FB0D8);
+                        box(c, u + 5, t + 0.5f, u + 7, t + 1.5f, 0xFF7FB0D8);
+                    }
+                if (w > 30 && h > 30) {
+                    stroke.setColor(alpha(0xFF9CC3D9, a));
+                    stroke.setStrokeWidth(1f);
+                    c.drawRect(x1 - w * 0.3f, y0 + 2, x1 - 2, y0 + h * 0.3f, stroke);
+                }
+                for (int n = 0; n < 3; n++) {
+                    fill.setColor(alpha(0xFF3E8A34, a));
+                    c.drawCircle(x0 + 3 + irand() * (w - 6), y0 + 3 + irand() * (h - 6), 1.8f, fill);
+                }
+                break;
+            }
+        }
+        // Damage: overturned shelves and litter after looting, glass inside smashed shop windows, blood where
+        // zombies have been.
+        if (b.looted || b.smashed) {
+            for (int n = 0; n < 8; n++) {
+                float px = x0 + 3 + irand() * (w - 6), py = y0 + 3 + irand() * (h - 6);
+                box(c, px, py, px + 2 + irand() * 3, py + 1 + irand() * 2, n % 2 == 0 ? dark : 0xFFE0D8C8);
+            }
+        }
+        if (b.lurkers > 0 || b.infestKnown) {
+            for (int n = 0; n < 5; n++) {
+                fill.setColor(alpha(0x996E0A0A, a));
+                c.drawCircle(x0 + 3 + irand() * (w - 6), y0 + 3 + irand() * (h - 6), 1.5f + irand() * 2.5f, fill);
+            }
+        }
+        stroke.setColor(alpha(City.darken(b.wall, 0.6f), a));
+        stroke.setStrokeWidth(2f);
+        oval.set(x0, y0, x1, y1);
+        c.drawRect(oval, stroke);
+        if (a < 0.5f) return;
+        // The people inside, each at their own spot (a seat, a desk, a bed...), moving between them now
+        // and then. Whoever doesn't fit on the ground floor is upstairs.
+        java.util.ArrayList<float[]> spots = plan != null ? plan.spots : looseSpots(b, x0, y0, x1, y1);
+        int ns = spots.size();
+        if (b.fighting && ns > 1) {
+            drawFightInside(c, b, spots, a);
+            return;
+        }
+        for (int i = 0, n = Math.min(ns, b.occupants.size() + b.visitors.size()); i < n; i++) {
+            Entity o = i < b.occupants.size() ? b.occupants.get(i) : b.visitors.get(i - b.occupants.size());
+            placeInside(o, i, b, spots, plan);
+            o.aiming = false;
+            drawEntity(c, o, false);
+        }
+        // Zombies waiting in the dark: only a close look through the roof gives them away.
+        for (int i = 0; i < b.lurkers; i++) {
+            float lx = x0 + 5 + ((b.seed * 31 + i * 57) % Math.max(1, (int) (w - 10)));
+            float ly = y0 + 5 + ((b.seed * 17 + i * 43) % Math.max(1, (int) (h - 10)));
+            float sway = (float) Math.sin(world.time * 1.5f + i) * 1.2f;
+            fill.setColor(alpha(0xFF3E5A2A, a * 0.75f));
+            c.drawCircle(lx + sway, ly, 3.4f, fill);
+            fill.setColor(alpha(0xFF7C9A5E, a * 0.75f));
+            c.drawCircle(lx + sway + 0.4f, ly, 2f, fill);
+        }
+    }
+
+    private Entity[] puppets;
+    private final java.util.HashMap<City.Building, Integer[]> byDoor = new java.util.HashMap<City.Building, Integer[]>();
+
+    /**
+     * A fight inside, seen through the roof: the dead have the rooms by the door, the people inside are
+     * pushed back to the far end, facing them, with guns flashing.
+     */
+    private void drawFightInside(Canvas c, final City.Building b, final java.util.ArrayList<float[]> spots, float a) {
+        Integer[] order = doorOrder(b, spots);
+        if (puppets == null) {
+            puppets = new Entity[10];
+            for (int i = 0; i < puppets.length; i++) puppets[i] = world.puppetZombie(i);
+        }
+        int ns = order.length;
+        int dead = Math.min(Math.min(puppets.length, b.lurkers), Math.max(1, ns / 2));
+        float fx = 0, fy = 0;
+        for (int i = 0; i < dead; i++) {
+            float[] sp = spots.get(order[i]);
+            Entity z = puppets[i];
+            // Shuffling forwards, pulled back, forwards again.
+            float lunge = (float) Math.sin(world.time * 2.2f + i * 1.7f) * 2.5f;
+            float[] far = spots.get(order[ns - 1]);
+            float dx = far[0] - sp[0], dy = far[1] - sp[1], d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            z.x = sp[0] + dx / d * lunge;
+            z.y = sp[1] + dy / d * lunge;
+            z.angle = (float) Math.atan2(dy, dx);
+            z.phase = world.time * 3 + i;
+            drawEntity(c, z, false);
+            fx += z.x;
+            fy += z.y;
+        }
+        if (dead > 0) {
+            fx /= dead;
+            fy /= dead;
+        }
+        int people = Math.min(b.occupants.size(), ns - dead);
+        for (int i = 0; i < people; i++) {
+            Entity o = b.occupants.get(i);
+            float[] sp = spots.get(order[ns - 1 - i]);
+            o.x = sp[0];
+            o.y = sp[1];
+            o.angle = (float) Math.atan2(fy - o.y, fx - o.x);
+            o.aiming = o.canShoot() && dead > 0;
+            drawEntity(c, o, false);
+            if (o.aiming && b.flash > 0 && (i & 1) == ((int) (world.time * 20) & 1)) {
+                float ca = (float) Math.cos(o.angle), sa = (float) Math.sin(o.angle);
+                fill.setColor(alpha(0xFFFFE08A, a));
+                c.drawCircle(o.x + ca * 7, o.y + sa * 7, 2.2f, fill);
+                stroke.setColor(alpha(0x99FFF2C0, a));
+                stroke.setStrokeWidth(0.6f);
+                c.drawLine(o.x + ca * 7, o.y + sa * 7, fx, fy, stroke);
+            }
+        }
+    }
+
+    private final java.util.HashMap<City.Building, Interiors.Plan> plans = new java.util.HashMap<City.Building, Interiors.Plan>();
+    private final java.util.HashMap<City.Building, java.util.ArrayList<float[]>> loose = new java.util.HashMap<City.Building, java.util.ArrayList<float[]>>();
+
+    private Interiors.Plan planOf(City.Building b, int inside) {
+        // ((17.1) The city's own: the same rooms and walls everyone walks through.)
+        return world.city.planOf(b);
+    }
+
+    /** (17.1) The walls to draw for the plan being drawn: the building's own, as people walk round them. */
+    private float[] planWalls;
+
+    /** Floors, furniture and inside walls of a floor plan. */
+    private void drawPlan(Canvas c, Interiors.Plan p, float a) {
+        // (10.53) Floors with a grain to them: boards in the homes and hotel rooms, tiles in the kitchens and
+        // bathrooms, carpet tiles in the offices; then the furniture standing up off them, the walls with their
+        // doors, and windows round the outside.
+        for (int i = 0, n = p.rooms.size(); i < n; i++) {
+            float[] r = p.rooms.get(i);
+            int kind = (int) r[4], col = Interiors.floorOf(kind);
+            box(c, r[0], r[1], r[2], r[3], col);
+            floorGrain(c, r[0], r[1], r[2], r[3], kind, col, a);
+        }
+        for (int i = 0, n = p.items.size(); i < n; i++) {
+            float[] it = p.items.get(i);
+            int col = (int) it[4];
+            if (it[5] > 0) {
+                float x = (it[0] + it[2]) / 2, y = (it[1] + it[3]) / 2, rad = (it[2] - it[0]) / 2;
+                fill.setColor(alpha(0x33000000, a));
+                c.drawCircle(x + 0.7f, y + 0.9f, rad, fill);
+                fill.setColor(alpha(col, a));
+                c.drawCircle(x, y, rad, fill);
+                fill.setColor(alpha(City.lighten(col, 0.25f), a));
+                c.drawCircle(x - rad * 0.3f, y - rad * 0.3f, rad * 0.45f, fill);
+            } else {
+                box(c, it[0] + 0.7f, it[1] + 0.9f, it[2] + 0.7f, it[3] + 0.9f, 0x33000000);
+                box(c, it[0], it[1], it[2], it[3], col);
+                // A lit edge along the top and left, a shaded one along the bottom: it stands up off the floor.
+                float e = Math.min(0.9f, Math.min(it[2] - it[0], it[3] - it[1]) * 0.18f);
+                if (e > 0.25f) {
+                    box(c, it[0], it[1], it[2], it[1] + e, City.lighten(col, 0.22f));
+                    box(c, it[0], it[1], it[0] + e, it[3], City.lighten(col, 0.12f));
+                    box(c, it[0], it[3] - e, it[2], it[3], City.darken(col, 0.78f));
+                }
+            }
+        }
+        // Walls: a dark edge and a lighter top, like a wall seen from above.
+        for (int pass = 0; pass < 2; pass++) {
+            stroke.setColor(alpha(pass == 0 ? 0xFF3A3430 : 0xFF6E655C, a));
+            stroke.setStrokeWidth(pass == 0 ? 1.6f : 0.7f);
+            // ((17.1) The walls people walk round, the outside ones with the doorway in them included.)
+            if (planWalls != null)
+                for (int i = 0; i + 3 < planWalls.length; i += 4) c.drawLine(planWalls[i], planWalls[i + 1], planWalls[i + 2], planWalls[i + 3], stroke);
+            else
+                for (int i = 0, n = p.walls.size(); i < n; i++) {
+                    float[] wl = p.walls.get(i);
+                    c.drawLine(wl[0], wl[1], wl[2], wl[3], stroke);
+                }
+        }
+        // Each room's door, swung open into it.
+        stroke.setColor(alpha(0x99584C40, a));
+        stroke.setStrokeWidth(0.5f);
+        for (int i = 0, n = p.rooms.size(); i < n; i++) {
+            float[] r = p.rooms.get(i);
+            if (r.length < 7 || r[5] <= 0) continue;
+            float dx = r[5], dy = r[6];
+            if (dx < r[0] - 3 || dx > r[2] + 3 || dy < r[1] - 3 || dy > r[3] + 3) continue;
+            // (Which wall it's in: the nearest edge of the room.)
+            float dl = Math.abs(dx - r[0]), dr = Math.abs(dx - r[2]), dt = Math.abs(dy - r[1]), db = Math.abs(dy - r[3]);
+            float m = Math.min(Math.min(dl, dr), Math.min(dt, db)), len = 3.2f;
+            float hx = dx, hy = dy, ox = 0, oy = 0;
+            if (m == dl) { hx = r[0]; ox = 1; }
+            else if (m == dr) { hx = r[2]; ox = -1; }
+            else if (m == dt) { hy = r[1]; oy = 1; }
+            else { hy = r[3]; oy = -1; }
+            float px = hx - oy * len * 0.5f, py = hy - ox * len * 0.5f;
+            c.drawLine(px, py, px + ox * len, py + oy * len, stroke);
+            int steps = 5;
+            float lx = px + ox * len, ly = py + oy * len;
+            for (int k = 1; k <= steps; k++) {
+                double an = Math.PI / 2 * k / steps;
+                float qx = px + (float) (ox * Math.cos(an) + oy * Math.sin(an)) * len, qy = py + (float) (oy * Math.cos(an) + ox * Math.sin(an)) * len;
+                c.drawLine(lx, ly, qx, qy, stroke);
+                lx = qx;
+                ly = qy;
+            }
+        }
+    }
+
+    /** (10.53) The look of a floor: boards, tiles or carpet squares, faintly lined over its colour. */
+    private void floorGrain(Canvas c, float x0, float y0, float x1, float y1, int kind, int col, float a) {
+        int style;
+        switch (kind) {
+            case Interiors.LIVING: case Interiors.BEDROOM: case Interiors.DINING: case Interiors.HOTELROOM:
+            case Interiors.BARROOM: case Interiors.BOOKS: case Interiors.DORMROOM: case Interiors.GYMFLOOR: style = 1; break;
+            case Interiors.KITCHEN: case Interiors.BATH: case Interiors.COOKING: case Interiors.LAUNDRY: case Interiors.BAKERY:
+            case Interiors.LAB: case Interiors.WARD: case Interiors.SALON: style = 2; break;
+            case Interiors.OPENPLAN: case Interiors.MEETING: case Interiors.CLASS: case Interiors.LOBBY: style = 3; break;
+            default: return;
+        }
+        float w = x1 - x0, h = y1 - y0;
+        if (w < 4 || h < 4) return;
+        stroke.setColor(alpha(City.darken(col, style == 2 ? 0.86f : 0.9f), a * (style == 3 ? 0.5f : 0.75f)));
+        stroke.setStrokeWidth(0.3f);
+        if (style == 1) {
+            // Boards along the room's long side, their ends staggered.
+            boolean along = w >= h;
+            float gap = 2.2f;
+            int row = 0;
+            for (float v = (along ? y0 : x0) + gap; v < (along ? y1 : x1); v += gap, row++) {
+                if (along) c.drawLine(x0, v, x1, v, stroke);
+                else c.drawLine(v, y0, v, y1, stroke);
+                float off = (row * 7.3f) % 9;
+                for (float u = (along ? x0 : y0) + off; u < (along ? x1 : y1); u += 9) {
+                    if (along) c.drawLine(u, v - gap, u, v, stroke);
+                    else c.drawLine(v - gap, u, v, u, stroke);
+                }
+            }
+        } else {
+            float g = style == 2 ? 3f : 6f;
+            for (float x = x0 + g; x < x1; x += g) c.drawLine(x, y0, x, y1, stroke);
+            for (float y = y0 + g; y < y1; y += g) c.drawLine(x0, y, x1, y, stroke);
+        }
+    }
+
+    /** Spots spread over the floor of a building without a plan (a warehouse floor, a barracks...). */
+    private java.util.ArrayList<float[]> looseSpots(City.Building b, float x0, float y0, float x1, float y1) {
+        java.util.ArrayList<float[]> s = loose.get(b);
+        if (s != null) return s;
+        if (loose.size() > 400) loose.clear();
+        s = new java.util.ArrayList<float[]>();
+        java.util.Random r = new java.util.Random(b.seed);
+        for (float y = y0 + 6; y < y1 - 4; y += 12)
+            for (float x = x0 + 6; x < x1 - 4; x += 12)
+                s.add(new float[]{x + r.nextFloat() * 4 - 2, y + r.nextFloat() * 4 - 2, 0, r.nextFloat() * 6.28f});
+        loose.put(b, s);
+        return s;
+    }
+
+    /**
+     * Where someone inside is right now: at one spot for a while, then walking to the next (through the
+     * doorways if it's in another room). Everyone in a building moves on the same beat to different spots,
+     * so nobody ends up on top of anyone else.
+     */
+    /** The spots inside a building, nearest the door first. */
+    private Integer[] doorOrder(final City.Building b, final java.util.ArrayList<float[]> spots) {
+        Integer[] order = byDoor.get(b);
+        if (order == null || order.length != spots.size()) {
+            if (byDoor.size() > 100) byDoor.clear();
+            order = new Integer[spots.size()];
+            for (int i = 0; i < order.length; i++) order[i] = i;
+            java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
+                public int compare(Integer p, Integer q) {
+                    float[] u = spots.get(p), v = spots.get(q);
+                    return Float.compare(Math.abs(u[0] - b.doorX) + Math.abs(u[1] - b.doorY), Math.abs(v[0] - b.doorX) + Math.abs(v[1] - b.doorY));
+                }
+            });
+            byDoor.put(b, order);
+        }
+        return order;
+    }
+
+    private void placeInside(Entity o, int i, City.Building b, java.util.ArrayList<float[]> spots, Interiors.Plan plan) {
+        int n = spots.size();
+        // ((11.5) The dead at the door: two of them put their backs to it (the strongest, or whoever has a gun),
+        // everyone else gets as far from it as the place allows and keeps still - no wandering from room to room.)
+        if (i < b.occupants.size() && b.barricade < 99 && b.calmTimer < 2 && n > 2) {
+            Integer[] order = doorOrder(b, spots);
+            float cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+            float ix = cx - b.doorX, iy = cy - b.doorY, il = (float) Math.sqrt(ix * ix + iy * iy) + 0.001f;
+            ix /= il;
+            iy /= il;
+            if (i < 2) {
+                float side = i == 0 ? 3.5f : -3.5f;
+                o.x = b.doorX + ix * 6 - iy * side;
+                o.y = b.doorY + iy * 6 + ix * side;
+                o.angle = (float) Math.atan2(-iy, -ix);
+                // (Shoving back as the door shakes.)
+                float shove = (float) Math.sin(world.time * 9 + i * 2) * (b.barricade < 50 ? 1.2f : 0.6f);
+                o.x -= ix * shove;
+                o.y -= iy * shove;
+                return;
+            }
+            float[] sp = spots.get(order[Math.max(0, n - 1 - (i - 2) % Math.max(1, n - 2))]);
+            o.x = sp[0];
+            o.y = sp[1];
+            o.angle = (float) Math.atan2(b.doorY - sp[1], b.doorX - sp[0]);
+            return;
+        }
+        // ((11.5) With the city under attack, those sheltering here move about a lot less.)
+        float cycle = (14 + (b.seed & 7)) * (world.alert >= 1 && i < b.occupants.size() ? 2.5f : 1);
+        float t = world.time + (b.seed & 255) * 0.13f;
+        int k = (int) (t / cycle);
+        float f = t / cycle - k;
+        int off = (b.seed >>> 4) & 1023;
+        float[] A = spots.get((i + k * 3 + off) % n), B = spots.get((i + (k + 1) * 3 + off) % n);
+        // Some stay put through a whole cycle (sitting at a desk, in bed, reading).
+        boolean stays = ((o.nameSeed >>> (k & 15)) & 3) == 0;
+        float walkFrom = 0.7f + ((o.nameSeed & 15) / 15f) * 0.12f;
+        if (stays || f < walkFrom || A == B) {
+            o.x = A[0];
+            o.y = A[1];
+            o.angle = A[3];
+            if (stays) {
+                B = A;
+            }
+            return;
+        }
+        float g = (f - walkFrom) / (1 - walkFrom);
+        float px, py, qx, qy;
+        if (plan != null && A[2] != B[2]) {
+            // Out through this room's doorway and in through the other's.
+            float[] ra = plan.rooms.get((int) A[2]), rb = plan.rooms.get((int) B[2]);
+            float[][] pts = {{A[0], A[1]}, {ra[5], ra[6]}, {rb[5], rb[6]}, {B[0], B[1]}};
+            float seg = g * 3;
+            int si = Math.min(2, (int) seg);
+            float u = seg - si;
+            px = pts[si][0];
+            py = pts[si][1];
+            qx = pts[si + 1][0];
+            qy = pts[si + 1][1];
+            o.x = px + (qx - px) * u;
+            o.y = py + (qy - py) * u;
+        } else {
+            px = A[0];
+            py = A[1];
+            qx = B[0];
+            qy = B[1];
+            o.x = px + (qx - px) * g;
+            o.y = py + (qy - py) * g;
+        }
+        if (Math.abs(qx - px) + Math.abs(qy - py) > 0.5f) o.angle = (float) Math.atan2(qy - py, qx - px);
+        o.phase += 0.2f;
+    }
 
     /** Draws one wall from ground edge a-b up to roof edge ta-tb, with windows and doors on it. */
     private void drawWall(Canvas c, City.Building b, float ax, float ay, float bx, float by, float tax, float tay,
