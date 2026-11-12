@@ -5178,6 +5178,165 @@ public final class GameTests {
                 check(w.warBalance > 0.9f || !w.outbreak, "and the city's side ahead once they're down (" + w.warBalance + ")");
             }
         });
+        test("17.4: the enemy's armour, air, artillery, drones and paratroopers; its ground and the occupation", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                c.mode = CityConfig.MODE_ARMY;
+                c.seed = 24;
+                World w = new World(c);
+                w.rnd.setSeed(24);
+                w.populate(c);
+                w.recount();
+                City city = w.city;
+                int tanks = 0;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.enemy && v.type == Fleet.TANK) tanks++;
+                check(tanks >= 1, "enemy armour comes in with the first squads (" + tanks + ")");
+                check(!Fleet.army(w.fleet.vehicles.get(0)) || !w.fleet.vehicles.get(0).enemy, "the enemy's aren't the army's");
+                // A truck bringing a squad: it unloads them when there's a fight in reach.
+                float[] goal = w.enemyObjective(city.worldW() / 2, city.worldH() / 2);
+                float[] entry = city.edgeRoad(new java.util.Random(3));
+                Fleet.Vehicle truck = w.fleet.enemyIn(Fleet.ENEMY_APC, entry[0], entry[1], goal[0], goal[1]);
+                check(truck != null && truck.enemy && truck.kind == Fleet.K_APC, "an enemy APC on its way in");
+                java.lang.reflect.Method aboard = World.class.getDeclaredMethod("aboard", Fleet.Vehicle.class, Entity.class);
+                aboard.setAccessible(true);
+                java.lang.reflect.Method kit = World.class.getDeclaredMethod("kitOut", Entity.class, int.class, int.class);
+                kit.setAccessible(true);
+                for (int k = 0; k < 4; k++) {
+                    Entity e = w.spawn(Entity.INVADER, truck.x, truck.y);
+                    kit.invoke(w, e, 0, 999);
+                    aboard.invoke(w, truck, e);
+                }
+                w.recount();
+                check(w.counts[Entity.INVADER] >= 4, "the troops aboard count");
+                check(w.fleet.describe(truck).startsWith("Enemy"), "it's called the enemy's");
+                // Put city soldiers in its path: it stops and they climb out.
+                Entity s0 = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.SOLDIER && e.ride == null) { s0 = e; break; }
+                float[] near = city.findWalkable(truck.x + 60, truck.y);
+                s0.hp = s0.maxHp = 100000;
+                s0.x = near[0];
+                s0.y = near[1];
+                for (int f = 0; f < 30 * 3 && !truck.riders.isEmpty(); f++) {
+                    s0.x = near[0];
+                    s0.y = near[1];
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(truck.riders.isEmpty(), "the squad climbs out at the fight (state " + truck.state + ", in fleet " + w.fleet.vehicles.contains(truck) + ", riders " + truck.riders.size() + ", d " + (int) Math.hypot(s0.x - truck.x, s0.y - truck.y) + ", near " + w.cityForceNear(truck.x, truck.y, 200) + ", soldier dead " + s0.dead + ")");
+                // A city tank knocks out enemy armour in reach.
+                Fleet.Vehicle cityTank = null;
+                java.lang.reflect.Method placeTank = Fleet.class.getDeclaredMethod("placeTank", float.class, float.class);
+                placeTank.setAccessible(true);
+                cityTank = (Fleet.Vehicle) placeTank.invoke(w.fleet, truck.x + 150, truck.y);
+                if (cityTank == null) cityTank = (Fleet.Vehicle) placeTank.invoke(w.fleet, truck.x - 150, truck.y);
+                check(cityTank != null && !cityTank.enemy, "a city tank");
+                cityTank.x = truck.x + 120;
+                cityTank.y = truck.y;
+                boolean out = false;
+                for (int f = 0; f < 30 * 30 && !out; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    out = truck.broken || !w.fleet.vehicles.contains(truck);
+                }
+                check(out, "the city's tank knocks out the APC (hp " + truck.hp + ")");
+                // An attack helicopter: comes in and circles, and leaves once the enemy's beaten.
+                Fleet.Vehicle heli = w.fleet.enemyIn(Fleet.ENEMY_HELI, -100, city.worldH() / 2, goal[0], goal[1]);
+                check(heli != null && heli.type == Fleet.HELI && heli.enemy, "an enemy helicopter");
+                for (int f = 0; f < 30 * 2; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(heli.x > -100, "flying in");
+                // Paratroopers come down before they fight; drones go up; artillery falls.
+                java.lang.reflect.Field t = World.class.getDeclaredField("paraCd");
+                t.setAccessible(true);
+                java.lang.reflect.Field dc = World.class.getDeclaredField("droneCd");
+                dc.setAccessible(true);
+                java.lang.reflect.Field ac = World.class.getDeclaredField("artCd");
+                ac.setAccessible(true);
+                w.outbreakTime = Math.max(w.outbreakTime, 60);
+                w.hostileReserve = Math.max(w.hostileReserve, 20);
+                t.setFloat(w, 0);
+                dc.setFloat(w, 0);
+                ac.setFloat(w, 0);
+                int before = w.grenades.size();
+                java.lang.reflect.Method life = World.class.getDeclaredMethod("armyLife");
+                life.setAccessible(true);
+                life.invoke(w);
+                int para = 0;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.INVADER && e.paraT > 0) para++;
+                check(para >= 3, "paratroopers coming down (" + para + ")");
+                check(w.enemyDrones.size() >= 1 || w.grenades.size() > before, "a drone up or shells on the way");
+                // The ground it holds: a district with its troops and none of ours.
+                for (int f = 0; f < 30 * 6; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                java.lang.reflect.Method front = World.class.getDeclaredMethod("updateFront");
+                front.setAccessible(true);
+                // Clear one district of our side, put enemy soldiers in it.
+                int dIdx = city.districtIndex(city.worldW() / 2, city.worldH() / 2);
+                City.District dist = city.districts.get(dIdx);
+                for (Entity e : w.entities) if (!e.dead && e.isArmed() && city.districtIndex(e.x, e.y) == dIdx) { e.dead = true; e.removed = true; }
+                java.util.ArrayList<Entity> guards = new java.util.ArrayList<Entity>();
+                float[] spot = city.randomWalkableInTown(new java.util.Random(7));
+                for (int tries = 0; tries < 200 && city.districtIndex(spot[0], spot[1]) != dIdx; tries++) spot = city.randomWalkableInTown(new java.util.Random(tries));
+                for (int k = 0; k < 4; k++) {
+                    Entity e = w.spawn(Entity.INVADER, spot[0] + k * 6, spot[1]);
+                    kit.invoke(w, e, 0, 998);
+                    guards.add(e);
+                }
+                w.recount();
+                front.invoke(w);
+                check(w.enemyHolds(spot[0], spot[1]), "the enemy holds " + dist.name);
+                // Someone out in it: held, walked off, freed when the police get there.
+                Entity civ = w.spawn(Entity.CIVILIAN, spot[0] + 20, spot[1]);
+                civ.stayIn = null;
+                java.lang.reflect.Method occ = World.class.getDeclaredMethod("occupy");
+                occ.setAccessible(true);
+                for (int k = 0; k < 10 && civ.arrested != 3; k++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    civ.x = spot[0] + 20;
+                    civ.y = spot[1];
+                    occ.invoke(w);
+                }
+                check(civ.arrested == 3 || civ.stayIn != null, "held by the enemy, or indoors for the curfew");
+                if (civ.arrested == 3) {
+                    for (Entity g : guards) { g.dead = true; g.removed = true; }
+                    Entity cop = w.spawn(Entity.COP, civ.x + 10, civ.y);
+                    for (int f = 0; f < 30 * 3 && civ.arrested == 3; f++) {
+                        cop.x = civ.x + 10;
+                        cop.y = civ.y;
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                    }
+                    check(civ.arrested == 0 && w.freed >= 1, "freed by the police");
+                }
+                // The enemy beaten: its armour and air pull out, and the city wins.
+                for (int f = 0; f < 30 * 30 && w.warResult == 0; f++) {
+                    w.hostileReserve = 0;
+                    for (Entity e : w.entities) if (e.isHostile()) e.hp = 0;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.warResult == 1, "the city won (" + w.warResult + ")");
+                boolean pulling = true;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.enemy && !v.broken && v.state != Fleet.RETURN && v.state != Fleet.FLY_OUT) pulling = false;
+                check(pulling, "what's left of its armour pulls out");
+                // Drawn: the front, the armour, the drones.
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {2400, 1080};
+                v.layout(size[0], size[1]);
+                Menu m = (Menu) field(v, "menu");
+                v.startGame(c);
+                v.awaitLoad();
+                m.screen = Menu.NONE;
+                for (int k = 0; k < 20; k++) draw(v, size);
+                check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());

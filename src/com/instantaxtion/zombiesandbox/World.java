@@ -614,7 +614,12 @@ final class World {
         hs += hiding * 0.02f;
         zs += lurking;
         // (Gang members out in a stolen car, and the other side's fighters still to come.)
-        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) if (fleet.vehicles.get(i).gang >= 0) zs += fleet.vehicles.get(i).riders.size() * 2;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.gang >= 0) zs += v.riders.size() * 2;
+            // ((17.4) The enemy's armour and helicopters, and the troops still aboard its trucks.)
+            if (v.enemy && !v.broken) zs += (v.type == Fleet.TANK ? 12 : v.type == Fleet.HELI ? 10 : v.kind == Fleet.K_APC ? 6 : 2) + v.riders.size() * 4;
+        }
         if (hostileMode()) zs += hostileReserve * (mode() == CityConfig.MODE_GANGS ? 2 : 4) * 0.5f;
         if (trait[TR_TOUGH]) zs *= 1.25f;
         if (trait[TR_FRAIL]) zs *= 0.8f;
@@ -2208,6 +2213,7 @@ final class World {
         stampedeNews(dt);
         fleet.update(dt);
         if (mode() == CityConfig.MODE_GANGS) driveBys(dt);
+        if (mode() == CityConfig.MODE_ARMY) cityVsArmour(dt);
         updateBlasts(dt);
         updateFirebomb(dt);
         updateMedkits(dt);
@@ -2877,6 +2883,16 @@ final class World {
             if (e.task == Dispatch.T_NONE) afterRide(e, e.rideFrom);
             e.rideFrom = null;
         }
+        // ((17.4) A paratrooper still coming down; someone the enemy's holding.)
+        if (e.paraT > 0) {
+            e.paraT -= dt;
+            steer(e, 0, 0, 0);
+            return;
+        }
+        if (e.arrested == 3) {
+            detainedStep(e, dt);
+            return;
+        }
         // ((17.2) Under arrest, or taking someone in.)
         if (e.arrested != 0) {
             arrestStep(e, dt);
@@ -3129,6 +3145,13 @@ final class World {
         for (int k = 0; k < entry.length; k++) {
             entry[k] = enemyEntry();
         }
+        entryX = entry[0][0];
+        entryY = entry[0][1];
+        // ((17.4) Armour with them: a tank for every two hundred or so.)
+        for (int k = 0; k < Math.max(1, n / 200); k++) {
+            float[] p = entry[k % entry.length], goal = enemyObjective(p[0], p[1]);
+            if (goal != null) fleet.enemyIn(Fleet.ENEMY_TANK, p[0] + k * 20, p[1], goal[0], goal[1]);
+        }
         int left = n, s = 0;
         while (left > 0) {
             float[] p = entry[s % entry.length];
@@ -3187,6 +3210,45 @@ final class World {
         } else {
             p = enemyEntry();
             group = 100 + squadsMade++;
+            if (entryX < 0) {
+                entryX = p[0];
+                entryY = p[1];
+            }
+            // ((17.4) The enemy's armour and air: a tank with every third wave, a helicopter with every fourth.)
+            waveN++;
+            float[] goal = enemyObjective(p[0], p[1]);
+            int tanks = 0, helis = 0, apcs = 0;
+            for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+                Fleet.Vehicle v = fleet.vehicles.get(i);
+                if (!v.enemy || v.broken) continue;
+                if (v.type == Fleet.TANK) tanks++;
+                if (v.type == Fleet.HELI) helis++;
+                if (v.kind == Fleet.K_APC) apcs++;
+            }
+            if (goal != null && waveN % 6 == 0 && helis == 0) {
+                float ww = city.worldW(), hh = city.worldH();
+                float hx = p[0] < ww / 2 ? -100 : ww + 100, hy = Math.max(100, Math.min(hh - 100, p[1]));
+                if (fleet.enemyIn(Fleet.ENEMY_HELI, hx, hy, goal[0], goal[1]) != null) {
+                    dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy attack helicopter inbound!", p[0], p[1], true);
+                    timeline("Enemy attack helicopter", p[0], p[1]);
+                }
+            }
+            if (goal != null && waveN % 5 == 0 && tanks < 3 && fleet.enemyIn(Fleet.ENEMY_TANK, p[0], p[1], goal[0], goal[1]) != null)
+                dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy armour coming in by " + city.placeName(p[0], p[1]) + "!", p[0], p[1]);
+            // The squad by truck or APC when there's a road in.
+            Fleet.Vehicle ride = goal == null ? null : fleet.enemyIn(waveN % 2 == 0 && apcs < 4 ? Fleet.ENEMY_APC : Fleet.ENEMY_TRUCK, p[0], p[1], goal[0], goal[1]);
+            if (ride != null) {
+                int made = 0;
+                for (int i = 0; i < size; i++) {
+                    Entity e = spawn(Entity.INVADER, ride.x, ride.y);
+                    if (e == null) continue;
+                    kitOut(e, i == 1 ? 1 : i == 2 && rnd.nextBoolean() ? 2 : 0, group);
+                    aboard(ride, e);
+                    made++;
+                }
+                hostileReserve -= Math.max(made, 1);
+                return;
+            }
         }
         int made = 0;
         arriving = true;
@@ -3547,7 +3609,7 @@ final class World {
         float bd = range * range;
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = fleet.vehicles.get(i);
-            if (v.broken || v.removedFromFleet || v.type == Fleet.CAR || v.type == Fleet.AMBULANCE || v.type == Fleet.TRAIN
+            if (v.broken || v.removedFromFleet || v.enemy || v.type == Fleet.CAR || v.type == Fleet.AMBULANCE || v.type == Fleet.TRAIN
                     || v.type == Fleet.JET || v.type == Fleet.BOAT) continue;
             if (v.driver == null && v.crew.isEmpty() && v.type != Fleet.TANK && v.type != Fleet.HELI && v.passengers <= 0) continue;
             float ddx = v.x - e.x, ddy = v.y - e.y, d2 = ddx * ddx + ddy * ddy;
@@ -4524,6 +4586,515 @@ final class World {
         }
         e.aiming = false;
         walkToSpot(e, e.roamX, e.roamY, e.runSpeed);
+    }
+
+    // ------------------------------------------------------------------ (17.4) the enemy army's vehicles, artillery,
+    // paratroopers and drones; the ground it holds, and the occupation
+
+    /** Is any of the city's police or soldiers within r of (x, y)? */
+    boolean cityForceNear(float x, float y, float r) {
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0) continue;
+                    if ((o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) < r * r) return true;
+                }
+            }
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.enemy || v.broken || (v.type != Fleet.TANK && v.type != Fleet.CRUISER && v.type != Fleet.TRUCK)) continue;
+            if (v.crew.isEmpty() && v.driver == null && v.type != Fleet.TANK) continue;
+            if ((v.x - x) * (v.x - x) + (v.y - y) * (v.y - y) < r * r) return true;
+        }
+        return false;
+    }
+
+    /** The nearest of the city's police or soldiers on foot in sight (from the air, any) within r of (x, y). */
+    private Entity cityTarget(float x, float y, float r, boolean fromAir) {
+        float best = r * r;
+        Entity res = null;
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = k + aCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || o.ride != null || o.hidden) continue;
+                    float d2 = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
+                    if (d2 >= best) continue;
+                    if (!fromAir && !city.los(x, y, o.x, o.y)) continue;
+                    if (fromAir && city.insideOf(o.x, o.y) != null) continue;
+                    best = d2;
+                    res = o;
+                }
+            }
+        return res;
+    }
+
+    /** The nearest of the city's police or army vehicles within r (in sight from the ground), or null. */
+    private Fleet.Vehicle cityVehicle(float x, float y, float r, boolean fromAir) {
+        Fleet.Vehicle best = null;
+        float bd = r * r;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.enemy || v.broken || v.removedFromFleet || v.gang >= 0) continue;
+            if (v.type != Fleet.TANK && v.type != Fleet.CRUISER && v.type != Fleet.TRUCK && v.type != Fleet.HELI) continue;
+            if (v.type == Fleet.HELI && !fromAir && v.alt > 0.5f && rnd.nextFloat() < 0.5f) continue;
+            float d2 = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
+            if (d2 >= bd || (!fromAir && v.type != Fleet.HELI && !city.los(x, y, v.x, v.y))) continue;
+            bd = d2;
+            best = v;
+        }
+        return best;
+    }
+
+    /** The nearest enemy vehicle within r of (x, y) (in sight from the ground), or null. */
+    Fleet.Vehicle enemyVehicleNear(float x, float y, float r, boolean needLos) {
+        Fleet.Vehicle best = null;
+        float bd = r * r;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (!v.enemy || v.broken || v.removedFromFleet) continue;
+            float d2 = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
+            if (d2 >= bd || (needLos && v.type != Fleet.HELI && !city.los(x, y, v.x, v.y))) continue;
+            bd = d2;
+            best = v;
+        }
+        return best;
+    }
+
+    /**
+     * An enemy vehicle's guns: an APC's or a truck's machine gun on whoever of the city's side is close, a tank's main
+     * gun on the city's armour or a knot of its soldiers (its machine gun on the rest), a helicopter's rockets and
+     * cannon from above.
+     */
+    void enemyGuns(Fleet.Vehicle v, float dt) {
+        boolean air = v.type == Fleet.HELI;
+        float reach = air ? 230 : v.type == Fleet.TANK ? 300 : 200;
+        Fleet.Vehicle tv = v.cannonCd <= 0 && (v.type == Fleet.TANK || air) ? cityVehicle(v.x, v.y, reach, air) : null;
+        Entity t = cityTarget(v.x, v.y, Math.min(reach, 220), air);
+        float ax = tv != null ? tv.x : t != null ? t.x : 0, ay = tv != null ? tv.y : t != null ? t.y : 0;
+        if (tv == null && t == null) return;
+        if (!air) v.turret = turn(v.turret, (float) Math.atan2(ay - v.y, ax - v.x), dt * 1.8f);
+        float fx = v.x + (float) Math.cos(air ? v.angle : v.turret) * (air ? 6 : 12), fy = v.y + (float) Math.sin(air ? v.angle : v.turret) * (air ? 6 : 12);
+        // The big gun: at armour, or at a knot of them.
+        if ((v.type == Fleet.TANK || air) && v.cannonCd <= 0) {
+            boolean knot = t != null && countLawNear(t.x, t.y, 40) >= 2;
+            if (tv != null || knot) {
+                float tx = tv != null ? tv.x : t.x, ty = tv != null ? tv.y : t.y;
+                v.cannonCd = air ? 5 : 4.5f;
+                if (air) {
+                    emit(Sfx.LAUNCHER, fx, fy);
+                    tracer(fx, fy, tx, ty);
+                    explode(tx + rnd.nextFloat() * 16 - 8, ty + rnd.nextFloat() * 16 - 8, 40, 160);
+                } else tankShell(fx, fy, tx + rnd.nextFloat() * 10 - 5, ty + rnd.nextFloat() * 10 - 5);
+                if (tv != null) fleet.damage(tv, air ? 180 : 320, true);
+                return;
+            }
+        }
+        if (t == null || v.gunCd > 0) return;
+        float d = (float) World.hypot(t.x - v.x, t.y - v.y);
+        if (d > (air ? 200 : v.type == Fleet.TANK ? 180 : 190)) return;
+        v.gunCd = air ? 0.14f : 0.12f;
+        shotsFired++;
+        float hit = (air ? 0.5f : 0.45f) * (1 - 0.4f * d / 200);
+        if (rnd.nextFloat() < hit) {
+            boolean wasUp = t.hp > 0;
+            t.hp -= air ? 14 : 10;
+            t.hurt = 1;
+            t.killedByZombie = false;
+            bloodBurst(t.x, t.y, 3, 0, 0);
+            tracer(fx, fy, t.x, t.y);
+            if (wasUp && t.hp <= 0 && t.isArmed()) officersLostToArmour++;
+        } else {
+            float mx = t.x + rnd.nextFloat() * 24 - 12, my = t.y + rnd.nextFloat() * 24 - 12;
+            tracer(fx, fy, mx, my);
+        }
+        if (rnd.nextFloat() < 0.4f) emit(air ? Sfx.MG : Sfx.MG, fx, fy);
+        if (rnd.nextFloat() < 0.15f) noise(fx, fy, 300);
+    }
+
+    /** Officers and soldiers lost to the enemy's armour (for the record). */
+    int officersLostToArmour;
+
+    private int countLawNear(float x, float y, float r) {
+        int n = 0;
+        for (int i = 0, m = gatherArmed(x, y, r); i < m; i++) {
+            Entity o = gathered[i];
+            if (!o.dead && o.hp > 0 && (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) < r * r) n++;
+        }
+        return n;
+    }
+
+    /** A squad climbs out of its truck or APC, into the fight. */
+    void squadOut(Fleet.Vehicle v) {
+        if (rnd.nextFloat() < 0.6f)
+            dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy " + (v.kind == Fleet.K_APC ? "APC" : "truck") + " unloading troops on "
+                    + city.placeName(v.x, v.y) + "!", v.x, v.y);
+    }
+
+    /** The next objective the enemy's after from (x, y), as a point, or null. */
+    float[] enemyObjective(float x, float y) {
+        int o = nextObjective(x, y);
+        return objX == null ? null : new float[]{objX[o], objY[o]};
+    }
+
+    /** An enemy helicopter that's come down: a fireball where it hit. */
+    boolean heliDown(Fleet.Vehicle v) {
+        explode(v.x, v.y, 45, 150);
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy helicopter down on " + city.placeName(v.x, v.y) + "!", v.x, v.y);
+        timeline("Enemy helicopter shot down", v.x, v.y);
+        return true;
+    }
+
+    /**
+     * The city's side against the enemy's vehicles: officers and soldiers in sight fire on any close by (they barely dent
+     * a tank, but trucks and helicopters go down), soldiers with a rocket to hand use it on armour, and the city's tanks
+     * turn their guns on it.
+     */
+    private void cityVsArmour(float dt) {
+        // (The enemy's drones fly on to where they're watching.)
+        for (int i = 0, n = enemyDrones.size(); i < n; i++) {
+            float[] d = enemyDrones.get(i);
+            float dx = d[2] - d[0], dy = d[3] - d[1], dist = (float) Math.sqrt(dx * dx + dy * dy);
+            if (dist > 1) {
+                float step = Math.min(dist, 70 * dt);
+                d[0] += dx / dist * step;
+                d[1] += dy / dist * step;
+            }
+        }
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (!v.enemy || v.broken || v.removedFromFleet) continue;
+            boolean air = v.type == Fleet.HELI, armour = v.type == Fleet.TANK || v.kind == Fleet.K_APC;
+            int shooters = 0;
+            for (int k = 0, m = gatherArmed(v.x, v.y, 190); k < m && shooters < 10; k++) {
+                Entity e = gathered[k];
+                if (e.dead || e.hp <= 0 || e.ride != null || e.aiming || e.reload > 0 || e.ammo <= 0 || e.cooldown > 0) continue;
+                float d = (float) World.hypot(v.x - e.x, v.y - e.y);
+                if (d > 190 || (!air && !city.los(e.x, e.y, v.x, v.y))) continue;
+                shooters++;
+                e.angle = (float) Math.atan2(v.y - e.y, v.x - e.x);
+                // A soldier's rocket at armour (or at a helicopter low enough).
+                if (e.type == Entity.SOLDIER && (armour || air) && e.grenades > 0 && e.grenadeCd <= 0 && d < 170 && rnd.nextFloat() < 0.3f) {
+                    e.grenades--;
+                    e.grenadeCd = 12;
+                    e.cooldown = 1.5f;
+                    emit(Sfx.LAUNCHER, e.x, e.y);
+                    tracer(e.x, e.y, v.x, v.y);
+                    fleet.damage(v, rnd.nextFloat() < 0.7f ? 260 : 60, true);
+                    particle(v.x, v.y, 0, 0, 0.12f, 7, 0xFFFFE9A0, P_FLASH);
+                    for (int q = 0; q < 6; q++) particle(v.x, v.y, rnd.nextFloat() * 60 - 30, rnd.nextFloat() * 60 - 30, 0.5f, 2.2f, 0xFFFFB040, P_DOT);
+                    emit(Sfx.EXPLOSION, v.x, v.y);
+                    continue;
+                }
+                e.cooldown = e.type == Entity.SOLDIER ? 0.3f : 0.45f;
+                e.ammo--;
+                shotsFired++;
+                tracer(e.x + (float) Math.cos(e.angle) * 5, e.y + (float) Math.sin(e.angle) * 5, v.x + rnd.nextFloat() * 6 - 3, v.y + rnd.nextFloat() * 6 - 3);
+                if (rnd.nextFloat() < 0.6f) fleet.damage(v, armour ? 0.6f : e.type == Entity.SOLDIER ? 5 : 3.5f, false);
+                if (rnd.nextFloat() < 0.3f) emit(e.type == Entity.SOLDIER ? Sfx.RIFLE : Sfx.PISTOL, e.x, e.y);
+            }
+            if (v.broken) {
+                timeline("Enemy " + (v.type == Fleet.TANK ? "tank" : air ? "helicopter" : v.kind == Fleet.K_APC ? "APC" : "truck") + " knocked out",
+                        v.x, v.y);
+                if (rnd.nextFloat() < 0.5f)
+                    dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy " + (v.type == Fleet.TANK ? "tank" : air ? "helicopter" : "vehicle")
+                            + " destroyed on " + city.placeName(v.x, v.y) + ".", v.x, v.y);
+            }
+        }
+    }
+
+    /** The enemy's recon drones over the front: {x, y, target x, target y, seconds aloft}. */
+    final ArrayList<float[]> enemyDrones = new ArrayList<float[]>();
+    private float artCd = 40, droneCd = 30, paraCd = 100, occCd;
+    private int waveN;
+    /** Where the enemy came in from (its artillery fires from there). */
+    private float entryX = -1, entryY = -1;
+
+    /**
+     * Once a second in an invasion: the drones, the artillery they call in, paratroopers dropped behind the city's lines,
+     * the ground the enemy holds and its occupation of it.
+     */
+    private void armyLife() {
+        if (counts[Entity.INVADER] == 0 && hostileReserve <= 0) {
+            enemyDrones.clear();
+            return;
+        }
+        boolean fighting = outbreakTime > 45;
+        // Recon drones: up to two over the front, looking for the city's soldiers.
+        droneCd -= 1;
+        if (droneCd <= 0 && fighting && enemyDrones.size() < 2) {
+            droneCd = 50 + rnd.nextFloat() * 30;
+            Entity at = frontSoldier();
+            if (at != null) enemyDrones.add(new float[]{at.x, at.y, at.x, at.y, 0});
+        }
+        for (int i = enemyDrones.size() - 1; i >= 0; i--) {
+            float[] d = enemyDrones.get(i);
+            d[4] += 1;
+            // Over the nearest of the city's soldiers to the front, a little off.
+            Entity t = cityTarget(d[0], d[1], 400, true);
+            if (t != null) {
+                d[2] = t.x + 50;
+                d[3] = t.y - 40;
+            }
+            // The city's soldiers shoot at it.
+            int guns = 0;
+            for (int k = 0, m = gatherArmed(d[0], d[1], 140); k < m; k++)
+                if (!gathered[k].dead && World.hypot(gathered[k].x - d[0], gathered[k].y - d[1]) < 140) guns++;
+            if (d[4] > 120 || rnd.nextFloat() < Math.min(0.5f, guns * 0.04f)) {
+                if (d[4] <= 120) {
+                    for (int q = 0; q < 6; q++) particle(d[0], d[1], rnd.nextFloat() * 50 - 25, rnd.nextFloat() * 50 - 25, 0.4f, 1.5f, 0xFFFFB040, P_DOT);
+                    emit(Sfx.THUD, d[0], d[1]);
+                    if (rnd.nextFloat() < 0.4f) dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy drone down over " + city.placeName(d[0], d[1]) + ".", d[0], d[1]);
+                }
+                enemyDrones.remove(i);
+            }
+        }
+        // Artillery from beyond the edge of the map: on what the drones see first, otherwise the front.
+        artCd -= 1;
+        if (artCd <= 0 && fighting) {
+            Entity t = null;
+            for (float[] d : enemyDrones) if (t == null) t = cityTarget(d[0], d[1], 160, true);
+            if (t == null && rnd.nextFloat() < 0.5f) t = frontSoldier();
+            artCd = t != null ? 28 + rnd.nextFloat() * 20 : 8;
+            if (t != null) {
+                float sx = entryX >= 0 ? entryX : 0, sy = entryY >= 0 ? entryY : 0;
+                for (int k = 0; k < 3; k++) {
+                    Grenade g = new Grenade();
+                    g.sx = sx;
+                    g.sy = sy;
+                    g.tx = t.x + rnd.nextFloat() * 50 - 25;
+                    g.ty = t.y + rnd.nextFloat() * 50 - 25;
+                    g.dur = 3.2f + k * 0.5f;
+                    g.shell = true;
+                    g.aimX = t.x;
+                    g.aimY = t.y;
+                    grenades.add(g);
+                }
+                dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Incoming! Enemy artillery on " + city.placeName(t.x, t.y) + "!", t.x, t.y);
+                timeline("Enemy artillery on " + city.placeName(t.x, t.y), t.x, t.y);
+            }
+        }
+        // Paratroopers: a squad dropped behind the city's lines, near something of the city's not yet taken.
+        paraCd -= 1;
+        if (paraCd <= 0 && fighting && hostileReserve >= 6) {
+            paraCd = 110 + rnd.nextFloat() * 60;
+            int o = farObjective();
+            if (o >= 0) {
+                float cx = objX[o] + rnd.nextFloat() * 200 - 100, cy = objY[o] + rnd.nextFloat() * 200 - 100;
+                int group = 100 + squadsMade++, made = 0;
+                for (int k = 0; k < 6; k++) {
+                    Entity e = spawn(Entity.INVADER, cx + rnd.nextFloat() * 60 - 30, cy + rnd.nextFloat() * 60 - 30);
+                    if (e == null) continue;
+                    kitOut(e, k == 1 ? 1 : 0, group);
+                    e.paraT = 4 + rnd.nextFloat() * 2;
+                    made++;
+                }
+                hostileReserve = Math.max(0, hostileReserve - made);
+                if (made > 0) {
+                    dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Enemy paratroopers dropping over " + city.placeName(cx, cy) + "!", cx, cy, true);
+                    timeline("Enemy paratroopers over " + city.placeName(cx, cy), cx, cy);
+                    emit(Sfx.JET, cx, cy);
+                }
+            }
+        }
+        occCd -= 1;
+        if (occCd <= 0) {
+            occCd = 5;
+            updateFront();
+            occupy();
+        }
+    }
+
+    /** The city's soldier (or officer) nearest to any of the enemy: where the front is. */
+    private Entity frontSoldier() {
+        Entity best = null;
+        float bd = 700 * 700;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.INVADER || rnd.nextFloat() < 0.6f) continue;
+            Entity t = cityTarget(e.x, e.y, 600, true);
+            if (t == null) continue;
+            float d = (t.x - e.x) * (t.x - e.x) + (t.y - e.y) * (t.y - e.y);
+            if (d < bd) {
+                bd = d;
+                best = t;
+            }
+        }
+        return best;
+    }
+
+    /** An objective not yet taken, as far from the enemy's troops as there is: for paratroopers. */
+    private int farObjective() {
+        if (objX == null) buildObjectives();
+        int best = -1;
+        float bd = -1;
+        for (int i = 0; i < objX.length; i++) {
+            if (objTaken[i]) continue;
+            float near = Float.MAX_VALUE;
+            for (int k = 0, n = entities.size(); k < n; k += 4) {
+                Entity e = entities.get(k);
+                if (!e.dead && e.type == Entity.INVADER) near = Math.min(near, (float) World.hypot(e.x - objX[i], e.y - objY[i]));
+            }
+            if (near > bd) {
+                bd = near;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Which districts the enemy holds: enough of its troops there and few of the city's (the city's owner index 0 in
+     * districtOwner, -1 the city's). Announced as each falls or is taken back.
+     */
+    private void updateFront() {
+        int D = city.districts.size();
+        if (D == 0) return;
+        if (districtOwner == null || districtOwner.length != D) {
+            districtOwner = new int[D];
+            Arrays.fill(districtOwner, -1);
+            turfVersion++;
+        }
+        int[] them = new int[D], us = new int[D];
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead) continue;
+            int d = -1;
+            if (e.type == Entity.INVADER || e.isArmed()) d = city.districtIndex(e.x, e.y);
+            if (d < 0 || d >= D) continue;
+            if (e.type == Entity.INVADER) them[d]++;
+            else us[d]++;
+        }
+        for (int d = 0; d < D; d++) {
+            int was = districtOwner[d], now = was;
+            if (them[d] >= 3 && us[d] * 2 < them[d]) now = 0;
+            else if (was == 0 && (them[d] == 0 || us[d] >= them[d] * 2)) now = -1;
+            if (now == was) continue;
+            districtOwner[d] = now;
+            turfVersion++;
+            City.District dist = city.districts.get(d);
+            if (dist.unnamed) continue;
+            if (now == 0) {
+                timeline("The enemy holds " + dist.name, dist.cx, dist.cy);
+                dispatch.say(Dispatch.WHO_MILITARY, null, "Military: We've lost " + dist.name + ". Enemy forces control it.", dist.cx, dist.cy);
+            } else {
+                timeline(dist.name + " liberated", dist.cx, dist.cy);
+                dispatch.say(Dispatch.WHO_MILITARY, null, "Military: " + dist.name + " is back in our hands.", dist.cx, dist.cy);
+            }
+        }
+    }
+
+    /** The places the enemy has taken and holds with a checkpoint, as {x, y} after each other. */
+    float[] checkpoints() {
+        if (objX == null || mode() != CityConfig.MODE_ARMY) return new float[0];
+        int n = 0;
+        for (boolean t : objTaken) if (t) n++;
+        float[] out = new float[n * 2];
+        for (int i = 0, k = 0; i < objX.length; i++)
+            if (objTaken[i]) {
+                out[k++] = objX[i];
+                out[k++] = objY[i];
+            }
+        return out;
+    }
+
+    boolean enemyHolds(float x, float y) {
+        if (districtOwner == null || mode() != CityConfig.MODE_ARMY) return false;
+        int d = city.districtIndex(x, y);
+        return d >= 0 && d < districtOwner.length && districtOwner[d] == 0;
+    }
+
+    /**
+     * The occupation: a curfew in the districts the enemy holds - people out on the street go indoors and stay there -
+     * and anyone the enemy's troops find outside is held, walked to where the enemy's taken and kept there until the
+     * city's police or soldiers get to them.
+     */
+    private void occupy() {
+        if (districtOwner == null) return;
+        int sent = 0, held = 0;
+        for (int i = 0, n = entities.size(); i < n && sent < 60; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.CIVILIAN || e.arrested != 0 || e.hasGun || e == controlled || e.ride != null) continue;
+            if (!enemyHolds(e.x, e.y) || city.insideOf(e.x, e.y) != null || e.stayIn != null) continue;
+            // An enemy soldier right there: held.
+            Entity guard = null;
+            for (int k = 0, m = gatherZombies(e.x, e.y, 60); k < m && guard == null; k++) {
+                Entity o = gathered[k];
+                if (!o.dead && o.type == Entity.INVADER && World.hypot(o.x - e.x, o.y - e.y) < 60) guard = o;
+            }
+            if (guard != null && rnd.nextFloat() < 0.5f) {
+                e.arrested = 3;
+                e.arrestT = 0;
+                e.captor = null;
+                e.task = Dispatch.T_NONE;
+                held++;
+                continue;
+            }
+            // Otherwise the curfew: indoors, the nearest building with room.
+            City.Building b = shelterNear(e, 220);
+            if (b != null) {
+                beginStay(e, b, 120 + rnd.nextFloat() * 120, true);
+                sent++;
+            }
+        }
+        if (held > 0 && rnd.nextFloat() < 0.5f)
+            dispatch.say(Dispatch.WHO_INFO, null, "News: Enemy soldiers are rounding people up in the occupied districts.", city.worldW() / 2, city.worldH() / 2);
+    }
+
+    /** Where those the enemy holds are kept: the nearest place it has taken, or the middle of the district. */
+    private float[] holdingPoint(Entity e) {
+        if (objX != null) {
+            float bd = Float.MAX_VALUE;
+            float[] best = null;
+            for (int i = 0; i < objX.length; i++) {
+                if (!objTaken[i]) continue;
+                float d = (float) World.hypot(objX[i] - e.x, objY[i] - e.y);
+                if (d < bd) {
+                    bd = d;
+                    best = new float[]{objX[i] + 20, objY[i] + 20};
+                }
+            }
+            if (best != null && bd < 1200) return best;
+        }
+        City.District d = city.districtOf(e.x, e.y);
+        return d != null ? new float[]{d.cx, d.cy} : new float[]{e.x, e.y};
+    }
+
+    /** Someone the enemy holds: walked to the holding point, hands up, kept there - freed when the city's side gets there. */
+    private void detainedStep(Entity e, float dt) {
+        e.arrestT += dt;
+        e.aiming = false;
+        // The city's police or soldiers here: free.
+        Entity law = lawNear(e, 45);
+        if (law != null || (!enemyHolds(e.x, e.y) && e.arrestT > 20)) {
+            e.arrested = 0;
+            e.fleeTimer = 5;
+            e.aware = true;
+            freed++;
+            if (law != null && rnd.nextFloat() < 0.3f)
+                dispatch.chatter(law.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, law,
+                        "Freed some of the people the enemy were holding on " + city.placeName(e.x, e.y) + ".", e.x, e.y);
+            return;
+        }
+        float[] p = holdingPoint(e);
+        float d = (float) World.hypot(p[0] - e.x, p[1] - e.y);
+        if (d > 25) walkToSpot(e, p[0], p[1], e.speed);
+        else steer(e, 0, 0, 0);
+    }
+
+    /** People freed from the enemy. */
+    int freed;
+
+    /** The enemy's beaten: none of its troops left, and none to come. */
+    boolean enemyBeaten() {
+        return counts[Entity.INVADER] == 0 && hostileReserve <= 0;
     }
 
     /** Makes zombies within a radius head for a noise (gunfire, explosions, a screamer). */
@@ -8781,6 +9352,7 @@ final class World {
         hostileWaves();
         if (WALK_IN) countInside();
         if (mode() == CityConfig.MODE_GANGS) gangLife();
+        if (mode() == CityConfig.MODE_ARMY) armyLife();
         fieldHospital();
         militias();
         if (outbreak) updateWar();

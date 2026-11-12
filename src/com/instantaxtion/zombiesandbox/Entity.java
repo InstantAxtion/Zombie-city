@@ -204,6 +204,8 @@ final class Entity {
     transient int robPhase, carJob, corner;
     /** ((17.2) An officer on a raid on a gang's hideout: the building, and how long it's been going. */
     transient City.Building raidB;
+    /** ((17.4) An enemy paratrooper still coming down (seconds). */
+    transient float paraT;
     transient float raidT;
     /** ((17.0) A gang member's or enemy soldier's kit: 0 the basic one, 1 the automatic, 2 the heavy or the scoped. */
     int kit;

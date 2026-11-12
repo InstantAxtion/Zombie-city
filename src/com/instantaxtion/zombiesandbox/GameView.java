@@ -3286,6 +3286,43 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(followV.x, followV.y, followV.length() + 5 + (float) Math.sin(world.time * 6), stroke);
         }
 
+        // ((17.4) The enemy's recon drones: dark, a red light, and the ground they're watching for their guns.)
+        for (int i = 0, n = world.enemyDrones.size(); i < n; i++) {
+            float[] d = world.enemyDrones.get(i);
+            fill.setColor(0x14FF4030);
+            c.drawCircle(d[0], d[1], 160, fill);
+            fill.setColor(0x40000000);
+            c.drawCircle(d[0] + 6, d[1] + 9, 3.2f, fill);
+            float r = 2.8f;
+            stroke.setStrokeWidth(0.8f);
+            stroke.setColor(0xFF3A2E22);
+            c.drawLine(d[0] - r, d[1] - r, d[0] + r, d[1] + r, stroke);
+            c.drawLine(d[0] - r, d[1] + r, d[0] + r, d[1] - r, stroke);
+            fill.setColor(0xFF4A3E2C);
+            c.drawRect(d[0] - 1.8f, d[1] - 1.8f, d[0] + 1.8f, d[1] + 1.8f, fill);
+            fill.setColor(0x70C8C0B0);
+            for (int k = 0; k < 4; k++) c.drawCircle(d[0] + (k % 2 == 0 ? -r : r), d[1] + (k < 2 ? -r : r), 1.8f, fill);
+            fill.setColor(((int) (world.time * 4 + i)) % 2 == 0 ? 0xFFFF2A20 : 0xFF601010);
+            c.drawCircle(d[0], d[1], 0.9f, fill);
+        }
+        // ((17.4) Where the enemy holds a place it's taken: sandbags round it and its flag.)
+        float[] cps = world.checkpoints();
+        for (int i = 0; i + 1 < cps.length; i += 2) {
+            float x = cps[i], y = cps[i + 1];
+            for (int k = 0; k < 10; k++) {
+                if (k == 7 || k == 8) continue;
+                double a = k * Math.PI * 2 / 10;
+                float sx = x + (float) Math.cos(a) * 20, sy = y + (float) Math.sin(a) * 20;
+                fill.setColor(0xFFB8A070);
+                oval.set(sx - 3.4f, sy - 2.2f, sx + 3.4f, sy + 2.2f);
+                c.drawOval(oval, fill);
+            }
+            stroke.setColor(0xFF3A3A3A);
+            stroke.setStrokeWidth(0.8f);
+            c.drawLine(x, y, x, y - 14, stroke);
+            fill.setColor(0xFF8A3A2A);
+            c.drawRect(x, y - 14, x + 8, y - 9, fill);
+        }
         // ((11.0) Police drones: a little quadcopter, its shadow below, rotors blurring, lights blinking, and the patch
         // of ground its camera's watching.)
         for (int i = 0, n = world.drones.size(); i < n; i++) {
@@ -3340,23 +3377,35 @@ final class GameView extends View implements Menu.Host {
     private final RectF turfDst = new RectF();
 
     private void drawTurf(Canvas c) {
-        if (world.mode() != CityConfig.MODE_GANGS || world.districtOwner == null) return;
+        if (world.mode() == CityConfig.MODE_ZOMBIES || world.districtOwner == null) return;
+        boolean army = world.mode() == CityConfig.MODE_ARMY;
         City city = world.city;
         if (turfVer != world.turfVersion || turfBmp == null) {
             turfVer = world.turfVersion;
             int k = Math.max(1, (city.w + 399) / 400), bw = Math.max(1, city.w / k), bh = Math.max(1, city.h / k);
             int[] px = new int[bw * bh];
             int[] own = world.districtOwner;
+            int[] gs = new int[bw * bh];
             for (int y = 0; y < bh; y++)
                 for (int x = 0; x < bw; x++) {
                     int d = city.districtOfTile((y * k + k / 2) * city.w + x * k + k / 2);
                     int g = d >= 0 && d < own.length ? own[d] : -1;
-                    px[y * bw + x] = g >= 0 && !world.gangBrokenUp(g) ? (World.GANG_COLORS[g] & 0x00FFFFFF) | 0xFF000000 : 0;
+                    gs[y * bw + x] = g >= 0 && (army || !world.gangBrokenUp(g)) ? g : -1;
+                }
+            for (int y = 0; y < bh; y++)
+                for (int x = 0; x < bw; x++) {
+                    int g = gs[y * bw + x];
+                    if (g < 0) continue;
+                    // ((17.4) The front: the edge of the enemy's ground, drawn strong.)
+                    boolean edge = x > 0 && gs[y * bw + x - 1] != g || x < bw - 1 && gs[y * bw + x + 1] != g
+                            || y > 0 && gs[(y - 1) * bw + x] != g || y < bh - 1 && gs[(y + 1) * bw + x] != g;
+                    int col = army ? 0xB0402A : World.GANG_COLORS[g] & 0x00FFFFFF;
+                    px[y * bw + x] = army && edge ? 0xE0701C10 : (army ? 0x58000000 : 0xFF000000) | col;
                 }
             turfBmp = android.graphics.Bitmap.createBitmap(px, bw, bh, android.graphics.Bitmap.Config.ARGB_8888);
         }
         // (Faint when close in, stronger zoomed out where it reads as a map.)
-        float a = scale / dp > 1.5f ? 0.1f : 0.22f;
+        float a = army ? (scale / dp > 1.5f ? 0.45f : 1f) : scale / dp > 1.5f ? 0.1f : 0.22f;
         turfPaint.setAlpha((int) (255 * a));
         turfPaint.setFilterBitmap(true);
         turfSrc.set(0, 0, turfBmp.getWidth(), turfBmp.getHeight());
@@ -4609,7 +4658,7 @@ final class GameView extends View implements Menu.Host {
         }
         boolean civ = v.type == Fleet.CAR;
         Country land0 = world.city.country;
-        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.recon ? 0xFF9C8A5E
+        int body = v.enemy ? (v.kind == Fleet.K_APC ? 0xFF6E5E40 : 0xFF7A6A4A) : civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.recon ? 0xFF9C8A5E
                 : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
                 : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? 0xFFF2F2F2
                 : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
@@ -5456,16 +5505,16 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(x, -hw, x + 0.8f, -hw + 2.6f, fill);
             c.drawRect(x, hw - 2.6f, x + 0.8f, hw, fill);
         }
-        fill.setColor(v.broken ? 0xFF3A3E2C : 0xFF55623A);
+        fill.setColor(v.enemy ? (v.broken ? 0xFF4A4232 : 0xFF7A6A4A) : v.broken ? 0xFF3A3E2C : 0xFF55623A);
         c.drawRect(-hl + 1, -hw + 2.4f, hl - 0.5f, hw - 2.4f, fill);
-        fill.setColor(0xFF4A5532);
+        fill.setColor(v.enemy ? 0xFF5E5236 : 0xFF4A5532);
         c.drawRect(-hl + 1, -1, -hl + 4, 1, fill);
         c.rotate((float) Math.toDegrees(v.turret - v.angle));
         stroke.setColor(0xFF3A4228);
         stroke.setStrokeWidth(1.6f);
         float recoil = v.cannonCd > 3.2f ? -2 : 0;
         c.drawLine(3 + recoil, 0, 17 + recoil, 0, stroke);
-        fill.setColor(v.broken ? 0xFF434830 : 0xFF627042);
+        fill.setColor(v.enemy ? (v.broken ? 0xFF4E4634 : 0xFF8A7A54) : v.broken ? 0xFF434830 : 0xFF627042);
         oval.set(-5, -4.2f, 5, 4.2f);
         c.drawRoundRect(oval, 2, 2, fill);
         fill.setColor(0xFF3E4829);
@@ -5563,7 +5612,7 @@ final class GameView extends View implements Menu.Host {
         stroke.setStrokeWidth(0.9f);
         c.drawLine(-6, -5.5f, 7, -5.5f, stroke);
         c.drawLine(-6, 5.5f, 7, 5.5f, stroke);
-        fill.setColor(police ? 0xFFF2F2F2 : 0xFF4F5E36);
+        fill.setColor(police ? 0xFFF2F2F2 : v.enemy ? 0xFF7A6A4A : 0xFF4F5E36);
         oval.set(-8, -5, 9, 5);
         c.drawOval(oval, fill);
         if (rescue) {
@@ -6950,7 +6999,17 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(alpha(0xFF7CFF3A, 0.35f + 0.25f * (float) Math.sin(world.time * 5)));
             c.drawCircle(r * 0.08f, 0, r * 0.58f, fill);
         }
-        if (e.arrested == 1) {
+        if (e.paraT > 0) {
+            // ((17.4) Coming down under a canopy.)
+            float cr = r * (2.2f + e.paraT * 0.25f);
+            stroke.setColor(0xCC3A3428);
+            stroke.setStrokeWidth(r * 0.08f);
+            c.drawLine(0, 0, -cr * 0.7f, -cr * 0.7f, stroke);
+            c.drawLine(0, 0, -cr * 0.7f, cr * 0.7f, stroke);
+            fill.setColor(0xD0B8A878);
+            c.drawCircle(-cr * 0.5f, 0, cr, fill);
+        }
+        if (e.arrested == 1 || e.arrested == 3) {
             // ((17.2) Hands up.)
             fill.setColor(e.skin);
             c.drawCircle(r * 0.15f, -r * 0.95f, r * 0.24f, fill);
@@ -7556,6 +7615,7 @@ final class GameView extends View implements Menu.Host {
         else if (e.type == Entity.ZOMBIE_DOG) title = Names.dog(e.nameSeed) + "  -  Zombie dog";
         else if (e.isUndead()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
         else if (e.isHostile()) title = Names.person(e.nameSeed) + "  -  " + world.hostileTitle(e);
+        else if (e.arrested == 3) title = Names.person(e.nameSeed) + "  -  Held by the enemy";
         else if (e.arrested != 0) title = Names.person(e.nameSeed) + "  -  " + (e.arrested == 1 ? "Surrendering" : "Under arrest")
                 + ", " + World.GANG_NAMES[World.fmod(e.squad, World.GANG_NAMES.length)];
         else if (e.raider) title = Names.person(e.nameSeed) + "  -  Looter" + (e.leader == null ? ", gang leader" : "");

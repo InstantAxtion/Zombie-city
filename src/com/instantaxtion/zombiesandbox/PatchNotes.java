@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "17.3";
-    static final int VERSION_CODE = 173;
+    static final String VERSION = "17.4";
+    static final int VERSION_CODE = 174;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "17.4  -  The enemy army's armour, air power and occupation",
+                    "Enemy vehicles, in tan: squads now come in by troop truck or APC, climbing out once there's a fight in reach (a truck then goes back for more; an APC stays and backs them up with its machine gun). A tank comes in with the first squads and with every fifth wave after (three at most at once), its main gun on the city's armour and on knots of its soldiers. Every sixth wave brings an attack helicopter, which circles the fighting with rockets and cannon for a minute and a half.",
+                    "Fighting them: officers and soldiers in sight fire on enemy vehicles (rifles barely dent a tank, but trucks and helicopters go down), soldiers fire rockets at armour (using their grenades), and the city's tanks turn their guns on enemy armour first. A knocked-out vehicle goes on the timeline; anyone still aboard scrambles out. Once the enemy's beaten, what's left of its armour and air pulls out.",
+                    "Artillery: once the fighting's on, the enemy shells the city's soldiers from beyond the edge of the map, three shells at a time, with a warning on the radio.",
+                    "Recon drones: up to two enemy drones over the front, watching the city's soldiers (the red circle is what they see) and directing the artillery onto them. The city's soldiers shoot them down.",
+                    "Paratroopers: every couple of minutes a squad is dropped behind the city's lines, near a station, base or City Hall the enemy hasn't reached. They come down under canopies and fight once they land.",
+                    "The front: districts the enemy holds (its troops there and few of the city's) are tinted dark red, with the front line drawn strong along their edge. Each one lost and each one won back is on the radio and the timeline. The places it has taken get sandbags and its flag.",
+                    "Occupation: in the districts the enemy holds there's a curfew - people out on the street go indoors and stay there - and anyone its soldiers find outside is held: hands up, walked to a place it has taken and kept there, until the city's police or soldiers reach them and set them free.",
+            },
             {
                     "17.3  -  Fixes: the war bar, and memory while loading",
                     "The war bar at the top tells it as it is. It weighs each side's fighting strength: the police and soldiers whether on foot or riding in a car or truck (half of them weren't counted), tanks, anyone with a gun, the gang members and enemy soldiers (who weren't counted at all), and the help still to come on each side. Unarmed people count only a little - twenty thousand of them used to outweigh the whole army, which kept the bar at 97 per cent. The two numbers always add up to 100, they're no longer held at 97 and 3, and the bar starts where things stand rather than at halfway.",
