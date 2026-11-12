@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 61;
+    private static final int VERSION = 62;
 
     private SaveGame() {
     }
@@ -388,6 +388,11 @@ final class SaveGame {
             out.writeInt(w.heistsStopped);
             out.writeInt(w.heistsEscaped);
             out.writeInt(w.lootStolen);
+            // (Version 62, 18.2: the prison break.)
+            out.writeInt(w.riotStage);
+            out.writeInt(w.riotTotal);
+            out.writeInt(w.prisonEscaped);
+            out.writeInt(w.recaptured);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
@@ -888,6 +893,12 @@ final class SaveGame {
                     w.heistsStopped = in.readInt();
                     w.heistsEscaped = in.readInt();
                     w.lootStolen = in.readInt();
+                }
+                if (version >= 62) {
+                    w.riotStage = in.readInt();
+                    w.riotTotal = in.readInt();
+                    w.prisonEscaped = in.readInt();
+                    w.recaptured = in.readInt();
                 }
                 int bm = in.readInt();
                 if (bm > 0) {

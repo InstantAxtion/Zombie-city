@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.1";
-    static final int VERSION_CODE = 181;
+    static final String VERSION = "18.2";
+    static final int VERSION_CODE = 182;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.2  -  Prison break",
+                    "A new game mode, Prison break (New Game, Game mode). It's played on the Prison Island, the map with the prison, which is picked for you. There are no zombies.",
+                    "The riot: after a quiet start, a third of the inmates riot at once. They rush the guards out in the yard, overpower most of them and take their shotguns. The rest fight hand to hand with whatever's to hand, and ringleaders are bigger and hit harder. Every so often more inmates join while it's going their way. The guards on the wall keep firing down into the yard.",
+                    "The breakout: with the guards down, or after a minute of rioting, the gate gives way. The rioters pour out over the causeway into the city and make for the far edge of town; once out they'd sooner run than fight. Every one who gets clear of the city has escaped.",
+                    "Stopping them: police and soldiers hold the causeway and the seafront, and round them up in the streets. A rioter badly hurt with an officer or guard close by gives up and goes back to the cells (or into cuffs once the prison's open).",
+                    "The ending: once nobody is left rioting, the city wins if fewer than a third of the rioters escaped; otherwise it's a mass escape. The after-action report shows how many rioted, were recaptured, got away, were taken out and are still loose.",
+                    "Two new campaign missions on the Prison Island: Lockdown (no more than five may escape) and Breakout (the whole prison at once, no more than five may escape).",
+                    "Inmates who die are no longer counted as civilians lost. The rioter tool places rioters, armed rioters or ringleaders.",
+                    "Fixed: on the Prison Island in a gang war, an invasion or a heist, the prison's zombie outbreak could still start.",
+            },
             {
                     "18.1  -  Heist mode, negotiators, and two heist missions",
                     "A new game mode, Heist (New Game, Game mode). Armed crews of four to six hit the city's banks, jewellers, pawn shops and stores one after another - a few minutes apart, two or three at once on the bigger maps - each job somewhere new. There are no zombies.",

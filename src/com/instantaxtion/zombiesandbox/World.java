@@ -621,6 +621,7 @@ final class World {
             if (v.enemy && !v.broken) zs += (v.type == Fleet.TANK ? 12 : v.type == Fleet.HELI ? 10 : v.kind == Fleet.K_APC ? 6 : 2) + v.riders.size() * 4;
         }
         if (hostileMode()) zs += hostileReserve * (mode() == CityConfig.MODE_GANGS ? 2 : heistMode() ? 10 : 4) * 0.5f;
+        // ((18.2) The inmates still in the yard who could join a riot weigh a little.)
         if (trait[TR_TOUGH]) zs *= 1.25f;
         if (trait[TR_FRAIL]) zs *= 0.8f;
         float b = hs + zs > 0 ? hs / (hs + zs) : 0.5f;
@@ -2446,7 +2447,7 @@ final class World {
             boolean clear = z == 0 && rising == 0 && lurking == 0 && bitten == 0 && h > 0 && hostileReserve <= 0;
             if (!clear) clearSince = -1;
             else if (clearSince < 0) clearSince = time;
-            if (clear && time - clearSince >= 4 && hostileMode() && !heistMode()) {
+            if (clear && time - clearSince >= 4 && hostileMode() && !heistMode() && !prisonMode()) {
                 outbreak = false;
                 warResult = 1;
                 boolean gangs = mode() == CityConfig.MODE_GANGS;
@@ -2458,8 +2459,8 @@ final class World {
                         + count(civiliansLost, "civilian", "civilians") + " lost in the crossfire.");
                 startAftermath(AFTER_RECOVERY);
                 calmDown();
-            } else if (heistMode()) {
-                // ((18.1) Heists: how it ends is worked out in heistLife.)
+            } else if (heistMode() || prisonMode()) {
+                // ((18.1) Heists, (18.2) and a prison break: how it ends is worked out in heistLife and riotLife.)
             } else if (hostileMode()) {
                 // ((17.0) The other side wins once there's nobody left to fight them: every officer and soldier down,
                 // and no more help coming from outside.)
@@ -2964,11 +2965,12 @@ final class World {
 
     /** What the other side is called in counts and labels. */
     String enemyLabel() {
-        return mode() == CityConfig.MODE_GANGS ? "Gangs" : mode() == CityConfig.MODE_ARMY ? "Enemy" : heistMode() ? "Robbers" : "Zombies";
+        return mode() == CityConfig.MODE_GANGS ? "Gangs" : mode() == CityConfig.MODE_ARMY ? "Enemy" : heistMode() ? "Robbers" : prisonMode() ? "Rioters" : "Zombies";
     }
 
     /** What a gang member or enemy soldier is, for the card about them. */
     String hostileTitle(Entity e) {
+        if (e.type == Entity.GANGSTER && e.squad == RIOT_SQUAD) return RIOT_KITS[Math.max(0, Math.min(2, e.kit))] + ", an inmate";
         if (e.type == Entity.GANGSTER && heistMode())
             return HEIST_KITS[Math.max(0, Math.min(2, e.kit))] + (e.squad >= HEIST_SQUAD ? ", the " + crewName(e.squad) : "");
         if (e.type == Entity.GANGSTER) return e.kit == 3 ? "Boss of the " + GANG_NAMES[fmod(e.squad, GANG_NAMES.length)]
@@ -2991,9 +2993,15 @@ final class World {
             {"the dead", "the robbers"}, {"The infected", "The robbers"}, {"the infected", "the robbers"}, {"Outbreak", "Crime wave"},
             {"outbreak", "crime wave"}, {"hordes", "crews"}, {"horde", "crew"}, {"Horde", "Crew"}};
 
+    private static final String[][] PRISON_WORDS = {{"THE DEAD", "THE RIOTERS"}, {"OUTBREAK", "PRISON BREAK"}, {"Zombies", "Rioters"},
+            {"zombies", "rioters"}, {"Zombie", "Rioter"}, {"zombie", "rioter"}, {"The dead", "The rioters"},
+            {"the dead", "the rioters"}, {"The infected", "The rioters"}, {"the infected", "the rioters"}, {"Outbreak", "Prison break"},
+            {"outbreak", "prison break"}, {"hordes", "mobs"}, {"horde", "mob"}, {"Horde", "Mob"}};
+
     String reword(String s) {
         if (s == null || city == null || city.cfg.mode == CityConfig.MODE_ZOMBIES) return s;
-        String[][] words = city.cfg.mode == CityConfig.MODE_GANGS ? GANG_WORDS : city.cfg.mode == CityConfig.MODE_HEIST ? HEIST_WORDS : ARMY_WORDS;
+        String[][] words = city.cfg.mode == CityConfig.MODE_GANGS ? GANG_WORDS : city.cfg.mode == CityConfig.MODE_HEIST ? HEIST_WORDS
+                : city.cfg.mode == CityConfig.MODE_PRISON ? PRISON_WORDS : ARMY_WORDS;
         for (String[] w : words) if (s.indexOf(w[0]) >= 0) s = s.replace(w[0], w[1]);
         return s;
     }
@@ -3055,6 +3063,10 @@ final class World {
             toolGroup = toolCrew(x, y);
             return;
         }
+        if (prisonMode()) {
+            toolGroup = RIOT_SQUAD;
+            return;
+        }
         if (mode() == CityConfig.MODE_GANGS) {
             int g = 0;
             float bd = Float.MAX_VALUE;
@@ -3077,6 +3089,15 @@ final class World {
         if (heistMode()) {
             Entity r = spawn(Entity.GANGSTER, x, y);
             if (r != null) kitRobber(r, kit, toolGroup);
+            return r;
+        }
+        if (prisonMode()) {
+            Entity r = spawn(Entity.GANGSTER, x, y);
+            if (r != null) {
+                kitRioter(r, kit);
+                riotTotal++;
+                if (riotStage == 0) riotStage = 1;
+            }
             return r;
         }
         // ((17.2) One boss to a gang: another placed while theirs is about is an enforcer.)
@@ -3142,6 +3163,13 @@ final class World {
     /** The game's own gang crews or invading squads, in place of the dead at the start. */
     private void startHostiles(int n) {
         if (n <= 0) return;
+        if (prisonMode()) {
+            // ((18.2) No one to come from outside: the riot is the prison's own inmates (a mission's number of them at first).)
+            riotPlanned = city.cfg.mission >= 0 ? n : -1;
+            hostileStart = n;
+            hostileReserve = 0;
+            return;
+        }
         if (heistMode()) {
             // ((18.1) Crews to come, one job at a time: a mission's own number, otherwise one for every eight of the setting.)
             int crews = city.cfg.mission >= 0 ? n : Math.max(2, Math.min(10, n / 8));
@@ -3219,7 +3247,7 @@ final class World {
      * gang's new recruits out on its turf - until there are no more to come.
      */
     private void hostileWaves() {
-        if (hostileReserve <= 0 || !hostileMode() || heistMode()) return;
+        if (hostileReserve <= 0 || !hostileMode() || heistMode() || prisonMode()) return;
         waveCd -= 1;
         int now = counts[Entity.GANGSTER] + counts[Entity.INVADER];
         if (waveCd > 0 || now >= hostileStart * 0.7f) return;
@@ -3441,6 +3469,8 @@ final class World {
     private void thinkHostile(Entity e, float dt) {
         // ((18.1) A heist crew's on a job.)
         if (e.type == Entity.GANGSTER && heistMode() && heistRobber(e, dt)) return;
+        // ((18.2) A prison rioter.)
+        if (e.type == Entity.GANGSTER && e.squad == RIOT_SQUAD && rioterStep(e, dt)) return;
         boolean army = e.type == Entity.INVADER;
         if (!army && e.kit == 3) {
             // ((17.2) The boss in the hideout, out of sight: nobody outside knows they're there until the police raid it.)
@@ -5133,6 +5163,254 @@ final class World {
                 return true;
             }
         }
+    }
+
+    // ------------------------------------------------------------------ (18.2) prison break
+
+    /** The squad number every rioter has. */
+    static final int RIOT_SQUAD = 300;
+    static final String[] RIOT_KITS = {"Rioter", "Armed rioter", "Ringleader"};
+    /** 0 quiet, 1 the riot inside the walls, 2 the breakout. */
+    int riotStage;
+    /** Inmates who've rioted, who got clear of the city, and who were taken back. */
+    int riotTotal, prisonEscaped, recaptured;
+    private float riotT;
+    /** A mission's own number to riot at first (-1: a third of them). */
+    private int riotPlanned = -1;
+
+    boolean prisonMode() {
+        return mode() == CityConfig.MODE_PRISON;
+    }
+
+    /** A rioter: prison orange, an improvised weapon (fists and whatever's to hand), or a gun taken off a guard. */
+    private void kitRioter(Entity e, int kit) {
+        e.type = Entity.GANGSTER;
+        e.kit = Math.max(0, Math.min(2, kit));
+        e.squad = RIOT_SQUAD;
+        e.body = 0xFFE07A2A;
+        e.head = 0xFF3A2A1E;
+        e.hasGun = false;
+        e.ammo = e.reserve = 0;
+        if (e.kit == 1) setGun(e, Entity.W_SHOTGUN, 16);
+        // (A crowd that's past caring: harder to stop than one person.)
+        e.hp = e.maxHp = e.kit == 2 ? 180 : 140;
+        if (e.kit == 2) {
+            e.mass = 1.5f;
+            e.radius = 4.2f;
+        }
+        e.leader = null;
+        e.errand = null;
+        e.aware = true;
+        e.task = Dispatch.T_NONE;
+    }
+
+    /** Once a second in a prison break: the riot starts, spreads, and breaks out. */
+    private void riotLife() {
+        if (city.prison == null) return;
+        riotT += 1;
+        if (riotStage == 0) {
+            if (time > PRISON_QUIET * 0.7f) startRiot();
+            return;
+        }
+        int guards = 0, inmates = 0, inside = 0, rioters = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead) continue;
+            if (e.role == Entity.ROLE_PRISON_GUARD && e.type == Entity.COP && inPrison(e.x, e.y)) guards++;
+            if (e.inmate && e.type == Entity.CIVILIAN && e.arrested == 0) inmates++;
+            if (e.type == Entity.GANGSTER && e.squad == RIOT_SQUAD) {
+                rioters++;
+                if (inPrison(e.x, e.y)) inside++;
+            }
+        }
+        // The riot spreads while it's going their way.
+        if (riotStage >= 1 && inmates > 0 && ((int) riotT) % 15 == 0 && rioters > 0 && rioters < riotTotal * 2 + 40) joinRiot(Math.max(2, inmates / 12));
+        if (riotStage == 1 && (guards <= 1 || riotT > 60)) breakout();
+        // Over: nobody left rioting, and nobody left to join.
+        if (warResult == 0 && rioters == 0 && (riotStage == 2 || inmates == 0 || riotT > 20)) {
+            boolean held = prisonEscaped * 3 < riotTotal;
+            outbreak = false;
+            warResult = held ? 1 : 2;
+            timeline(held ? "The prison riot is over" : "The prison break: too many got away");
+            banner(held ? "THE RIOT IS OVER" : "MASS ESCAPE", riotTotal + " rioted: " + recaptured + " back in the cells, "
+                    + prisonEscaped + " got away.");
+            startAftermath(held ? AFTER_RECOVERY : AFTER_FALLEN);
+            if (held) calmDown();
+        }
+    }
+
+    private void startRiot() {
+        riotStage = 1;
+        riotT = 0;
+        int inmates = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) if (entities.get(i).inmate && !entities.get(i).dead) inmates++;
+        int want = riotPlanned > 0 ? riotPlanned : Math.max(6, inmates / 3);
+        joinRiot(want);
+        // The rush: the guards out in the yard (not those up on the wall) jumped all at once, most of them overpowered
+        // and their shotguns taken.
+        ArrayList<Entity> rioters = new ArrayList<Entity>();
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.type == Entity.GANGSTER && e.squad == RIOT_SQUAD) rioters.add(e);
+        }
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity g = entities.get(i);
+            if (g.dead || g.role != Entity.ROLE_PRISON_GUARD || g.type != Entity.COP || !inPrison(g.x, g.y)) continue;
+            boolean onWall = false;
+            for (float[] q : city.prisonPosts) onWall |= World.hypot(q[0] - g.x, q[1] - g.y) < 40;
+            if (onWall) continue;
+            if (rnd.nextFloat() > 0.75f) continue;
+            Entity taker = null;
+            float bd = Float.MAX_VALUE;
+            for (Entity r : rioters) {
+                float d = (float) World.hypot(r.x - g.x, r.y - g.y);
+                if (!r.hasGun && d < bd) {
+                    bd = d;
+                    taker = r;
+                }
+            }
+            if (taker != null) {
+                setGun(taker, Entity.W_SHOTGUN, 16 + rnd.nextInt(12));
+                taker.kit = Math.max(taker.kit, 1);
+            }
+            g.hp = 0;
+        }
+        float[] p = prisonCentre();
+        emit(Sfx.ALARM, p[0], p[1]);
+        banner("PRISON RIOT", "Inmates have attacked the guards on the island. " + riotTotal + " of them are rioting.");
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Riot at the island prison! The guards are under attack. All units to the seafront and the causeway!",
+                p[0], p[1], true);
+        timeline("Riot at the island prison", p[0], p[1]);
+        dispatch.sighting(p[0], p[1], null);
+    }
+
+    private float[] prisonCentre() {
+        int[] q = city.prison;
+        return new float[]{(q[0] + q[2]) / 2f * City.T, (q[1] + q[3]) / 2f * City.T};
+    }
+
+    /** Inmates in the yard pick up whatever's to hand and join in. */
+    private void joinRiot(int n) {
+        ArrayList<Entity> in = new ArrayList<Entity>();
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity e = entities.get(i);
+            if (!e.dead && e.inmate && e.type == Entity.CIVILIAN && e.arrested == 0 && e.ride == null && e.bleedT == 0) in.add(e);
+        }
+        java.util.Collections.shuffle(in, rnd);
+        for (int k = 0; k < Math.min(n, in.size()); k++) {
+            Entity e = in.get(k);
+            kitRioter(e, k % 12 == 0 ? 2 : 0);
+            riotTotal++;
+        }
+        if (n > 0) recountLive();
+    }
+
+    /** The gate gives way: out across the causeway, and away into the city. */
+    private void breakout() {
+        riotStage = 2;
+        riotT = 0;
+        prisonFallen = true;
+        city.openPrisonGate();
+        routesChanged();
+        float gx = (city.prisonGate[0] + 1.5f) * City.T, gy = city.prisonGate[1] * City.T;
+        banner("PRISON BREAK", "The rioters have broken the prison gate. They're coming over the causeway into the city.");
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: They're through the prison gate! Hold the causeway, don't let them into the city!", gx, gy, true);
+        timeline("The prison gate broken: the breakout", gx, gy);
+        dispatch.sighting(gx, gy - 4 * City.T, null);
+    }
+
+    /** Back in the cells: a rioter who's given up, or been hurt badly enough to stop, is an inmate again. */
+    private void recapture(Entity e) {
+        e.type = Entity.CIVILIAN;
+        e.squad = -1;
+        e.hasGun = false;
+        e.ammo = e.reserve = 0;
+        e.aiming = false;
+        e.foe = null;
+        e.inmate = !prisonFallen;
+        e.arrested = prisonFallen ? (byte) 1 : 0;
+        e.arrestT = 0;
+        e.body = 0xFFE07A2A;
+        recaptured++;
+        arrests++;
+        recountLive();
+    }
+
+    /**
+     * A rioter: hand to hand with the guards (and a guard's shotgun picked up off them), and once the gate's down out
+     * across the causeway, heading for the edge of the city. Gives up when badly hurt with the law close by. False to
+     * fight as the armed do.
+     */
+    private boolean rioterStep(Entity e, float dt) {
+        // Badly hurt, the police or guards right there: hands up.
+        if (e.hp < e.maxHp * 0.35f && rnd.nextFloat() < dt * 1.2f && lawNear(e, 70) != null) {
+            recapture(e);
+            return true;
+        }
+        e.foeT -= dt;
+        if (e.foeT <= 0 || (e.foe != null && (e.foe.dead || e.foe.hp <= 0))) {
+            e.foeT = 0.35f + rnd.nextFloat() * 0.3f;
+            e.foe = hostileTarget(e, e.hasGun ? hostileSight(e) : 110);
+        }
+        Entity t = e.foe;
+        boolean armed = e.hasGun && e.ammo + e.reserve > 0;
+        if (t != null && !t.dead && t.hp > 0) {
+            float d = (float) World.hypot(t.x - e.x, t.y - e.y);
+            if (armed && d < hostileRange(e) && city.los(e.x, e.y, t.x, t.y) && (riotStage < 2 || d < 90 || rnd.nextFloat() < 0.3f)) return false;
+            // Out of the prison and the way clear: they'd sooner run than fight.
+            if (riotStage == 2 && !inPrison(e.x, e.y) && d > 40 && rnd.nextFloat() < 0.7f) {
+                // (fall through to running)
+            } else if (!armed && d < (riotStage == 2 ? 25 : 90)) {
+                e.aiming = false;
+                if (d > 8) walkToSpot(e, t.x, t.y, e.runSpeed);
+                else {
+                    steer(e, 0, 0, 0);
+                    e.angle = (float) Math.atan2(t.y - e.y, t.x - e.x);
+                    e.cooldown -= dt;
+                    if (e.cooldown <= 0) {
+                        e.cooldown = 0.9f;
+                        t.hp -= e.kit == 2 ? 16 : 10;
+                        emit(Sfx.MELEE, t.x, t.y);
+                        if (t.hp <= 0 && t.hasGun && !e.hasGun) {
+                            // The guard's gun, taken.
+                            setGun(e, t.weapon == Entity.W_STD ? Entity.W_PISTOL : t.weapon, Math.max(8, t.ammo + t.reserve / 2));
+                            e.kit = Math.max(e.kit, 1);
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+        e.aiming = false;
+        if (riotStage < 2) {
+            // Inside: after the guards, or about the yard.
+            if (t != null && !t.dead && inPrison(t.x, t.y)) walkToSpot(e, t.x, t.y, e.speed * 1.3f);
+            else wander(e, e.speed * 0.7f);
+            return true;
+        }
+        // Out, and away: the edge of the city on the far side from the sea.
+        if (e.roamX <= 0 && e.roamY <= 0 || e.hostileT > -1000) {
+            float ww = city.worldW();
+            float[] p = city.findWalkable(30 + rnd.nextFloat() * (ww - 60), 20);
+            if (p == null) p = city.edgeSpawn(rnd.nextFloat() * ww, 0);
+            if (p != null) {
+                e.roamX = p[0];
+                e.roamY = p[1];
+            }
+            e.hostileT = -2000;
+        }
+        float edge = 3 * City.T;
+        if (e.x < edge || e.y < edge || e.x > city.worldW() - edge || World.hypot(e.x - e.roamX, e.y - e.roamY) < 20) {
+            prisonEscaped++;
+            if (rnd.nextFloat() < 0.35f || prisonEscaped == 1)
+                dispatch.say(Dispatch.WHO_POLICE, null, "Police: An inmate's got clear of the city on " + city.placeName(e.x, e.y) + ".", e.x, e.y);
+            e.dead = true;
+            e.removed = true;
+            counts[e.type]--;
+            return true;
+        }
+        walkToSpot(e, e.roamX, e.roamY, e.runSpeed);
+        return true;
     }
 
     /** Is any of the city's police or soldiers within r of (x, y)? */
@@ -10144,7 +10422,10 @@ final class World {
     /** Once a second: the infection evolves, and after it's over the city slowly recovers. */
     private void cityLife() {
         keyBuildings();
-        if (city.prison != null) prisonLife();
+        if (city.prison != null) {
+            if (prisonMode()) riotLife();
+            else if (mode() == CityConfig.MODE_ZOMBIES) prisonLife();
+        }
         if (city.apron != null) airportLife();
         reservePilots();
         if (((int) time) % 5 == 0) fleet.stationHelis();
@@ -12472,7 +12753,7 @@ final class World {
      */
     private boolean mortarStep(Entity e, float dt) {
         // ((17.0) Nobody shells their own city's streets over a gang war.)
-        if (mode() == CityConfig.MODE_GANGS || heistMode()) return false;
+        if (mode() == CityConfig.MODE_GANGS || heistMode() || prisonMode()) return false;
         if (e.grenades <= 0) {
             if (e.task == Dispatch.T_POST) {
                 e.task = Dispatch.T_NONE;
@@ -17089,7 +17370,8 @@ final class World {
             if (fallenHeroes.size() > 40) fallenHeroes.remove(0);
         }
         dispatch.onDeath(e);
-        if (e.type == Entity.CIVILIAN) civiliansLost++;
+        // ((18.2) The prison's inmates aren't counted with the townspeople.)
+        if (e.type == Entity.CIVILIAN && !e.inmate) civiliansLost++;
         // Their gun stays where they fell for someone else to pick up.
         if (e.canShoot() && e.ammo + e.reserve > 0) {
             Pickup p = new Pickup();

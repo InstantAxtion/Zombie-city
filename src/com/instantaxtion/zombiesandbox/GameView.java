@@ -69,13 +69,15 @@ final class GameView extends View implements Menu.Host {
             "Shotgun: tough, charges in and doesn't break", "One to a gang: tough, a big revolver, guarded; the gang falls apart without them"};
     private static final String[] HEIST_INFO = {"Pistol and a mask: a crew of them goes for the nearest bank or shop",
             "Submachine gun: sprays the street on the way out", "Body armour and a rifle: holds the door"};
+    private static final String[] RIOT_INFO = {"An inmate in orange, fists and whatever's to hand: goes for the guards",
+            "An inmate with a shotgun taken off a guard", "A ringleader: big, tough, hits hard"};
     private static final String[] ARMY_INFO = {"Assault rifle in bursts; advances on the stations and bases",
             "Belt-fed machine gun: pins down from a distance", "Scoped rifle: picks off officers from far away"};
 
     /** ((17.0) What the enemy tool makes in this game: the dead, a gang or the enemy army. */
     private int enemyType() {
         int m = world.mode();
-        return m == CityConfig.MODE_GANGS || m == CityConfig.MODE_HEIST ? Entity.GANGSTER : m == CityConfig.MODE_ARMY ? Entity.INVADER
+        return m == CityConfig.MODE_GANGS || m == CityConfig.MODE_HEIST || m == CityConfig.MODE_PRISON ? Entity.GANGSTER : m == CityConfig.MODE_ARMY ? Entity.INVADER
                 : ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
     }
 
@@ -84,6 +86,7 @@ final class GameView extends View implements Menu.Host {
         if (m == CityConfig.MODE_GANGS) return World.GANG_KITS;
         if (m == CityConfig.MODE_ARMY) return World.ARMY_KITS;
         if (m == CityConfig.MODE_HEIST) return World.HEIST_KITS;
+        if (m == CityConfig.MODE_PRISON) return World.RIOT_KITS;
         String[] n = new String[ZOMBIE_VARIANTS.length];
         for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
         return n;
@@ -106,6 +109,7 @@ final class GameView extends View implements Menu.Host {
             if (m == CityConfig.MODE_GANGS) return "Gangs";
             if (m == CityConfig.MODE_ARMY) return "Enemy army";
             if (m == CityConfig.MODE_HEIST) return "Robbers";
+            if (m == CityConfig.MODE_PRISON) return "Rioters";
         }
         return TOOL_NAMES[t];
     }
@@ -8632,7 +8636,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_COP: return COP_INFO;
             case TOOL_MIL: return MIL_INFO;
             case TOOL_ZOMBIE: return world.mode() == CityConfig.MODE_GANGS ? GANG_INFO : world.mode() == CityConfig.MODE_ARMY ? ARMY_INFO
-                    : world.mode() == CityConfig.MODE_HEIST ? HEIST_INFO : ZOMBIE_INFO;
+                    : world.mode() == CityConfig.MODE_HEIST ? HEIST_INFO : world.mode() == CityConfig.MODE_PRISON ? RIOT_INFO : ZOMBIE_INFO;
             case TOOL_PLACE: return PLACE_INFO;
             case TOOL_BUILD: return BUILD_INFO;
             default: return EVENT_INFO;

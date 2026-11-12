@@ -55,8 +55,8 @@ final class CityConfig implements OptionSet {
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
     /** ((17.0) The game mode (not one of the eight in v): who the police and the army are up against. */
     static final int OPT_MODE = 10;
-    static final String[] MODES = {"Zombies", "Gangs", "Enemy army", "Heist"};
-    static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2, MODE_HEIST = 3;
+    static final String[] MODES = {"Zombies", "Gangs", "Enemy army", "Heist", "Prison break"};
+    static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2, MODE_HEIST = 3, MODE_PRISON = 4;
     /** ((17.0) See OPT_MODE. Not part of the city code: the same streets can be played any way. */
     int mode;
     /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
@@ -314,6 +314,8 @@ final class CityConfig implements OptionSet {
 
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
+        // ((18.2) A prison break is on the Prison Island: it's the map with the prison.)
+        if (mode == MODE_PRISON) v[OPT_PRESET] = PRISON_ISLAND;
         // ((13.0) The island maps come at the biggest size: Colossal, 1280 tiles across (640 and 720 before).)
         if (v[OPT_PRESET] == ISLANDS || v[OPT_PRESET] == ARCHIPELAGO) v[OPT_SIZE] = COLOSSAL;
         if (removed(v[OPT_PRESET])) v[OPT_PRESET] = METROPOLIS;
@@ -700,6 +702,7 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_MODE) {
             mode = Math.max(0, Math.min(MODES.length - 1, value));
+            normalize();
             return;
         }
         v[i] = value;

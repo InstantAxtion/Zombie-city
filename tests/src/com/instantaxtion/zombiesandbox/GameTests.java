@@ -5661,6 +5661,67 @@ public final class GameTests {
                 check(g.heistsEscaped == 1 && g.lootStolen > 0, "and with nobody to stop them, got away (" + g.heistsEscaped + ", $" + g.lootStolen + ")");
             }
         });
+        test("18.2: prison break - the riot, guards overpowered, the gate broken, escapes and recaptures, the ending, saves", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.mode = CityConfig.MODE_PRISON;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.seed = 3;
+                c.normalize();
+                check(c.prisonIsland(), "a prison break is on the Prison Island");
+                World w = new World(c);
+                w.setMaxPopulation(5000);
+                w.rnd.setSeed(3);
+                w.populate(c);
+                check(w.city.prison != null && w.counts[Entity.GANGSTER] == 0 && w.riotStage == 0, "quiet at first");
+                // No zombies on the island: nobody's bitten.
+                boolean riot = false, armed = false, gate = false, out = false;
+                for (int f = 0; f < 30 * 200 && !(gate && out); f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    riot |= w.riotStage >= 1;
+                    gate |= w.riotStage == 2 && w.prisonFallen;
+                    if (f % 30 == 0)
+                        for (Entity e : w.entities)
+                            if (!e.dead && e.squad == World.RIOT_SQUAD && e.type == Entity.GANGSTER) {
+                                armed |= e.hasGun;
+                                out |= !w.inPrison(e.x, e.y);
+                            }
+                }
+                check(riot && w.riotTotal > 10, "the riot started (" + w.riotTotal + ")");
+                check(w.zombieCount() == w.counts[Entity.GANGSTER], "no zombies");
+                check(armed, "guards' shotguns taken");
+                check(gate, "the gate broken");
+                check(out, "rioters out over the causeway");
+                // A rioter badly hurt with the law right by: back in the cells.
+                Entity r = null;
+                for (Entity e : w.entities) if (!e.dead && e.squad == World.RIOT_SQUAD && e.type == Entity.GANGSTER) { r = e; break; }
+                if (r != null) {
+                    int before = w.recaptured;
+                    r.hp = 5;
+                    w.spawnCop(0, r.x + 8, r.y);
+                    for (int f = 0; f < 90 && r.type == Entity.GANGSTER && !r.dead; f++) {
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                    }
+                    check(r.dead || (r.type == Entity.CIVILIAN && w.recaptured > before), "a hurt rioter gives up");
+                }
+                // Saved and loaded.
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.mode() == CityConfig.MODE_PRISON && l.riotStage == w.riotStage && l.riotTotal == w.riotTotal && l.prisonEscaped == w.prisonEscaped
+                        && l.recaptured == w.recaptured && l.prisonFallen, "kept in a save");
+                // The end: nobody left rioting.
+                for (int f = 0; f < 30 * 300 && w.warResult == 0; f++) {
+                    for (Entity e : w.entities) if (e.type == Entity.GANGSTER) e.hp = 0;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.warResult == 1, "the riot's over and the city held (" + w.warResult + ", " + w.prisonEscaped + " of " + w.riotTotal + " away)");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

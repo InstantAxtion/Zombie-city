@@ -687,7 +687,8 @@ final class Menu {
             y += 8 * dp;
         }
         // Each side's losses, side by side.
-        String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : mode == CityConfig.MODE_HEIST ? "The crews" : "The dead";
+        String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : mode == CityConfig.MODE_HEIST ? "The crews"
+                : mode == CityConfig.MODE_PRISON ? "The rioters" : "The dead";
         String[][] ours = {
                 {"Police officers lost", String.valueOf(world.copsLost)},
                 {"Soldiers lost", String.valueOf(world.soldiersLost)},
@@ -704,6 +705,14 @@ final class Menu {
                     {"Arrested", String.valueOf(world.arrests)},
                     {"Gangs broken", String.valueOf(Integer.bitCount(world.gangBroken))},
                     {"Still on the street", String.valueOf(world.zombieCount())},
+            };
+        } else if (mode == CityConfig.MODE_PRISON) {
+            theirs = new String[][]{
+                    {"Rioted", String.valueOf(world.riotTotal)},
+                    {"Back in the cells", String.valueOf(world.recaptured)},
+                    {"Got away", String.valueOf(world.prisonEscaped)},
+                    {"Taken out", String.valueOf(world.zombiesKilled)},
+                    {"Still loose", String.valueOf(world.zombieCount())},
             };
         } else if (mode == CityConfig.MODE_HEIST) {
             theirs = new String[][]{
@@ -923,7 +932,7 @@ final class Menu {
         c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
                 + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
         y += 28 * dp;
-        String[] modes = {"Zombies", "Gangs", "Enemy army", "Heist"};
+        String[] modes = {"Zombies", "Gangs", "Enemy army", "Heist", "Prison break"};
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
             Campaign.Mission m = Campaign.MISSIONS[i];
             boolean open = records == null || records.unlocked(i);
@@ -1875,7 +1884,8 @@ final class Menu {
         String[] modeInfo = {"Zombies: an outbreak of the dead. The bitten turn, and the city fights for its life.",
                 "Gangs: armed street gangs hold their turf and take on the police and the army. No zombies: civilians run from the shooting, and can be caught in it.",
                 "Enemy army: an invading army's squads march on the city's police stations and bases, more coming in waves. No zombies: civilians run from the fighting, and can be caught in it.",
-                "Heist: armed crews hit the city's banks and shops one after another, taking hostages. Box them in for a standoff and talk them out, or chase the getaway car before it reaches the edge of town."};
+                "Heist: armed crews hit the city's banks and shops one after another, taking hostages. Box them in for a standoff and talk them out, or chase the getaway car before it reaches the edge of town.",
+                "Prison break (on the Prison Island): the inmates riot and go for the guards, take their guns, and break out over the causeway into the city. Hold them on the causeway and round them up before they get clear of town."};
         for (String line : wrap(modeInfo[Math.max(0, Math.min(modeInfo.length - 1, config.mode))], lw - 4 * dp, plain)) {
             c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;
