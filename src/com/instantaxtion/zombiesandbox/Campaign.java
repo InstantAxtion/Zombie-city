@@ -46,7 +46,8 @@ final class Campaign {
     }
 
     private static final int Z = CityConfig.MODE_ZOMBIES, G = CityConfig.MODE_GANGS, A = CityConfig.MODE_ARMY, H = CityConfig.MODE_HEIST, P = CityConfig.MODE_PRISON,
-            K = CityConfig.MODE_CARTEL, T = CityConfig.MODE_TERROR, D = CityConfig.MODE_DISASTER, X = CityConfig.MODE_ALIENS;
+            K = CityConfig.MODE_CARTEL, T = CityConfig.MODE_TERROR, D = CityConfig.MODE_DISASTER, X = CityConfig.MODE_ALIENS,
+            L = CityConfig.MODE_LOOTERS;
 
     // (cops and soldiers: what the city starts with; foes: the zombies at the start, or the gang members or enemy
     // soldiers on the streets, with more of them to come in waves.)
@@ -92,6 +93,9 @@ final class Campaign {
                     X, 6, CityConfig.SMALL, 20, 16, 40, 39001, 500, 90, 1200, G_CLEAR, 0, 300, 40),
             new Mission("Mothership", "The full invasion: a mothership over a big city, drones without end until it falls. Shoot it down, then finish them.",
                     X, 0, CityConfig.MEDIUM, 28, 24, 80, 66157, 700, 120, 1500, G_CLEAR, 0, 600, 80),
+            // ((18.4) Outbreak + looters.)
+            new Mission("Smash and Grab", "The dead are loose in a small town, and armed looting gangs are already stripping the shops. Clear the dead; the looters will fight you for the streets.",
+                    L, 6, CityConfig.SMALL, 26, 4, 20, 58211, 320, 60, 900, G_CLEAR, 0, 80, 10),
     };
 
     /**
@@ -100,7 +104,7 @@ final class Campaign {
      */
     static int population(int id) {
         Mission m = get(id);
-        return m != null && m.mode == Z ? 1800 : 5000;
+        return m != null && (m.mode == Z || m.mode == L) ? 1800 : 5000;
     }
 
     static Mission get(int id) {
@@ -130,7 +134,7 @@ final class Campaign {
     /** Each soldier by GameView.MIL_ROLES order. */
     static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee. */
-    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40};
+    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45};
     /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect. */
     static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1};
 

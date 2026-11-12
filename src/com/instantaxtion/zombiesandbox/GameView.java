@@ -35,7 +35,7 @@ final class GameView extends View implements Menu.Host {
             return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
     }
-    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee"};
+    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
             "City alarm", "Infect"};
     private static final int TOOL_COP = 3;
@@ -133,7 +133,8 @@ final class GameView extends View implements Menu.Host {
     private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile", "Big and tough, shoves people aside"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
-            "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde"};
+            "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
+            "Flies from the station to watch the spot: marks the enemy there (better aim, no hiding in cover) and calls in what it sees"};
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten"};
@@ -547,6 +548,7 @@ final class GameView extends View implements Menu.Host {
         world = new World(cfg);
         world.setMaxPopulation(settings.maxPopulation());
         world.gore = settings.gore();
+        world.heavy = settings.heavyDestruction();
         world.populate(cfg);
         follow = null;
         followV = null;
@@ -567,6 +569,7 @@ final class GameView extends View implements Menu.Host {
         }
         world.setMaxPopulation(settings.maxPopulation());
         world.gore = settings.gore();
+        world.heavy = settings.heavyDestruction();
         sound.setVolumes(settings.music(), settings.sfx());
         realistic = settings.realistic();
         City.realistic = realistic;
@@ -779,7 +782,7 @@ final class GameView extends View implements Menu.Host {
         // (10.50) A new game always starts in the 3D view (the View button still switches it).
         settings.setBuildings3d(true);
         final int maxPop = settings.maxPopulation();
-        final boolean gore = settings.gore();
+        final boolean gore = settings.gore(), heavy = settings.heavyDestruction();
         startLoader(false, null, new Runnable() {
             @Override
             public void run() {
@@ -787,6 +790,7 @@ final class GameView extends View implements Menu.Host {
                 // ((18.0) A mission's the same on every phone: its own population, not the setting's.)
                 w.setMaxPopulation(cfg.mission >= 0 ? Campaign.population(cfg.mission) : maxPop);
                 w.gore = gore;
+                w.heavy = heavy;
                 w.populate(cfg);
                 if (cfg.mission >= 0) Campaign.begin(w, records.veterans());
                 built = w;
@@ -1560,7 +1564,8 @@ final class GameView extends View implements Menu.Host {
         }
         // ((14.4) How tense it is, 0 to 1: how far the dead have spread through the city sets the floor, the fighting in
         // view the rest. The music follows it - calm, the tension, the fight - and sits louder the higher it is.)
-        int zs = world.zombieCount();
+        // ((18.4) A disaster under way, or a bomb ticking, is as tense as the other side on the streets.)
+        int zs = world.zombieCount() + world.hazards.size() * 25 + world.bombs.size() * 15;
         float spread = zs == 0 ? 0 : Math.min(1, 3f * zs / Math.max(1, zs + world.humans));
         float local = Math.min(1, shots / 18f + onScreen / 36f + (world.explosions.isEmpty() ? 0 : 0.35f));
         float target = zs == 0 ? 0 : Math.max(local, 0.2f + 0.45f * spread);
@@ -1576,7 +1581,7 @@ final class GameView extends View implements Menu.Host {
             if (moodPlayed > 140) {
                 moodPlayed = 0;
                 moodVariant = (moodVariant + 1 + rnd.nextInt(2)) % 3;
-                mood = Synth.variant(moodBase, moodVariant);
+                mood = themed(Synth.variant(moodBase, moodVariant));
             }
             return;
         }
@@ -1584,8 +1589,16 @@ final class GameView extends View implements Menu.Host {
         moodBase = want;
         moodVariant = rnd.nextInt(3);
         moodPlayed = 0;
-        mood = Synth.variant(moodBase, moodVariant);
+        mood = themed(Synth.variant(moodBase, moodVariant));
         moodHold = 20;
+    }
+
+    /** ((18.4) Each mode's own theme in place of the general in-game music. */
+    private int themed(int track) {
+        if (moodBase != Synth.TRACK_GAME || world == null || world.city.cfg.zombieMode()) return track;
+        int m = world.mode();
+        return m == CityConfig.MODE_ALIENS ? Synth.THEME_ALIEN : m == CityConfig.MODE_DISASTER ? Synth.THEME_STORM
+                : m == CityConfig.MODE_ARMY || m == CityConfig.MODE_TERROR ? Synth.THEME_WAR : Synth.THEME_STREET;
     }
 
     private int moodBase = Synth.TRACK_GAME, moodVariant;
@@ -3499,6 +3512,28 @@ final class GameView extends View implements Menu.Host {
             text.setColor(0xFFFFE0E0);
             c.drawText("BOMB " + World.clock((int) Math.max(0, b[2])) + (b[3] > 0 ? "  " + (int) (b[3] * 100 / World.DEFUSE) + "%" : ""), b[0], b[1] - 18, text);
         }
+        // ((18.4) The police's drones: small and dark with blue and red lights, the ground they watch ringed in blue.)
+        for (int i = 0, n = world.policeDrones.size(); i < n; i++) {
+            float[] d = world.policeDrones.get(i);
+            if (World.hypot(d[0] - d[2], d[1] - d[3]) < 60) {
+                stroke.setColor(0x506FA8FF);
+                stroke.setStrokeWidth(1.5f);
+                c.drawCircle(d[2], d[3], World.WATCH_SEE, stroke);
+            }
+            fill.setColor(0x50000000);
+            c.drawCircle(d[0] + 6, d[1] + 8, 5, fill);
+            fill.setColor(0xFF22252A);
+            c.drawRect(d[0] - 4, d[1] - 1, d[0] + 4, d[1] + 1, fill);
+            c.drawRect(d[0] - 1, d[1] - 4, d[0] + 1, d[1] + 4, fill);
+            for (int k = 0; k < 4; k++) {
+                float rx = d[0] + (k % 2 == 0 ? -4 : 4), ry = d[1] + (k < 2 ? -4 : 4);
+                fill.setColor(0x80C8CCD2);
+                c.drawCircle(rx, ry, 2.6f, fill);
+            }
+            boolean blink = ((int) (tm * 4)) % 2 == 0;
+            fill.setColor(blink ? 0xFF4F7BFF : 0xFFFF4040);
+            c.drawCircle(d[0], d[1], 1.4f, fill);
+        }
         if (world.motherAlive) {
             float mx = world.motherX, my = world.motherY, r = 75;
             fill.setColor(0x40000000);
@@ -3531,7 +3566,7 @@ final class GameView extends View implements Menu.Host {
     }
 
     private void drawTurf(Canvas c) {
-        if (world.mode() == CityConfig.MODE_ZOMBIES || world.districtOwner == null) return;
+        if (world.city.cfg.zombieMode() || world.districtOwner == null) return;
         boolean army = world.armyLike();
         City city = world.city;
         if (turfVer != world.turfVersion || turfBmp == null) {
@@ -9934,6 +9969,7 @@ final class GameView extends View implements Menu.Host {
                 case 5: made = world.placeMedkit(wx, wy); break;
                 case 6: made = world.fleet.placeBearCat(at[0], at[1]); break;
                 case 7: made = world.fleet.startReconAt(at[0], at[1]); break;
+                case 8: made = world.launchDrone(wx, wy); break;
             }
         }
         if (made == null) {
@@ -9989,6 +10025,7 @@ final class GameView extends View implements Menu.Host {
             case 4: made = world.placeCrate(wx, wy, 0); break;
             case 6: made = world.fleet.placeBearCat(wx, wy); break;
             case 7: made = world.fleet.startReconAt(wx, wy); break;
+            case 8: made = world.launchDrone(wx, wy); break;
             default: made = world.placeMedkit(wx, wy); break;
         }
         if (made != null) lastAction.add(made);

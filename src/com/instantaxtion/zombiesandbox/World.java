@@ -321,6 +321,9 @@ final class World {
         maxEntities = cap > 0 ? cap : Math.max(2500, city.totalResidents * 2 + 1000);
     }
     boolean gore = true;
+    /** ((18.4) The Destruction setting: heavy. */
+    boolean heavy;
+    private int collapseChain;
 
     float time, shake;
     /** What the player can see (world units), so cars aren't made to vanish or appear in plain view. */
@@ -659,7 +662,7 @@ final class World {
         Country.current = city.country;
         rollStrain();
         // ((17.0) No virus in a gang war or an invasion.)
-        if (cfg.mode != CityConfig.MODE_ZOMBIES) Arrays.fill(trait, false);
+        if (!cfg.zombieMode()) Arrays.fill(trait, false);
         dispatch = new Dispatch(this, cfg.reinforcements());
         fleet = new Fleet(this);
         burned = new boolean[city.w * city.h];
@@ -786,7 +789,7 @@ final class World {
         int[] force0 = forces(cfg, city);
         int people = Math.min(cfg.civilians(city.totalResidents), Math.max(maxEntities / 2, maxEntities * 4 / 5 - force0[0] - force0[1]));
         // ((17.0) In a gang war or an invasion, room kept for the other side as well: they don't come from the people.)
-        if (cfg.mode != CityConfig.MODE_ZOMBIES)
+        if (!cfg.zombieMode())
             people = Math.min(people, Math.max(maxEntities / 4, maxEntities - force0[0] - force0[1]
                     - Math.round(hostilePlanned(cfg.zombies(), force0[0] + force0[1]) * 1.25f) - 150));
         residents(people);
@@ -2228,6 +2231,7 @@ final class World {
         if (gangLike() || heistMode()) driveBys(dt);
         if (armyLike() || heistMode() || cartelMode()) cityVsArmour(dt);
         if (disasterMode() && !hazards.isEmpty()) hazardsMove(dt);
+        if (!policeDrones.isEmpty()) dronesStep(dt);
         updateBlasts(dt);
         updateFirebomb(dt);
         updateMedkits(dt);
@@ -2968,7 +2972,7 @@ final class World {
 
     /** No zombies in this game: a gang war or an invasion. */
     boolean hostileMode() {
-        return city.cfg.mode != CityConfig.MODE_ZOMBIES;
+        return !city.cfg.zombieMode();
     }
 
     /** What the other side is called in counts and labels. */
@@ -3034,7 +3038,7 @@ final class World {
             {"The enemy", "The aliens"}, {"the enemy", "the aliens"}, {"Enemy", "Alien"}};
 
     String reword(String s) {
-        if (s == null || city == null || city.cfg.mode == CityConfig.MODE_ZOMBIES) return s;
+        if (s == null || city == null || city.cfg.zombieMode()) return s;
         int md = city.cfg.mode;
         String[][] words = md == CityConfig.MODE_GANGS ? GANG_WORDS : md == CityConfig.MODE_HEIST ? HEIST_WORDS
                 : md == CityConfig.MODE_PRISON ? PRISON_WORDS : md == CityConfig.MODE_CARTEL ? CARTEL_WORDS : md == CityConfig.MODE_TERROR ? TERROR_WORDS
@@ -6189,6 +6193,71 @@ final class World {
             banner("THE MOTHERSHIP IS DOWN", "It's come down in flames over " + city.placeName(motherX, motherY) + ". Its drones are faltering: finish them.");
             dispatch.say(Dispatch.WHO_MILITARY, null, "Military: The mothership is down! Mop up the rest of them!", motherX, motherY, true);
             timeline("The mothership shot down", motherX, motherY);
+        }
+    }
+
+    // ------------------------------------------------------------------ (18.4) police drones
+
+    /** The police's drones: {x, y, where it's watching x, y, seconds left, seconds to its next report}. */
+    final ArrayList<float[]> policeDrones = new ArrayList<float[]>();
+    /** How far a drone sees, and how long one stays up. */
+    static final float WATCH_SEE = 200, WATCH_LIFE = 150;
+
+    /** A drone up from the nearest police station (or right there if there's none) to watch over (x, y). */
+    float[] launchDrone(float x, float y) {
+        City.Facility st = city.nearestFacility(City.FACILITY_POLICE, x, y);
+        float sx = st != null ? st.gateX : x, sy = st != null ? st.gateY : y;
+        float[] d = {sx, sy, x, y, WATCH_LIFE, 2};
+        policeDrones.add(d);
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police: Drone up, heading for " + city.placeName(x, y) + ".", x, y);
+        return d;
+    }
+
+    boolean droneOver(float x, float y) {
+        for (int i = 0, n = policeDrones.size(); i < n; i++) {
+            float[] d = policeDrones.get(i);
+            float dx = d[0] - x, dy = d[1] - y;
+            if (dx * dx + dy * dy < WATCH_SEE * WATCH_SEE && World.hypot(d[0] - d[2], d[1] - d[3]) < 60) return true;
+        }
+        return false;
+    }
+
+    /** Each frame: the drones fly out to where they're watching and circle it; now and then they report what they see. */
+    private void dronesStep(float dt) {
+        for (int i = policeDrones.size() - 1; i >= 0; i--) {
+            float[] d = policeDrones.get(i);
+            d[4] -= dt;
+            if (d[4] <= 0) {
+                policeDrones.remove(i);
+                continue;
+            }
+            float a = time * 0.6f + i;
+            float gx = d[2] + (float) Math.cos(a) * 40, gy = d[3] + (float) Math.sin(a) * 40;
+            float dx = gx - d[0], dy = gy - d[1], dl = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            float step = Math.min(dl, 110 * dt);
+            d[0] += dx / dl * step;
+            d[1] += dy / dl * step;
+            d[5] -= dt;
+            if (d[5] > 0 || World.hypot(d[0] - d[2], d[1] - d[3]) > 60) continue;
+            d[5] = 6;
+            // What it sees: the other side in numbers gets the police sent; a bomb gets the bomb squad.
+            int seen = 0;
+            float sx = 0, sy = 0;
+            for (int k = 0, n = entities.size(); k < n; k++) {
+                Entity e = entities.get(k);
+                if (e.dead || !e.isZombie() || World.hypot(e.x - d[0], e.y - d[1]) > WATCH_SEE) continue;
+                seen++;
+                sx += e.x;
+                sy += e.y;
+            }
+            if (seen > 0) {
+                dispatch.sighting(sx / seen, sy / seen, null);
+                if (rnd.nextFloat() < 0.4f)
+                    dispatch.say(Dispatch.WHO_POLICE, null, "Drone: " + seen + " hostile" + (seen == 1 ? "" : "s") + " near " + city.placeName(sx / seen, sy / seen)
+                            + ". Marking them.", sx / seen, sy / seen);
+            }
+            for (float[] b : bombs)
+                if (World.hypot(b[0] - d[0], b[1] - d[1]) < WATCH_SEE && b[2] > 84) b[2] = 84;
         }
     }
 
@@ -11209,7 +11278,7 @@ final class World {
         keyBuildings();
         if (city.prison != null) {
             if (prisonMode()) riotLife();
-            else if (mode() == CityConfig.MODE_ZOMBIES) prisonLife();
+            else if (city.cfg.zombieMode()) prisonLife();
         }
         if (city.apron != null) airportLife();
         reservePilots();
@@ -12906,7 +12975,16 @@ final class World {
             if (!e.dead) active++;
         }
         raidersActive = active;
-        if (!outbreak || outbreakTime < 360 || gangsFormed >= MAX_GANGS || rnd.nextFloat() > 0.012f) return;
+        // ((18.4) Outbreak + looters: they're out within the first minute, up to three times as many gangs, and they
+        // arm themselves from what they've already looted.)
+        boolean looters = mode() == CityConfig.MODE_LOOTERS;
+        if (!outbreak || outbreakTime < (looters ? 45 : 360) || gangsFormed >= MAX_GANGS * (looters ? 4 : 1) || rnd.nextFloat() > (looters ? 0.05f : 0.012f)) return;
+        if (looters)
+            for (int k = 0; k < 12; k++) {
+                Entity e = entities.get(rnd.nextInt(entities.size()));
+                if (!e.dead && e.type == Entity.CIVILIAN && !e.hasGun && !e.infected && e.task == Dispatch.T_NONE && e.building == null && e != controlled && !e.inmate)
+                    armCivilian(e, 24 + rnd.nextInt(3) * 12);
+            }
         Entity boss = null;
         for (int tries = 0; tries < 300 && boss == null; tries++) {
             Entity e = entities.get(rnd.nextInt(entities.size()));
@@ -16636,7 +16714,10 @@ final class World {
         float hit = accuracy * (1 - (scoped ? 0.1f : 0.4f) * d / range) + (t.type == Entity.BRUTE ? 0.1f : 0);
         if (t.type == Entity.CRAWLER) hit *= 0.6f;
         // ((17.6) Behind cover, half as easy to hit; pinned down by fire, a worse shot.)
-        if (COVER && !t.isUndead() && inCover(t, e.x, e.y)) hit *= 0.5f;
+        // ((18.4) A police drone overhead marks them: the city's shots at them go true, and cover doesn't hide them.)
+        boolean marked = !e.isZombie() && t.isZombie() && droneOver(t.x, t.y);
+        if (marked) hit *= 1.25f;
+        if (COVER && !t.isUndead() && !marked && inCover(t, e.x, e.y)) hit *= 0.5f;
         if (COVER) hit *= 1 - 0.45f * e.suppress;
         if (rnd.nextFloat() < hit) {
             boolean wasUp = t.hp > 0;
@@ -18709,7 +18790,7 @@ final class World {
         int side = wallSide(b, x, y);
         b.mark(side, along(b, side, nx, ny), 1 + rnd.nextFloat() * 8, 3 + f * 5);
         b.barricade -= damage * f * 0.3f;
-        b.hp -= damage * f;
+        b.hp -= damage * f * (heavy ? 2.5f : 1);
         if (b.hp > 0) return;
         collapseBuilding(b);
     }
@@ -18752,6 +18833,29 @@ final class World {
         emit(Sfx.COLLAPSE, cx, cy);
         shake = Math.min(2f, shake + 1f);
         noise(cx, cy, 400);
+        // ((18.4) Heavy destruction: debris thrown wide, and the buildings next to it hit hard enough to come down too.)
+        if (heavy && collapseChain < 3) {
+            collapseChain++;
+            float reach = 26 + h * 0.3f;
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity o = entities.get(i);
+                if (o.dead || o.ride != null) continue;
+                if (o.x > b.x0 - reach && o.x < b.x1 + reach && o.y > b.y0 - reach && o.y < b.y1 + reach && rnd.nextFloat() < 0.5f) {
+                    o.hp -= 15 + rnd.nextFloat() * 30;
+                    o.hurt = 1;
+                }
+            }
+            for (int i = 0; i < 20; i++)
+                particle(cx, cy, rnd.nextFloat() * 160 - 80, rnd.nextFloat() * 160 - 80, 1.2f + rnd.nextFloat(), 2 + rnd.nextFloat() * 3, 0xFF6E6860, P_DOT);
+            java.util.ArrayList<City.Building> near = new java.util.ArrayList<City.Building>();
+            for (int i = 0, n = city.buildings.size(); i < n; i++) {
+                City.Building o = city.buildings.get(i);
+                if (o == b || o.collapsed) continue;
+                if (o.x1 > b.x0 - 20 && o.x0 < b.x1 + 20 && o.y1 > b.y0 - 20 && o.y0 < b.y1 + 20) near.add(o);
+            }
+            for (City.Building o : near) blastBuilding(o, cx, cy, Math.max(b.x1 - b.x0, b.y1 - b.y0) + 30, 60 + h * 2);
+            collapseChain--;
+        }
     }
 
     private void updateGrenades(float dt) {

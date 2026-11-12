@@ -55,15 +55,16 @@ final class CityConfig implements OptionSet {
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
     /** ((17.0) The game mode (not one of the eight in v): who the police and the army are up against. */
     static final int OPT_MODE = 10;
-    static final String[] MODES = {"Zombies", "Gangs", "Enemy army", "Heist", "Prison break", "Cartel", "Terror", "Disasters", "Aliens"};
+    static final String[] MODES = {"Zombies", "Gangs", "Enemy army", "Heist", "Prison break", "Cartel", "Terror", "Disasters", "Aliens", "Outbreak + looters"};
     static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2, MODE_HEIST = 3, MODE_PRISON = 4, MODE_CARTEL = 5, MODE_TERROR = 6,
-            MODE_DISASTER = 7, MODE_ALIENS = 8;
+            MODE_DISASTER = 7, MODE_ALIENS = 8, MODE_LOOTERS = 9;
     /** ((17.0) See OPT_MODE. Not part of the city code: the same streets can be played any way. */
     int mode;
     /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
     int mission = -1;
 
-    boolean zombieMode() { return mode == MODE_ZOMBIES; }
+    /** ((18.4) The dead on the streets: zombies, or zombies and looters. */
+    boolean zombieMode() { return mode == MODE_ZOMBIES || mode == MODE_LOOTERS; }
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
             "Reinforcements", "Country"};
     private static final String[][] VALUES = {

@@ -782,7 +782,7 @@ final class Menu {
         for (int i = 0; i < n; i++) max = Math.max(max, Math.max(world.histArmed[i], world.histZombies[i]));
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(12 * dp);
-        String[] keys = {"Police & army", mode == CityConfig.MODE_ZOMBIES ? "Zombies" : world.enemyLabel()};
+        String[] keys = {"Police & army", world.city.cfg.zombieMode() ? "Zombies" : world.enemyLabel()};
         int[] cols = {0xFFE8C547, 0xFFFF7A5A};
         float kx = chart.left + 14 * dp;
         for (int k = 0; k < 2; k++) {
@@ -1920,7 +1920,8 @@ final class Menu {
                 "Cartel: cartel cells hold their turf and run convoys of product out of town from their safe houses, and buy off police officers. Stop five convoys getting through, take down the jefes, and break the cartel.",
                 "Terror: one attack after another - gunmen opening fire in busy streets, and bombs left in crowds. The bomb squad has 90 seconds to make each one safe.",
                 "Disasters: no enemy, just a tornado, an earthquake, a flash flood and a wildfire, one after another. Get the injured out and keep the death toll down.",
-                "Aliens: a mothership hovers over the city, dropping drones that march on the stations and bases, and burning the streets with its beam. Bring it down with rockets, tanks and helicopters."};
+                "Aliens: a mothership hovers over the city, dropping drones that march on the stations and bases, and burning the streets with its beam. Bring it down with rockets, tanks and helicopters.",
+                "Outbreak + looters: the zombie outbreak, and with it armed looting gangs from the first minute - up to twelve of them - stripping the shops and shooting anyone in their way."};
         for (String line : wrap(modeInfo[Math.max(0, Math.min(modeInfo.length - 1, config.mode))], lw - 4 * dp, plain)) {
             c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;

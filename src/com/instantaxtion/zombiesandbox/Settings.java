@@ -9,13 +9,13 @@ final class Settings implements OptionSet {
     private static final String[] ON_OFF = {"Off", "On"};
     private static final String[] LABELS = {"Music", "Sound effects", "View", "Blood", "Health bars",
             "Screen shake", "Show FPS", "Max population", "Radio messages", "Minimap",
-            "Text & buttons", "Battery saver", "Name tags", "Graphics", "Vibration", "Radio lines on screen"};
+            "Text & buttons", "Battery saver", "Name tags", "Graphics", "Vibration", "Radio lines on screen", "Destruction"};
     private static final String[][] VALUES = {VOLUME, VOLUME, {"Bird's-eye", "3D"}, ON_OFF, ON_OFF, ON_OFF, ON_OFF,
             {"Auto", "2500", "5000", "8000", "12000"}, ON_OFF, ON_OFF, {"Small", "Normal", "Large"}, ON_OFF, ON_OFF,
-            {"Classic", "Realistic"}, ON_OFF, {"1", "2", "3", "4"}};
+            {"Classic", "Realistic"}, ON_OFF, {"1", "2", "3", "4"}, {"Normal", "Heavy"}};
     private static final String[] KEYS = {"music", "sfx", "buildings3d", "gore", "healthBars", "shake", "fps",
-            "maxPop2", "radio", "minimap", "uiSize", "battery", "nameTags", "graphics", "vibration", "feedLines"};
-    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1};
+            "maxPop2", "radio", "minimap", "uiSize", "battery", "nameTags", "graphics", "vibration", "feedLines", "destruction"};
+    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0};
     /** 0 is Auto: room for everyone who lives in the city, and plenty of zombies. */
     private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000};
 
@@ -41,6 +41,8 @@ final class Settings implements OptionSet {
     boolean showFps() { return v[6] == 1; }
     int maxPopulation() { return MAX_POP[v[7]]; }
     boolean vibration() { return v[14] == 1; }
+    /** ((18.4) Heavy destruction: blasts tear buildings apart, and a collapse brings down what's next to it. */
+    boolean heavyDestruction() { return v[16] == 1; }
     /** ((12.0) How many radio messages show at once along the top.) */
     int feedLines() { return v[15] + 1; }
     boolean radio() { return v[8] == 1; }

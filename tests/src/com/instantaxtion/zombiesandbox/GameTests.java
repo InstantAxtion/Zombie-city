@@ -5881,6 +5881,77 @@ public final class GameTests {
                 }
             }
         });
+        test("18.4: each mode's music; a police drone sent to watch; outbreak + looters; heavy destruction", new Check() {
+            public void run() throws Exception {
+                for (int k = Synth.THEME_STREET; k <= Synth.THEME_STORM; k++) {
+                    short[] pcm = Synth.music(k);
+                    int peak = 0;
+                    for (short s : pcm) peak = Math.max(peak, Math.abs(s));
+                    check(pcm.length >= 22050 * 8 && peak > 3000, "theme " + k + " has music in it (" + pcm.length + ", " + peak + ")");
+                }
+                check(Synth.TRACKS == 14, "fourteen pieces");
+                // A drone sent out: it gets there, and marks the enemy under it.
+                CityConfig c = new CityConfig();
+                c.mode = CityConfig.MODE_GANGS;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 2;
+                c.seed = 31;
+                World w = new World(c);
+                w.setMaxPopulation(4000);
+                w.populate(c);
+                Entity foe = null;
+                for (Entity e : w.entities) if (!e.dead && e.isHostile() && e.kit < 3) { foe = e; break; }
+                float[] d = w.launchDrone(foe.x, foe.y);
+                check(!w.droneOver(foe.x, foe.y), "not marked till it's there");
+                for (int f = 0; f < 30 * 40; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(World.hypot(d[0] - d[2], d[1] - d[3]) < 60 && w.droneOver(d[2], d[3]), "over the spot, marking it");
+                for (int f = 0; f < 30 * (int) World.WATCH_LIFE; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.policeDrones.isEmpty(), "and home when its battery's done");
+                // Outbreak + looters: the dead, and looting gangs from the first minutes.
+                CityConfig lc = new CityConfig();
+                lc.mode = CityConfig.MODE_LOOTERS;
+                lc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                lc.v[CityConfig.OPT_ZOMBIES] = 4;
+                lc.seed = 32;
+                World lw = new World(lc);
+                lw.setMaxPopulation(4000);
+                lw.populate(lc);
+                check(!lw.hostileMode() && lw.zombieCount() > 0, "a zombie outbreak");
+                java.lang.reflect.Field formed = World.class.getDeclaredField("gangsFormed");
+                formed.setAccessible(true);
+                for (int f = 0; f < 30 * 200 && formed.getInt(lw) == 0; f++) {
+                    lw.update(1 / 30f);
+                    lw.evCount = 0;
+                }
+                check(formed.getInt(lw) > 0 && lw.outbreakTime < 200, "looters out early (" + formed.getInt(lw) + " gangs by " + (int) lw.outbreakTime + "s)");
+                // Heavy destruction: the same blast does far more.
+                float[] lost = new float[2];
+                for (int k = 0; k < 2; k++) {
+                    CityConfig hc = new CityConfig();
+                    hc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                    hc.v[CityConfig.OPT_ZOMBIES] = 0;
+                    hc.seed = 33;
+                    World hw = new World(hc);
+                    hw.populate(hc);
+                    hw.heavy = k == 1;
+                    City.Building b = null;
+                    for (City.Building x : hw.city.buildings) if (b == null && !x.collapsed && x.x1 - x.x0 > 30 && x.maxHp > 0) b = x;
+                    float before = 0;
+                    for (City.Building x : hw.city.buildings) if (!x.collapsed) before += x.hp;
+                    hw.explode((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, 70, 300);
+                    float after = 0;
+                    for (City.Building x : hw.city.buildings) if (!x.collapsed) after += x.hp;
+                    lost[k] = before - after;
+                }
+                check(lost[1] > lost[0] * 1.2f, "heavy destruction does more (" + (int) lost[0] + " -> " + (int) lost[1] + ")");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.3";
-    static final int VERSION_CODE = 183;
+    static final String VERSION = "18.4";
+    static final int VERSION_CODE = 184;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.4  -  Music for each mode, police drones, outbreak + looters, heavy destruction",
+                    "Each mode has its own music in place of the general in-game pieces: a slow swung street beat for gangs, the cartel, heists and the prison break; a marching snare for the enemy army and terror; a cold arpeggio over a drone for the aliens; and a driving ostinato for the disasters. The calm and the action music stay as they were. A disaster under way or a bomb ticking now counts as tension for the music.",
+                    "Police drone: a new choice in Place (Vehicles in a mission, $45). It flies from the nearest police station to where you tap and circles it for two and a half minutes. Enemies within its view are marked: the city's shots at them are a quarter more likely to hit, and cover doesn't help them. It calls in what it sees, and a bomb it spots gets the bomb squad sent at once. (The stations' own patrolling drones are still there as before.)",
+                    "Outbreak + looters, a new game mode: the zombie outbreak as ever, and with it armed looting gangs. They form within the first minute, up to twelve of them, arming themselves as they go, stripping the shops and shooting anyone in their way. A new campaign mission plays it: Smash and Grab.",
+                    "Heavy destruction (Settings, Destruction): blasts do two and a half times the damage to buildings. A building that comes down throws debris wide, hurting people round it, and can bring down the buildings next to it, up to three in a chain.",
+            },
             {
                     "18.3  -  Four new modes: Cartel, Terror, Disasters and Aliens",
                     "Cartel: two or more cartel cells hold their turf, with their jefe hidden in a safe house (raid it, as with a gang boss). Every minute or two a convoy - a car with three sicarios and the product - leaves a safe house for the edge of town; a 911 tip says where from. Police are sent after it and shoot at it; stop it and the product's seized. Five convoys through and the cartel runs the city. Now and then an officer is bought and turns on the rest (still in uniform). Break every cell to win.",
