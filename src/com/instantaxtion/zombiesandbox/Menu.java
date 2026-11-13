@@ -705,12 +705,16 @@ final class Menu {
                 {"Wounded saved", String.valueOf(world.woundedSaved)},
                 {"Bled out", String.valueOf(world.bledOut)},
                 {"People turned", String.valueOf(world.turned)},
+                {"Nights survived", String.valueOf(world.nightsSurvived)},
+                {"Score (" + Director.NAMES[world.difficulty] + ")", String.valueOf(world.score())},
         };
         String[][] theirs = {
                 {"Destroyed", String.valueOf(world.zombiesKilled)},
                 {"Most at once", String.valueOf(world.peakZombies)},
                 {"Biggest horde", String.valueOf(world.biggestHorde)},
                 {"Still walking", String.valueOf(world.zombieCount())},
+                {"Hordes from outside", String.valueOf(world.director.hordes + world.director.sieges + world.director.stragglers)},
+                {"Mines set off", String.valueOf(world.minesBlown)},
         };
         boolean wide = maxW > 520 * dp;
         float colW = wide ? (maxW - 12 * dp) / 2 : maxW;
@@ -932,7 +936,7 @@ final class Menu {
             c.drawText(m.title, x0 + 56 * dp, y + 24 * dp, text);
             plain.setTextSize(11.5f * dp);
             plain.setColor(ACCENT);
-            c.drawText((m.goal == Campaign.G_SURVIVE ? "SURVIVE" : "CLEAR THE CITY") + "   " + World.clock(m.limit) + "   $" + m.budget, x0 + 56 * dp, y + 40 * dp, plain);
+            c.drawText(Campaign.GOAL_NAMES[m.goal] + "   " + (m.goal == Campaign.G_DAWN ? "Dusk" : World.clock(m.limit)) + "   $" + m.budget, x0 + 56 * dp, y + 40 * dp, plain);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setTextSize(18 * dp);
             text.setColor(stars > 0 ? 0xFFFFD54A : 0x55FFFFFF);
@@ -1971,6 +1975,32 @@ final class Menu {
             y += 16 * dp;
         }
         y += 12 * dp;
+        // ((20.0) How hard it is, the time of day and the weather.)
+        String[][] skyInfo = {
+                {"Easy: the dead are slower and weaker, bites infect less often, and supplies are dropped to a force in trouble. No hordes from outside.",
+                        "Normal: a horde comes in at nightfall, and stragglers wander in through the night.",
+                        "Hard: quicker, tougher dead; stragglers at any hour, a bigger horde at nightfall, and a siege on a station or base before dawn.",
+                        "Nightmare: the dead at their quickest and toughest, bites that nearly always infect, and the biggest hordes."},
+                {"Day & night: a day lasts twelve minutes, starting at 8 in the morning. At night nobody sees far (street lights help while the power's on) and the dead are quicker.",
+                        "Always day: the sun never sets.", "Always night: darkness from start to finish."},
+                {"Changing: clear, rain, fog and storms come and go.", "Clear skies throughout.",
+                        "Rain: sound doesn't carry as far, and it's a little harder to see and to shoot.",
+                        "Fog: nobody - living or dead - sees past the end of the street.",
+                        "Storm: heavy rain, and thunder that stirs the dead towards it."}};
+        int[] skyOpt = {CityConfig.OPT_DIFFICULTY, CityConfig.OPT_TIME, CityConfig.OPT_WEATHER};
+        String[] skyLabel = {"Difficulty", "Time of day", "Weather"};
+        for (int k = 0; k < 3; k++) {
+            y = segRow(c, skyOpt[k], skyLabel[k], lx, y, lw);
+            plain.setTextSize(12.5f * dp);
+            plain.setColor(MUTED);
+            y -= 6 * dp;
+            String[] info = skyInfo[k];
+            for (String line : wrap(info[Math.max(0, Math.min(info.length - 1, config.get(skyOpt[k])))], lw - 4 * dp, plain)) {
+                c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
+                y += 16 * dp;
+            }
+            y += 12 * dp;
+        }
         c.restore();
         contentHeight = y + scroll - listTop;
         clampScroll();

@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 64;
+    private static final int VERSION = 65;
 
     private SaveGame() {
     }
@@ -39,8 +39,8 @@ final class SaveGame {
             // Version 47: the map version the city was built to, itself.
             out.writeInt(cfg.civic);
             // ((17.0) Version 57: the game mode.)
-            // (The game mode: only the dead now since 19.6, kept as 0.)
-            out.writeInt(0);
+            // (The game mode until 19.6. From version 65 (20.0): the time of day, weather and difficulty settings.)
+            out.writeInt(cfg.timeOfDay | cfg.weather << 4 | cfg.difficulty << 8);
 
             out.writeFloat(w.time);
             out.writeInt(w.turned);
@@ -416,6 +416,28 @@ final class SaveGame {
             out.writeInt(0);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
+            // (Version 65, 20.0: the sky, the director, flares and mines.)
+            out.writeFloat(w.sky.clock);
+            out.writeInt(w.sky.days);
+            out.writeInt(w.sky.timeMode);
+            out.writeInt(w.sky.weather);
+            out.writeFloat(w.sky.weatherLeft);
+            out.writeFloat(w.sky.rain);
+            out.writeFloat(w.sky.fog);
+            out.writeInt(w.nightsSurvived);
+            out.writeInt(w.flaresFired);
+            out.writeInt(w.minesBlown);
+            out.writeInt(w.director.phase);
+            out.writeFloat(w.director.stress);
+            out.writeFloat(w.director.nextWave);
+            out.writeInt(w.director.hordes);
+            out.writeInt(w.director.stragglers);
+            out.writeInt(w.director.reliefs);
+            out.writeInt(w.director.sieges);
+            out.writeInt(w.flares.size());
+            for (float[] f : w.flares) for (int k = 0; k < 3; k++) out.writeFloat(f[k]);
+            out.writeInt(w.mines.size());
+            for (float[] m : w.mines) for (int k = 0; k < 3; k++) out.writeFloat(m[k]);
         } finally {
             moved = null;
             homeIndex = null;
@@ -539,7 +561,15 @@ final class SaveGame {
             if (version >= 41) cfg.exodus = in.readInt();
             int civic = version >= 47 ? in.readInt() : -1;
             // (A game mode from before 19.6, when there were others: only the dead now.)
-            if (version >= 57) in.readInt();
+            if (version >= 57) {
+                int packed = in.readInt();
+                // ((20.0) From version 65 the old game mode's place holds the time, weather and difficulty settings.)
+                if (version >= 65) {
+                    cfg.timeOfDay = Math.min(2, packed & 15);
+                    cfg.weather = Math.min(4, packed >> 4 & 15);
+                    cfg.difficulty = Math.min(3, packed >> 8 & 15);
+                }
+            }
             // (Cities saved before 10.4 were built without their government quarter.)
             cfg.civic = version >= 48 ? 27 : version >= 47 ? 26 : version >= 46 ? 25 : version >= 45 ? 24 : version >= 44 ? 23 : version >= 43 ? 22 : version >= 42 ? 21 : version >= 40 ? 20 : version >= 39 ? 19 : version >= 38 ? 18 : version >= 37 ? 17 : version >= 36 ? 16 : version >= 35 ? 15 : version >= 34 ? 14 : version >= 33 ? 13 : version >= 32 ? 12 : version >= 31 ? 11 : version >= 30 ? 11 : version >= 29 ? 10 : version >= 28 ? 9 : version >= 27 ? 8 : version >= 26 ? 7 : version >= 25 ? 6 : version >= 24 ? 5 : version >= 23 ? 4 : version >= 22 ? 3 : version >= 20 ? 2 : version >= 19 ? 1 : 0;
             if (civic >= 0) cfg.civic = civic;
@@ -968,6 +998,30 @@ final class SaveGame {
                 if (bm > 0) {
                     w.battleMap = new float[bm];
                     for (int i = 0; i < bm; i++) w.battleMap[i] = in.readFloat();
+                }
+                if (version >= 65) {
+                    w.sky.clock = in.readFloat();
+                    w.sky.days = in.readInt();
+                    w.sky.timeMode = in.readInt();
+                    w.sky.weather = in.readInt();
+                    w.sky.weatherLeft = in.readFloat();
+                    w.sky.rain = in.readFloat();
+                    w.sky.fog = in.readFloat();
+                    w.sky.resume();
+                    w.nightsSurvived = in.readInt();
+                    w.flaresFired = in.readInt();
+                    w.minesBlown = in.readInt();
+                    w.director.phase = in.readInt();
+                    w.director.stress = in.readFloat();
+                    w.director.nextWave = in.readFloat();
+                    w.director.hordes = in.readInt();
+                    w.director.stragglers = in.readInt();
+                    w.director.reliefs = in.readInt();
+                    w.director.sieges = in.readInt();
+                    int fn = in.readInt();
+                    for (int k = 0; k < fn; k++) w.flares.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat()});
+                    int mn = in.readInt();
+                    for (int k = 0; k < mn; k++) w.mines.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat()});
                 }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)

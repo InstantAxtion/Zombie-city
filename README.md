@@ -9,7 +9,7 @@ away from the middle of the screen as you pan, and the game plays in both portra
 
 ## Main menu
 
-- **Campaign** (18.0): three missions (19.6: Patient Zero, The Long Night, Dead City) to play in order as the commander - a set force, a budget to buy
+- **Campaign** (18.0): ten missions (20.0) to play in order as the commander - a set force, a budget to buy
   more police, soldiers, vehicles and air support (earned by funding and by doing well), units that come in
   from the stations and bases and go where you send them, and an objective against the clock. Up to three
   stars a mission; veterans who make rank carry over to the next. New Game below is the sandbox.
@@ -19,7 +19,7 @@ away from the middle of the screen as you pan, and the game plays in both portra
   be called in (Off, Low, Medium or High, each spelled out: waves of police backup, army squads, tanks
   and helicopter sorties). Police and soldiers on duty are set by the size of the city (about one officer
   per 80 residents plus two per station; a garrison at the base if the map has one). Each map decides its
-  own buildings, layout, parks, police stations and military base. **Randomize** rolls a random setup.
+  own buildings, layout, parks, police stations and military base. **Difficulty** (20.0: Easy, Normal, Hard, Nightmare), **Time of day** (Day & night, Always day, Always night) and **Weather** (Changing, Clear, Rain, Fog, Storm). **Randomize** rolls a random setup.
   **City code** replays a city: every city has a code like `12-483920` (or `12-483920@2` for a city
   outside the USA; shown in the pause menu and stats), so you can play the same streets again or share
   them with a friend.
@@ -419,6 +419,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**The Gameplay Update (20.0):** Sky.java holds the time of day (clock 0 to 1, a 720-second day from 8:00; light/dark/night, untilNight/untilDawn) and the weather (CLEAR, RAIN, FOG, STORM; rain and fog eased 0 to 1; changing weather picks a new kind every two to five minutes; a storm's strikes call World.thunder), and gives the numbers the world uses: sightLiving(lit), sightDead, hearing, pace, aim(lit). World.skyStep runs it each step and sets skyDim and zPace; World.nearest and thinkArmed's range are scaled by sightOf(e) when the radius is over 60, noise() by hearing, the dead's want by zPace, fire()'s accuracy by aim. litAt(x, y) is 1 within FLARE_LIGHT of a flare, else 0 in a blackout, 0.5 on roads and pavements, 0.2 elsewhere. Flares (flare/illuminate: x, y, life; lure() turns the dead within FLARE_LURE each second) and mines (layMines; zombieAt within MINE_TRIGGER sets one off through explode). Director.java: difficulty tables (Z_SPEED, Z_HP, INFECT, GUN, SCORE), stress from losses and the share of the dead, phases CALM/BUILD/PEAK/RESPITE, stragglers, the nightfall horde (World.nightFell -> hordeFrom), the pre-dawn siege on Hard and above, relief drops on Easy and Normal. CityConfig.timeOfDay/weather/difficulty (OPT_TIME, OPT_WEATHER, OPT_DIFFICULTY; packed into the old game-mode int of the save header from save version 65, which also adds the sky, the director's counters, flares and mines). Campaign: G_DAWN, G_EVAC, G_RESCUE, G_KILLS (count/progress), Mission.sky()/rules() for the hour, weather, difficulty, exodus and blackout; ten missions. World.score(); Records 8 and 9. Events 7 to 10: Flare, Mines, Night / Day, Weather; CA_FLARE for the one you're playing. Visuals.drawSky (fog, mines, the dark, flares, street lamps, headlights, torches; nightLights) and drawWeather (rain); Sfx THUNDER, FLARE, LOOP_RAIN, LOOP_NIGHT (AUDIO_VERSION 7). Fleet: sharp turns capped at a crawl, orbit detection on slip roads. Tests are seeded from their names (World.testSeed), so each plays out the same every run.
 
 **No vignette (19.7):** Visuals.drawScreen no longer darkens the screen's edges; the tension and hurt edges, flash and daze are unchanged.
 

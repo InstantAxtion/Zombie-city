@@ -8,7 +8,9 @@ final class Records {
     static final String[] RECORD_NAMES = {"Longest outbreak survived", "Most zombies killed in a game",
             "Biggest horde", "Most volunteers in a game", "Zombies killed, all games", "Games played",
             // ((12.0) Two more.)
-            "Most kills by one person", "Most survivors, city saved"};
+            "Most kills by one person", "Most survivors, city saved",
+            // ((20.0) The score, and the nights.)
+            "Best score", "Most nights survived in a game"};
 
     private final SharedPreferences prefs;
 
@@ -97,6 +99,8 @@ final class Records {
         best(3, w.recruits);
         best(6, w.bestKills());
         if (w.warResult == 1) best(7, w.humans);
+        best(8, w.score());
+        best(9, w.nightsSurvived);
         checkHall(w);
     }
 

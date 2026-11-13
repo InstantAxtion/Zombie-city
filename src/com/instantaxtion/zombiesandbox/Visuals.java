@@ -164,6 +164,10 @@ final class Visuals {
                             10 + rnd.nextFloat() * 12, 4 + rnd.nextFloat() * 4, 0.75f, 5);
                 }
                 smoulder.add(new float[]{x, y, 45, 1, 0});
+            } else if (t == Sfx.FLARE) {
+                light(x, y, 120, 0.5f, G_WHITE, 0.9f, false);
+                for (int k = 0; k < cap(10); k++)
+                    spark(x, y, rnd.nextFloat() * 120 - 60, rnd.nextFloat() * 120 - 60, 0.4f + rnd.nextFloat() * 0.4f, 0xFFFF7A5A, true);
             } else if (t == Sfx.CRASH) {
                 for (int k = 0; k < cap(8); k++)
                     spark(x, y, rnd.nextFloat() * 160 - 80, rnd.nextFloat() * 160 - 80, 0.3f + rnd.nextFloat() * 0.3f, 0xFFFFD27A, false);
@@ -213,6 +217,9 @@ final class Visuals {
      */
     void update(World w, float dt, float vx0, float vy0, float vx1, float vy1, java.util.List<Entity> onScreen) {
         time += dt;
+        seen = onScreen;
+        // ((20.0) Lightning lights the whole screen.)
+        if (w != null && w.sky.flash > 0.9f && screen) flash = Math.max(flash, 0.55f);
         flash = Math.max(0, flash - dt * 2.5f);
         hurt = Math.max(0, hurt - dt * 1.8f);
         daze = Math.max(0, daze - dt * 0.4f);
@@ -412,6 +419,7 @@ final class Visuals {
             c.drawLine(s[0], s[1], s[0] - s[2] * tl, s[1] - s[3] * tl, stroke);
         }
         stroke.setStrokeCap(Paint.Cap.BUTT);
+        drawSky(c, vx0, vy0, vx1, vy1);
         // The light, last: glows over the ground and everyone on it.
         for (int i = 0, n = lights.size(); i < n; i++) {
             float[] l = lights.get(i);
@@ -458,11 +466,121 @@ final class Visuals {
                 c.drawRect(0, 0, w, h, fill);
             }
         }
+        drawWeather(c, w, h);
         if (cinematic) {
             float bar = h * 0.085f;
             fill.setColor(0xFF000000);
             c.drawRect(0, 0, w, bar, fill);
             c.drawRect(0, h - bar, w, h, fill);
+        }
+    }
+
+    // ---- ((20.0) Night, weather and what lights the dark ----
+
+    private java.util.List<Entity> seen;
+    /** Lights drawn for the night last frame, for the tests. */
+    int nightLights;
+
+    /**
+     * The dark, and the fog: laid over the world, with whatever lights it showing through as glows on top - street
+     * lamps while the power's on, headlights, the torches of police and soldiers, flares.
+     */
+    private void drawSky(Canvas c, float vx0, float vy0, float vx1, float vy1) {
+        World w = lastWorld;
+        nightLights = 0;
+        if (w == null) return;
+        Sky k = w.sky;
+        float dark = k.dark();
+        if (k.fog > 0.01f) {
+            fill.setColor(alpha(0xFFB9BEC2, 0.42f * k.fog));
+            c.drawRect(vx0, vy0, vx1, vy1, fill);
+        }
+        // Mines, and the flares themselves, whatever the hour.
+        for (int i = 0, n = w.mines.size(); i < n; i++) {
+            float[] m = w.mines.get(i);
+            if (m[0] < vx0 || m[0] > vx1 || m[1] < vy0 || m[1] > vy1) continue;
+            fill.setColor(0xFF23261F);
+            c.drawCircle(m[0], m[1], 2.2f, fill);
+            fill.setColor(m[2] > 0 ? 0xFFE0C040 : ((int) (time * 2 + i)) % 2 == 0 ? 0xFFFF3020 : 0xFF601410);
+            c.drawCircle(m[0], m[1], 0.8f, fill);
+        }
+        if (dark > 0.01f) {
+            fill.setColor(alpha(0xFF060A18, 0.66f * dark));
+            c.drawRect(vx0, vy0, vx1, vy1, fill);
+        }
+        for (int i = 0, n = w.flares.size(); i < n; i++) {
+            float[] f = w.flares.get(i);
+            float r = World.FLARE_LIGHT * (0.9f + 0.1f * rnd.nextFloat()) * Math.min(1, f[2] / 4);
+            if (f[0] + r < vx0 || f[0] - r > vx1 || f[1] + r < vy0 || f[1] - r > vy1) continue;
+            glowAt(c, f[0], f[1], r, G_RED, 0.75f);
+            glowAt(c, f[0], f[1], 26, G_WHITE, 1);
+            if (rnd.nextFloat() < 0.5f) spark(f[0], f[1], rnd.nextFloat() * 60 - 30, rnd.nextFloat() * 60 - 30, 0.4f, 0xFFFF6A4A, true);
+        }
+        if (dark < 0.15f) return;
+        float a = Math.min(1, (dark - 0.15f) * 1.6f);
+        int budget = cap(140);
+        // Street lamps: every few tiles of road, while the power's on; none zoomed too far out to see them.
+        City city = w.city;
+        float span = (vx1 - vx0) / City.T;
+        if (!w.blackout && span < 140) {
+            int step = span > 80 ? 8 : 5;
+            int tx0 = Math.max(0, (int) (vx0 / City.T) / step * step), ty0 = Math.max(0, (int) (vy0 / City.T) / step * step);
+            int tx1 = Math.min(city.w - 1, (int) (vx1 / City.T)), ty1 = Math.min(city.h - 1, (int) (vy1 / City.T));
+            for (int ty = ty0; ty <= ty1 && nightLights < budget; ty += step)
+                for (int tx = tx0; tx <= tx1 && nightLights < budget; tx += step) {
+                    byte t = city.tiles[ty * city.w + tx];
+                    if (t != City.ROAD && t != City.SIDEWALK && t != City.PLAZA) continue;
+                    glowAt(c, (tx + 0.5f) * City.T, (ty + 0.5f) * City.T, step == 8 ? 70 : 54, G_FIRE, 0.6f * a);
+                    nightLights++;
+                }
+        }
+        // Headlights, and the blue and red of police lights.
+        java.util.List<Fleet.Vehicle> vs = w.fleet.vehicles;
+        for (int i = 0, n = vs.size(); i < n && nightLights < budget; i++) {
+            Fleet.Vehicle v = vs.get(i);
+            if (v.x < vx0 - 40 || v.x > vx1 + 40 || v.y < vy0 - 40 || v.y > vy1 + 40) continue;
+            if (v.type == Fleet.HELI || v.type == Fleet.JET) {
+                glowAt(c, v.x, v.y, 70, G_WHITE, 0.45f * a);
+                nightLights++;
+                continue;
+            }
+            if (v.broken || Math.abs(v.speed) < 2) continue;
+            float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
+            glowAt(c, v.x + ca * 26, v.y + sa * 26, 34, G_WHITE, 0.5f * a);
+            nightLights++;
+        }
+        // Whoever you're playing can see round themselves.
+        if (w.controlled != null && !w.controlled.dead) glowAt(c, w.controlled.x, w.controlled.y, 60, G_WHITE, 0.45f * a);
+        // Torches: police and soldiers on foot light the ground ahead of them.
+        if (seen != null && quality >= 1)
+            for (int i = 0, n = seen.size(); i < n && nightLights < budget; i++) {
+                Entity e = seen.get(i);
+                if (e.dead || (e.type != Entity.COP && e.type != Entity.SOLDIER)) continue;
+                glowAt(c, e.x + (float) Math.cos(e.angle) * 16, e.y + (float) Math.sin(e.angle) * 16, 22, G_WHITE, 0.4f * a);
+                nightLights++;
+            }
+    }
+
+    private void glowAt(Canvas c, float x, float y, float r, int kind, float strength) {
+        glowPaint.setAlpha((int) (Math.max(0, Math.min(1, strength)) * 255 * 0.85f));
+        dst.set(x - r, y - r, x + r, y + r);
+        c.drawBitmap(glow[kind], src, dst, glowPaint);
+    }
+
+    /** Rain across the screen, slanting on the wind; heavier in a storm. */
+    private void drawWeather(Canvas c, int w, int h) {
+        World wd = lastWorld;
+        if (wd == null || wd.sky.rain < 0.02f) return;
+        float rain = wd.sky.rain;
+        fill.setColor(alpha(0xFF1A2430, 0.14f * rain));
+        c.drawRect(0, 0, w, h, fill);
+        int n = (int) (cap(160) * rain);
+        float len = h * (0.035f + 0.03f * rain), slant = (float) Math.cos(windA) * len * 0.45f;
+        stroke.setStrokeWidth(Math.max(1, w / 700f));
+        stroke.setColor(alpha(0xFFC8D8E8, 0.32f));
+        for (int i = 0; i < n; i++) {
+            float x = rnd.nextFloat() * (w + 60) - 30, y = rnd.nextFloat() * h;
+            c.drawLine(x, y, x + slant, y + len, stroke);
         }
     }
 

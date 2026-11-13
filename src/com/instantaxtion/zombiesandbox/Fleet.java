@@ -5022,9 +5022,11 @@ final class Fleet {
         v.angle += turned;
         // A full circle and more without getting any nearer: it's missed its turn and is orbiting.
         // (10.49) Not on a slip road, though: one that loops round under the highway isn't a car going in circles.
-        if (city.onSlip(v.x, v.y)) v.spin = 0;
-        else v.spin += turned;
-        if (Math.abs(v.spin) > 7.5f && v.player == null) {
+        // ((20.0) A slip road's loop is allowed for, not ignored: a car that had overshot its turn at speed could go round
+        // and round one for good.)
+        boolean slip = city.onSlip(v.x, v.y);
+        v.spin += turned;
+        if (Math.abs(v.spin) > (slip ? 11f : 7.5f) && v.player == null) {
             v.spin = 0;
             // ((19.6) Round again while still flagged from the last time - a driver whose errand doesn't act on it,
             // such as one on a call: longer at the careful crawl, which makes even a tight turn.)
@@ -5034,6 +5036,9 @@ final class Fleet {
             if (v.field.get(own) < City.FAR) v.pathT = own;
         }
         float target = max * throttle * (0.35f + 0.65f * Math.max(0, (float) Math.cos(diff)));
+        // ((20.0) Pointing well away from where it's going - a U-turn, a junction taken too fast: down to a crawl that
+        // turns inside a lane's width. A quick motorcycle used to swing wide, miss, and go round again.)
+        if (Math.abs(diff) > 1.1f && v.player == null) target = Math.min(target, 16);
         // A badly damaged car limps along.
         if (v.hp < v.maxHp * 0.3f) target *= 0.6f;
         // Brake harder than you accelerate.

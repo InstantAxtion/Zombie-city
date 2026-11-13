@@ -2,11 +2,28 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "19.7";
-    static final int VERSION_CODE = 197;
+    static final String VERSION = "20.0";
+    static final int VERSION_CODE = 200;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "20.0  -  The Gameplay Update",
+                    "Day and night: the city now has a clock. A day lasts twelve minutes and a new game starts at 8 in the morning, so night falls about six minutes in. In the dark the living can't see far or shoot as well - less so under street lights while the power's on, not at all in a blackout - while the dead see a little less but are quicker and hear further. The time is shown at the top of the screen, and Time of day on the New Game screen can hold it at Always day or Always night.",
+                    "Weather: clear, rain, fog and storms come and go (or pick one on the New Game screen). Rain muffles sound and makes it a little harder to see and shoot. Fog hides everything past the end of the street, for the dead as well as the living. A storm is heavy rain with lightning, and each clap of thunder turns the dead near it towards the sound.",
+                    "Difficulty: Easy, Normal, Hard and Nightmare. The harder it is, the quicker and tougher the dead are, the more often a bite infects and the less a bullet does - and the more a game scores.",
+                    "The director: an outbreak now has a shape. It watches how the fight is going - calm, building, a peak, a respite - and acts on it. On Normal a horde comes in from outside at nightfall and stragglers wander in through the night; on Hard and Nightmare stragglers come at any hour, the nightfall horde is bigger, and before dawn a horde lays siege to a police station or army base. It holds off while the city is being overwhelmed. On Easy there are no hordes from outside, and supplies are dropped to a force that's losing (on Normal too, less often).",
+                    "The dead at night: hordes that drift by day walk with a purpose after dark.",
+                    "Flares: a new tool (Events). A flare burns for 45 seconds, lights the ground round it so the living see and shoot as by day, and draws the dead towards it - a light to fight by, or a lure to pull them away. Police and soldiers in a night fight put flares down by themselves, the army's mortars fire illumination over the worst of the fighting, and an officer or soldier you're playing gets a Flare button in the dark.",
+                    "Mines: a new tool (Events). Six mines round the spot you tap, armed after three seconds, set off only by the dead.",
+                    "Night / Day and Weather: two more sandbox tools, to skip to nightfall or morning and to change the weather.",
+                    "The campaign has ten missions (three before), with new objectives: hold until dawn (The Long Night now really is one), evacuate four hundred and fifty people in Exodus, clear a village in fog in Whiteout, bring back twenty of the wounded in Triage, last ten minutes of a night storm in Storm Front, destroy seven hundred of the dead in Body Count, clear a campus with the power out in Blackout, and hold the base until dawn on Hard in Last Stand. Commanders can buy flares ($12) and mines ($35).",
+                    "The score: every game is scored - the dead destroyed, the wounded saved, nights lived through and a city saved, less those lost, and more on a harder difficulty. It's on the after-action report, with the nights survived, the hordes that came from outside and the mines set off. Best score and Most nights survived are new records.",
+                    "How it looks and sounds: the city darkens at dusk, with street lamps along the roads (out in a blackout), headlights, the torches of police and soldiers, and the red glow of flares; rain streaks the screen, fog greys it, lightning flashes. Rain and thunder are heard, and crickets on a quiet night; birds fall silent in the dark and the wet.",
+                    "Driving: a vehicle pointing well away from where it's going slows right down to turn, so quick motorcycles no longer swing wide and circle a junction; and a car that overshot its turn on a slip road no longer goes round the loop for good.",
+                    "Under the hood: the time and weather (Sky) and the pacing (Director) are new, separate parts of the code with their own dice, so they change nothing else's luck. Every test now plays out identically each run, which is how the two driving faults above were found and fixed.",
+                    "Saves from before load as a clear morning on Normal.",
+            },
             {
                     "19.7  -  No vignette",
                     "The dark vignette round the edges of the screen is gone: the edges are as bright as the middle. The red edge when things are tense or you're hurt, a blast's flash and the daze stay (under Screen effects, as before).",

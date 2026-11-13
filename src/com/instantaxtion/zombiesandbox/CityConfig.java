@@ -53,6 +53,11 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
+    /** ((20.0) The time of day, the weather and how hard the game is (not in v: kept in fields of their own). */
+    static final int OPT_TIME = 10, OPT_WEATHER = 11, OPT_DIFFICULTY = 12;
+    private static final String[] TIMES = {"Day & night", "Always day", "Always night"};
+    private static final String[] WEATHERS = {"Changing", "Clear", "Rain", "Fog", "Storm"};
+    int timeOfDay, weather, difficulty = Director.NORMAL;
     /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
     int mission = -1;
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
@@ -369,6 +374,9 @@ final class CityConfig implements OptionSet {
         c.seed = seed;
         c.outskirts = outskirts;
         c.exodus = exodus;
+        c.timeOfDay = timeOfDay;
+        c.weather = weather;
+        c.difficulty = difficulty;
         c.mission = mission;
         c.civic = civic;
         for (int[] e : edits) c.edits.add(e.clone());
@@ -679,8 +687,14 @@ final class CityConfig implements OptionSet {
 
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
-    @Override public String[] values(int i) { return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : VALUES[i]; }
-    @Override public int get(int i) { return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : v[i]; }
+    @Override public String[] values(int i) {
+        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_TIME ? TIMES : i == OPT_WEATHER ? WEATHERS
+                : i == OPT_DIFFICULTY ? Director.NAMES : VALUES[i];
+    }
+    @Override public int get(int i) {
+        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_TIME ? timeOfDay : i == OPT_WEATHER ? weather
+                : i == OPT_DIFFICULTY ? difficulty : v[i];
+    }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
             outskirts = value;
@@ -688,6 +702,18 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_EXODUS) {
             exodus = value;
+            return;
+        }
+        if (i == OPT_TIME) {
+            timeOfDay = value;
+            return;
+        }
+        if (i == OPT_WEATHER) {
+            weather = value;
+            return;
+        }
+        if (i == OPT_DIFFICULTY) {
+            difficulty = value;
             return;
         }
         v[i] = value;

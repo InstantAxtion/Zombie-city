@@ -98,6 +98,8 @@ final class Synth {
             case Sfx.SQUELCH: out = squelch(r); break;
             case Sfx.MIL_RADIO: out = beeps(new float[]{1050, 1050}, 0.06f, 0.05f); break;
             case Sfx.TAP: out = tap(); break;
+            case Sfx.THUNDER: out = thunder(r); break;
+            case Sfx.FLARE: out = flare(r); break;
             default: out = click(); break;
         }
         if (variant > 0) out = vary(out, 1 + (r.nextFloat() - 0.5f) * (Sfx.gun(id) ? 0.12f : 0.18f));
@@ -759,6 +761,40 @@ final class Synth {
 
 
     /** A few clean electronic beeps. */
+    /** ((20.0) Thunder: a sharp crack, then a long rumble rolling away. */
+    private static float[] thunder(Random r) {
+        float dur = 3.2f + r.nextFloat() * 0.8f;
+        int n = (int) (dur * RATE);
+        float[] o = new float[n];
+        float lp = 0, lp2 = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.035f;
+            lp2 += (lp - lp2) * 0.2f;
+            float crack = w * (float) Math.exp(-t * 14) * 0.9f;
+            float roll = 0.55f + 0.45f * (float) Math.sin(TAU * (2.1f + r.nextFloat() * 0.02f) * t + 1);
+            float env = Math.min(1, t / 0.03f) * (float) Math.exp(-t * 1.1f);
+            o[i] = crack + lp2 * 9 * env * roll + (float) Math.sin(TAU * 38 * t) * 0.25f * env;
+        }
+        return o;
+    }
+
+    /** ((20.0) A flare going up: a pop, a rising hiss, and it sputters. */
+    private static float[] flare(Random r) {
+        float dur = 1.3f;
+        int n = (int) (dur * RATE);
+        float[] o = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * (0.25f + 0.5f * Math.min(1, t / 0.6f));
+            float pop = (float) Math.sin(TAU * 180 * t) * (float) Math.exp(-t * 30);
+            float hiss = (w - lp) * Math.min(1, t / 0.1f) * (float) Math.exp(-t * 2.2f) * (0.7f + 0.3f * (float) Math.sin(TAU * 27 * t));
+            o[i] = pop * 0.9f + hiss * 0.8f;
+        }
+        return o;
+    }
+
     private static float[] beeps(float[] freqs, float len, float gap) {
         int n = (int) ((len + gap) * freqs.length * RATE) + 1;
         float[] o = new float[n];
@@ -1001,6 +1037,30 @@ final class Synth {
                     lp += (w - lp) * 0.05f;
                     float wave = 0.5f + 0.5f * (float) Math.sin(TAU * t / 3);
                     o[i] = lp * 4 * (0.4f + wave * 0.8f);
+                }
+                break;
+            }
+            case Sfx.LOOP_RAIN: {
+                // ((20.0) Rain: a steady hiss, heavier and lighter in gusts, with drops spattering close by.)
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.45f;
+                    lp2 += (lp - lp2) * 0.03f;
+                    float gust = 0.75f + 0.25f * (float) Math.sin(TAU * t / LOOP_SECONDS * 2);
+                    o[i] = (lp - lp2) * 2.2f * gust + (r.nextFloat() < 0.004f ? (r.nextFloat() - 0.5f) * 0.9f : 0);
+                }
+                break;
+            }
+            case Sfx.LOOP_NIGHT: {
+                // ((20.0) Night: crickets, in pulses, over a faint low hush.)
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.01f;
+                    float pulse = (float) Math.sin(TAU * 31 * t);
+                    float chirp = pulse > 0.2f ? (float) Math.sin(TAU * 4300 * t) * (pulse - 0.2f) : 0;
+                    float on = (float) Math.sin(TAU * t * 1.3f) > -0.2f ? 1 : 0;
+                    float far = (float) Math.sin(TAU * 3650 * t) * Math.max(0, (float) Math.sin(TAU * 23 * t)) * 0.35f;
+                    o[i] = lp * 3 + chirp * 0.5f * on + far * (0.6f + 0.4f * (float) Math.sin(TAU * t / LOOP_SECONDS));
                 }
                 break;
             }
