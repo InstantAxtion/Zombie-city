@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "21.1";
-    static final int VERSION_CODE = 211;
+    static final String VERSION = "21.2";
+    static final int VERSION_CODE = 212;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "21.2  -  Smarter AI",
+                    "Breaking out: police and soldiers read a fight - how many of the dead are near, from how many sides, and which way is open. When a ring starts closing round them, or a crowd is about to roll over them, they run for the open side before it closes, shooting whatever's in their way as they go, and turn to fight again once they have room. Before, they stood and shot until it was on them. In testing, a six-man army squad against ninety of the dead now keeps four or five of its men instead of two or three, and police squads against fifty-five lose fewer too.",
+                    "Stepping back the right way: falling back while shooting, they now step away from all of them by the open side, not straight back from the nearest one into the rest.",
+                    "Reloading in a lull: a gun getting low is reloaded when the nearest of the dead is a fair way off, rather than run dry with one at arm's length. Officers reloading in contact went from twenty-seven to four in a test run, and running out of rounds in contact from seventy-eight to none.",
+                    "Saving people: one of the dead with its teeth in someone used to be ignored by anyone without a clear shot past the victim - they stood and watched. Now that's the one they go for: they step round for an angle on it, never firing through the person. Police and soldiers ordered to move used to walk past the dead, and past people being bitten, without firing; they now shoot what's close as they go. And those on their way to board a vehicle stop for one of the dead biting someone near them. In testing, the share of bites with a police officer or soldier close by with a clear shot and ammunition, who wasn't shooting, fell from 38% to 11%.",
+                    "Civilians running from more than one of the dead run through the gap between them, not straight away from the nearest one.",
+                    "Fixed: a quarantine wall could be put up across an army checkpoint's own road, leaving its guards standing in the fence.",
+                    "What this doesn't change: across many whole-city outbreaks, how many people are lost overall came out about the same - it's decided mostly by whether the first outbreak is caught in time. The difference is in the fights themselves.",
+            },
             {
                     "21.1  -  The sandbox is yours",
                     "Nothing comes into a sandbox game by itself any more: no hordes from outside, no stragglers, no sieges, no supplies dropped to a losing side. The only zombies in the city are the ones the setup put there, the ones you add, and the people they turn.",

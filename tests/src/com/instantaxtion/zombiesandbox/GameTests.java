@@ -5879,6 +5879,159 @@ public final class GameTests {
                 check(w.city.insideOf(idle.x, idle.y) == room, "and stay there");
             }
         });
+        test("21.2: smarter fighting - breaking out of a closing ring by the gap, reloading in a lull, shooting on the move, working round a victim", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.v[CityConfig.OPT_CIVILIANS] = 0;
+                c.seed = 95;
+                World w = new World(c);
+                w.populate(c);
+                // Open ground with room all round.
+                float[] p = null;
+                for (int r = 0; r < 4000 && p == null; r++) {
+                    float x = 400 + w.rnd.nextFloat() * (w.city.worldW() - 800), y = 400 + w.rnd.nextFloat() * (w.city.worldH() - 800);
+                    boolean ok = true;
+                    for (int dx = -9; dx <= 9 && ok; dx += 2) for (int dy = -9; dy <= 9 && ok; dy += 2) if (w.city.solidAt(x + dx * City.T, y + dy * City.T)) ok = false;
+                    if (ok) p = new float[]{x, y};
+                }
+                check(p != null, "open ground");
+                for (Entity e : w.entities) if (World.hypot(e.x - p[0], e.y - p[1]) < 600) { e.removed = true; e.dead = true; }
+                for (Fleet.Vehicle v : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) if (World.hypot(v.x - p[0], v.y - p[1]) < 600) w.fleet.discard(v);
+                w.update(1 / 30f);
+                // A ring of the dead closing in from every side but one: the gap is to the east.
+                Entity cop = w.spawnCop(0, p[0], p[1]);
+                java.util.ArrayList<Entity> ring = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 12; k++) {
+                    double a = Math.toRadians(70 + k * 20);
+                    Entity z = w.spawn(Entity.ZOMBIE, p[0] + (float) Math.cos(a) * 55, p[1] + (float) Math.sin(a) * 55);
+                    if (z != null) ring.add(z);
+                }
+                w.update(1 / 30f);
+                w.sense(cop);
+                check(cop.tN >= 10 && cop.tSides >= 5 && cop.escX > 0.7f, "the ring read: " + cop.tN + " of them from " + cop.tSides + " sides, the way out east (" + cop.escX + ", " + cop.escY + ")");
+                float x0 = cop.x;
+                for (int f = 0; f < 30 * 3; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(cop.x - x0 > 30 && !cop.dead, "alone against a dozen, they fall back by the gap (" + (int) (cop.x - x0) + " east)");
+                for (Entity z : ring) z.hp = 0;
+                w.update(1 / 30f);
+                // A squad of six, not outnumbered enough to fall back: the ring closing round them, they break out of it.
+                java.util.ArrayList<Entity> squad = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 6; k++) {
+                    Entity s6 = w.spawnCop(0, p[0] - 4 + (k % 3) * 4, p[1] - 3 + (k / 3) * 6);
+                    s6.ammo = s6.magSize;
+                    squad.add(s6);
+                }
+                ring.clear();
+                for (int k = 0; k < 16; k++) {
+                    double a = Math.toRadians(70 + k * 14);
+                    Entity z = w.spawn(Entity.ZOMBIE, p[0] + (float) Math.cos(a) * 60, p[1] + (float) Math.sin(a) * 60);
+                    if (z != null) {
+                        z.hp = z.maxHp = 1e4f;
+                        ring.add(z);
+                    }
+                }
+                int b0 = w.breakouts;
+                float sx0 = 0;
+                for (Entity s6 : squad) sx0 += s6.x;
+                for (int f = 0; f < 30 * 3; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                float sx1 = 0;
+                int up = 0;
+                for (Entity s6 : squad) {
+                    sx1 += s6.x;
+                    if (!s6.dead) up++;
+                }
+                check(w.breakouts > b0 && (sx1 - sx0) / squad.size() > 25, "a squad being surrounded breaks out by the gap (" + (w.breakouts - b0) + " broke out, "
+                        + (int) ((sx1 - sx0) / squad.size()) + " east on average, " + up + " standing)");
+                for (Entity z : ring) z.hp = 0;
+                for (Entity s6 : squad) { s6.removed = true; s6.dead = true; }
+                w.update(1 / 30f);
+                // A lull with the gun getting low: reload now.
+                cop.ammo = 3;
+                cop.reload = 0;
+                cop.x = p[0];
+                cop.y = p[1];
+                Entity far = w.spawn(Entity.ZOMBIE, p[0] + 130, p[1]);
+                far.noiseTimer = 0;
+                for (int f = 0; f < 10 && cop.reload <= 0 && cop.ammo == 3; f++) {
+                    far.x = p[0] + 130;
+                    far.y = p[1];
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(cop.reload > 0 || cop.ammo > 3, "a gun nearly empty is reloaded in a lull, not with the dead on them");
+                far.hp = 0;
+                w.update(1 / 30f);
+                // Under orders to move, still shooting what's close on the way. (With the city knowing what this is: before,
+                // an officer holds fire on a lone "suspect" a little way off.)
+                w.alert = 2;
+                java.util.ArrayList<Entity> sent = new java.util.ArrayList<Entity>();
+                sent.add(cop);
+                cop.ammo = cop.magSize;
+                cop.reload = 0;
+                w.dispatch.order(sent, p[0] - 300, p[1]);
+                Entity near = w.spawn(Entity.ZOMBIE, cop.x - 50, cop.y + 20);
+                near.hp = near.maxHp = 1e5f;
+                int shots = w.shotsFired;
+                for (int f = 0; f < 30 * 2; f++) {
+                    near.x = cop.x - 50;
+                    near.y = cop.y + 20;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(cop.task == Dispatch.T_MOVE && w.shotsFired > shots, "on the move under orders, they shoot one of the dead close by (" + (w.shotsFired - shots) + " shots, task " + cop.task + " dead " + cop.dead + " ammo " + cop.ammo
+                        + " reload " + cop.reload + " d " + (int) World.hypot(near.x - cop.x, near.y - cop.y) + " los " + w.city.los(cop.x, cop.y, near.x, near.y) + " goal " + cop.goal + " ride " + (cop.ride != null)
+                        + " pick " + (pickT(w, cop, 160) == near) + " fear " + cop.fear + " post " + (int) cop.postX + "," + (int) cop.postY + " at " + (int) cop.x + "," + (int) cop.y + " inside " + (w.city.insideOf(cop.x, cop.y) != null) + " postInside " + (w.city.insideOf(cop.postX, cop.postY) != null) + ")");
+                near.hp = 0;
+                w.update(1 / 30f);
+                // One of the dead on someone, with them in the way: it's still the target, and they work round for a shot.
+                Entity gun = w.spawnCop(0, p[0], p[1]);
+                gun.ammo = gun.magSize;
+                Entity victim = w.spawn(Entity.CIVILIAN, p[0] + 40, p[1]);
+                Entity biter = w.spawn(Entity.ZOMBIE, p[0] + 48, p[1]);
+                biter.hp = biter.maxHp = 1e5f;
+                for (int f = 0; f < 5; f++) {
+                    victim.x = p[0] + 40;
+                    victim.y = p[1];
+                    biter.x = p[0] + 48;
+                    biter.y = p[1];
+                    biter.biteCd = 0.5f;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                java.lang.reflect.Method pick = World.class.getDeclaredMethod("pickTarget", Entity.class, float.class);
+                pick.setAccessible(true);
+                gun.fear = 5;
+                gun.x = p[0];
+                gun.y = p[1];
+                gun.angle = 0;
+                check(pick.invoke(w, gun, 160f) == biter, "the one biting someone is still the target with them in the line of fire");
+                float gy0 = gun.y;
+                boolean shot = false;
+                for (int f = 0; f < 30 * 2 && !shot; f++) {
+                    victim.x = p[0] + 40;
+                    victim.y = p[1];
+                    biter.x = p[0] + 48;
+                    biter.y = p[1];
+                    biter.biteCd = 0.5f;
+                    victim.hp = victim.maxHp;
+                    victim.infected = false;
+                    int before = w.shotsFired;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    shot = w.shotsFired > before;
+                }
+                check(Math.abs(gun.y - gy0) > 2 || shot, "they step round for an angle (" + (gun.y - gy0) + ")");
+                check(victim.hp > 0, "and nobody shoots through the one being bitten");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -6085,6 +6238,12 @@ public final class GameTests {
 
     private static void check(boolean ok, String what) {
         if (!ok) throw new AssertionError(what);
+    }
+
+    private static Entity pickT(World w, Entity e, float r) throws Exception {
+        java.lang.reflect.Method m = World.class.getDeclaredMethod("pickTarget", Entity.class, float.class);
+        m.setAccessible(true);
+        return (Entity) m.invoke(w, e, r);
     }
 
     private static Object field(Object o, String name) throws Exception {

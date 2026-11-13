@@ -154,6 +154,11 @@ final class Entity {
     /** ((21.0) Indoors and armed: whether there's one of the dead to shoot from where they stand, looked for a few times a second. */
     transient float indoorLook;
     transient boolean indoorSees;
+    /** ((21.2) The fight as last read (World.sense): the dead near, from how many sides, the nearest, the way out. */
+    transient int tN, tSides, escK = -1, breakCount;
+    transient float tNear = 999, escX, escY, senseAt, breakT;
+    /** How bad the best way out is: the dead along it (a hundred more if it's walled off). */
+    transient float escCost;
     /** ((21.0) Scattered from a horde whose alpha fell: seconds until they'll join another. */
     transient float scatterT;
     float roamX, roamY, feedTimer;

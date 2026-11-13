@@ -2842,6 +2842,11 @@ final class World {
             // (10.37) Police and soldiers on their way to a vehicle stop to deal with one of the dead that gets
             // close, instead of walking on with it biting them.
             boolean defend = e.isArmed() && (e.ammo > 0 || e.reserve > 0) && nearest(e, 45, true, false) != null;
+            // ((21.2) Nor do they walk on past one of the dead with its teeth in someone.)
+            if (!defend && TACTICS && e.isArmed() && (e.ammo > 0 || e.reserve > 0)) {
+                Entity z = nearest(e, 70, true, true);
+                defend = z != null && z.biteCd > 0;
+            }
             if (!defend && boardStep(e)) return;
         }
         if (e.isZombie()) thinkZombie(e, dt);
@@ -3006,6 +3011,173 @@ final class World {
         float s = zombiesKilled * 10 + alphasKilled * 150 + (warResult == 1 ? 1500 + humans * 2 : 0) - civiliansLost * 4 - (copsLost + soldiersLost) * 6;
         if (mission() != null && missionResult == 1) s += 1000 * missionStars;
         return Math.max(0, Math.round(s * Director.SCORE[difficulty]));
+    }
+
+    // ---- ((21.2) Tactics: reading the fight ----
+
+    static boolean TACTICS = true;
+    /** How far round someone looks to read a fight. */
+    static final float SENSE_R = 110;
+    private static final int DIRS = 16;
+    private static final float[] DIR_X = new float[DIRS], DIR_Y = new float[DIRS];
+    static {
+        for (int k = 0; k < DIRS; k++) {
+            DIR_X[k] = (float) Math.cos(k * Math.PI * 2 / DIRS);
+            DIR_Y[k] = (float) Math.sin(k * Math.PI * 2 / DIRS);
+        }
+    }
+    private final float[] cone = new float[DIRS];
+    int breakouts;
+    private float breakSaidAt = -99;
+
+    /**
+     * A few times a second: the dead within SENSE_R of someone - how many, from how many of eight sides, how near the
+     * nearest - and the best way out: of sixteen directions, the open one with the fewest of them (the near ones
+     * counting for more) along it, holding to the last way out unless another is clearly better.
+     */
+    void sense(Entity e) {
+        if (time < e.senseAt) return;
+        e.senseAt = time + 0.2f + (e.nameSeed & 3) * 0.02f;
+        float r = SENSE_R;
+        java.util.Arrays.fill(cone, 0);
+        int n = 0, sides = 0;
+        float near = 999;
+        int cx0 = Math.max(0, (int) ((e.x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((e.y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
+                    float dx = o.x - e.x, dy = o.y - e.y, d2 = dx * dx + dy * dy;
+                    if (d2 > r * r) continue;
+                    float d = (float) Math.sqrt(d2) + 0.001f;
+                    n++;
+                    near = Math.min(near, d);
+                    int sec = ((int) Math.floor((Math.atan2(dy, dx) + Math.PI) / (Math.PI / 4))) & 7;
+                    sides |= 1 << sec;
+                    float wgt = 1 + 2 * (r - d) / r;
+                    for (int q = 0; q < DIRS; q++) {
+                        float dot = (dx * DIR_X[q] + dy * DIR_Y[q]) / d;
+                        if (dot > 0.35f) cone[q] += wgt * (dot - 0.35f) / 0.65f;
+                    }
+                }
+            }
+        e.tN = n;
+        e.tSides = Integer.bitCount(sides);
+        e.tNear = near;
+        if (n == 0) return;
+        int best = -1;
+        float bs = -Float.MAX_VALUE;
+        for (int q = 0; q < DIRS; q++) {
+            float score = -cone[q];
+            if (city.circleBlocked(e.x + DIR_X[q] * 14, e.y + DIR_Y[q] * 14, e.radius)) score -= 100;
+            else if (city.circleBlocked(e.x + DIR_X[q] * 32, e.y + DIR_Y[q] * 32, e.radius)) score -= 6;
+            if (q == e.escK) score += 0.6f;
+            if (score > bs) {
+                bs = score;
+                best = q;
+            }
+        }
+        e.escCost = -bs - (best == e.escK ? 0.6f : 0);
+        e.escK = best;
+        e.escX = DIR_X[best];
+        e.escY = DIR_Y[best];
+    }
+
+    /** Which way to step back from a target: by the open side when there are several of the dead about. */
+    private float awayX(Entity e, float ddx, float d) {
+        if (!TACTICS) return -ddx / d;
+        sense(e);
+        return e.tN >= 3 ? e.escX * 0.75f - ddx / d * 0.25f : -ddx / d;
+    }
+
+    private float awayY(Entity e, float ddy, float d) {
+        if (!TACTICS) return -ddy / d;
+        return e.tN >= 3 ? e.escY * 0.75f - ddy / d * 0.25f : -ddy / d;
+    }
+
+    /**
+     * A police officer or soldier in a fight. Being surrounded - the dead closing in from five sides or more - or about
+     * to be overrun: they run for the open side before the ring closes, shooting as they go, and keep going until
+     * they have room again (the old way was to stand and shoot until it was on them, then step back from the nearest
+     * into the rest). With a lull, they reload a gun that's getting low, rather than run dry with the dead at arm's
+     * length. True when this took care of their step.
+     */
+    private boolean breakOut(Entity e, Entity t, float d, float range, float dt) {
+        if (e.ride != null || e.rig != null) return false;
+        sense(e);
+        // A lull, with a gun getting low: reload now, not with the dead on top of them.
+        if (e.reload <= 0 && e.reserve > 0 && e.ammo > 0 && e.ammo <= Math.max(2, e.magSize * 0.4f) && e.tNear > 85) {
+            e.reload = e.type == Entity.SOLDIER ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+            emit(Sfx.RELOAD, e.x, e.y);
+        }
+        // (Behind sandbags or a safe zone's wall, and guards on a gate: they hold.)
+        if (e.task == Dispatch.T_GUARD || (e.task == Dispatch.T_HOLD && defences.nests > 0 && wallsRound(e))) return false;
+        boolean surrounded = e.tN >= 6 && e.tSides >= 5 && e.tNear < 75;
+        boolean overrun = e.tN >= 14 && e.tNear < 55;
+        if (surrounded || overrun) e.breakT = 2.2f;
+        if (e.breakT <= 0) return false;
+        e.breakT -= dt;
+        // Room again: back to the fight.
+        if (e.tNear > 70 && !surrounded && !overrun) {
+            e.breakT = 0;
+            return false;
+        }
+        if (surrounded || overrun) {
+            if (e.breakCount++ == 0) breakouts++;
+            if (time - breakSaidAt > 12) {
+                breakSaidAt = time;
+                dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                        "They're all round us! Fall back - this way!", e.x, e.y);
+            }
+        }
+        steer(e, e.escX, e.escY, e.runSpeed);
+        float l = (float) Math.sqrt(e.mx * e.mx + e.my * e.my) + 0.001f;
+        e.mx /= l;
+        e.my /= l;
+        // Shooting as they go: whatever's in the way first.
+        Entity ahead = null;
+        float ad = Float.MAX_VALUE;
+        for (int i = 0, n = gatherZ(e.x, e.y, 60); i < n; i++) {
+            Entity o = gathered[i];
+            float ox = o.x - e.x, oy = o.y - e.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
+            if ((ox * e.escX + oy * e.escY) / od < 0.5f) continue;
+            if (od < ad) {
+                ad = od;
+                ahead = o;
+            }
+        }
+        if (ahead != null) aimAndFire(e, ahead, ad, range, dt);
+        else if (d < range) aimAndFire(e, t, d, range, dt);
+        return true;
+    }
+
+    /** Sandbags or a wall right round someone: they're dug in. */
+    private boolean wallsRound(Entity e) {
+        int walls = 0;
+        for (int q = 0; q < DIRS; q += 2) if (city.circleBlocked(e.x + DIR_X[q] * 17, e.y + DIR_Y[q] * 17, 3)) walls++;
+        return walls >= 4;
+    }
+
+    /** The dead round (x, y), from the grid, into gathered. */
+    private int gatherZ(float x, float y, float r) {
+        int n = 0;
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
+                    if ((o.x - x) * (o.x - x) + (o.y - y) * (o.y - y) > r * r) continue;
+                    if (n == gathered.length) gathered = Arrays.copyOf(gathered, n * 2);
+                    gathered[n++] = o;
+                }
+            }
+        return n;
     }
 
     // ---- ((21.0) Defences, alphas, the barrage and the mop-up ----
@@ -5762,6 +5934,14 @@ final class World {
                 e.mx /= l;
                 e.my /= l;
                 return;
+            }
+        }
+        // ((21.2) Away from all of them and through the gap, when there's more than one about.)
+        if (TACTICS) {
+            sense(e);
+            if (e.tN >= 2) {
+                ax = e.escX * d;
+                ay = e.escY * d;
             }
         }
         flee(e, ax / d, ay / d, e.runSpeed);
@@ -10644,6 +10824,8 @@ final class World {
         if (t != null && e.task != Dispatch.T_MOVE) {
             float ddx = t.x - e.x, ddy = t.y - e.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
+            // ((21.2) Reading the fight: how many, from how many sides, and which way is open.)
+            if (TACTICS && e != controlled && breakOut(e, t, d, range, dt)) return;
             // ((16.9) Each kind of police officer keeps their own distance (see doctrine).)
             float[] dc = doctrine(e);
             float keep = soldier ? (e.role == Entity.ROLE_COMMANDER ? 90 : e.role == Entity.ROLE_SNIPER ? 60 : 40) : dc != null ? dc[4] : 50;
@@ -10660,12 +10842,13 @@ final class World {
                 // (a fair way, not across town), shooting, and take the post again once it's clear.)
                 float pd = (float) World.hypot(e.x - e.postX, e.y - e.postY);
                 if ((d < keep * 0.8f || swarmed || (e.reload > 0 && d < 45)) && pd < 120)
-                    flee(e, -ddx / d, -ddy / d, backOff(e, swarmed));
+                    flee(e, awayX(e, ddx, d), awayY(e, ddy, d), backOff(e, swarmed));
                 else if (d > keep * 1.4f && !swarmed) standAt(e, e.postX, e.postY, 0.5f);
                 else steer(e, 0, 0, 0);
             } else if (pressed && (guarding == null || inside(e, guarding, 1f)))
-                // Too close, reloading or outnumbered: fall back while shooting.
-                flee(e, -ddx / d, -ddy / d, backOff(e, swarmed));
+                // Too close, reloading or outnumbered: fall back while shooting. ((21.2) Away from all of them, by the
+                // open side - not straight back from the nearest into the rest.)
+                flee(e, awayX(e, ddx, d), awayY(e, ddy, d), backOff(e, swarmed));
             else if (pressed && guarding != null)
                 // ((11.5) On the gate outside the walls and the dead are on them: back inside, not stood there.)
                 walkToSpot(e, guarding.x, guarding.y, e.runSpeed * 0.9f);
@@ -10713,6 +10896,12 @@ final class World {
                 e.orderField = null;
             } else if (e.orderField == null || !followField(e, e.orderField, e.runSpeed)) {
                 steer(e, ddx / d, ddy / d, e.runSpeed);
+            }
+            // ((21.2) On the way, they shoot what's close: under orders to move, they used to walk past the dead -
+            // and past people being bitten - without firing a shot.)
+            if (TACTICS && t != null) {
+                float tx = t.x - e.x, ty = t.y - e.y, td = (float) Math.sqrt(tx * tx + ty * ty) + 0.001f;
+                if (td < 95) aimAndFire(e, t, td, range, dt);
             }
             return;
         }
@@ -12062,6 +12251,14 @@ final class World {
         return best;
     }
 
+    private boolean checkpointAt(float x, float y) {
+        for (int k = 0, n = city.checkpoints.size(); k < n; k++) {
+            float[] cp = city.checkpoints.get(k);
+            if (Math.abs(cp[0] - x) < City.T && Math.abs(cp[1] - y) < City.T) return true;
+        }
+        return false;
+    }
+
     /** Quarantine: barricades across every road out of a district. */
     private int sealDistrict(int d) {
         int placed = 0, w = city.w;
@@ -12077,7 +12274,9 @@ final class World {
                     if (city.tiles[j] != City.ROAD) continue;
                     if (city.districtIndex((j % w) * City.T + 8, (j / w) * City.T + 8) != d) edge = true;
                 }
-                if (edge && placeBarricade(x, y) != null) placed++;
+                // ((21.2) Not across a checkpoint's own road: the army's already holding it there, and a wall put up
+                // on top of the checkpoint left its guards standing in a fence.)
+                if (edge && !checkpointAt(x, y) && placeBarricade(x, y) != null) placed++;
             }
         if (placed > 0) {
             City.District dd = city.districts.get(d);
@@ -12826,8 +13025,8 @@ final class World {
      * jump the queue, and crawlers wait. Only targets in sight count.
      */
     private Entity pickTarget(Entity e, float range) {
-        float best = Float.MAX_VALUE;
-        Entity res = null;
+        float best = Float.MAX_VALUE, blockedBest = Float.MAX_VALUE;
+        Entity res = null, blocked = null;
         int cx0 = Math.max(0, (int) ((e.x - range) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + range) / CELL));
         int cy0 = Math.max(0, (int) ((e.y - range) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + range) / CELL));
         for (int cy = cy0; cy <= cy1; cy++)
@@ -12861,12 +13060,22 @@ final class World {
                     // (Only out past sixty or so: one that's nearly on them gets every gun there is.)
                     if (score > 65 && o.aimT > time && !o.alpha && o.type != Entity.BRUTE) score += Math.min(3, o.aimN) * 12;
                     // (10.27) A clear shot: not one with a friend standing in the way, when there's another to take.
-                    if (score < best && city.los(e.x, e.y, o.x, o.y) && !friendInLine(e, o, (float) Math.sqrt(d2) + 0.001f)) {
-                        best = score;
-                        res = o;
+                    if (score < best && city.los(e.x, e.y, o.x, o.y)) {
+                        if (!friendInLine(e, o, (float) Math.sqrt(d2) + 0.001f)) {
+                            best = score;
+                            res = o;
+                        } else if (TACTICS && score < blockedBest && (o.biteCd > 0 || peopleNear(o.x, o.y, 12))) {
+                            // ((21.2) One of the dead on someone, with them in the way: kept, in case there's nothing
+                            // else, to work round for an angle on it rather than stand and watch.)
+                            blockedBest = score;
+                            blocked = o;
+                        }
                     }
                 }
             }
+        // ((21.2) Nothing clear to shoot, and one of the dead on someone with them in the way: that's the one. The shot
+        // isn't taken through them (aimAndFire won't): they step round for an angle on it.)
+        if (res == null && blocked != null) res = blocked;
         if (res != null) {
             if (res.aimT <= time) res.aimN = 0;
             res.aimT = time + 0.5f;
