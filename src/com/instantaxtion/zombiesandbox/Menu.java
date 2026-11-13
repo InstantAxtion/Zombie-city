@@ -85,6 +85,9 @@ final class Menu {
             A_SOUNDS = 34, A_SFX = 6000, A_LOOP = 7000;
     /** ((19.0) The ambience bed being tried in the Sound Lab, or -1. */
     int previewLoop = -1;
+    /** ((19.6) The sound last played in the Sound Lab, and when: lit up, with a meter along the bottom. */
+    private int previewId = -1;
+    private float previewAt = -99;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -1059,16 +1062,43 @@ final class Menu {
                 int col = k % cols;
                 float bx = x0 + col * (bw + gap);
                 if (col == 0 && k > 0) y += bh + gap;
-                if (y + bh > listArea.top && y < listArea.bottom) button(Sfx.NAMES[id], A_SFX + id, false, bx, y, bx + bw, y + bh);
+                boolean lit = id == previewId && time - previewAt < 0.9f;
+                if (y + bh > listArea.top && y < listArea.bottom) button((lit ? "\u25B6 " : "") + Sfx.NAMES[id], A_SFX + id, lit, bx, y, bx + bw, y + bh);
                 k++;
             }
             y += bh + gap;
         }
         sameSize(first);
         c.restore();
-        contentHeight = y + scroll - top + 10 * dp;
+        contentHeight = y + scroll - top + 10 * dp + 70 * dp;
         clampScroll();
         drawScrollHint(c, w);
+        // What's playing: its name and a meter dancing along the bottom, fading as it ends.
+        float age = time - previewAt;
+        boolean bed = previewLoop >= 0;
+        if ((previewId >= 0 && age < 1.6f) || bed) {
+            float a = bed && (previewId < 0 || age >= 1.6f) ? 1 : Math.max(0, 1 - Math.max(0, age - 0.8f) / 0.8f);
+            String name = previewId >= 0 && age < 1.6f ? Sfx.NAMES[previewId] : Sfx.LOOP_NAMES[previewLoop] + " (ambience)";
+            float ph = 54 * dp, pw = Math.min(maxW, 420 * dp), px = (w - pw) / 2, py = h - ph - 14 * dp;
+            tmp.set(px, py, px + pw, py + ph);
+            fill.setColor(((int) (a * 235) << 24) | 0x16191E);
+            c.drawRoundRect(tmp, 14 * dp, 14 * dp, fill);
+            stroke.setStrokeWidth(1.5f * dp);
+            stroke.setColor(((int) (a * 255) << 24) | (ACCENT & 0xFFFFFF));
+            c.drawRoundRect(tmp, 14 * dp, 14 * dp, stroke);
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setTextSize(15 * dp);
+            text.setColor(((int) (a * 255) << 24) | (INK & 0xFFFFFF));
+            c.drawText("\u266A  " + name, px + 16 * dp, py + ph / 2 + 5 * dp, text);
+            int bars = 14;
+            float bx0 = px + pw - 16 * dp - bars * 7 * dp;
+            for (int k = 0; k < bars; k++) {
+                float lvl = 0.25f + 0.75f * Math.abs((float) Math.sin(time * (5 + k * 1.3f) + k * 0.7f)) * (bed ? 0.8f : Math.max(0.15f, 1 - age / 1.4f));
+                float bh2 = (ph - 20 * dp) * lvl;
+                fill.setColor(((int) (a * 255) << 24) | (ACCENT & 0xFFFFFF));
+                c.drawRect(bx0 + k * 7 * dp, py + ph - 10 * dp - bh2, bx0 + k * 7 * dp + 4 * dp, py + ph - 10 * dp, fill);
+            }
+        }
     }
 
     /** A titled box of label / number rows; returns where it ends. */
@@ -2199,9 +2229,9 @@ final class Menu {
                     scrubReplay(x);
                     break;
                 }
+                // ((19.6) Every list scrolls: the Campaign, the reports, the Sound Lab and the top fighters were left out.)
                 if (!dragging && Math.abs(y - downY) > 10 * dp && listArea.contains(downX, downY)
-                        && (screen == SETUP || screen == SETTINGS || screen == NOTES || screen == RECORDS || screen == LOG
-                        || screen == SAVES || screen == STATS)) dragging = true;
+                        && screen != MAIN && screen != PAUSE && screen != REPLAY && screen != NONE) dragging = true;
                 if (dragging) {
                     scroll -= y - lastY;
                     clampScroll();
@@ -2277,6 +2307,8 @@ final class Menu {
         }
         if (action >= A_SFX && action < A_SFX + Sfx.COUNT) {
             host.preview(action - A_SFX);
+            previewId = action - A_SFX;
+            previewAt = time;
             return;
         }
         if (action >= A_MISSION) {
