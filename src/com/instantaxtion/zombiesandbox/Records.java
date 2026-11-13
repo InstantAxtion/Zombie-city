@@ -85,6 +85,16 @@ final class Records {
         lastWorld = null;
     }
 
+    /** ((21.4) Wipes the records and the hall of fame. Campaign stars and veterans are kept.) */
+    void resetStats() {
+        SharedPreferences.Editor ed = prefs.edit();
+        for (int i = 0; i < RECORD_NAMES.length; i++) ed.putInt("rec" + i, 0);
+        ed.putString("hall", "");
+        ed.apply();
+        hallText = "";
+        lastWorld = null;
+    }
+
     /** Checks the current game against the records. */
     void check(World w) {
         if (w != lastWorld) {

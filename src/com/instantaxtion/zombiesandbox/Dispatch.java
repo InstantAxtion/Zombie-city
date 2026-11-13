@@ -456,8 +456,30 @@ final class Dispatch {
         say(who, speaker, text, x, y, false);
     }
 
+    /**
+     * ((21.4) Routine chatter left off the radio: units mounting up, standing down, restocking, refuelling, heading
+     * back. It said nothing the map doesn't, and buried what mattered.)
+     */
+    private static final String[] ROUTINE = {"Copy, resuming patrol", "restocked at", "Standing down", "All quiet at",
+            "Nothing left at", "Patrol mounted up", "to the pad", "Crew to the helicopter", "are boarding for", "mounting up for",
+            "Low on fuel", "Winchester", "Armor pulling back", "Gas stations across town", "A driver dropped", "LZ's hot",
+            "Perimeter secure", "Contact on the way", "Boots on the ground", "Long walk", "Got some rounds", "eserve pilot",
+            "Deer are bolting", "Heading back", "has been rebuilt", "Work has started on rebuilding", "taken down their barricades",
+            "Clean-up crews", "every truck out clearing", "is rolling out of", "take a car to", ", divert to", "grab a car",
+            "moving to support at", "take the post at", "Gun's up at", "wiring the streets", "Drone up, heading", " delivered to ",
+            "taking the bulldozer", "car is wrecked", "truck is wrecked", ": Over ", "Squads out"};
+
+    static boolean routine(String text) {
+        for (String r : ROUTINE) if (text.contains(r)) return true;
+        return false;
+    }
+
     /** As above; always set, it goes out even if the same was just said (a call for backup from another fight). */
     void say(int who, Entity speaker, String text, float x, float y, boolean always) {
+        if (routine(text)) {
+            if (speaker != null) speaker.talkTimer = 2.5f;
+            return;
+        }
         // ((13.8) The same kind of news again within a few seconds (a second "People are turning into monsters", a
         // third officer down in the same fight) is left out: it's on the map already.)
         String kind = kindOf(who, text);

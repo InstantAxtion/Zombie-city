@@ -26,6 +26,12 @@ final class Settings implements OptionSet {
     /** 0 is Auto: room for everyone who lives in the city, and plenty of zombies. */
     private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000};
 
+    /**
+     * ((21.4) The settings offered, by index: the rest stay as they come (FPS, radio, name tags, radio lines,
+     * destruction, the extra volumes and sound options, screen effects and colour grading).
+     */
+    private static final int[] SHOWN = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 24, 14};
+
     private final SharedPreferences prefs;
     private final int[] v = DEFAULTS.clone();
 
@@ -33,7 +39,7 @@ final class Settings implements OptionSet {
         prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE);
         for (int i = 0; i < v.length; i++) {
             int saved = prefs.getInt(KEYS[i], DEFAULTS[i]);
-            v[i] = saved >= 0 && saved < VALUES[i].length ? saved : DEFAULTS[i];
+            v[i] = saved >= 0 && saved < VALUES[i].length && shown(i) ? saved : DEFAULTS[i];
         }
     }
 
@@ -41,7 +47,7 @@ final class Settings implements OptionSet {
     float sfx() { return v[1] / 4f; }
     /** 3D (GTA 2 style, buildings lean) or bird's-eye (flat, straight down). */
     boolean buildings3d() { return v[2] == 1; }
-    void setBuildings3d(boolean on) { set(2, on ? 1 : 0); }
+    void setBuildings3d(boolean on) { put(2, on ? 1 : 0); }
     boolean gore() { return v[3] == 1; }
     boolean healthBars() { return v[4] == 1; }
     boolean shake() { return v[5] == 1; }
@@ -98,19 +104,29 @@ final class Settings implements OptionSet {
         prefs.edit().putInt("notesSeen", PatchNotes.VERSION_CODE).apply();
     }
 
-    @Override public int count() { return LABELS.length; }
-    @Override public String label(int i) { return LABELS[i]; }
-    @Override public String[] values(int i) { return VALUES[i]; }
-    @Override public int get(int i) { return v[i]; }
+    private static boolean shown(int raw) {
+        for (int k : SHOWN) if (k == raw) return true;
+        return false;
+    }
+
+    @Override public int count() { return SHOWN.length; }
+    @Override public String label(int i) { return LABELS[SHOWN[i]]; }
+    @Override public String[] values(int i) { return VALUES[SHOWN[i]]; }
+    @Override public int get(int i) { return v[SHOWN[i]]; }
 
     /** (12.0) Every setting back as it comes. */
     void reset() {
-        for (int i = 0; i < v.length; i++) set(i, DEFAULTS[i]);
+        for (int i = 0; i < v.length; i++) put(i, DEFAULTS[i]);
     }
 
     @Override
     public void set(int i, int value) {
-        v[i] = value;
-        prefs.edit().putInt(KEYS[i], value).apply();
+        put(SHOWN[i], value);
+    }
+
+    /** By the setting's own index (KEYS), shown or not. */
+    void put(int raw, int value) {
+        v[raw] = value;
+        prefs.edit().putInt(KEYS[raw], value).apply();
     }
 }

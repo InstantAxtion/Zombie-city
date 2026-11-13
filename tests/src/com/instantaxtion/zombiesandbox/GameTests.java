@@ -3078,7 +3078,7 @@ public final class GameTests {
                 v.layout(size[0], size[1]);
                 Menu menu = (Menu) field(v, "menu");
                 Settings st = (Settings) field(v, "settings");
-                st.set(22, 1);
+                st.put(22, 1);
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 3;
@@ -4140,6 +4140,46 @@ public final class GameTests {
                 check(v.drawErrors == 0, "drawn without an error");
             }
         });
+        test("21.4: every Archipelago island keeps its roads, with 3 or 4 small ones; Reset stats; fewer settings; no routine chatter", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.ARCHIPELAGO;
+                c.seed = 7920; // (One whose small island lost every road before.)
+                City city = new City(c);
+                check(city.islandRects.length == 4 || city.islandRects.length == 5, "3 or 4 small islands (" + (city.islandRects.length - 1) + ")");
+                int w = city.w, h = city.h, bad = 0;
+                int[] comp = new int[w * h], q = new int[w * h];
+                java.util.Arrays.fill(comp, -1);
+                for (int s0 = 0; s0 < w * h; s0++) {
+                    if (city.tiles[s0] == City.WATER || comp[s0] >= 0) continue;
+                    int hd = 0, tl = 0, road = 0;
+                    q[tl++] = s0;
+                    comp[s0] = 1;
+                    while (hd < tl) {
+                        int cc = q[hd++], x = cc % w, y = cc / w;
+                        if (city.tiles[cc] == City.ROAD) road++;
+                        int[] nb = {x > 0 ? cc - 1 : -1, x < w - 1 ? cc + 1 : -1, y > 0 ? cc - w : -1, y < h - 1 ? cc + w : -1};
+                        for (int j : nb) if (j >= 0 && comp[j] < 0 && city.tiles[j] != City.WATER) { comp[j] = 1; q[tl++] = j; }
+                    }
+                    if (tl > 150 && road == 0) bad++;
+                }
+                check(bad == 0, "no land without a road on it (" + bad + " patches)");
+
+                Records rec = new Records(new android.app.Activity());
+                rec.best(1, 500);
+                check(rec.record(1) == 500, "a record is kept");
+                rec.resetStats();
+                check(rec.record(1) == 0 && rec.hall().isEmpty(), "Reset stats clears the records and the hall of fame");
+
+                Settings st = new Settings(new android.app.Activity());
+                check(st.count() < 15, "fewer settings (" + st.count() + ")");
+                boolean view = false;
+                for (int i = 0; i < st.count(); i++) view |= st.label(i).equals("View");
+                check(view, "View (3D or bird's-eye) is in Settings");
+                check(Dispatch.routine("Unit 4: All quiet at Elm St. Heading back.") && !Dispatch.routine("Dispatch: Officer down at Elm St!"),
+                        "routine chatter is left off the radio, not what matters");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -4267,7 +4307,7 @@ public final class GameTests {
                     Settings st = (Settings) field(v, "settings");
                     World w = (World) field(v, "world");
                     for (int g = 0; g < 2; g++) {
-                        st.set(13, g);
+                        st.put(13, g);
                         v.settingsChanged();
                         check(w.city.drawnRealistic == (g == 1), "map redrawn in the chosen style");
                         m.screen = Menu.NONE;

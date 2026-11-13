@@ -82,7 +82,7 @@ final class Menu {
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
             A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000,
             A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30, A_CAMPAIGN = 31, A_RETRY = 32, A_NEXT = 33, A_MISSION = 5000,
-            A_SOUNDS = 34, A_SFX = 6000, A_LOOP = 7000;
+            A_SOUNDS = 34, A_RESET_STATS = 35, A_SFX = 6000, A_LOOP = 7000;
     /** ((19.0) The ambience bed being tried in the Sound Lab, or -1. */
     int previewLoop = -1;
     /** ((19.6) The sound last played in the Sound Lab, and when: lit up, with a meter along the bottom. */
@@ -541,9 +541,9 @@ final class Menu {
         backdrop(c, w, h, 0.6f);
         // ((12.0) Restart: the same city from the start, with a second tap to be sure.)
         boolean sure = time - restartArmedAt < 4;
-        String[] labels = {"Resume", "Top Fighters", "Save / Load", "Screenshot", "Radio Log", "Hide Buttons", "Stats", "Report", sure ? "Tap again to restart" : "Restart City",
+        String[] labels = {"Resume", "Top Fighters", "Save / Load", "Radio Log", "Stats", "Report", sure ? "Tap again to restart" : "Restart City",
                 "New Game", "Settings", "Main Menu"};
-        int[] actions = {A_RESUME, A_TOP, A_SAVES, A_SHOT, A_LOG, A_HUD, A_STATS, A_REPORT, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
+        int[] actions = {A_RESUME, A_TOP, A_SAVES, A_LOG, A_STATS, A_REPORT, A_RESTART, A_NEW, A_SETTINGS, A_MAIN_MENU};
         int cols = w > h ? 2 : 1, rowsN = (labels.length + cols - 1) / cols;
         float gap = 7 * dp, bh = Math.min(46 * dp, (h - 138 * dp - gap * (rowsN - 1)) / rowsN);
         float colW = Math.min(300 * dp, (w - 60 * dp) / cols);
@@ -637,7 +637,7 @@ final class Menu {
     private float copiedAt = -99;
 
     /** ((12.0) When Reset to defaults was first tapped.) */
-    private float resetArmedAt = -99;
+    private float resetArmedAt = -99, statsArmedAt = -99;
 
     /** ((12.0) When Restart City was first tapped.) */
     private float restartArmedAt = -99;
@@ -1697,6 +1697,11 @@ final class Menu {
             c.drawText(fit(plain, kind + ", " + hr.city, maxW), x0 + 22 * dp, y + 30 * dp, plain);
             y += 42 * dp;
         }
+        // ((21.4) Start the records over, with a second tap to be sure.)
+        y += 14 * dp;
+        float bw = Math.min(240 * dp, maxW);
+        button(time - statsArmedAt < 4 ? "Tap again to reset" : "Reset stats", A_RESET_STATS, false, (w - bw) / 2, y, (w + bw) / 2, y + 44 * dp);
+        y += 58 * dp;
         c.restore();
         contentHeight = y + scroll - top;
         clampScroll();
@@ -2416,6 +2421,14 @@ final class Menu {
                 }
                 restartArmedAt = -99;
                 host.startGame(host.world().city.cfg.copy());
+                break;
+            case A_RESET_STATS:
+                if (time - statsArmedAt >= 4) {
+                    statsArmedAt = time;
+                    break;
+                }
+                statsArmedAt = -99;
+                records.resetStats();
                 break;
             case A_RESET_SETTINGS:
                 if (time - resetArmedAt >= 4) {

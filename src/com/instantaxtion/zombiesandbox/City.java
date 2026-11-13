@@ -4034,11 +4034,11 @@ final class City {
 
     /**
      * (10.60) The Archipelago: one big island in the middle with the city on it, and two to five smaller island
-     * towns round it (south, west, east, north, then the north-east), each joined to the big one by a bridge (the
+     * towns round it ((21.4) three or four now) (south, west, east, north, then the north-east), each joined to the big one by a bridge (the
      * north-east one by way of the east), and the causeway from the southern one to the mainland.
      */
     private void archipelagoLayout(Random r, int j) {
-        int extra = 2 + new Random(cfg.seed * 73L + 9).nextInt(4);
+        int extra = cfg.moreIslands() ? 3 + new Random(cfg.seed * 73L + 9).nextInt(2) : 2 + new Random(cfg.seed * 73L + 9).nextInt(4);
         float[][] all = {
                 {0.27f, 0.26f, 0.73f, 0.72f},     // the big island
                 {0.32f, 0.775f, 0.66f, 0.95f},    // south
@@ -4185,7 +4185,7 @@ final class City {
         // Stray bits of road (and blocks only they reach) go too.
         int[] comp = new int[w * h];
         Arrays.fill(comp, -1);
-        List<Integer> sizes = new ArrayList<Integer>();
+        List<Integer> sizes = new ArrayList<Integer>(), compIsland = new ArrayList<Integer>();
         int[] qu = new int[w * h];
         for (int s0 = 0; s0 < w * h; s0++) {
             if (tiles[s0] != ROAD || comp[s0] >= 0) continue;
@@ -4202,11 +4202,17 @@ final class City {
                     }
             }
             sizes.add(tail);
+            compIsland.add(island(s0 % w, s0 / w));
         }
-        int biggest = 0;
-        for (int sz : sizes) biggest = Math.max(biggest, sz);
+        // ((21.4) Measured island by island: a small island town's streets were thrown away for being small next to
+        // the big island's, and left its blocks standing in the sea.)
+        int[] biggest = new int[n + 1];
+        for (int k = 0; k < sizes.size(); k++) {
+            int il = compIsland.get(k) + 1;
+            biggest[il] = Math.max(biggest[il], sizes.get(k));
+        }
         for (int t = 0; t < w * h; t++)
-            if (comp[t] >= 0 && sizes.get(comp[t]) < biggest / 6) {
+            if (comp[t] >= 0 && sizes.get(comp[t]) < biggest[compIsland.get(comp[t]) + 1] / 6) {
                 tiles[t] = WATER;
                 roadDir[t] = 0;
                 mainRoad[t] = false;

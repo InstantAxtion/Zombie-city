@@ -104,8 +104,9 @@ final class GameView extends View implements Menu.Host {
             "Six mines round the spot: only the dead set them off",
             "Eight mortar shells walked across the spot, a couple of seconds after the call",
             "Six soldiers with a machine gun dropped on the spot, to hold it"};
-    private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5, BTN_TOP = 6;
-    private static final int TOP_BUTTONS = 7;
+    private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_CLEAR = 3, BTN_MENU = 4, BTN_TOP = 5;
+    /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
+    private static final int TOP_BUTTONS = 6;
     private static final int[] SPEEDS = {1, 2, 4, 8};
     private static final int[] BRUSHES = {1, 10, 25, 50};
     private static final int[] SHOP_AWNINGS = {0xFFD83A3A, 0xFF2E7D4F, 0xFF2E5FB0, 0xFFE8A21C, 0xFF8A2E6B};
@@ -7614,7 +7615,7 @@ final class GameView extends View implements Menu.Host {
         drawMapLabels(c);
         drawPopups(c);
         // Top buttons.
-        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], settings.buildings3d() ? "3D" : "Top", commander() ? "Goal" : "Clear", "Menu", "Kills"};
+        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], commander() ? "Goal" : "Clear", "Menu", "Kills"};
         text.setTextSize((portrait ? 11 : 12) * dp);
         text.setTextAlign(Paint.Align.CENTER);
         for (int i = 0; i < TOP_BUTTONS; i++) {
@@ -9510,10 +9511,6 @@ final class GameView extends View implements Menu.Host {
                 break;
             case BTN_BRUSH:
                 brushIdx = (brushIdx + 1) % BRUSHES.length;
-                break;
-            case BTN_VIEW:
-                settings.setBuildings3d(!settings.buildings3d());
-                world.say(settings.buildings3d() ? "3D view" : "Bird's-eye view");
                 break;
             case BTN_CLEAR:
                 // ((18.0) In a mission there's no clearing the streets: the button says what the mission wants.)
