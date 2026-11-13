@@ -696,7 +696,8 @@ final class City {
                     || k == BARN || (k == STADIUM && !stadiumNamed) || k >= CITY_HALL) placeDoor(b, l);
             // (Nobody shelters in the cells.)
             if (k == JAIL) b.capacity = 0;
-            if (k == MALL) b.capacity = 40;
+            // ((22.0) A mall takes in far more of those sheltering: its shops, its halls, its stores.)
+            if (k == MALL) b.capacity = cfg.v22() ? 150 : 40;
             if (k == APARTMENT) b.capacity = Math.max(8, Math.min(40, l[2] * l[3] / 3));
             Random rr = new Random(l[5] * 31L + 7);
             if (b.capacity > 0) {
@@ -2715,6 +2716,8 @@ final class City {
             islands();
         } else if (waterKind == CityConfig.W_LAKE) {
             lakeTown(bx0, by0, bx1, by1, in);
+        } else if (waterKind == CityConfig.W_RIVER) {
+            riverTown(bx0, by0, bx1, by1, in);
         } else if (village && m > 0) {
             villageCore(bx0, by0, bx1, by1);
         } else if (cfg.militaryTown()) {
@@ -2990,6 +2993,35 @@ final class City {
                 int[] b = blocks.get(k);
                 fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
                 mall(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
+            }
+        }
+        // ((22.0) A second mall on the bigger maps, and a walled prison out towards the edge of town.)
+        if (cfg.v22() && w >= 256 && !rural) {
+            int k = bigBlock(used, 11, 9, 0.45f);
+            if (k >= 0) {
+                used[k] = true;
+                int[] b = blocks.get(k);
+                fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+                mall(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
+            }
+        }
+        if (cfg.v22() && w >= 256 && prison == null && !rural && waterKind != CityConfig.W_ISLANDS) {
+            int best = -1;
+            float bestD = -1;
+            for (int k = 0; k < blocks.size(); k++) {
+                int[] b = blocks.get(k);
+                if (used[k] || b[2] - b[0] < 24 || b[3] - b[1] < 18 || b[1] < 2) continue;
+                // (Out towards the edge of town: the furthest big block from the middle.)
+                float d = (float) Math.hypot((b[0] + b[2]) / 2f - w / 2f, (b[1] + b[3]) / 2f - h / 2f);
+                if (d > bestD) {
+                    bestD = d;
+                    best = k;
+                }
+            }
+            if (best >= 0) {
+                used[best] = true;
+                int[] b = blocks.get(best);
+                landPrison(b[0] + 1, b[1] + 1, b[2] - 1, b[3] - 1);
             }
         }
         if ((w >= 256 || cfg.density() == 2) && !rural) {
@@ -4971,6 +5003,92 @@ final class City {
             }
         fill(lx0, ly0, lw, lh, SIDEWALK);
         bigBase = new int[]{lx0, ly0, lx1, ly1};
+    }
+
+    /** ((22.0) River City's river: its first and last rows of water. */
+    int riverY0 = -1, riverY1 = -1;
+
+    /**
+     * ((22.0) River City: a river right across the map through the middle of town, a road and a promenade along each
+     * bank, the town laid out on either side, and a bridge every few blocks.
+     */
+    private void riverTown(int bx0, int by0, int bx1, int by1, int in) {
+        int th = by1 - by0;
+        int rw = Math.max(9, Math.min(20, th / 14));
+        int ry0 = by0 + (int) (th * 0.45f) + rnd.nextInt(Math.max(1, th / 10)) - th / 20, ry1 = ry0 + rw;
+        riverY0 = ry0;
+        riverY1 = ry1;
+        splitTop(bx0 + in, by0 + in, bx1 - in, ry0 - 4);
+        split(bx0 + in, ry1 + 4, bx1 - in, by1 - in, 0, -1, -1);
+        carve(new Street(bx0, ry0 - 4, bx1, ry0 - 1, false, true));
+        carve(new Street(bx0, ry1 + 1, bx1, ry1 + 4, false, true));
+        fill(bx0, ry0 - 1, bx1 - bx0, 1, SIDEWALK);
+        fill(bx0, ry1, bx1 - bx0, 1, SIDEWALK);
+        fill(0, ry0, w, rw, WATER);
+        for (int y = ry0; y < ry1; y++)
+            for (int x = 0; x < w; x++) {
+                roadDir[y * w + x] = 0;
+                mainRoad[y * w + x] = false;
+            }
+        if (bridge == null) bridge = new boolean[w * h];
+        // Bridges: one every forty to fifty-five tiles, joining the bank roads.
+        for (int x = bx0 + 18 + rnd.nextInt(12); x < bx1 - 18; x += 40 + rnd.nextInt(16)) {
+            for (int y = ry0 - 1; y <= ry1; y++)
+                for (int k = 0; k < 3; k++) if (tiles[y * w + x + k] == WATER) bridge[y * w + x + k] = true;
+            carve(new Street(x, ry0 - 2, x + 3, ry1 + 2, true, true));
+        }
+    }
+
+    /**
+     * ((22.0) A walled prison on a regular map: the island prison's wall, gate, watchtowers and cell blocks, on a big
+     * block of its own, the gate facing the road along its top. Nothing starts in it by itself.
+     */
+    private void landPrison(int x0, int y0, int x1, int y1) {
+        fill(x0, y0, x1 - x0, y1 - y0, GRASS);
+        int cx0 = x0 + 1, cy0 = y0 + 1, cx1 = x1 - 1, cy1 = y1 - 1;
+        fill(cx0, cy0, cx1 - cx0, cy1 - cy0, LOT);
+        for (int t = 0; t < PRISON_WALL; t++) {
+            for (int x = cx0; x < cx1; x++) {
+                tiles[(cy0 + t) * w + x] = ROCK;
+                tiles[(cy1 - 1 - t) * w + x] = ROCK;
+            }
+            for (int y = cy0; y < cy1; y++) {
+                tiles[y * w + cx0 + t] = ROCK;
+                tiles[y * w + cx1 - 1 - t] = ROCK;
+            }
+        }
+        prison = new int[]{cx0, cy0, cx1, cy1};
+        int gx = (cx0 + cx1) / 2 - 1;
+        // A drive from the road above to the gate.
+        carve(new Street(gx, y0 - 2, gx + 3, cy0, true, false));
+        for (int y = cy0; y < cy0 + PRISON_WALL; y++)
+            for (int x = gx; x < gx + 3; x++) tiles[y * w + x] = ROCK;
+        prisonGate = new int[]{gx, cy0, gx + 3, cy0 + PRISON_WALL};
+        int gh0 = cy0 + PRISON_WALL;
+        float m = PRISON_WALL * T / 2f;
+        prisonTowers.clear();
+        prisonTowers.add(new float[]{cx0 * T + m, cy0 * T + m});
+        prisonTowers.add(new float[]{cx1 * T - m, cy0 * T + m});
+        prisonTowers.add(new float[]{cx0 * T + m, cy1 * T - m});
+        prisonTowers.add(new float[]{cx1 * T - m, cy1 * T - m});
+        prisonPosts.clear();
+        prisonPosts.add(new float[]{(gx + 0.5f) * T, (gh0 + 1.5f) * T});
+        prisonPosts.add(new float[]{(gx + 2.5f) * T, (gh0 + 1.5f) * T});
+        for (float[] t : prisonTowers) {
+            float px = t[0] + (t[0] < (cx0 + cx1) / 2f * T ? 2.5f : -2.5f) * T, py = t[1] + (t[1] < (cy0 + cy1) / 2f * T ? 2.5f : -2.5f) * T;
+            prisonPosts.add(new float[]{px, py});
+        }
+        int yx0 = cx0 + 3, yx1 = cx1 - 3, yy0 = cy0 + 4, yy1 = cy1 - 3;
+        int blocks = Math.max(2, Math.min(4, (yx1 - yx0) / 14));
+        int bw = Math.max(5, Math.min(12, (yx1 - yx0 - (blocks - 1) * 4) / blocks)), gap = (yx1 - yx0 - blocks * bw) / Math.max(1, blocks - 1);
+        int bh = Math.max(4, Math.min(7, (yy1 - yy0) / 3));
+        Building townJail = jail;
+        for (int k = 0; k < blocks; k++) {
+            int bx = yx0 + k * (bw + gap);
+            govLot(bx, yy1 - bh - 1, bw, bh, JAIL);
+        }
+        jail = townJail;
+        openAreas.add(new float[]{(cx0 + cx1) / 2f * T, (cy0 + cy1) / 2f * T, 0});
     }
 
     private void lakeTown(int bx0, int by0, int bx1, int by1, int in) {

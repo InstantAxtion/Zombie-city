@@ -22,7 +22,8 @@ final class Settings implements OptionSet {
     private static final String[] KEYS = {"music", "sfx", "buildings3d", "gore", "healthBars", "shake", "fps",
             "maxPop2", "radio", "minimap", "uiSize", "battery", "nameTags", "graphics", "vibration", "feedLines", "destruction",
             "ambience", "radioVol", "uiVol", "mono", "nightMode", "captions", "shellShock", "effects", "screenFx", "grading"};
-    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 3, 3, 3, 0, 0, 0, 1, 2, 1, 1};
+    // ((22.0) One line of radio on screen, not two.)
+    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 3, 3, 3, 0, 0, 0, 1, 2, 1, 1};
     /** 0 is Auto: room for everyone who lives in the city, and plenty of zombies. */
     private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000};
 

@@ -85,6 +85,20 @@ final class Records {
         lastWorld = null;
     }
 
+    /** ((22.0) The perks taken (one bit each). Before any are chosen, those the stars gave by themselves before 22.0. */
+    int perkMask() {
+        int m = prefs.getInt("perkMask", -1);
+        return m >= 0 ? m : Perks.legacy(totalStars());
+    }
+
+    /** ((22.0) Takes a perk, if it's open. */
+    boolean takePerk(int perk) {
+        int m = perkMask();
+        if (!Perks.open(m, totalStars(), perk)) return false;
+        prefs.edit().putInt("perkMask", m | (1 << perk)).apply();
+        return true;
+    }
+
     /** ((21.4) Wipes the records and the hall of fame. Campaign stars and veterans are kept.) */
     void resetStats() {
         SharedPreferences.Editor ed = prefs.edit();

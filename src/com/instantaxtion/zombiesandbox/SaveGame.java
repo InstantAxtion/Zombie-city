@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 66;
+    private static final int VERSION = 67;
 
     private SaveGame() {
     }
@@ -157,6 +157,8 @@ final class SaveGame {
                 out.writeFloat(b[0]);
                 out.writeFloat(b[1]);
                 out.writeFloat(b[2]);
+                // (Version 67, 22.0: what it's made of.)
+                out.writeByte((int) b[5]);
             }
 
             out.writeInt(w.corpses.size());
@@ -658,7 +660,11 @@ final class SaveGame {
             for (int i = 0; i < barriers; i++) {
                 float[] b = w.placeBarricade(in.readFloat(), in.readFloat());
                 float hp = in.readFloat();
-                if (b != null) b[2] = hp;
+                int tier = version >= 67 ? in.readByte() : 0;
+                if (b != null) {
+                    b[5] = tier;
+                    b[2] = hp;
+                }
             }
 
             int corpses = in.readInt();
@@ -1043,6 +1049,8 @@ final class SaveGame {
                     w.alphasKilled = in.readInt();
                     w.barrages = in.readInt();
                     w.perkStars = in.readInt();
+                    // ((22.0) Stars then; the perks themselves now.)
+                    if (version < 67) w.perkStars = Perks.legacy(w.perkStars);
                     w.siteT = in.readFloat();
                 }
             }

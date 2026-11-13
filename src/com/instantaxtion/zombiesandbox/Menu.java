@@ -82,7 +82,7 @@ final class Menu {
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
             A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000,
             A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30, A_CAMPAIGN = 31, A_RETRY = 32, A_NEXT = 33, A_MISSION = 5000,
-            A_SOUNDS = 34, A_RESET_STATS = 35, A_SFX = 6000, A_LOOP = 7000;
+            A_SOUNDS = 34, A_RESET_STATS = 35, A_SFX = 6000, A_LOOP = 7000, A_PERK = 8000;
     /** ((19.0) The ambience bed being tried in the Sound Lab, or -1. */
     int previewLoop = -1;
     /** ((19.6) The sound last played in the Sound Lab, and when: lit up, with a meter along the bottom. */
@@ -910,26 +910,40 @@ final class Menu {
         c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
                 + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
         y += 28 * dp;
-        // ((21.0) The commander's perks: earned by stars, three at a time.)
-        int have = records == null ? 0 : records.totalStars();
-        int nextAt = Perks.next(have);
+        // ((22.0) The commander's perks: a tree of three branches, a point to spend for every four stars. Tap one that's
+        // open to take it.)
+        int allStars = records == null ? 0 : records.totalStars();
+        int mask = records == null ? 0 : records.perkMask();
+        int spare = Perks.spare(mask, allStars);
         text.setTextSize(12.5f * dp);
         text.setColor(0xFFC8CCD2);
-        c.drawText("PERKS  " + Perks.count(have) + " / " + Perks.STARS.length + (nextAt > 0 ? "      next at " + nextAt + " stars" : ""), x0, y + 12 * dp, text);
+        c.drawText("PERKS  " + Perks.count(mask) + " / " + Perks.COUNT + (spare > 0 ? "      " + spare + (spare == 1 ? " point" : " points") + " to spend: tap a perk"
+                : "      a point every " + Perks.STARS_PER_POINT + " stars"), x0, y + 12 * dp, text);
         y += 22 * dp;
-        for (int k = 0; k < Perks.STARS.length; k++) {
-            boolean got = have >= Perks.STARS[k];
-            // (Those earned, and the next one to earn: the rest stay a surprise.)
-            if (!got && Perks.STARS[k] != nextAt) continue;
-            fill.setColor(got ? 0xFF1E2A1C : 0xFF1C1F24);
-            c.drawRoundRect(new RectF(x0, y, x0 + maxW, y + 40 * dp), 8 * dp, 8 * dp, fill);
-            text.setTextSize(13 * dp);
-            text.setColor(got ? 0xFF9BE07A : 0xFF8A8F98);
-            c.drawText((got ? "\u2713 " : Perks.STARS[k] + "\u2605  ") + Perks.NAMES[k], x0 + 10 * dp, y + 16 * dp, text);
-            plain.setTextSize(11.5f * dp);
-            plain.setColor(got ? 0xFFC8CCD2 : MUTED);
-            c.drawText(Perks.INFO[k], x0 + 10 * dp, y + 32 * dp, plain);
-            y += 46 * dp;
+        for (int br = 0; br < Perks.BRANCHES.length; br++) {
+            text.setTextSize(11.5f * dp);
+            text.setColor(ACCENT);
+            c.drawText(Perks.BRANCH_NAMES[br].toUpperCase(java.util.Locale.US), x0, y + 12 * dp, text);
+            y += 18 * dp;
+            for (int k : Perks.BRANCHES[br]) {
+                boolean got = Perks.taken(mask, k), canTake = Perks.open(mask, allStars, k);
+                tmp.set(x0, y, x0 + maxW, y + 40 * dp);
+                fill.setColor(got ? 0xFF1E2A1C : canTake ? 0xFF22303F : 0xFF1C1F24);
+                c.drawRoundRect(tmp, 8 * dp, 8 * dp, fill);
+                if (canTake) {
+                    stroke.setColor(ACCENT);
+                    stroke.setStrokeWidth(1.5f * dp);
+                    c.drawRoundRect(tmp, 8 * dp, 8 * dp, stroke);
+                    button("", A_PERK + k, false, tmp.left, tmp.top, tmp.right, tmp.bottom).invisible = true;
+                }
+                text.setTextSize(13 * dp);
+                text.setColor(got ? 0xFF9BE07A : canTake ? 0xFFFFFFFF : 0xFF8A8F98);
+                c.drawText((got ? "\u2713 " : canTake ? "+ " : "\u2022 ") + Perks.NAMES[k], x0 + 10 * dp, y + 16 * dp, text);
+                plain.setTextSize(11.5f * dp);
+                plain.setColor(got ? 0xFFC8CCD2 : MUTED);
+                c.drawText(fit(plain, Perks.INFO[k], maxW - 20 * dp), x0 + 10 * dp, y + 32 * dp, plain);
+                y += 46 * dp;
+            }
         }
         y += 8 * dp;
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
@@ -2250,6 +2264,10 @@ final class Menu {
             host.preview(action - A_SFX);
             previewId = action - A_SFX;
             previewAt = time;
+            return;
+        }
+        if (action >= A_PERK && action < A_PERK + Perks.COUNT) {
+            if (records != null) records.takePerk(action - A_PERK);
             return;
         }
         if (action >= A_MISSION) {

@@ -19,7 +19,10 @@ final class Campaign {
     static final int G_EVAC = 2, G_KILLS = 3;
     /** ((21.0) Hold a site (the main police station) for the time; keep at least goalN people alive for the time. */
     static final int G_DEFEND = 4, G_PROTECT = 5;
-    static final String[] GOAL_NAMES = {"CLEAR THE CITY", "SURVIVE", "EVACUATE", "BODY COUNT", "HOLD THE STATION", "PROTECT THE PEOPLE"};
+    /** ((22.0) Clear a named district of the dead and keep it clear for RETAKE_HOLD seconds. */
+    static final int G_RETAKE = 6;
+    static final int RETAKE_HOLD = 30;
+    static final String[] GOAL_NAMES = {"CLEAR THE CITY", "SURVIVE", "EVACUATE", "BODY COUNT", "HOLD THE STATION", "PROTECT THE PEOPLE", "RETAKE THE DISTRICT"};
     /** How long a defended site can be in the hands of the dead, with nobody armed there, before it's lost (seconds). */
     static final int SITE_LOST = 20;
 
@@ -87,7 +90,54 @@ final class Campaign {
                     6, CityConfig.SMALL, 14, 6, 40, 80429, 900, 120, 900, G_KILLS, 350, 120, 10).rules(Director.HARD, CityConfig.EXODUS_OFF),
             new Mission("Endgame", "This is the last city. A hundred and fifty of the worst of them, and everything you've learned. Clear it.",
                     8, CityConfig.MEDIUM, 50, 40, 150, 37991, 1200, 160, 1500, G_CLEAR, 0, 320, 40).rules(Director.NIGHTMARE, CityConfig.EXODUS_OFF),
+            // ((22.0) Six more: a river to cross, districts to take back, a prison, and the hordes.)
+            new Mission("Across the River", "The dead hold the far bank and the bridges are the only way over. Retake the district they're thickest in, and keep it clear for thirty seconds.",
+                    CityConfig.RIVER_CITY, CityConfig.SMALL, 26, 14, 70, 31337, 600, 110, 900, G_RETAKE, 0, 180, 14),
+            new Mission("Downtown", "The heart of the city has gone dark. Go back in, street by street, and take the worst district back.",
+                    1, CityConfig.MEDIUM, 34, 24, 110, 44021, 800, 130, 1080, G_RETAKE, 0, 240, 20).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            new Mission("Lockdown", "There's a prison on the edge of town and the dead are already in the streets around it. If it falls there are hundreds more of them. Clear the city.",
+                    0, CityConfig.MEDIUM, 36, 18, 80, 72161, 700, 120, 1200, G_CLEAR, 0, 220, 18),
+            new Mission("Bridgehead", "Get people across the river and out of the city. The buses run from the far bank: hold the bridges and get three hundred out.",
+                    CityConfig.RIVER_CITY, CityConfig.MEDIUM, 32, 16, 90, 18803, 600, 110, 900, G_EVAC, 300, 260, 16).rules(Director.NORMAL, CityConfig.EXODUS_ALL),
+            new Mission("The Tide", "Horde after horde is coming in from the country, bigger every time. Command wants a thousand of them destroyed.",
+                    3, CityConfig.MEDIUM, 40, 36, 120, 90217, 1100, 170, 1320, G_KILLS, 1000, 300, 30).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            new Mission("Ground Zero", "Where it all started, and worse than ever. Retake the district it came out of, against everything the dead have got.",
+                    8, CityConfig.MEDIUM, 46, 40, 160, 66607, 1300, 180, 1500, G_RETAKE, 0, 320, 40).rules(Director.NIGHTMARE, CityConfig.EXODUS_OFF),
     };
+
+    /** ((22.0) The district a Retake mission is about: the one with the most of the dead in it when it starts. */
+    static City.District retakeDistrict(World w) {
+        if (w.retakeDistrict < 0) {
+            int[] n = new int[w.city.districts.size()];
+            for (int i = 0, m = w.entities.size(); i < m; i++) {
+                Entity e = w.entities.get(i);
+                if (e.dead || !e.isZombie()) continue;
+                City.District d = w.city.districtOf(e.x, e.y);
+                int k = d == null ? -1 : w.city.districts.indexOf(d);
+                if (k >= 0 && d.labelled()) n[k]++;
+            }
+            int best = -1;
+            for (int k = 0; k < n.length; k++) if (n[k] > 0 && (best < 0 || n[k] > n[best])) best = k;
+            if (best < 0) {
+                City.District d = w.city.districtOf(w.city.worldW() / 2, w.city.worldH() / 2);
+                best = d == null ? 0 : w.city.districts.indexOf(d);
+            }
+            w.retakeDistrict = best;
+        }
+        return w.retakeDistrict < w.city.districts.size() ? w.city.districts.get(w.retakeDistrict) : null;
+    }
+
+    /** ((22.0) How many of the dead are in the district to retake. */
+    static int inDistrict(World w) {
+        City.District d = retakeDistrict(w);
+        if (d == null) return 0;
+        int n = 0;
+        for (int i = 0, m = w.entities.size(); i < m; i++) {
+            Entity e = w.entities.get(i);
+            if (!e.dead && e.isZombie() && w.city.districtOf(e.x, e.y) == d) n++;
+        }
+        return n;
+    }
 
     /**
      * Everyone a mission's city holds at most (the Max population setting doesn't apply): fewer against the dead,
@@ -124,11 +174,11 @@ final class Campaign {
     // ---- Costs ----
 
     /** Each police officer by GameView.COP_ROLES order; -1 not to be had. */
-    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15, 18, 14};
+    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15, 18, 14, -1, -1};
     /** Each soldier by GameView.MIL_ROLES order. */
-    static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
+    static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40, -1, -1};
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee, police drone, ((21.0) razor wire, MG nest. */
-    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45, 6, 90, 60};
+    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45, 6, 90, 60, 8, 15};
     /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines, ((21.0) barrage, airborne squad. */
     static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, 80, 140, -1};
 
@@ -137,6 +187,15 @@ final class Campaign {
         if (!Perks.has(w, Perks.QUARTERMASTER)) return PLACE_COST;
         int[] c = PLACE_COST.clone();
         for (int k : new int[]{4, 5, 9}) c[k] = (c[k] + 1) / 2;
+        return c;
+    }
+
+    /** ((22.0) Police (or soldiers) for this commander: Rapid response takes 15% off. */
+    static int[] unitCost(World w, boolean cops) {
+        int[] base = cops ? COP_COST : MIL_COST;
+        if (!Perks.has(w, Perks.RAPID)) return base;
+        int[] c = base.clone();
+        for (int k = 0; k < c.length; k++) if (c[k] > 0) c[k] = Math.max(1, Math.round(c[k] * 0.85f));
         return c;
     }
 
@@ -192,12 +251,14 @@ final class Campaign {
         begin(w, roster, 0);
     }
 
-    /** ((21.0) With the stars the commander has won so far, for their perks. */
-    static void begin(World w, String roster, int stars) {
+    /** ((21.0) With the commander's perks ((22.0) the perks taken, one bit each). */
+    static void begin(World w, String roster, int perks) {
         Mission m = w.mission();
         if (m == null) return;
-        w.perkStars = stars;
+        w.perkStars = perks;
         w.siteT = 0;
+        w.retakeDistrict = -1;
+        w.retakeClearT = 0;
         w.missionStart = w.time;
         w.spent = 0;
         w.missionResult = 0;
@@ -211,7 +272,7 @@ final class Campaign {
         int vets = applyVeterans(w, roster);
         w.dispatch.say(Dispatch.WHO_INFO, null, "Mission: " + m.title + ". " + goalText(w) + (vets > 0 ? " "
                 + World.count(vets, "veteran is", "veterans are") + " back with you." : "")
-                + (Perks.count(stars) > 0 ? " " + World.count(Perks.count(stars), "perk", "perks") + " in force." : ""), w.city.worldW() / 2, w.city.worldH() / 2);
+                + (Perks.count(perks) > 0 ? " " + World.count(Perks.count(perks), "perk", "perks") + " in force." : ""), w.city.worldW() / 2, w.city.worldH() / 2);
     }
 
     /**
@@ -280,6 +341,10 @@ final class Campaign {
             case G_KILLS: return "Destroy " + m.goalN + " of the dead within " + time + ".";
             case G_DEFEND: return "Hold " + siteName(w) + " for " + time + ".";
             case G_PROTECT: return "Keep " + m.goalN + " people alive for " + time + ".";
+            case G_RETAKE: {
+                City.District d = retakeDistrict(w);
+                return "Clear " + (d != null ? d.name : "the district") + " of the dead and hold it for " + RETAKE_HOLD + " seconds, within " + time + ".";
+            }
             default: return "Destroy every zombie within " + time + ".";
         }
     }
@@ -320,6 +385,11 @@ final class Campaign {
             return w.siteT > 0 ? "STATION OVERRUN: lost in " + Math.max(0, SITE_LOST - (int) w.siteT) + "s" : at + " of the dead at the station";
         }
         if (m.goal == G_PROTECT) return w.humans + " alive (" + m.goalN + " needed)";
+        if (m.goal == G_RETAKE) {
+            int left = inDistrict(w);
+            City.District d = retakeDistrict(w);
+            return left > 0 ? left + " of the dead in " + (d != null ? d.name : "the district") : "Clear: hold for " + Math.max(0, RETAKE_HOLD - (int) w.retakeClearT) + "s";
+        }
         return w.zombieCount() + (m.goal == G_SURVIVE ? " zombies left standing" : " zombies left");
     }
 
@@ -350,6 +420,11 @@ final class Campaign {
                 won = w.warResult == 1 || (out && w.warResult != 2);
                 break;
             }
+            case G_RETAKE:
+                // (Clear of the dead, and kept clear for half a minute: a single one wandering back in resets the count.)
+                w.retakeClearT = inDistrict(w) == 0 ? w.retakeClearT + 1 : 0;
+                won = w.retakeClearT >= RETAKE_HOLD || w.warResult == 1;
+                break;
             case G_PROTECT:
                 if (t > 5 && w.humans < m.goalN) {
                     finish(w, 2, "Too many lost: only " + w.humans + " left alive.");

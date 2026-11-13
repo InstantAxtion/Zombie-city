@@ -124,7 +124,7 @@ final class Defences {
         for (int k = 0; k < ring.length; k++) {
             if (k == open) continue;
             float[] b = w.placeBarricade(cx + ring[k][0] * City.T, cy + ring[k][1] * City.T);
-            if (b != null) b[2] = SANDBAG_HP;
+            if (b != null) World.setTier(b, 1);
         }
         w.placeCrate(cx, cy + 4, 0);
         nests++;

@@ -35,23 +35,23 @@ final class GameView extends View implements Menu.Host {
             return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
     }
-    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van"};
+    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
             "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde"};
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
-            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_K9, -4};
+            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_K9, -4, -10, -11};
     private static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
-            "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
+            "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop", "Response team", "Tactical team"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
     private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
-            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
+            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR, -10, -11};
     private static final String[] MIL_NAMES = {"Soldier", "Commander", "Sniper", "Machine gunner", "National Guard",
-            "Grenadier", "Marine", "Recon scout", "Combat medic", "Combat engineer", "Mortar team"};
+            "Grenadier", "Marine", "Recon scout", "Combat medic", "Combat engineer", "Mortar team", "Fire team", "Rifle squad"};
     // One line about each option in the pickers.
     private static final String[] CIV_INFO = {"Goes about their day, runs and hides from zombies"};
     private static final String[] COP_INFO = {"Pistol, answers 911 calls", "Shield blocks bites from the front",
@@ -60,12 +60,16 @@ final class GameView extends View implements Menu.Host {
             "County deputy: patrols the back roads", "Patrols the trails and dirt roads, guards the ranger station",
             "Rescue specialist: finds the cut-off and gets them out",
             "Handler and police dog: the dog sniffs out hidden zombies and bites",
-            "On a police motorcycle: patrols fast and calls in the hordes it passes"};
+            "On a police motorcycle: patrols fast and calls in the hordes it passes",
+            "Group: three officers, a riot cop and a marksman, in one tap",
+            "Group: four SWAT, a marksman and a K9 unit, in one tap"};
     private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
             "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
-            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
+            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off",
+            "Group: two riflemen, a grenadier, a gunner and a medic, in one tap",
+            "Group: a commander and eight - riflemen, grenadier, gunner, medic and sniper - in one tap"};
     /** What the enemy tool makes: one of the dead. */
     private int enemyType() {
         return ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
@@ -99,7 +103,8 @@ final class GameView extends View implements Menu.Host {
             "Flies from the station to watch the spot: marks the enemy there (better aim, no hiding in cover) and calls in what it sees",
             "Drag to lay coils: the dead tangle in it, slowed to a third and torn at, until it wears out",
             "Two machine gunners behind sandbags with a crate of ammunition: they hold the spot",
-            "Parked with its doors open: a dozen people running from the dead can shelter inside. Drive it away with them"};
+            "Parked with its doors open: a dozen people running from the dead can shelter inside. Drive it away with them",
+            "Drag to build: over twice as tough as a wooden barricade", "Drag to build: five times as tough as a wooden barricade"};
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten",
@@ -186,7 +191,11 @@ final class GameView extends View implements Menu.Host {
         n[5] = land.ruralName != null ? land.ruralName : "Rural police";
         return n;
     }
-    private int zombieVariant, civVariant, milVariant, placeVariant, eventVariant, copVariant, buildVariant;
+    private int zombieVariant, civVariant, milVariant, placeVariant, eventVariant, copVariant, buildVariant, zoneVariant;
+    /** ((22.0) The Zone tool's choices: an ordinary safe zone, or the biggest block near the spot. */
+    private static final String[] ZONE_NAMES = {"Safe zone", "Large safe zone"};
+    private static final String[] ZONE_INFO = {"Walls in a block and guards it; it gets stronger the longer it holds",
+            "As big a block as there is nearby, for many more people"};
     /** The map changed under the Build tool: redraw it when the finger lifts. */
     private boolean buildDirty;
     private int lastBuildTile = -1;
@@ -769,7 +778,7 @@ final class GameView extends View implements Menu.Host {
                 w.gore = gore;
                 w.heavy = heavy;
                 w.populate(cfg);
-                if (cfg.mission >= 0) Campaign.begin(w, records.veterans(), records.totalStars());
+                if (cfg.mission >= 0) Campaign.begin(w, records.veterans(), records.perkMask());
                 built = w;
             }
         });
@@ -2520,7 +2529,15 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** The radio as each message comes in: a phone for a 911 call, the army's two beeps, the police's hiss; then the squelch. */
+    private float radioQuietUntil;
+
     private void radioSound() {
+        // ((22.0) Fewer beeps: one at a time, at most every four seconds - several messages in a burst made a racket.
+        // A 911 call always rings.)
+        java.util.ArrayList<Dispatch.Message> log0 = world.dispatch.log;
+        String who0 = log0.isEmpty() || log0.get(log0.size() - 1).who == null ? "" : log0.get(log0.size() - 1).who;
+        if (world.time < radioQuietUntil && !who0.startsWith("911")) return;
+        radioQuietUntil = world.time + 4;
         java.util.ArrayList<Dispatch.Message> log = world.dispatch.log;
         String who = log.isEmpty() ? "" : log.get(log.size() - 1).who;
         String w = who == null ? "" : who.toLowerCase(java.util.Locale.US);
@@ -2969,6 +2986,10 @@ final class GameView extends View implements Menu.Host {
         for (int i = 0, n = world.barriers.size(); i < n; i++) {
             float[] b = world.barriers.get(i);
             if (b[0] < vx0 || b[0] > vx1 || b[1] < vy0 || b[1] > vy1) continue;
+            if (b.length > 5 && b[5] >= 1) {
+                drawToughBarricade(c, b);
+                continue;
+            }
             // Planks and sandbags; they splinter as they take hits.
             fill.setColor(0x55000000);
             c.drawRect(b[0] - 7, b[1] - 5, b[0] + 9, b[1] + 8, fill);
@@ -6410,7 +6431,8 @@ final class GameView extends View implements Menu.Host {
                 }
             }
         }
-        for (int i = 0, n = world.city.facilities.size(); i < n; i++) {
+        // ((22.0) The stations and bases by name only from a middling zoom in: far out, the districts' names are enough.)
+        for (int i = 0, n = scale / dp < 0.55f ? 0 : world.city.facilities.size(); i < n; i++) {
             City.Facility f = world.city.facilities.get(i);
             if (f.kind == City.FACILITY_FIRE || f.kind == City.FACILITY_HOSPITAL) continue;
             boolean zoned = false;
@@ -6485,14 +6507,13 @@ final class GameView extends View implements Menu.Host {
                 }
             }
         }
-        // What each vehicle is up to.
-        boolean close = scale / dp > 0.9f;
+        // What each vehicle is up to. ((22.0) Only right up close, or the one being followed: the status of every
+        // helicopter on its pad and every car on a call was more of the screen than the city.)
+        boolean close = scale / dp > 2.2f;
         text.setTextSize(10 * dp);
         for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.type == Fleet.CAR && !close) continue;
-            // Zoomed out, only the ones on a call (lights going) or in the air.
-            if (!close && !v.lightsOn() && !Fleet.airborne(v) && v.type != Fleet.TANK) continue;
+            if (v != followV && (!close || v.type == Fleet.CAR || (!v.lightsOn() && !Fleet.airborne(v) && v.type != Fleet.TANK))) continue;
             // ((12.0) Only those on screen have their label worked out: it was put together for every vehicle on the map, every frame.)
             float sx = screenX(v.x), sy = screenY(v.y) - (v.type == Fleet.HELI ? 22 + 14 * v.alt : 14) * dp;
             if (sx < -80 * dp || sx > getWidth() + 80 * dp || sy < 0 || sy > barTop) continue;
@@ -6917,7 +6938,8 @@ final class GameView extends View implements Menu.Host {
         c.translate(e.x, e.y);
         c.rotate((float) Math.toDegrees(e.angle));
         float now = world.time, spd = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
-        boolean anim = scale > 1.6f;
+        // ((22.0) Moving, stepping and swinging from further out: they read as people, not dots, at the usual zoom.)
+        boolean anim = scale > 1.3f;
         if (anim) {
             // Attacks: the dead lunge as they bite, guns kick back.
             float bite = 1 - Math.min(1, (now - e.biteAt) / 0.25f);
@@ -6967,7 +6989,7 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(e.head);
             c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
         } else {
-            if (e.type != Entity.CRAWLER && scale > 2.5f) {
+            if (e.type != Entity.CRAWLER && scale > 1.9f) {
                 // Legs stepping out in front and behind as they walk.
                 float step = (float) Math.sin(e.phase) * r * 0.55f;
                 fill.setColor(e.isUndead() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
@@ -7183,7 +7205,7 @@ final class GameView extends View implements Menu.Host {
 
             fill.setColor(e.head);
             c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
-            if (scale > 2.5f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
+            if (scale > 1.9f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
                     || e.type == Entity.RUNNER)) drawHair(c, e, r);
             if (e.raider) {
                 // ((14.2) A looter: a red bandana over the face.)
@@ -8078,6 +8100,40 @@ final class GameView extends View implements Menu.Host {
 
     private final RectF driveRect = new RectF();
 
+    /** ((22.0) Sandbags (a stack of sacks) and concrete barriers (a grey block), cracking as they take hits. */
+    private void drawToughBarricade(Canvas c, float[] b) {
+        boolean concrete = b[5] >= 2;
+        float left = Math.max(0, b[2] / World.BARRICADE_HP[concrete ? 2 : 1]);
+        fill.setColor(0x55000000);
+        c.drawRect(b[0] - 7, b[1] - 5, b[0] + 9, b[1] + 8, fill);
+        if (concrete) {
+            fill.setColor(0xFF9A9C9E);
+            c.drawRect(b[0] - 8, b[1] - 6, b[0] + 8, b[1] + 6, fill);
+            fill.setColor(0xFFB8BABC);
+            c.drawRect(b[0] - 8, b[1] - 6, b[0] + 8, b[1] - 2, fill);
+            fill.setColor(0xFFE0B020);
+            c.drawRect(b[0] - 6, b[1] + 1, b[0] - 2, b[1] + 3, fill);
+            c.drawRect(b[0] + 2, b[1] + 1, b[0] + 6, b[1] + 3, fill);
+            if (left < 0.6f) {
+                stroke.setColor(0xFF505254);
+                stroke.setStrokeWidth(0.8f);
+                c.drawLine(b[0] - 3, b[1] - 6, b[0] + 1, b[1] + 6, stroke);
+                if (left < 0.3f) c.drawLine(b[0] + 4, b[1] - 6, b[0] + 2, b[1] + 2, stroke);
+            }
+        } else {
+            for (int row = 0; row < 2; row++)
+                for (int k = 0; k < 3 - row; k++) {
+                    fill.setColor((k + row) % 2 == 0 ? 0xFFB9A57A : 0xFFA8946A);
+                    oval.set(b[0] - 8 + k * 5.4f + row * 2.7f, b[1] - row * 4.5f - 1, b[0] - 2.4f + k * 5.4f + row * 2.7f, b[1] - row * 4.5f + 4);
+                    c.drawRoundRect(oval, 2, 2, fill);
+                }
+            if (left < 0.5f) {
+                fill.setColor(0xFF8A7650);
+                c.drawCircle(b[0] + 3, b[1] + 4, 1.6f, fill);
+            }
+        }
+    }
+
     /** ((22.0) Into the driver's seat of v, as someone who'd be driving it: an officer, a soldier, or anyone. */
     private void driveVehicle(Fleet.Vehicle v) {
         int type = v.type == Fleet.CRUISER || Fleet.policeTruck(v) || v.kind == Fleet.K_POLICE_HELI || v.kind == Fleet.K_RESCUE_HELI ? Entity.COP
@@ -8862,13 +8918,13 @@ final class GameView extends View implements Menu.Host {
 
     /** The tool whose option picker is open, or -1. */
     private int picker = -1;
-    private final RectF[] pickerRects = new RectF[12];
+    private final RectF[] pickerRects = new RectF[20];
     private final RectF pickerPanel = new RectF();
     private int pickerCount;
 
     private static boolean hasPicker(int t) {
         // (People have just the one kind since 10.50: no picker.)
-        return t == TOOL_COP || t == TOOL_MIL || t == TOOL_ZOMBIE || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD;
+        return t == TOOL_COP || t == TOOL_MIL || t == TOOL_ZOMBIE || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
     }
 
     private String[] optionNames(int t) {
@@ -8883,8 +8939,8 @@ final class GameView extends View implements Menu.Host {
     /** ((18.0) What each choice of a tool costs in a mission, or null. */
     private int[] costs(int t) {
         switch (t) {
-            case TOOL_COP: return Campaign.COP_COST;
-            case TOOL_MIL: return Campaign.MIL_COST;
+            case TOOL_COP: return Campaign.unitCost(world, true);
+            case TOOL_MIL: return Campaign.unitCost(world, false);
             case TOOL_PLACE: return Campaign.placeCost(world);
             case TOOL_EVENT: return Campaign.eventCost(world);
             default: return null;
@@ -8903,6 +8959,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_ZOMBIE: return enemyNames();
             case TOOL_PLACE: return PLACE_NAMES;
             case TOOL_BUILD: return BUILD_NAMES;
+            case TOOL_ZONE: return ZONE_NAMES;
             default: return EVENT_NAMES;
         }
     }
@@ -8915,6 +8972,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_ZOMBIE: return ZOMBIE_INFO;
             case TOOL_PLACE: return PLACE_INFO;
             case TOOL_BUILD: return BUILD_INFO;
+            case TOOL_ZONE: return ZONE_INFO;
             default: return EVENT_INFO;
         }
     }
@@ -8927,6 +8985,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_ZOMBIE: return zombieVariant;
             case TOOL_PLACE: return placeVariant;
             case TOOL_BUILD: return buildVariant;
+            case TOOL_ZONE: return zoneVariant;
             default: return eventVariant;
         }
     }
@@ -8939,6 +8998,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_ZOMBIE: zombieVariant = v; break;
             case TOOL_PLACE: placeVariant = v; break;
             case TOOL_BUILD: buildVariant = v; break;
+            case TOOL_ZONE: zoneVariant = v; break;
             default: eventVariant = v; break;
         }
     }
@@ -9112,7 +9172,7 @@ final class GameView extends View implements Menu.Host {
             }
             if (type == Entity.SOLDIER) {
                 // Show the chosen kind of soldier.
-                e.role = t == TOOL_MIL ? MIL_ROLES[milVariant] : 0;
+                e.role = t == TOOL_MIL ? Math.max(0, MIL_ROLES[milVariant]) : 0;
                 e.head = e.role == Entity.ROLE_COMMANDER ? 0xFF8E1F1F : e.role == Entity.ROLE_GUARD ? 0xFF6A6248 : 0xFF3C4628;
                 e.body = e.role == Entity.ROLE_GUARD ? 0xFF8C8260 : 0xFF55623A;
                 e.radius = e.role == Entity.ROLE_GUNNER ? 4.3f : 4f;
@@ -9649,7 +9709,7 @@ final class GameView extends View implements Menu.Host {
         } else if (tool == TOOL_BOMB) {
             world.explode(wx, wy, 70, 400);
         } else if (tool == TOOL_ZONE) {
-            world.dispatch.orderZone(wx, wy);
+            world.dispatch.orderZone(wx, wy, zoneVariant == 1);
         } else if (tool == TOOL_ERASE) {
             if (!world.dispatch.removeZoneAt(wx, wy)) world.erase(wx, wy, 22);
         } else {
@@ -9697,14 +9757,14 @@ final class GameView extends View implements Menu.Host {
             boxing = dragged;
         } else if (commander()) {
             // ((18.0) Nothing brushed on in a mission: one tap, one purchase - but a barricade line can be dragged out.)
-            if (tool == TOOL_PLACE && (placeVariant == 3 || placeVariant == 9) && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
+            if (tool == TOOL_PLACE && (placeVariant == 3 || placeVariant == 9 || placeVariant == 12 || placeVariant == 13) && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
                 commandAt(wx, wy);
                 lastSpawnX = wx;
                 lastSpawnY = wy;
             }
         } else if (tool == TOOL_PLACE) {
             // Drag to build a line of barricades.
-            if ((placeVariant == 3 || placeVariant == 9) && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
+            if ((placeVariant == 3 || placeVariant == 9 || placeVariant == 12 || placeVariant == 13) && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
                 place(wx, wy);
                 lastSpawnX = wx;
                 lastSpawnY = wy;
@@ -10024,7 +10084,7 @@ final class GameView extends View implements Menu.Host {
         int budget = Campaign.budget(world);
         if (tool == TOOL_COP || tool == TOOL_MIL) {
             boolean police = tool == TOOL_COP;
-            int cost = police ? Campaign.COP_COST[copVariant] : Campaign.MIL_COST[milVariant];
+            int cost = police ? Campaign.unitCost(world, true)[copVariant] : Campaign.unitCost(world, false)[milVariant];
             String name = police ? copNames()[copVariant] : MIL_NAMES[milVariant];
             int n = BRUSHES[brushIdx];
             if (!police && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;
@@ -10111,6 +10171,8 @@ final class GameView extends View implements Menu.Host {
                     if (!world.mgNest(wx, wy).isEmpty()) made = Boolean.TRUE;
                     break;
                 case 11: made = world.fleet.placeShelterVan(wx, wy); break;
+                case 12: made = world.placeBarricade(wx, wy, 1); break;
+                case 13: made = world.placeBarricade(wx, wy, 2); break;
             }
         }
         if (made == null) {
@@ -10119,11 +10181,20 @@ final class GameView extends View implements Menu.Host {
         }
         Campaign.spend(world, cost[v]);
         if (!(made instanceof Boolean)) lastAction.add(made);
-        if (cost[v] > 0 && (tool != TOOL_PLACE || (v != 3 && v != 9) || world.messageTime <= 0)) world.say(names[v] + "  (-$" + cost[v] + ")");
+        if (cost[v] > 0 && (tool != TOOL_PLACE || (v != 3 && v != 9 && v != 12 && v != 13) || world.messageTime <= 0)) world.say(names[v] + "  (-$" + cost[v] + ")");
     }
 
     private void spawnBrush(float wx, float wy) {
         int type = tool == TOOL_ZOMBIE ? enemyType() : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
+        // ((22.0) A ready-made group: the whole of it in one tap (the brush size doesn't come into it).)
+        int preset = tool == TOOL_MIL ? MIL_ROLES[milVariant] : tool == TOOL_COP ? COP_ROLES[copVariant] : 0;
+        if (preset <= -10) {
+            int[] roles = tool == TOOL_MIL ? (preset == -10 ? World.FIRE_TEAM : World.RIFLE_SQUAD) : (preset == -10 ? World.RESPONSE_TEAM : World.TACTICAL_TEAM);
+            java.util.ArrayList<Entity> g = world.spawnGroup(roles, tool == TOOL_COP, wx, wy);
+            lastAction.addAll(g);
+            if (g.isEmpty() && world.messageTime <= 0) world.say("Nowhere to put them there");
+            return;
+        }
         int n = BRUSHES[brushIdx];
         // Only one commander at a time.
         if (tool == TOOL_MIL && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;
@@ -10164,6 +10235,8 @@ final class GameView extends View implements Menu.Host {
                 if (world.mgNest(wx, wy).isEmpty()) world.say("No room for a nest there");
                 break;
             case 11: made = world.fleet.placeShelterVan(wx, wy); break;
+            case 12: made = world.placeBarricade(wx, wy, 1); break;
+            case 13: made = world.placeBarricade(wx, wy, 2); break;
             default: made = world.placeMedkit(wx, wy); break;
         }
         if (made != null) lastAction.add(made);

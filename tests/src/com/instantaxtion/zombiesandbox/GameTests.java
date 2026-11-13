@@ -698,7 +698,8 @@ public final class GameTests {
                 for (Entity e : new java.util.ArrayList<Entity>(w.entities)) {
                     if (tried >= 6 && armedTried >= 4) break;
                     if (e.type != Entity.CIVILIAN || e.dead || e.hidden || e.ride != null || e.leader != null || e.task != Dispatch.T_NONE
-                            || e.militia || e.scavenge != null || e.job == Entity.J_LOOKOUT) continue;
+                            || e.militia || e.scavenge != null || e.job == Entity.J_LOOKOUT || e.inmate
+                            || w.city.insideOf(e.x, e.y) != null) continue;
                     boolean arm = World.bravery(e) > 0.75f && armedTried < 4;
                     if (!arm && tried >= 6) continue;
                     // (Some people already own a gun, and may well stand and use it: not who this is about.)
@@ -3716,9 +3717,9 @@ public final class GameTests {
         });
         test("21.0: commander perks from stars; the twelve missions; holding the station and keeping people alive", new Check() {
             public void run() throws Exception {
-                check(Perks.count(0) == 0 && Perks.count(9) == 3 && Perks.next(9) == 12 && Perks.next(24) == -1 && Perks.NAMES.length == Perks.STARS.length
-                        && Perks.INFO.length == Perks.STARS.length, "perks by stars");
-                check(Campaign.MISSIONS.length == 12, "twelve missions");
+                check(Perks.count(0) == 0 && Perks.count(Perks.legacy(9)) == 3 && Perks.points(24) == 6 && Perks.NAMES.length == Perks.COUNT
+                        && Perks.INFO.length == Perks.COUNT, "perks by stars");
+                check(Campaign.MISSIONS.length == 18, "eighteen missions");
                 for (Campaign.Mission m : Campaign.MISSIONS) check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
                 CityConfig c = Campaign.config(8);
                 World w = new World(c);
@@ -3733,7 +3734,7 @@ public final class GameTests {
                 Entity any = null;
                 for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { any = e; break; }
                 Entity plain = w.spawnCop(0, any.x + 6, any.y);
-                Campaign.begin(w, "", 24);
+                Campaign.begin(w, "", (1 << Perks.COUNT) - 1);
                 check(Perks.has(w, Perks.OLD_HANDS) && Campaign.budget(w) == m.budget * 6 / 5, "Logistics: a fifth more to start with");
                 Entity tough = w.spawnCop(0, any.x - 6, any.y);
                 check(plain != null && tough != null && Math.abs(tough.maxHp - plain.maxHp * 1.15f) < 0.5f, "Body armour (" + plain.maxHp + " -> " + tough.maxHp + ")");
@@ -3808,7 +3809,7 @@ public final class GameTests {
                 Menu menu = (Menu) field(v, "menu");
                 Records rec = (Records) field(v, "records");
                 for (int i = 0; i < 4; i++) rec.missionWon(i, 3, "");
-                check(rec.totalStars() == 12 && Perks.count(rec.totalStars()) == 4, "twelve stars, four perks");
+                check(rec.totalStars() == 12 && Perks.count(rec.perkMask()) == 4, "twelve stars, four perks");
                 for (int i = 0; i < 3; i++) draw(v, size);
                 menu.open(Menu.CAMPAIGN);
                 java.lang.reflect.Field sc = Menu.class.getDeclaredField("scroll");
@@ -4264,6 +4265,82 @@ public final class GameTests {
                 w.controlled = me;
                 w.driveInto(me, van);
                 check(van.player == me, "the player takes the wheel");
+            }
+        });
+        test("22.0: River City's river and bridges; a prison and two malls; barricade kinds saved; groups in one tap; the perk tree; retaking a district", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.RIVER_CITY;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 2201;
+                World w = new World(c);
+                City city = w.city;
+                check(city.riverY0 > 0, "River City has a river");
+                int x = city.w / 2, wet = 0, bridges = 0;
+                for (int y = city.riverY0; y < city.riverY1; y++) if (city.tiles[y * city.w + x] == City.WATER) wet++;
+                for (int i = 0; i < city.w; i++) if (city.bridge != null && city.bridge[city.riverY0 * city.w + i]) bridges++;
+                check(wet >= 6, "the river runs across the middle of town (" + wet + " tiles of water)");
+                check(bridges >= 6, "with bridges over it (" + bridges + " tiles of bridge)");
+                // The other side of the river is reachable on foot over a bridge.
+                float[] north = city.findWalkable(city.worldW() / 2, (city.riverY0 - 20) * City.T), south = city.findWalkable(city.worldW() / 2, (city.riverY1 + 20) * City.T);
+                int W = city.w, start = city.tileIndex(north[0], north[1]), goal = city.tileIndex(south[0], south[1]);
+                boolean[] seen = new boolean[W * city.h];
+                int[] q = new int[W * city.h];
+                int hd = 0, tl = 0;
+                q[tl++] = start;
+                seen[start] = true;
+                while (hd < tl && !seen[goal]) {
+                    int cc = q[hd++];
+                    int[] nb = {cc - 1, cc + 1, cc - W, cc + W};
+                    for (int j : nb) if (j >= 0 && j < seen.length && !seen[j] && !city.solid[j]) { seen[j] = true; q[tl++] = j; }
+                }
+                check(seen[goal], "the far bank can be walked to");
+                // A prison and a second mall on a medium map.
+                CityConfig m = new CityConfig();
+                m.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                m.seed = 77;
+                City mc = new City(m);
+                int malls = 0;
+                for (City.Building b : mc.buildings) if (b.kind == City.MALL) malls++;
+                check(mc.prison != null, "a walled prison on the edge of town");
+                check(malls >= 2, "two malls (" + malls + ")");
+                // Barricades: three kinds, kept in a save.
+                w.populate(c);
+                w.update(1 / 30f);
+                float[] p = city.findWalkable(city.worldW() / 2, (city.riverY0 - 30) * City.T);
+                float[] wood = null, bags = null, wall = null;
+                java.util.Random tr = new java.util.Random(5);
+                for (int k = 0; k < 400 && (wood == null || bags == null || wall == null); k++) {
+                    float[] spot = city.randomWalkable(tr);
+                    if (wood == null) wood = w.placeBarricade(spot[0], spot[1]);
+                    else if (bags == null) bags = w.placeBarricade(spot[0], spot[1], 1);
+                    else wall = w.placeBarricade(spot[0], spot[1], 2);
+                }
+                check(wood != null && bags != null && wall != null && wood[2] < bags[2] && bags[2] < wall[2], "sandbags tougher than planks, concrete tougher still ("
+                        + (wood == null ? "-" : wood[2]) + ", " + (bags == null ? "-" : bags[2]) + ", " + (wall == null ? "-" : wall[2]) + ")");
+                // A group in one tap.
+                java.util.ArrayList<Entity> squad = w.spawnGroup(World.RIFLE_SQUAD, false, p[0], p[1] + 60);
+                check(squad.size() == World.RIFLE_SQUAD.length, "a rifle squad in one go (" + squad.size() + ")");
+                // The perk tree: a perk needs the one before it, and points from stars.
+                check(!Perks.open(0, 40, Perks.SAPPERS), "Sappers needs Body armour first");
+                check(Perks.open(1 << Perks.ARMOUR, 40, Perks.SAPPERS), "and is open once Body armour is taken");
+                check(!Perks.open(0, 3, Perks.ARMOUR), "no perk without a point (four stars)");
+                check(Perks.legacy(9) == 7, "the perks earned before the tree are kept");
+                // Retake the district: clear the named district and hold it.
+                CityConfig rc = Campaign.config(13);
+                World rw = new World(rc);
+                rw.populate(rc);
+                Campaign.begin(rw, "", 0);
+                City.District d = Campaign.retakeDistrict(rw);
+                check(d != null && rw.mission().goal == Campaign.G_RETAKE, "a mission to retake " + (d == null ? "?" : d.name));
+                for (Entity e : rw.entities) if (e.isZombie()) e.hp = 0;
+                rw.update(1 / 30f);
+                for (int k = 0; k < Campaign.RETAKE_HOLD + 2 && rw.missionResult == 0; k++) {
+                    for (Entity e : rw.entities) if (e.isZombie() && rw.city.districtOf(e.x, e.y) == d) e.hp = 0;
+                    Campaign.tick(rw);
+                }
+                check(rw.missionResult == 1, "cleared and held: the mission is won");
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {

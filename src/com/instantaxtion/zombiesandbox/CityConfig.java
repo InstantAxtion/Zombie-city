@@ -11,7 +11,7 @@ final class CityConfig implements OptionSet {
             "Small Town", "Campus", "Metropolis", "Village", "Downtown Towers", "Military Town", "Lakeside", "Harbour", "Islands",
             // ((12.7) The places of maps taken out of the game, the real cities among them, are kept so the others keep
             // their numbers: see removed.) ((15.6) The first of them is the Prison Island now.)
-            "Prison Island", "", "", "", "", "", "",
+            "Prison Island", "River City", "", "", "", "", "",
             "",
             // (10.60)
             "Archipelago", "",
@@ -34,7 +34,8 @@ final class CityConfig implements OptionSet {
             "A working port: quays, docks, cranes, container stacks and ships, with warehouses along the water.",
             "Three island towns in the sea, joined by bridges, with a causeway to the mainland. Always one size: between Large and Massive.",
             "A town on the coast, and out in the bay a walled prison on its own island, joined to the town by a causeway, with a ferry across. The outbreak starts inside the walls.",
-            "", "", "", "", "", "",
+            "A river runs right across the middle of town, with roads along both banks and a handful of bridges over it.",
+            "", "", "", "", "",
             "",
             "One big island city in the middle of the sea, with two to five smaller island towns round it, every one lived in and joined to it by a bridge, and a causeway to the mainland. Always one size.",
             "",
@@ -107,7 +108,7 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 1, 1, 2, 0, 1, 1},       // Harbour
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // Islands
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((15.6) Prison Island, in the old Los Angeles' place; (15.8) with a base)
-            {STYLE_MIXED, 1, 2, 2, 2, 0, 3, 1},       // Portland
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((22.0) River City, in the old Portland's place)
             {STYLE_MIXED, 2, 3, 1, 2, 0, 3, 1},       // Seattle
             {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // New York
             {STYLE_MIXED, 2, 2, 2, 2, 0, 3, 1},       // Sydney
@@ -234,7 +235,7 @@ final class CityConfig implements OptionSet {
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
      * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9). Saved games rebuild with what they had.
      */
-    int civic = 32;
+    int civic = 33;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -244,6 +245,9 @@ final class CityConfig implements OptionSet {
 
     /** ((21.4) Map version 32: three or four small islands round the Archipelago's big one.) */
     boolean moreIslands() { return civic >= 32; }
+
+    /** ((22.0) Map version 33: a second mall and a walled prison on the bigger maps, malls that shelter more. */
+    boolean v22() { return civic >= 33; }
 
     /** ((16.5) A hospital in town: only in cities built before 16.5. It had nothing left to do. */
     boolean hospital() { return civic < 30; }
@@ -269,7 +273,9 @@ final class CityConfig implements OptionSet {
 
 
     /** Water on the map: none, the sea along one side (a beach or a port), a river, or a lake. */
-    static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5;
+    static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5, W_RIVER = 6;
+    /** ((22.0) River City. */
+    static final int RIVER_CITY = 16;
     /** The Islands map, and its one size (tiles across: a bit bigger than Massive). */
     static final int ISLANDS = 14, ISLANDS_TILES = 1280;
     /** (10.60) The Archipelago (always one size, like Islands). */
@@ -286,7 +292,8 @@ final class CityConfig implements OptionSet {
         // ((15.2) Not 10 any more: it's Downtown Towers now.)
         // ((15.5) Nor 11: it's the Military Town.)
         // ((15.6) Nor 15: the Prison Island.)
-        return preset == 2 || (preset >= 16 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((22.0) Nor 16: River City.)
+        return preset == 2 || (preset >= 17 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -323,6 +330,7 @@ final class CityConfig implements OptionSet {
             case 12: return W_LAKE;
             case 13: case PRISON_ISLAND: return W_HARBOUR;
             case ISLANDS: case ARCHIPELAGO: return W_ISLANDS;
+            case RIVER_CITY: return W_RIVER;
             default: return W_NONE;
         }
     }

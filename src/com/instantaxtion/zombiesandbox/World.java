@@ -1621,6 +1621,35 @@ final class World {
         e.postY = p[1];
     }
 
+    /** ((22.0) The ready-made groups in the pickers: who's in each, by role. */
+    static final int[] FIRE_TEAM = {Entity.ROLE_RIFLE, Entity.ROLE_RIFLE, Entity.ROLE_GRENADIER, Entity.ROLE_GUNNER, Entity.ROLE_CORPSMAN};
+    static final int[] RIFLE_SQUAD = {Entity.ROLE_COMMANDER, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE,
+            Entity.ROLE_GRENADIER, Entity.ROLE_GUNNER, Entity.ROLE_CORPSMAN, Entity.ROLE_SNIPER};
+    static final int[] RESPONSE_TEAM = {0, 0, 0, Entity.ROLE_RIOT, Entity.ROLE_MARKSMAN};
+    static final int[] TACTICAL_TEAM = {Entity.ROLE_SWAT, Entity.ROLE_SWAT, Entity.ROLE_SWAT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN, Entity.ROLE_K9};
+
+    /**
+     * ((22.0) A ready-made group, put down together round (x, y) in one tap: soldiers (police if cops) by role, the
+     * soldiers all one squad.
+     */
+    ArrayList<Entity> spawnGroup(int[] roles, boolean cops, float x, float y) {
+        ArrayList<Entity> out = new ArrayList<Entity>();
+        int squad = -1;
+        for (int i = 0; i < roles.length; i++) {
+            double a = i * 2.4, r = 6 + i * 2.2;
+            float px = x + (float) (Math.cos(a) * r), py = y + (float) (Math.sin(a) * r);
+            Entity e = cops ? spawnCop(roles[i], px, py) : spawnSoldier(roles[i], px, py);
+            if (e == null) continue;
+            if (!cops && roles[i] != Entity.ROLE_COMMANDER) {
+                if (squad < 0) squad = e.squad;
+                e.squad = squad;
+                e.member = out.size() + 1;
+            }
+            out.add(e);
+        }
+        return out;
+    }
+
     Entity spawnSoldier(int role, float x, float y) {
         Entity e = spawn(Entity.SOLDIER, x, y);
         if (e == null) return null;
@@ -1672,8 +1701,8 @@ final class World {
                 // A rifle with a grenade launcher slung under it, and a bandolier of rounds for it.
                 e.hp = e.maxHp = 100;
                 e.magSize = 30;
-                e.reserve = 150;
-                e.grenades = 4;
+                e.reserve = Perks.has(this, Perks.HEAVY) ? 225 : 150;
+                e.grenades = Perks.has(this, Perks.HEAVY) ? 6 : 4;
                 break;
             case Entity.ROLE_MARKSMAN:
                 // A scoped bolt-action rifle and a handful of rounds.
@@ -1739,7 +1768,7 @@ final class World {
             case Entity.ROLE_GUNNER:
                 e.hp = e.maxHp = 130;
                 e.magSize = 100;
-                e.reserve = 200;
+                e.reserve = Perks.has(this, Perks.HEAVY) ? 300 : 200;
                 e.grenades = 0;
                 e.speed = 19;
                 e.runSpeed = 31;
@@ -3204,6 +3233,9 @@ final class World {
     final Defences defences = new Defences();
     /** The stars a commander had going into this mission: what perks they have (Perks). */
     int perkStars;
+    /** ((22.0) Retake the district: which one (City.districts), and how long it's been clear of the dead. */
+    int retakeDistrict = -1;
+    float retakeClearT;
     /** How big a horde has to be to have an alpha at its head; how many of the dead left counts as mopping up. */
     static final int ALPHA_HORDE = 12, MOP_UP = 12;
     int alphas, alphasKilled, barrages;
@@ -3272,6 +3304,37 @@ final class World {
      * Once a second (acting every ten). In an outbreak the army's engineers wire the streets leading into a safe zone
      * they're at: a coil at a time, up to ten a zone, on the roads and pavements just outside its wall.
      */
+    /**
+     * ((22.0) A safe zone that has held for three minutes: two of its own guards take machine guns to sandbagged posts at
+     * opposite inside corners of the wall. Nobody new: the guards it has.
+     */
+    void zonePosts(Dispatch.SafeZone z) {
+        float[][] corners = {{(z.tx0 + 2.5f) * City.T, (z.ty0 + 2.5f) * City.T}, {(z.tx1 - 1.5f) * City.T, (z.ty1 - 1.5f) * City.T}};
+        int c = 0;
+        for (int i = 0, n = entities.size(); i < n && c < 2; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.zone != z || e.task != Dispatch.T_GUARD || !e.canShoot() || e.role == Entity.ROLE_GUNNER) continue;
+            float[] q = city.findWalkable(corners[c][0], corners[c][1]);
+            if (q == null || !z.inside(q[0], q[1])) {
+                c++;
+                continue;
+            }
+            if (e.type == Entity.SOLDIER) applyRole(e, Entity.ROLE_GUNNER);
+            else e.reserve += 150;
+            // (Holding the post, like a nest's crew: off the zone's own roster, which finds another for the wall.)
+            e.task = Dispatch.T_HOLD;
+            e.zone = null;
+            z.guards--;
+            e.postX = q[0];
+            e.postY = q[1];
+            for (int k = 0; k < 3; k++) {
+                float[] b = placeBarricade(q[0] + (k - 1) * City.T, q[1] + (c == 0 ? -City.T : City.T));
+                if (b != null) setTier(b, 1);
+            }
+            c++;
+        }
+    }
+
     private float fortifyCd;
     int sandbagsLaid;
 
@@ -3282,7 +3345,9 @@ final class World {
      */
     private void engineersFortify() {
         if (!outbreak || (fortifyCd -= 1) > 0) return;
-        fortifyCd = 12;
+        boolean field = Perks.has(this, Perks.ENGINEERS);
+        fortifyCd = field ? 6 : 12;
+        int most = field ? 9 : 6;
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
             if (e.dead || e.type != Entity.SOLDIER || e.role != Entity.ROLE_ENGINEER || e.rig != null || e.ride != null) continue;
@@ -3292,19 +3357,19 @@ final class World {
             if (c[2] < 1) continue;
             int have = 0;
             for (float[] b : barriers) if (hypot(b[0] - e.x, b[1] - e.y) < 90) have++;
-            if (have >= 6) continue;
+            if (have >= most) continue;
             float dx = c[0] - e.x, dy = c[1] - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
             dx /= d;
             dy /= d;
             int laid = 0;
-            for (int k = -1; k <= 1 && have + laid < 6; k++) {
+            for (int k = -1; k <= 1 && have + laid < most; k++) {
                 // A short line across the way they'd come, thirty-odd units out.
                 float bx = e.x + dx * 34 - dy * k * City.T, by = e.y + dy * 34 + dx * k * City.T;
                 int t = city.tileIndex(bx, by);
                 if (t < 0 || (city.tiles[t] != City.ROAD && city.tiles[t] != City.SIDEWALK)) continue;
                 float[] b = placeBarricade(bx, by);
                 if (b == null) continue;
-                b[2] = Math.max(b[2], Defences.SANDBAG_HP);
+                setTier(b, 1);
                 laid++;
             }
             if (laid > 0) {
@@ -7772,6 +7837,22 @@ final class World {
     // ------------------------------------------------------------------ sandbox tools
 
     /** Puts a barricade on the tile at (x, y). Returns it, or null if the tile can't take one. */
+    /** ((22.0) What each kind of barricade can take: wooden planks, sandbags, a concrete barrier. */
+    static final float[] BARRICADE_HP = {220, Defences.SANDBAG_HP, 1200};
+
+    /** ((22.0) A barricade of a kind (0 wood, 1 sandbags, 2 concrete) on the tile at (x, y), or null. */
+    float[] placeBarricade(float x, float y, int tier) {
+        float[] b = placeBarricade(x, y);
+        if (b != null) setTier(b, tier);
+        return b;
+    }
+
+    /** ((22.0) Makes a barricade one of the tougher kinds (at full strength for that kind). */
+    static void setTier(float[] b, int tier) {
+        b[5] = tier;
+        b[2] = Math.max(b[2], BARRICADE_HP[Math.max(0, Math.min(2, tier))]);
+    }
+
     float[] placeBarricade(float x, float y) {
         int tx = City.fl(x / City.T), ty = City.fl(y / City.T);
         if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) return null;
@@ -7790,7 +7871,7 @@ final class World {
                     Entity e = sorted[k];
                     if (Math.abs(e.x - bx) < City.T / 2f + e.radius && Math.abs(e.y - by) < City.T / 2f + e.radius) return null;
                 }
-        float[] b = {tx * City.T + City.T / 2f, ty * City.T + City.T / 2f, 220, i, t};
+        float[] b = {tx * City.T + City.T / 2f, ty * City.T + City.T / 2f, 220, i, t, 0};
         city.tiles[i] = City.FENCE;
         city.solid[i] = true;
         city.solidChanged(i);
@@ -10496,7 +10577,7 @@ final class World {
             g.postY = q[1];
         }
         float[] f = city.ferry;
-        ferryBoat = new float[]{f[0], f[1], 0, 1, 0, 1};
+        if (f != null) ferryBoat = new float[]{f[0], f[1], 0, 1, 0, 1};
     }
 
     /** (15.6) Inside the prison walls (the yard and the buildings in it)? */
@@ -10511,7 +10592,9 @@ final class World {
      * prison falls: the gate opens, and inmates and the dead alike pour out over the causeway.
      */
     private void prisonLife() {
-        if (!prisonSeeded && !outbreak && time > PRISON_QUIET) {
+        // ((22.0) Only on the Prison Island does it start in there by itself: a prison on any other map stays quiet
+        // unless the dead get in.)
+        if (!prisonSeeded && !outbreak && time > PRISON_QUIET && city.cfg.prisonIsland()) {
             prisonSeeded = true;
             java.util.List<Entity> in = new java.util.ArrayList<Entity>();
             for (Entity e : entities) if (e.inmate && !e.dead && !e.infected) in.add(e);
@@ -10552,9 +10635,11 @@ final class World {
                 if (!e.dead) loose++;
             }
         float gx = (city.prisonGate[0] + 1.5f) * City.T, gy = city.prisonGate[1] * City.T;
-        banner("PRISON BREAK", "The dead have overrun the island prison and its gate is open. " + loose + " inmates are loose.");
-        dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: The island prison has fallen. Inmates and the dead coming over the causeway. All units to the seafront!", gx, gy);
-        timeline("The island prison fell", gx, gy);
+        boolean island = city.cfg.prisonIsland();
+        banner("PRISON BREAK", "The dead have overrun the " + (island ? "island " : "") + "prison and its gate is open. " + loose + " inmates are loose.");
+        dispatch.say(Dispatch.WHO_POLICE, null, island ? "Police Command: The island prison has fallen. Inmates and the dead coming over the causeway. All units to the seafront!"
+                : "Police Command: The prison has fallen. Inmates and the dead are pouring out of the gate. All units, contain them!", gx, gy);
+        timeline(island ? "The island prison fell" : "The prison fell", gx, gy);
         dispatch.sighting(gx, gy - 4 * City.T, null);
     }
 
@@ -13814,8 +13899,10 @@ final class World {
         int gunSound = e.weapon == Entity.W_SHOTGUN ? Sfx.SHOTGUN : e.weapon == Entity.W_HUNTING ? Sfx.HUNTING : e.weapon == Entity.W_REVOLVER ? Sfx.REVOLVER
                 : e.weapon == Entity.W_SMG ? Sfx.SMG : e.weapon == Entity.W_CARBINE ? Sfx.CARBINE : e.weapon == Entity.W_DMR ? Sfx.DMR : -1;
         if (gunSound >= 0) emit(gunSound, e.x, e.y);
-        else emit(e.role == Entity.ROLE_MARKSMAN ? Sfx.SNIPER : !soldier || e.role == Entity.ROLE_COMMANDER ? Sfx.PISTOL : e.role == Entity.ROLE_SNIPER ? Sfx.SNIPER
-                : e.role == Entity.ROLE_GUNNER ? Sfx.MG : Sfx.RIFLE, e.x, e.y);
+        // ((22.0) More of them with a sound of their own: SWAT and recon carbines, grenadiers' and Marines' bursts.)
+        else emit(e.role == Entity.ROLE_MARKSMAN ? Sfx.SNIPER : e.role == Entity.ROLE_SWAT || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_RECON ? Sfx.CARBINE
+                : !soldier || e.role == Entity.ROLE_COMMANDER ? Sfx.PISTOL : e.role == Entity.ROLE_SNIPER ? Sfx.SNIPER
+                : e.role == Entity.ROLE_GUNNER ? Sfx.MG : e.role == Entity.ROLE_GRENADIER || e.role == Entity.ROLE_MARINE ? Sfx.BURST : Sfx.RIFLE, e.x, e.y);
     }
 
     // ------------------------------------------------------------------ hiding indoors, pickups

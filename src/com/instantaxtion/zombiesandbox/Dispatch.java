@@ -101,6 +101,9 @@ final class Dispatch {
         float medX, medY, foodX, foodY;
         /** Sections of wall down right now. */
         int breaches;
+        /** ((22.0) How built up it is (0 to 2: reinforced wall, then machine-gun posts), and until it next looks for guards. */
+        int level;
+        float staffCd;
 
         float left() {
             return tx0 * City.T;
@@ -2483,6 +2486,11 @@ final class Dispatch {
                     z.open = true;
                     z.age = 0;
                     zonesDirty = true;
+                    // ((22.0) The Fortified perk: the wall's reinforced from the start.)
+                    if (Perks.has(w, Perks.FORTIFIED)) {
+                        z.level = 1;
+                        for (int k = 0; k < z.hp.length; k++) if (z.up[k]) z.hp[k] = Math.max(z.hp[k], 100);
+                    }
                     say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military: " : "Police Command: ")
                             + "The safe zone at " + z.place + " is open: walled in, room for " + z.capacity
                             + ". Civilians, come to the gates!", z.x, z.y);
@@ -2490,6 +2498,28 @@ final class Dispatch {
                 }
                 if (z.guards < z.wantGuards) assignGuards(z, z.wantGuards - z.guards, 900, z.military ? Entity.SOLDIER : Entity.COP);
                 continue;
+            }
+            // ((22.0) Holding: the longer a zone stands, the stronger it gets - the wall reinforced at a minute and a
+            // half, sandbagged posts with machine guns at three - and short of guards, it calls in those close by
+            // with nothing to do.)
+            if (z.level < 1 && z.age > 90 && z.breaches == 0) {
+                z.level = 1;
+                for (int k = 0; k < z.hp.length; k++) if (z.up[k]) z.hp[k] = Math.max(z.hp[k], 100);
+                say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military: " : "Police Command: ") + "The wall at " + z.place
+                        + " is being reinforced.", z.x, z.y);
+            } else if (z.level == 1 && z.age > 180 && z.breaches == 0) {
+                z.level = 2;
+                w.zonePosts(z);
+                say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military: " : "Police Command: ") + z.place
+                        + " has machine-gun posts on its corners now.", z.x, z.y);
+            }
+            if ((z.staffCd -= step) <= 0) {
+                z.staffCd = 15;
+                if (z.guards < z.wantGuards) {
+                    int got = assignGuards(z, z.wantGuards - z.guards, 700, z.military ? Entity.SOLDIER : Entity.COP);
+                    if (got < z.wantGuards - z.guards) got += assignGuards(z, z.wantGuards - z.guards, 700, z.military ? Entity.COP : Entity.SOLDIER);
+                    zoneStaffed += got;
+                }
             }
             // Overrun: more of the dead inside the wall than the guards can hold.
             int inside = 0;
@@ -2688,7 +2718,7 @@ final class Dispatch {
     void damageWall(SafeZone z, int seg, float dmg) {
         if (seg >= 0) {
             if (!z.up[seg]) return;
-            z.hp[seg] -= dmg;
+            z.hp[seg] -= z.level >= 1 ? dmg * 0.5f : dmg;
             if (z.hp[seg] > 0) return;
             z.hp[seg] = 0;
             z.up[seg] = false;
@@ -2800,6 +2830,8 @@ final class Dispatch {
                 for (int x = tx0 + 1; x < tx1; x++) if (!city.solid[y * city.w + x]) open++;
             if (open < (military ? 70 : 50)) continue;
             float score = Math.min(open, 500) * 0.03f + zd * 2 - (float) World.hypot(cx - px, cy - py) / City.T * 0.5f;
+            // ((22.0) A large zone: room counts for far more than being right on the spot.)
+            if (wantLarge) score += open * 0.12f;
             for (City.Facility f : city.facilities)
                 if (f.x > tx0 * City.T && f.x < (tx1 + 1) * City.T && f.y > ty0 * City.T && f.y < (ty1 + 1) * City.T
                         && f.kind == (military ? City.FACILITY_BASE : City.FACILITY_POLICE)) score += 25;
@@ -2991,8 +3023,27 @@ final class Dispatch {
         return t >= 0 && t < city.solid.length && !city.solid[t] && city.tiles[t] != City.WATER && city.tiles[t] != City.ROAD;
     }
 
+    int zoneStaffed;
+
+    /** ((22.0) The stadium has been opened as a refugee centre (the first safe zone the city sets up goes there). */
+    boolean stadiumOpened;
+
     private SafeZone establish(boolean military, float[] at) {
+        // ((22.0) The first safe zone the city sets up of its own accord is at the stadium, if there is one: the obvious
+        // place to take in thousands.)
+        City.Building stadium = null;
+        if (at == null && !stadiumOpened && city.cfg.v22())
+            for (int i = 0, n = city.buildings.size(); i < n && stadium == null; i++) {
+                City.Building o = city.buildings.get(i);
+                if (o.kind == City.STADIUM && o.name != null && !o.collapsed) stadium = o;
+            }
+        if (stadium != null) {
+            stadiumOpened = true;
+            at = new float[]{(stadium.x0 + stadium.x1) / 2, (stadium.y0 + stadium.y1) / 2};
+        }
         int[] b = chooseBlock(military, at);
+        if (b != null && stadium != null)
+            say(WHO_INFO, null, "News: " + stadium.name + " is opening its gates as a refugee centre. Head there if you can.", at[0], at[1], true);
         if (b == null) {
             if (at != null) say(WHO_INFO, null, "No block there to wall in as a safe zone.", at[0], at[1]);
             return null;
@@ -3114,6 +3165,13 @@ final class Dispatch {
 
     /** The Safe Zone tool: the player orders a safe zone at a spot. */
     void orderZone(float x, float y) {
+        orderZone(x, y, false);
+    }
+
+    /** ((22.0) Large: the biggest block that will do near the spot, not just the nearest. */
+    private boolean wantLarge;
+
+    void orderZone(float x, float y, boolean large) {
         if (w.countZombiesNear(x, y, CLEAR_OF_DEAD) > 0) {
             say(WHO_INFO, null, "Too close to the dead to set up a safe zone. Pick somewhere quieter.", x, y);
             return;
@@ -3132,7 +3190,9 @@ final class Dispatch {
             return;
         }
         boolean military = freeSoldiers >= 2 || freeCops == 0;
+        wantLarge = large;
         SafeZone z = establish(military, new float[]{x, y});
+        wantLarge = false;
         if (z != null && z.guards < z.wantGuards)
             assignGuards(z, z.wantGuards - z.guards, Float.MAX_VALUE, military ? Entity.COP : Entity.SOLDIER);
     }
