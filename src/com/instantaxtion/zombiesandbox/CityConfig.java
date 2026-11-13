@@ -53,8 +53,7 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
-    /** ((20.0) How hard the game is (not in v: kept in a field of its own). */
-    static final int OPT_DIFFICULTY = 12;
+    /** ((20.0) How hard a campaign mission is (Campaign.Mission.difficulty). ((21.1) Not a choice in the sandbox.) */
     int difficulty = Director.NORMAL;
     /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
     int mission = -1;
@@ -684,10 +683,10 @@ final class CityConfig implements OptionSet {
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
     @Override public String[] values(int i) {
-        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_DIFFICULTY ? Director.NAMES : VALUES[i];
+        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : VALUES[i];
     }
     @Override public int get(int i) {
-        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_DIFFICULTY ? difficulty : v[i];
+        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : v[i];
     }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
@@ -696,10 +695,6 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_EXODUS) {
             exodus = value;
-            return;
-        }
-        if (i == OPT_DIFFICULTY) {
-            difficulty = value;
             return;
         }
         v[i] = value;

@@ -433,7 +433,7 @@ final class SaveGame {
             out.writeFloat(w.director.nextWave);
             out.writeInt(w.director.hordes);
             out.writeInt(w.director.stragglers);
-            out.writeInt(w.director.reliefs);
+            out.writeInt(0);
             out.writeInt(w.director.sieges);
             out.writeInt(w.flares.size());
             for (float[] f : w.flares) for (int k = 0; k < 3; k++) out.writeFloat(f[k]);
@@ -944,6 +944,7 @@ final class SaveGame {
                 if (version >= 60) {
                     int ms = in.readInt();
                     w.city.cfg.mission = Campaign.get(ms) != null ? ms : -1;
+                    w.applyRules();
                     w.missionStart = in.readFloat();
                     w.spent = in.readInt();
                     w.missionResult = in.readInt();
@@ -1026,7 +1027,7 @@ final class SaveGame {
                     w.director.nextWave = in.readFloat();
                     w.director.hordes = in.readInt();
                     w.director.stragglers = in.readInt();
-                    w.director.reliefs = in.readInt();
+                    in.readInt();
                     w.director.sieges = in.readInt();
                     int fn = in.readInt();
                     for (int k = 0; k < fn; k++) w.flares.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat()});

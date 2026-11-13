@@ -6,8 +6,8 @@ import java.util.Random;
  * ((20.0) The director: paces an outbreak so it has a shape - pressure building, a peak, a breather - rather than
  * one long slide either way. It watches how the fight is going and, depending on the difficulty, sends stragglers
  * in from the country while things are quiet, a horde every few minutes, a siege on a station or base on the
- * harder settings, holds off while the city is being overwhelmed, and on the easier ones has supplies dropped to a
- * force that's on its knees. It only ever acts through World's own events.
+ * harder settings, and holds off while the city is being overwhelmed. ((21.1) In campaign missions only: in the sandbox it
+ * watches and sends nothing.) It only ever acts through World's own events.
  */
 final class Director {
     static final int EASY = 0, NORMAL = 1, HARD = 2, NIGHTMARE = 3;
@@ -21,16 +21,16 @@ final class Director {
     static final int CALM = 0, BUILD = 1, PEAK = 2, RESPITE = 3;
     static final String[] PHASES = {"Calm", "Building", "Peak", "Respite"};
 
-    final int level;
+    int level;
     int phase = CALM;
     /** How hard pressed the city is, 0 to 1, smoothed over half a minute or so. */
     float stress;
     /** Seconds in this phase, until the next group of stragglers, and since help was last dropped. */
-    float phaseT, nextWave = 90, reliefCd;
+    float phaseT, nextWave = 90;
     /** Seconds of outbreak until the next horde from outside, and until the next siege (Hard and above). */
     float nextHorde = 330, nextSiege = 480;
     /** What it has done, for the report. */
-    int hordes, stragglers, reliefs, sieges;
+    int hordes, stragglers, sieges;
     private int lastLost = -1;
     private final Random rnd;
 
@@ -71,9 +71,9 @@ final class Director {
             default:
                 if (phaseT > 50 - level * 8) to(BUILD);
         }
-        if (reliefCd > 0) reliefCd -= 1;
-        // (A mission to clear the city has what it starts with to clear: nothing more comes in from outside.)
-        boolean sealed = w.mission() != null && w.mission().goal == Campaign.G_CLEAR;
+        // ((21.1) The sandbox is the player's: nothing comes in that they didn't put there. Only a campaign mission has
+        // hordes of its own - and not one to clear the city, which has what it starts with to clear.)
+        boolean sealed = w.mission() == null || w.mission().goal == Campaign.G_CLEAR;
         // Building: stragglers wander in from the country - once it's gone on five minutes on Normal, from the start on
         // the harder settings.
         if (!sealed && phase == BUILD && STRAGGLERS[level] > 0 && (level >= HARD || w.outbreakTime > 300)) {
@@ -102,15 +102,6 @@ final class Director {
                 w.timeline("A horde lays siege to " + f.name, f.x, f.y);
             }
         }
-        // A force on its knees, on the easier settings: supplies dropped to whoever's still fighting.
-        if (level <= NORMAL && reliefCd <= 0 && w.warBalance < 0.3f && w.mission() == null && w.outbreakTime > 120) {
-            float[] at = armedCentre(w);
-            if (at != null) {
-                reliefCd = level == EASY ? 120 : 240;
-                reliefs++;
-                w.supplyDrop(at[0], at[1]);
-            }
-        }
     }
 
     private void to(int p) {
@@ -136,32 +127,5 @@ final class Director {
         }
         if (n == 0) return null;
         return new float[]{sx / n + (rnd.nextFloat() - 0.5f) * 300, sy / n + (rnd.nextFloat() - 0.5f) * 300};
-    }
-
-    private float[] armedCentre(World w) {
-        float sx = 0, sy = 0;
-        int n = 0;
-        for (int i = 0, m = w.entities.size(); i < m; i++) {
-            Entity e = w.entities.get(i);
-            if (e.dead || e.removed || (e.type != Entity.COP && e.type != Entity.SOLDIER)) continue;
-            sx += e.x;
-            sy += e.y;
-            n++;
-        }
-        if (n == 0) return null;
-        float cx = sx / n, cy = sy / n;
-        // (To one of them, not to the middle of them all - which may be the middle of a lake.)
-        Entity best = null;
-        float bd = Float.MAX_VALUE;
-        for (int i = 0, m = w.entities.size(); i < m; i++) {
-            Entity e = w.entities.get(i);
-            if (e.dead || e.removed || (e.type != Entity.COP && e.type != Entity.SOLDIER)) continue;
-            float d = (e.x - cx) * (e.x - cx) + (e.y - cy) * (e.y - cy);
-            if (d < bd) {
-                bd = d;
-                best = e;
-            }
-        }
-        return best == null ? null : new float[]{best.x, best.y};
     }
 }

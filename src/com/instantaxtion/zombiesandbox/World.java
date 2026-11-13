@@ -667,6 +667,7 @@ final class World {
         difficulty = Math.max(0, Math.min(3, cfg.difficulty));
         zPace = Director.Z_SPEED[difficulty];
         director = new Director(difficulty, (testSeed >= 0 ? testSeed + 7 : new Random().nextLong()) * 31 + 5);
+        applyRules();
         // ((11.5) No courthouse armoury: the government buildings are just buildings now.)
         if (false) {
             City.Building b = city.courthouse;
@@ -2886,9 +2887,21 @@ final class World {
 
     final Director director;
     /** Easy, Normal, Hard or Nightmare (Director.NAMES). */
-    final int difficulty;
+    int difficulty;
     /** How quick the dead are for the difficulty. */
-    private final float zPace;
+    private float zPace;
+
+    /**
+     * ((21.1) Only a campaign mission has a difficulty - its own. A sandbox game is always Normal, whatever it was
+     * saved as: nothing about it is harder or easier than what the player puts in it.
+     */
+    void applyRules() {
+        Campaign.Mission m = mission();
+        difficulty = m != null ? Math.max(0, Math.min(3, m.difficulty)) : Director.NORMAL;
+        zPace = Director.Z_SPEED[difficulty];
+        director.level = difficulty;
+        city.cfg.difficulty = difficulty;
+    }
     /** Flares burning: x, y, seconds left. Mines laid: x, y, seconds until armed. */
     final ArrayList<float[]> flares = new ArrayList<float[]>();
     final ArrayList<float[]> mines = new ArrayList<float[]>();

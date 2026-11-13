@@ -703,7 +703,7 @@ final class Menu {
                 {"Soldiers lost", String.valueOf(world.soldiersLost)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"People turned", String.valueOf(world.turned)},
-                {"Score (" + Director.NAMES[world.difficulty] + ")", String.valueOf(world.score())},
+                {world.mission() != null ? "Score (" + Director.NAMES[world.difficulty] + ")" : "Score", String.valueOf(world.score())},
         };
         String[][] theirs = {
                 {"Destroyed", String.valueOf(world.zombiesKilled)},
@@ -1992,20 +1992,6 @@ final class Menu {
                 "Bus & train: once the news breaks, evacuation buses pick people up at stops around town and trains leave from the station (if there is one). They come home once it's over.",
                 "All ways: once the news breaks, most people leave the city - by bus or train if a stop is near, on foot if not. They come home once it's over."};
         for (String line : wrap(exodusInfo[Math.max(0, Math.min(3, config.exodus))], lw - 4 * dp, plain)) {
-            c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
-            y += 16 * dp;
-        }
-        y += 12 * dp;
-        // ((20.0) How hard it is.)
-        String[] hardInfo = {"Easy: the dead are slower and weaker, bites infect less often, and supplies are dropped to a force in trouble. No hordes from outside.",
-                "Normal: once the outbreak has gone on a few minutes, a horde comes in from outside every five or six minutes and stragglers wander in between.",
-                "Hard: quicker, tougher dead; stragglers from the start, bigger hordes more often, and now and then a siege on a station or base.",
-                "Nightmare: the dead at their quickest and toughest, bites that nearly always infect, and the biggest hordes."};
-        y = segRow(c, CityConfig.OPT_DIFFICULTY, "Difficulty", lx, y, lw);
-        plain.setTextSize(12.5f * dp);
-        plain.setColor(MUTED);
-        y -= 6 * dp;
-        for (String line : wrap(hardInfo[Math.max(0, Math.min(3, config.difficulty))], lw - 4 * dp, plain)) {
             c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
             y += 16 * dp;
         }

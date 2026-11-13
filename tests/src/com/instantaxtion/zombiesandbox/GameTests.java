@@ -5237,90 +5237,90 @@ public final class GameTests {
                 check(Campaign.EVENT_COST[7] > 0 && Campaign.EVENT_COST[8] > 0, "a commander pays for them");
             }
         });
-        test("20.0: difficulty, the director's hordes and pacing, the score", new Check() {
+        test("20.0: a mission's difficulty and the director's hordes - and none of either in the sandbox; the score", new Check() {
             public void run() throws Exception {
-                float[] hp = new float[4];
-                World[] ws = new World[4];
-                for (int d = 0; d < 4; d++) {
-                    CityConfig c = new CityConfig();
-                    c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
-                    c.v[CityConfig.OPT_ZOMBIES] = 3;
-                    c.difficulty = d;
-                    c.seed = 73;
-                    World w = new World(c);
-                    w.populate(c);
-                    check(w.difficulty == d, "the difficulty's the game's");
-                    Entity z = null;
-                    for (Entity e : w.entities) if (e.type == Entity.ZOMBIE) { z = e; break; }
-                    hp[d] = z.maxHp;
-                    ws[d] = w;
+                // The sandbox: always Normal, and nothing comes in by itself however long it goes on.
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                c.difficulty = Director.NIGHTMARE;
+                c.seed = 73;
+                World sb = new World(c);
+                sb.populate(c);
+                check(sb.difficulty == Director.NORMAL && sb.director.level == Director.NORMAL, "a sandbox game is always Normal");
+                Entity sz = null;
+                for (Entity e : sb.entities) if (e.type == Entity.ZOMBIE) { sz = e; break; }
+                float normalHp = sz.maxHp;
+                int zs = sb.zombieCount(), crates = sb.pickups.size();
+                for (int t = 0; t < 1500; t++) {
+                    sb.outbreak = true;
+                    sb.outbreakTime = 400 + t;
+                    sb.warBalance = 0.1f;
+                    sb.director.stress = 0;
+                    sb.director.tick(sb);
                 }
-                check(hp[0] < hp[1] && hp[1] < hp[2] && hp[2] < hp[3], "the dead are tougher the harder it is");
-                // A horde from outside once the outbreak's gone on a while - never on Easy.
-                for (int d = 0; d < 4; d += 1) {
-                    World w = ws[d];
-                    Director dir = new Director(d, 9);
-                    w.outbreak = true;
-                    int zs = w.zombieCount();
-                    for (int t = 0; t < 420; t++) {
-                        dir.stress = 0;
-                        dir.tick(w);
-                    }
-                    w.recount();
-                    if (d == Director.EASY) check(dir.hordes == 0 && dir.stragglers == 0 && dir.sieges == 0 && w.zombieCount() == zs, "nothing from outside on Easy");
-                    else check(dir.hordes >= 1 && w.zombieCount() > zs, Director.NAMES[d] + ": a horde comes in (" + dir.hordes + ", " + zs + " -> " + w.zombieCount() + ")");
-                    if (d == Director.NORMAL) check(dir.stragglers == 0 && dir.sieges == 0, "no stragglers early on Normal, and no sieges");
-                    if (d >= Director.HARD) check(dir.stragglers >= 1, "stragglers from the start on " + Director.NAMES[d]);
-                }
-                // On Hard, in time, a siege.
-                World hw = ws[Director.HARD];
-                Director dir = new Director(Director.HARD, 9);
-                for (int t = 0; t < 600 && dir.sieges == 0; t++) {
-                    hw.outbreak = true;
-                    dir.stress = 0;
-                    dir.tick(hw);
-                }
-                check(dir.sieges == 1, "a siege on Hard");
-                // Pressure builds to a peak, then a breather; nothing's sent at the peak.
-                Director p = new Director(Director.HARD, 9);
-                World pw = ws[Director.NIGHTMARE];
-                pw.outbreak = true;
-                p.tick(pw);
-                p.tick(pw);
-                check(p.phase == Director.BUILD, "building");
+                sb.recount();
+                check(sb.director.hordes == 0 && sb.director.stragglers == 0 && sb.director.sieges == 0 && sb.zombieCount() == zs && sb.pickups.size() == crates
+                        && sb.incoming.isEmpty(), "nothing comes into a sandbox game by itself: no hordes, stragglers, sieges or supplies");
+                // The director still follows how it's going there (for the line at the top of the screen).
                 boolean peaked = false, rested = false;
+                sb.director.tick(sb);
+                check(sb.director.phase == Director.BUILD, "building");
                 for (int t = 0; t < 60; t++) {
-                    pw.civiliansLost += 6;
-                    p.tick(pw);
-                    peaked |= p.phase == Director.PEAK;
+                    sb.civiliansLost += 6;
+                    sb.director.tick(sb);
+                    peaked |= sb.director.phase == Director.PEAK;
                 }
-                check(peaked, "a peak when people are dying fast (" + p.stress + ")");
+                check(peaked, "a peak when people are dying fast");
                 for (int t = 0; t < 120; t++) {
-                    p.stress = Math.min(p.stress, 0.3f);
-                    p.tick(pw);
-                    rested |= p.phase == Director.RESPITE;
+                    sb.director.stress = Math.min(sb.director.stress, 0.3f);
+                    sb.director.tick(sb);
+                    rested |= sb.director.phase == Director.RESPITE;
                 }
-                check(rested && p.phase == Director.BUILD, "then a respite, then building again");
-                // Easy: supplies dropped to a force that's losing.
-                Director easy = new Director(Director.EASY, 9);
-                World ew = ws[Director.EASY];
-                ew.outbreak = true;
-                ew.warBalance = 0.1f;
-                ew.outbreakTime = 300;
-                easy.tick(ew);
-                easy.tick(ew);
-                check(easy.reliefs == 1, "relief on Easy");
-                // The score: kills count, and more on a harder game.
-                World a = ws[Director.NORMAL], b = ws[Director.NIGHTMARE];
-                a.zombiesKilled = b.zombiesKilled = 100;
-                a.civiliansLost = b.civiliansLost = 0;
-                a.copsLost = b.copsLost = a.soldiersLost = b.soldiersLost = 0;
-                check(a.score() == 1000 && b.score() > a.score() * 2, "a hundred kills score, more on Nightmare (" + a.score() + ", " + b.score() + ")");
-                // The New Game screen's option.
+                check(rested && sb.director.phase == Director.BUILD, "then a respite, then building again");
+                // A mission on Hard (Overrun): tougher dead, stragglers, a horde, in time a siege.
+                CityConfig mc = Campaign.config(5);
+                World w = new World(mc);
+                w.setMaxPopulation(2400);
+                w.populate(mc);
+                Campaign.begin(w, "");
+                check(w.difficulty == Director.HARD && w.director.level == Director.HARD, "a mission has its own difficulty");
+                Entity mz = null;
+                for (Entity e : w.entities) if (e.type == Entity.ZOMBIE) { mz = e; break; }
+                check(mz.maxHp > normalHp * 1.1f, "the dead are tougher on Hard (" + normalHp + " -> " + mz.maxHp + ")");
+                int before = w.zombieCount();
+                for (int t = 0; t < 700 && (w.director.hordes == 0 || w.director.sieges == 0 || w.director.stragglers == 0); t++) {
+                    w.outbreak = true;
+                    w.director.stress = 0;
+                    w.director.tick(w);
+                }
+                w.recount();
+                check(w.director.stragglers >= 1 && w.director.hordes >= 1 && w.director.sieges >= 1 && w.zombieCount() > before,
+                        "stragglers, a horde and a siege come in (" + w.director.stragglers + ", " + w.director.hordes + ", " + w.director.sieges + ")");
+                // Kept through a save, and a sandbox save that says Hard loads as Normal.
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.difficulty == Director.HARD && l.director.level == Director.HARD && l.mission() == w.mission(), "a mission's difficulty is kept in a save");
+                sb.city.cfg.difficulty = Director.HARD;
+                file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(sb, file);
+                World sl = SaveGame.load(file);
+                file.delete();
+                check(sl.difficulty == Director.NORMAL && sl.director.level == Director.NORMAL, "a sandbox save loads as Normal");
+                // The score: kills count, and more in a harder mission.
+                sb.zombiesKilled = w.zombiesKilled = 100;
+                sb.civiliansLost = w.civiliansLost = 0;
+                sb.copsLost = w.copsLost = sb.soldiersLost = w.soldiersLost = 0;
+                sb.alphasKilled = w.alphasKilled = 0;
+                sb.warResult = w.warResult = 0;
+                check(sb.score() == 1000 && w.score() > sb.score(), "a hundred kills score, more on Hard (" + sb.score() + ", " + w.score() + ")");
+                // No difficulty to choose on the New Game screen.
+                boolean offered = false;
                 CityConfig oc = new CityConfig();
-                check(oc.values(CityConfig.OPT_DIFFICULTY).length == 4 && oc.get(CityConfig.OPT_DIFFICULTY) == Director.NORMAL, "difficulty on the New Game screen");
-                oc.set(CityConfig.OPT_DIFFICULTY, 3);
-                check(oc.copy().difficulty == 3, "kept when the city's played again");
+                for (int i = 0; i < oc.count(); i++) offered |= oc.label(i).toLowerCase().contains("difficult");
+                check(!offered && oc.difficulty == Director.NORMAL && oc.copy().difficulty == Director.NORMAL, "no difficulty on the New Game screen");
             }
         });
         test("20.0: the campaign's missions and their objectives", new Check() {

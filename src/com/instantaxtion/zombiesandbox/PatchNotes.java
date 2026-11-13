@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "21.0";
-    static final int VERSION_CODE = 210;
+    static final String VERSION = "21.1";
+    static final int VERSION_CODE = 211;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "21.1  -  The sandbox is yours",
+                    "Nothing comes into a sandbox game by itself any more: no hordes from outside, no stragglers, no sieges, no supplies dropped to a losing side. The only zombies in the city are the ones the setup put there, the ones you add, and the people they turn.",
+                    "No Difficulty setting: it's gone from the New Game screen, and a sandbox game always plays by the same rules. A saved sandbox game that was on Easy, Hard or Nightmare carries on as Normal from where it is.",
+                    "Campaign missions keep their own rules: some are set harder than others, and several are built on the dead coming in from outside (never the ones where the job is to clear the city).",
+            },
             {
                     "21.0  -  The Command Update",
                     "Fixed - nobody fought indoors: police and soldiers inside a building never fired a shot. Only someone already aiming was allowed to fight in there, and nobody inside ever got as far as aiming - so they walked out past whatever was in the room with them. They now open fire on any of the dead they can see from where they stand, and walk out only when there's nothing to shoot.",
