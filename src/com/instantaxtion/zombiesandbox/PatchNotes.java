@@ -14,6 +14,7 @@ final class PatchNotes {
                     "Records: a Reset stats button (tap twice).",
                     "Screenshot, Hide Buttons and the 3D/Top button are gone; View is in Settings.",
                     "Fewer settings, and routine radio chatter is left off the log.",
+                    "Fixed: on island maps, soldiers kept calling up truck after truck for rides that never got there.",
                     "Patch notes are short now.",
             },
             {

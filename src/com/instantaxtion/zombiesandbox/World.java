@@ -11659,6 +11659,9 @@ final class World {
             if (e.role == Entity.ROLE_PILOT || e.task >= 32) continue;
             float[] to = rideTarget(e);
             if (to == null || World.hypot(to[0] - e.x, to[1] - e.y) < 500 || countZombiesNear(e.x, e.y, 120) > 0) continue;
+            // ((21.4) Two lifts in a row that got them nowhere (a post the trucks can't reach, on an island map): they
+            // walk it for a few minutes. Each lift took a truck out, and the trucks never stopped coming.)
+            if (e.rideWasted >= 2 && time - e.rideAt < 240) continue;
             // (Grouped by what they're doing and where it is, not by squad: a squad gets split up, and a truck for
             // each one on their own soon used up every truck there was.)
             int key = (e.task * 64 + (int) (to[0] / 400)) * 64 + (int) (to[1] / 400);
@@ -11699,6 +11702,12 @@ final class World {
             for (Entity e : group) {
                 e.rideCd = time + (ok ? 25 : 8);
                 if (ok && inc.ride) e.rideFrom = inc;
+                if (ok) {
+                    float left = (float) World.hypot(inc.x - e.x, inc.y - e.y);
+                    e.rideWasted = time - e.rideAt < 240 && left > e.rideLeft * 0.6f ? e.rideWasted + 1 : 0;
+                    e.rideAt = time;
+                    e.rideLeft = left;
+                }
             }
             if (ok && time > squadRideSaidAt && inc.ride) {
                 squadRideSaidAt = time + 25;

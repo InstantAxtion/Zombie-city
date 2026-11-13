@@ -383,6 +383,9 @@ final class Entity {
     transient boolean bodyShot;
     /** (12.3) Not to be offered another lift before this time (World.rideCheck). */
     transient float rideCd;
+    /** ((21.4) When they last got a lift, how far they had to go then, and how many lifts in a row got them nowhere.) */
+    transient float rideAt = -999, rideLeft;
+    transient int rideWasted;
     /** (12.3) The lift they're on, or waiting for: what they were doing before it, to go back to if it falls through. */
     transient Dispatch.Incident rideFrom;
     /** (10.37) What the brain has them doing (World.G_*), until it thinks again, and the building it had in mind. */
