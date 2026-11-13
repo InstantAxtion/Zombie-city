@@ -11,15 +11,18 @@ final class Settings implements OptionSet {
             "Screen shake", "Show FPS", "Max population", "Radio messages", "Minimap",
             "Text & buttons", "Battery saver", "Name tags", "Graphics", "Vibration", "Radio lines on screen", "Destruction",
             // ((19.0) The Sound Update.)
-            "Ambience", "Radio chatter", "Menu & mission sounds", "Mono audio", "Dynamic range", "Sound captions", "Shell shock"};
+            "Ambience", "Radio chatter", "Menu & mission sounds", "Mono audio", "Dynamic range", "Sound captions", "Shell shock",
+            // ((19.5) The Visuals Update.)
+            "Effects", "Screen effects", "Colour grading"};
     private static final String[][] VALUES = {VOLUME, VOLUME, {"Bird's-eye", "3D"}, ON_OFF, ON_OFF, ON_OFF, ON_OFF,
             {"Auto", "2500", "5000", "8000", "12000"}, ON_OFF, ON_OFF, {"Small", "Normal", "Large"}, ON_OFF, ON_OFF,
             {"Classic", "Realistic"}, ON_OFF, {"1", "2", "3", "4"}, {"Normal", "Heavy"},
-            VOLUME, VOLUME, VOLUME, ON_OFF, {"Full", "Night"}, ON_OFF, ON_OFF};
+            VOLUME, VOLUME, VOLUME, ON_OFF, {"Full", "Night"}, ON_OFF, ON_OFF,
+            {"Low", "Medium", "High", "Ultra"}, ON_OFF, ON_OFF};
     private static final String[] KEYS = {"music", "sfx", "buildings3d", "gore", "healthBars", "shake", "fps",
             "maxPop2", "radio", "minimap", "uiSize", "battery", "nameTags", "graphics", "vibration", "feedLines", "destruction",
-            "ambience", "radioVol", "uiVol", "mono", "nightMode", "captions", "shellShock"};
-    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 3, 3, 3, 0, 0, 0, 1};
+            "ambience", "radioVol", "uiVol", "mono", "nightMode", "captions", "shellShock", "effects", "screenFx", "grading"};
+    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 3, 3, 3, 0, 0, 0, 1, 2, 1, 1};
     /** 0 is Auto: room for everyone who lives in the city, and plenty of zombies. */
     private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000};
 
@@ -59,6 +62,12 @@ final class Settings implements OptionSet {
     boolean captions() { return v[22] == 1; }
     /** Ringing ears and dulled hearing after a blast close by. */
     boolean shellShock() { return v[23] == 1; }
+    /** ((19.5) How much of the effects is drawn: 0 low to 3 ultra. */
+    int effects() { return v[24]; }
+    /** The vignette, flashes and the red of danger over the screen. */
+    boolean screenEffects() { return v[25] == 1; }
+    /** Each mode's own colour over the city. */
+    boolean colourGrading() { return v[26] == 1; }
     /** ((12.0) How many radio messages show at once along the top.) */
     int feedLines() { return v[15] + 1; }
     boolean radio() { return v[8] == 1; }

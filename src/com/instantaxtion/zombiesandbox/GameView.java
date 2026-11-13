@@ -572,6 +572,9 @@ final class GameView extends View implements Menu.Host {
         world.heavy = settings.heavyDestruction();
         sound.setVolumes(settings.music(), settings.sfx());
         // ((19.0) The groups: the radio and the menus' sounds on their own levels; the listening options.)
+        vfx.quality = settings.effects();
+        vfx.screen = settings.screenEffects();
+        vfx.grading = settings.colourGrading();
         float[] buses = {1, 1, 1, 1, 1, settings.radioVolume() * 1.2f, settings.uiVolume() * 1.2f};
         sound.setMix(buses, settings.ambience(), settings.mono(), settings.nightMode());
         realistic = settings.realistic();
@@ -851,6 +854,7 @@ final class GameView extends View implements Menu.Host {
         roofLabels.clear();
         byDoor.clear();
         records.forget();
+        vfx.forget();
         follow = null;
         followV = null;
         inspectB = null;
@@ -1426,6 +1430,12 @@ final class GameView extends View implements Menu.Host {
         }
         sound.playTrack(inGame || menu.screen == Menu.PAUSE ? mood : Synth.TRACK_MENU);
         if (world.alarmTime > 0) sound.play(Sfx.ALARM, 0.7f, 0);
+        // ((19.5) The city's bangs as things to see too, before they're played and cleared; and the effects a frame on.)
+        {
+            float vw0 = getWidth() / scale, vh0 = getHeight() / scale;
+            vfx.events(world, camX, camY, camX + vw0, camY + vh0);
+            vfx.update(world, simulate ? dt : 0, camX, camY, camX + vw0, camY + vh0, onScreen);
+        }
         playSounds(inGame ? 1f : 0.35f);
         if (inGame) {
             heartbeat(dt, 1f);
@@ -1446,6 +1456,8 @@ final class GameView extends View implements Menu.Host {
         int saves = c.getSaveCount();
         try {
             drawWorld(c);
+            // ((19.5) Over the whole screen, in the game: the vignette, danger, flashes, the mode's colour, cinematic bars.)
+            if (!menu.isOpen() && hasGame) vfx.drawScreen(c, getWidth(), getHeight(), intensity, world.mode(), hudHidden);
             if (menu.isOpen()) menu.draw(c, getWidth(), getHeight(), dt);
             else if (!hudHidden) {
                 drawUi(c);
@@ -1711,6 +1723,14 @@ final class GameView extends View implements Menu.Host {
                 Dispatch.SafeZone z = world.dispatch.zones.get(i);
                 fill.setColor(z.military ? 0x886FBF3F : 0x884F8FE0);
                 c.drawCircle(mx(z.x), my(z.y), Math.max(2.5f * dp, z.r * sx), fill);
+            }
+            // ((19.5) Where something big just happened: a ring spreading out on the map.)
+            for (int i = 0, n = vfx.pings.size(); i < n; i++) {
+                float[] p = vfx.pings.get(i);
+                float k = 1 - p[2] / 1.6f;
+                stroke.setStrokeWidth(1.5f * dp);
+                stroke.setColor(alpha(p[3] > 0 ? 0xFFE8D8B0 : 0xFFFF9A40, 1 - k));
+                c.drawCircle(mx(p[0]), my(p[1]), (2 + k * 9) * dp, stroke);
             }
             // ((12.0) The open 911 calls: a small red mark at each, bigger the more of the dead there.)
             for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {
@@ -2432,7 +2452,13 @@ final class GameView extends View implements Menu.Host {
     private long lastBuzz;
 
     /** A little buzz when you shoot, a hard one when you're hurt, and a thump for crashes and nearby blasts. */
+    private float hurtHp = -1;
+
     private void haptics() {
+        // ((19.5) Whoever you're playing hurt: a red flash at the edges of the screen.)
+        Entity me = world.controlled;
+        if (me != null && hurtHp >= 0 && me.hp < hurtHp - 0.5f) vfx.hurt = Math.max(vfx.hurt, Math.min(1, 0.4f + (hurtHp - me.hp) / 40));
+        hurtHp = me != null ? me.hp : -1;
         if (!settings.vibration()) return;
         Entity e = world.controlled;
         int strength = 0;
@@ -2485,6 +2511,8 @@ final class GameView extends View implements Menu.Host {
     // ------------------------------------------------------------------ (19.0) the Sound Update
 
     private float shockCd;
+    /** ((19.5) The Visuals Update's effects. */
+    final Visuals vfx = new Visuals();
     /** Sounds to play a moment from now: {seconds left, id, volume}. */
     private final java.util.ArrayList<float[]> soon = new java.util.ArrayList<float[]>();
 
@@ -2704,6 +2732,7 @@ final class GameView extends View implements Menu.Host {
                 float amt = Math.min(1, (1 - d / 90) * (scale / 2.5f));
                 if (amt > 0.25f) {
                     sound.shock(amt);
+                    vfx.daze = Math.max(vfx.daze, amt);
                     sound.play(Sfx.WHINE, 0.25f + 0.35f * amt, 0);
                     shockCd = 4;
                 }
@@ -2963,6 +2992,8 @@ final class GameView extends View implements Menu.Host {
         }
 
         if (scale > 0.7f) drawMarks(c, vx0, vy0, vx1, vy1);
+        // ((19.5) Craters, cracks and ripples on the ground.)
+        vfx.drawGround(c, vx0, vy0, vx1, vy1);
 
         for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) drawZone(c, world.dispatch.zones.get(i));
         for (int i = 0, n = world.holdouts.size(); i < n; i++) {
@@ -3430,19 +3461,23 @@ final class GameView extends View implements Menu.Host {
             if (life <= 0) continue;
             float f = life / World.TRACER_LIFE, p = 1 - f;
             float x0 = world.tx0[i], y0 = world.ty0[i], x1 = world.tx1[i], y1 = world.ty1[i];
-            stroke.setStrokeWidth(1.6f);
-            stroke.setColor(alpha(0xFFFFC860, 0.22f * f));
+            // ((19.5) The aliens' shots green; every tracer's glow a little wider on the higher effects settings.)
+            boolean green = world.tgreen[i];
+            stroke.setStrokeWidth(vfx.quality >= 2 ? 2.4f : 1.6f);
+            stroke.setColor(alpha(green ? 0xFF60FF90 : 0xFFFFC860, 0.22f * f));
             c.drawLine(x0, y0, x1, y1, stroke);
             float hx = x0 + (x1 - x0) * Math.min(1, p * 1.4f), hy = y0 + (y1 - y0) * Math.min(1, p * 1.4f);
             float tl = Math.max(0, Math.min(1, p * 1.4f) - 0.35f);
             float sx = x0 + (x1 - x0) * tl, sy = y0 + (y1 - y0) * tl;
             stroke.setStrokeWidth(1.2f);
-            stroke.setColor(alpha(0xFFFFF0B0, Math.min(1, f * 1.6f)));
+            stroke.setColor(alpha(green ? 0xFFD8FFE0 : 0xFFFFF0B0, Math.min(1, f * 1.6f)));
             c.drawLine(sx, sy, hx, hy, stroke);
         }
 
         drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
         drawHaze(c, vx0, vy0, vx1, vy1);
+        // ((19.5) Light, shockwaves, smoke, sparks and debris over it all.)
+        vfx.drawAbove(c, vx0, vy0, vx1, vy1);
         for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = world.fleet.vehicles.get(i);
             if (v.type == Fleet.HELI) drawHeli(c, v);
@@ -3770,6 +3805,11 @@ final class GameView extends View implements Menu.Host {
                 stroke.setStrokeWidth(3);
                 c.drawLine(mx, my, world.beamX, world.beamY, stroke);
             }
+            // ((19.5) A ring of energy pulsing out from under it.)
+            float pulse = (tm * 0.6f) % 1f;
+            stroke.setStrokeWidth(3 * (1 - pulse) + 0.5f);
+            stroke.setColor(alpha(0xFF60FF90, 0.5f * (1 - pulse)));
+            c.drawCircle(mx, my, r * (1 + pulse * 1.4f), stroke);
             fill.setColor(0xFF2A3036);
             c.drawCircle(mx, my, r, fill);
             fill.setColor(0xFF3C454E);

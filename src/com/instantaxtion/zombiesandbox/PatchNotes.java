@@ -2,11 +2,26 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "19.0";
-    static final int VERSION_CODE = 190;
+    static final String VERSION = "19.5";
+    static final int VERSION_CODE = 195;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "19.5  -  The Visuals Update",
+                    "Light: gunfire throws a flash of light from every muzzle (the aliens' a green one); blasts light up the streets round them in a burst of orange with a white-hot flash at the heart; wrecks burn and flicker; wildfires glow; bombs pulse red; the mothership bathes the ground beneath it in green, and its beam lights up where it lands.",
+                    "Blasts: a shockwave ring racing out; a crater left behind that stays (dark, with a rim of thrown earth, slowly fading), or rings on the water if it was in it; debris thrown into the air that tumbles, casts its shadow and lands; a shower of sparks; billowing smoke; and a column of smoke rising from the spot for a while after, with flames at first. A blast in the middle of the screen flashes it white.",
+                    "Wrecks: a vehicle that's knocked out burns for most of a minute - flames, embers and firelight - then smokes for a minute or so more. A badly damaged vehicle trails smoke as it drives.",
+                    "Smoke drifts on a wind that slowly turns: dark smoke from fires, pale dust from collapses and quakes.",
+                    "Collapses: a great cloud of dust rolling out from the building, and the ruin smouldering after.",
+                    "Disasters: a tornado whirls debris round itself and throws up dust; an earthquake splits the ground in cracks that stay for a few minutes; a flood's surface ripples; a wildfire throws embers into the air, sends up smoke and glows.",
+                    "The aliens: their shots are green tracers, their drones glow, and a ring of energy pulses out from under the mothership.",
+                    "Tracers: a wider glow behind every shot on the High and Ultra effects.",
+                    "The minimap: a ring flashes on it where anything big happens anywhere in the city - a blast, the beam, a building coming down, a quake - so you can see where it is.",
+                    "Over the screen: a soft vignette; the edges pulse red when things are at their most tense, and flash red when whoever you're playing is hurt; a blast close by dazes you (the screen washes pale and clears, with the ringing ears of 19.0); each mode has its own subtle colour - green for the aliens, dusty for the disasters, cold for terror, warm for the prison and the cartel, and so on; and with the HUD hidden, black bars top and bottom for a cinematic look.",
+                    "New graphics settings: Effects (Low, Medium, High, Ultra: how much of it is drawn - Low keeps only the big things, Ultra half as much again as High), Screen effects (the vignette, flashes and red edges), and Colour grading (each mode's colour).",
+                    "None of this changes the game itself: it's all drawn on top of the simulation.",
+            },
             {
                     "19.0  -  The Sound Update",
                     "Ambience: ten beds of sound now play under everything, each following what's on the screen. The city's traffic hum (busier with more cars about, distant and dull when zoomed out). Wind, stronger zoomed out and roaring as a tornado nears. Birdsong over parks and trees when it's quiet, falling silent in a fight. The murmur of a crowd where people are gathered. Waves by the sea and lakes. The crackle of a wildfire, the rush of a flood, the howl of a tornado and the throb of the alien mothership, each from its side of the screen as you get near. A low drone of tension under a big fight.",

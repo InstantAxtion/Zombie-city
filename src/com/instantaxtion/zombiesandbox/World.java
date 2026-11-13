@@ -164,6 +164,9 @@ final class World {
     // Bullet tracers.
     static final int MAXT = 300;
     final float[] tx0 = new float[MAXT], ty0 = new float[MAXT], tx1 = new float[MAXT], ty1 = new float[MAXT];
+    /** ((19.5) Which tracers are the aliens' (drawn green), and whether the next one is. */
+    final boolean[] tgreen = new boolean[MAXT];
+    private boolean nextGreen;
     final float[] tlife = new float[MAXT];
     private int tnext;
 
@@ -16829,6 +16832,7 @@ final class World {
         particle(mx, my, 0, 0, 0.06f, soldier ? 3.2f : 2.6f, 0xFFFFE9A0, P_FLASH);
         // ((19.0) The aliens' guns: a beam's whine, not a bang.)
         if (e.type == Entity.INVADER && alienMode()) {
+            if (MAXT > 0) tgreen[(tnext + MAXT - 1) % MAXT] = true;
             emit(Sfx.LASER, e.x, e.y);
             return;
         }
@@ -18973,6 +18977,8 @@ final class World {
         tx1[i] = x1;
         ty1[i] = y1;
         tlife[i] = TRACER_LIFE;
+        tgreen[i] = nextGreen;
+        nextGreen = false;
     }
 
     private void decal(float x, float y, float r, int color) {

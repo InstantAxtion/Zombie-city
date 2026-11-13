@@ -3165,7 +3165,7 @@ public final class GameTests {
                 }
                 check(site, "a building site while the work goes on");
                 check(!early, "not built over someone standing on the site");
-                check(!b.collapsed && b.height == height && b.capacity == capacity, "rebuilt as it was (" + b.height + "/" + height + ", " + b.capacity + "/" + capacity + ")");
+                check(!b.collapsed && b.height == height && b.capacity == capacity, "rebuilt as it was (" + b.height + "/" + height + ", " + b.capacity + "/" + capacity + ") aftermath " + w.aftermath + " rebuildT " + b.rebuildT + " z " + w.zombieCount() + " banner " + w.warBanner + " rebuilt " + w.rebuilt);
                 int tx = (int) ((b.x0 + b.x1) / 2 / City.T), ty = (int) ((b.y0 + b.y1) / 2 / City.T);
                 check(w.city.solid[ty * w.city.w + tx], "solid walls again");
                 java.io.File f = java.io.File.createTempFile("zcsb", ".dat");
@@ -6018,6 +6018,104 @@ public final class GameTests {
                 draw(v, size);
                 check(snd.loopGain[Sfx.LOOP_BIRDS] > 0.3f, "and an ambience bed");
                 check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
+        test("19.5: the Visuals Update - light, blasts, craters, smoke, wrecks burning, disasters, alien tracers, the screen's effects", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 61;
+                World w = new World(c);
+                w.populate(c);
+                Visuals fx = new Visuals();
+                float cx = w.city.worldW() / 2, cy = w.city.worldH() / 2;
+                float vx0 = cx - 400, vy0 = cy - 400, vx1 = cx + 400, vy1 = cy + 400;
+                // A blast on the screen: light, a shockwave, a crater, debris, sparks, smoke, a ping on the map.
+                w.evCount = 0;
+                w.emit(Sfx.EXPLOSION, cx, cy);
+                fx.events(w, vx0, vy0, vx1, vy1);
+                check(!fx.lights.isEmpty() && !fx.waves.isEmpty() && fx.craters.size() == 1 && !fx.debris.isEmpty() && !fx.sparks.isEmpty()
+                        && !fx.smoke.isEmpty() && fx.pings.size() == 1, "a blast's light, shockwave, crater, debris, sparks, smoke and ping");
+                check(fx.flash > 0, "a flash when it's in the middle of the screen");
+                // Far off the screen: only the ping.
+                w.evCount = 0;
+                w.emit(Sfx.EXPLOSION, cx + 3000, cy);
+                int before = fx.count();
+                fx.events(w, vx0, vy0, vx1, vy1);
+                check(fx.count() == before && fx.pings.size() == 2, "one off the screen: just its ping on the map");
+                // A while on: the flash and light gone, the crater kept, debris come down.
+                for (int k = 0; k < 90; k++) fx.update(w, 1 / 30f, vx0, vy0, vx1, vy1, null);
+                check(fx.flash == 0 && fx.waves.isEmpty() && fx.craters.size() == 1, "the flash and shockwave gone, the crater stays");
+                boolean landed = true;
+                for (float[] d : fx.debris) landed &= d[2] <= 0;
+                check(landed, "the debris has come down");
+                // A wreck burns.
+                Fleet.Vehicle car = w.fleet.vehicles.isEmpty() ? null : w.fleet.vehicles.get(0);
+                if (car != null) {
+                    car.broken = true;
+                    fx.lights.clear();
+                    fx.sparks.clear();
+                    float wx0 = car.x - 400, wy0 = car.y - 400;
+                    for (int k = 0; k < 60; k++) fx.update(w, 1 / 30f, wx0, wy0, wx0 + 800, wy0 + 800, null);
+                    check(!fx.sparks.isEmpty() || !fx.lights.isEmpty(), "a wreck burning");
+                }
+                // A quake cracks the ground; a fire throws embers and light.
+                w.evCount = 0;
+                w.emit(Sfx.QUAKE, cx, cy);
+                fx.events(w, vx0, vy0, vx1, vy1);
+                check(fx.cracks.size() > 10, "cracks after a quake (" + fx.cracks.size() + ")");
+                w.startDisaster(World.HZ_FIRE, cx, cy);
+                int maxSparks = 0, maxLights = 0;
+                for (int k = 0; k < 90; k++) {
+                    fx.update(w, 1 / 30f, vx0, vy0, vx1, vy1, null);
+                    maxSparks = Math.max(maxSparks, fx.sparks.size());
+                    maxLights = Math.max(maxLights, fx.lights.size());
+                }
+                check(maxSparks > 0 && maxLights > 0, "embers and firelight (" + maxSparks + ", " + maxLights + ")");
+                // Low effects: far less.
+                Visuals low = new Visuals();
+                low.quality = 0;
+                w.evCount = 0;
+                for (int k = 0; k < 20; k++) w.emit(Sfx.EXPLOSION, cx + k, cy);
+                low.events(w, vx0, vy0, vx1, vy1);
+                Visuals high = new Visuals();
+                high.events(w, vx0, vy0, vx1, vy1);
+                check(low.count() < high.count() / 2, "Low draws far less (" + low.count() + " / " + high.count() + ")");
+                // A new city: nothing carried over.
+                World w2 = new World(c);
+                w2.evCount = 0;
+                fx.events(w2, vx0, vy0, vx1, vy1);
+                check(fx.craters.isEmpty() && fx.count() == 0, "a new city starts clean");
+                // The aliens' shots are drawn green.
+                CityConfig ac = new CityConfig();
+                ac.mode = CityConfig.MODE_ALIENS;
+                ac.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                ac.v[CityConfig.OPT_ZOMBIES] = 3;
+                ac.seed = 62;
+                World aw = new World(ac);
+                aw.setMaxPopulation(4000);
+                aw.populate(ac);
+                boolean green = false;
+                for (int f = 0; f < 30 * 60 && !green; f++) {
+                    aw.update(1 / 30f);
+                    aw.evCount = 0;
+                    for (int k = 0; k < World.MAXT; k++) green |= aw.tlife[k] > 0 && aw.tgreen[k];
+                }
+                check(green, "green alien tracers");
+                // Drawn, all of it: the ground, above, and the screen (with every mode's colour and the bars).
+                android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(800, 800, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+                fx.events(w, vx0, vy0, vx1, vy1);
+                w.evCount = 0;
+                w.emit(Sfx.EXPLOSION, cx, cy);
+                fx.events(w, vx0, vy0, vx1, vy1);
+                fx.drawGround(cv, vx0, vy0, vx1, vy1);
+                fx.drawAbove(cv, vx0, vy0, vx1, vy1);
+                fx.hurt = 1;
+                fx.daze = 1;
+                for (int m = 0; m < CityConfig.MODES.length; m++) fx.drawScreen(cv, 800, 800, 0.9f, m, m % 2 == 0);
+                check(true, "drawn");
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
