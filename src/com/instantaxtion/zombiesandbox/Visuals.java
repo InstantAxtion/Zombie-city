@@ -123,7 +123,7 @@ final class Visuals {
     void light(float x, float y, float r, float life, int glowKind, float strength, boolean flicker) {
         if (quality == 0 && r < 60) return;
         if (lights.size() >= cap(90)) lights.remove(0);
-        lights.add(new float[]{x, y, r, life, life, glowKind, strength, flicker ? 1 : 0});
+        lights.add(new float[]{x, y, r, life, life, glowKind, strength, flicker ? 1 : 0, 0});
     }
 
     private void puff(float x, float y, float vx, float vy, float r, float life, float shade, float grow) {
@@ -131,9 +131,20 @@ final class Visuals {
         smoke.add(new float[]{x, y, vx, vy, r, life, life, shade, grow});
     }
 
+    /** ((21.3) A fire's flame or glow on the ground: drawn under the people walking through it, not on top of them. */
+    private void groundLight(float x, float y, float r, float life, float strength) {
+        light(x, y, r, life, G_FIRE, strength, true);
+        if (!lights.isEmpty()) lights.get(lights.size() - 1)[8] = 1;
+    }
+
+    private void groundSpark(float x, float y, float vx, float vy, float life, int color) {
+        spark(x, y, vx, vy, life, color, true);
+        if (!sparks.isEmpty()) sparks.get(sparks.size() - 1)[8] = 1;
+    }
+
     private void spark(float x, float y, float vx, float vy, float life, int color, boolean rising) {
         if (sparks.size() >= cap(240)) sparks.remove(0);
-        sparks.add(new float[]{x, y, vx, vy, life, life, color, rising ? 1 : 0});
+        sparks.add(new float[]{x, y, vx, vy, life, life, color, rising ? 1 : 0, 0});
     }
 
     /**
@@ -311,8 +322,8 @@ final class Visuals {
             if (rnd.nextFloat() < dt * 6 * s[3] * (quality + 1) / 3f)
                 puff(s[0] + rnd.nextFloat() * 10 - 5, s[1] + rnd.nextFloat() * 10 - 5, 0, -6, 4 + rnd.nextFloat() * 4, 5 + rnd.nextFloat() * 3, 0.25f, 3);
             if (s[4] > 0 && s[2] > 8 && rnd.nextFloat() < dt * 8) {
-                spark(s[0] + rnd.nextFloat() * 8 - 4, s[1], rnd.nextFloat() * 10 - 5, -20 - rnd.nextFloat() * 20, 1 + rnd.nextFloat(), 0xFFFF9A40, true);
-                if (rnd.nextFloat() < 0.3f) light(s[0], s[1], 40, 0.3f, G_FIRE, 0.5f, true);
+                groundSpark(s[0] + rnd.nextFloat() * 8 - 4, s[1], rnd.nextFloat() * 10 - 5, -20 - rnd.nextFloat() * 20, 1 + rnd.nextFloat(), 0xFFFF9A40);
+                if (rnd.nextFloat() < 0.3f) groundLight(s[0], s[1], 40, 0.3f, 0.5f);
             }
         }
         // Vehicles: wrecks burn for a while, then smoke; badly hurt ones trail smoke.
@@ -328,8 +339,8 @@ final class Visuals {
                 float age = w.time - at;
                 if (!on || age > 120 || Fleet.airborne(v)) continue;
                 if (age < 40) {
-                    if (rnd.nextFloat() < dt * 10) spark(v.x + rnd.nextFloat() * 8 - 4, v.y + rnd.nextFloat() * 8 - 4, rnd.nextFloat() * 10 - 5, -25 - rnd.nextFloat() * 20, 0.8f + rnd.nextFloat(), 0xFFFFA040, true);
-                    if (rnd.nextFloat() < dt * 12) light(v.x, v.y, 46 + rnd.nextFloat() * 10, 0.2f, G_FIRE, 0.6f, true);
+                    if (rnd.nextFloat() < dt * 10) groundSpark(v.x + rnd.nextFloat() * 8 - 4, v.y + rnd.nextFloat() * 8 - 4, rnd.nextFloat() * 10 - 5, -25 - rnd.nextFloat() * 20, 0.8f + rnd.nextFloat(), 0xFFFFA040);
+                    if (rnd.nextFloat() < dt * 12) groundLight(v.x, v.y, 46 + rnd.nextFloat() * 10, 0.2f, 0.6f);
                 }
                 if (rnd.nextFloat() < dt * (age < 40 ? 6 : 2.5f) * (quality + 1) / 3f)
                     puff(v.x, v.y, 0, -8, 5 + rnd.nextFloat() * 3, 6 + rnd.nextFloat() * 3, age < 40 ? 0.1f : 0.4f, 3.5f);
@@ -360,6 +371,27 @@ final class Visuals {
             stroke.setStrokeWidth(k[5]);
             stroke.setColor(alpha(0xFF141210, 0.8f * fade));
             c.drawLine(k[0], k[1], k[2], k[3], stroke);
+        }
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+        // ((21.3) Fires on the ground - burning wrecks, where something blew up - under everyone, glow and flames.)
+        for (int i = 0, n = lights.size(); i < n; i++) {
+            float[] l = lights.get(i);
+            if (l[8] <= 0) continue;
+            float r = l[2];
+            if (l[0] + r < vx0 || l[0] - r > vx1 || l[1] + r < vy0 || l[1] - r > vy1) continue;
+            float f = l[3] / l[4] * (0.8f + 0.2f * rnd.nextFloat());
+            glowPaint.setAlpha((int) (Math.max(0, Math.min(1, f * l[6])) * 255 * 0.85f));
+            dst.set(l[0] - r, l[1] - r, l[0] + r, l[1] + r);
+            c.drawBitmap(glow[(int) l[5]], src, dst, glowPaint);
+        }
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        for (int i = 0, n = sparks.size(); i < n; i++) {
+            float[] s = sparks.get(i);
+            if (s[8] <= 0 || s[0] < vx0 - 20 || s[0] > vx1 + 20 || s[1] < vy0 - 20 || s[1] > vy1 + 20) continue;
+            float f = s[4] / s[5];
+            stroke.setStrokeWidth(1.1f);
+            stroke.setColor(alpha((int) s[6], Math.min(1, f * 1.5f)));
+            c.drawLine(s[0], s[1], s[0] - s[2] * 0.03f, s[1] - s[3] * 0.03f, stroke);
         }
         stroke.setStrokeCap(Paint.Cap.BUTT);
         // ((21.0) Razor wire: coils across the tile between two posts, thinner as it wears.)
@@ -426,6 +458,7 @@ final class Visuals {
         stroke.setStrokeCap(Paint.Cap.ROUND);
         for (int i = 0, n = sparks.size(); i < n; i++) {
             float[] s = sparks.get(i);
+            if (s[8] > 0) continue;
             if (s[0] < vx0 - 20 || s[0] > vx1 + 20 || s[1] < vy0 - 20 || s[1] > vy1 + 20) continue;
             float f = s[4] / s[5];
             stroke.setStrokeWidth(s[7] > 0 ? 1.1f : 0.9f);
@@ -438,6 +471,7 @@ final class Visuals {
         // The light, last: glows over the ground and everyone on it.
         for (int i = 0, n = lights.size(); i < n; i++) {
             float[] l = lights.get(i);
+            if (l[8] > 0) continue;
             float r = l[2];
             if (l[0] + r < vx0 || l[0] - r > vx1 || l[1] + r < vy0 || l[1] - r > vy1) continue;
             float f = l[3] / l[4];

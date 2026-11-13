@@ -114,6 +114,9 @@ final class Fleet {
         float x, y, angle, speed, timer, stuckTimer, lastDist, gunCd, soundCd, circle;
         /** It went round in a circle (missed its turn); traffic gives up that route. */
         boolean orbited;
+        /** ((21.3) Its crew out on foot this frame (see onFoot), and which frame that was. */
+        final ArrayList<Entity> foot = new ArrayList<Entity>();
+        int footFrame = -1;
         /** A SWAT team's armoured van (a truck carrying police). */
         boolean swat;
         /** Which kind of truck, police car or helicopter (K_APC and so on; 0 the usual). */
@@ -5966,9 +5969,11 @@ final class Fleet {
         return out;
     }
 
-    /** ((12.0) Who belongs to which vehicle while out of it, gathered in one look through everyone a frame.) */
-    private final java.util.IdentityHashMap<Vehicle, ArrayList<Entity>> rigIndex = new java.util.IdentityHashMap<Vehicle, ArrayList<Entity>>();
-    private final ArrayList<ArrayList<Entity>> rigPool = new ArrayList<ArrayList<Entity>>();
+    /**
+     * ((12.0) Who belongs to which vehicle while out of it, gathered in one look through everyone a frame.) ((21.3) Kept
+     * on each vehicle (Vehicle.foot, stamped with the frame), not in a map looked up for each of thousands of officers
+     * every frame.)
+     */
     private static final ArrayList<Entity> NOBODY = new ArrayList<Entity>();
     private int frameNo, rigFrame = -1;
 
@@ -5979,24 +5984,18 @@ final class Fleet {
     ArrayList<Entity> onFoot(Vehicle v) {
         if (rigFrame != frameNo) {
             rigFrame = frameNo;
-            for (ArrayList<Entity> l : rigIndex.values()) {
-                l.clear();
-                rigPool.add(l);
-            }
-            rigIndex.clear();
             for (int i = 0, n = w.entities.size(); i < n; i++) {
                 Entity e = w.entities.get(i);
                 if (e.dead || e.rig == null) continue;
-                ArrayList<Entity> l = rigIndex.get(e.rig);
-                if (l == null) {
-                    l = rigPool.isEmpty() ? new ArrayList<Entity>() : rigPool.remove(rigPool.size() - 1);
-                    rigIndex.put(e.rig, l);
+                Vehicle r = e.rig;
+                if (r.footFrame != frameNo) {
+                    r.footFrame = frameNo;
+                    r.foot.clear();
                 }
-                l.add(e);
+                r.foot.add(e);
             }
         }
-        ArrayList<Entity> l = rigIndex.get(v);
-        return l == null ? NOBODY : l;
+        return v.footFrame == frameNo ? v.foot : NOBODY;
     }
 
     /** People aboard vehicles, by type (they still count). */

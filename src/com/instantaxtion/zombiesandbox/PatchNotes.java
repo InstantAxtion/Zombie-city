@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "21.2";
-    static final int VERSION_CODE = 212;
+    static final String VERSION = "21.3";
+    static final int VERSION_CODE = 213;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "21.3  -  Off screen, as on screen",
+                    "The dead behave the same wherever you're looking. To keep the big cities running, those off screen were worked out a few steps at a time, and for the dead that changed how fights went: tested on the same cities, outbreaks nobody was watching cost far fewer lives than the same outbreaks on screen. The dead are now worked out in full every step wherever they are - there are few enough of them that it costs nothing measurable. (Police and soldiers only get the lighter treatment a long way from any of the dead, and civilians' makes no difference to what happens: both are kept, as they're most of the work.)",
+                    "Less lag in big outbreaks: each horde's leader used to count its horde by going through everyone in the city, every time it thought - with many hordes, millions of looks a second. All the hordes are now counted together in one look, twice a second. A commander choosing a squad to join did the same for every squad, and now counts from the map round each one. A vehicle's crew on foot is kept with the vehicle instead of in a table rebuilt every frame. Together they pay for working out the dead in full: a big outbreak runs no slower than before.",
+                    "The war meter is a set size: it used to be as wide as the line of figures above it, and grew most of the way across the screen as that line got longer.",
+                    "Fire under the people: flames, embers and the glow from burning wrecks, where something blew up and from air strikes are now drawn on the ground, under anyone running through them, not on top of them. (An explosion's flash still lights up everything.)",
+                    "Runners always run: wherever a runner is going - after someone, to a noise, roaming, with a horde - it goes at a run.",
+            },
             {
                     "21.2  -  Smarter AI",
                     "Breaking out: police and soldiers read a fight - how many of the dead are near, from how many sides, and which way is open. When a ring starts closing round them, or a crowd is about to roll over them, they run for the open side before it closes, shooting whatever's in their way as they go, and turn to fight again once they have room. Before, they stood and shot until it was on them. In testing, a six-man army squad against ninety of the dead now keeps four or five of its men instead of two or three, and police squads against fifty-five lose fewer too.",

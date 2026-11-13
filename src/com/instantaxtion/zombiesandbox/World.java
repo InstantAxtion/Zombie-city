@@ -305,7 +305,13 @@ final class World {
         fleet.trafficScale = quality == Q_FULL ? 1f : quality == Q_REDUCED ? 0.7f : 0.45f;
     }
 
+    /** For comparing: false works everyone out in full every step, on screen or not. */
+    static boolean LOD = true;
+    /** For comparing: 2 works civilians out in full off screen too. (The dead and the armed always are.) */
+    static int LOD_FULL;
+
     private boolean onScreen(Entity e) {
+        if (!LOD) return true;
         // ((10.57) Zoomed right out, people are a dot or two across: they count as out of sight, and get the
         // lighter treatment, instead of the whole city thinking every frame because it's all on screen.)
         return viewX1 >= 0 && viewX1 - viewX0 < 2000 && e.x > viewX0 - 80 && e.x < viewX1 + 80 && e.y > viewY0 - 80 && e.y < viewY1 + 80;
@@ -2103,6 +2109,15 @@ final class World {
             Entity e = entities.get(i);
             e.lodStep = 1;
             if (e.dead || e.hp <= 0) continue;
+            // ((21.3) The dead are worked out in full every step wherever they are: with the lighter treatment off screen,
+            // fights nobody was watching went differently - fewer bitten, fewer killed - than the same fights on screen.
+            // There are few enough of them that it costs next to nothing. (Police and soldiers only get the lighter
+            // treatment a long way from any of the dead, and civilians' makes no difference: both are kept.)
+            if (!LOD || e.isZombie() || (LOD_FULL & 2) != 0 && e.type == Entity.CIVILIAN) {
+                think(e, dt);
+                if (!e.dead && e.lodStep > 0) move(e, dt);
+                continue;
+            }
             if (i == 0) {
                 // ((11.5) From six thousand people up, not twelve: a Large city in a panic is about ten thousand.)
                 boolean crowd = entities.size() > 6000;
@@ -4267,18 +4282,46 @@ final class World {
         if (rnd.nextFloat() < 0.3f) emit(z.type == Entity.BRUTE ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
     }
 
+    private int tallyAt = -1;
+
+    /**
+     * ((21.3) Every horde's numbers in one look through everyone, at most every fifteen steps: how many follow each leader
+     * and how many of those are strung out behind.
+     */
+    private void hordeTally() {
+        if (tallyAt >= 0 && lodFrame - tallyAt < 15 && lodFrame >= tallyAt) return;
+        tallyAt = lodFrame;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity o = entities.get(i);
+            Entity z = o.hordeLeader;
+            if (z == null || o.dead) continue;
+            if (z.tallyFrame != tallyAt) {
+                z.tallyFrame = tallyAt;
+                z.tallyN = 0;
+                z.tallyBehind = 0;
+            }
+            z.tallyN++;
+            if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > (o.roamX + 70) * (o.roamX + 70)) z.tallyBehind++;
+        }
+    }
+
     /** Hordes: idle zombies bunch up behind a leader who roams the city, and small hordes merge. */
     private void thinkHorde(Entity z) {
         if (z.type == Entity.CRAWLER) return;
         if (z.hordeLeader != null && (z.hordeLeader.dead || !z.hordeLeader.leadsHorde)) z.hordeLeader = null;
         if (z.leadsHorde) {
-            int size = 1, behind = 0;
-            for (int i = 0, n = entities.size(); i < n; i++) {
-                Entity o = entities.get(i);
-                if (o.hordeLeader != z) continue;
-                size++;
-                if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > (o.roamX + 70) * (o.roamX + 70)) behind++;
+            // ((21.3) From the tally made for every horde at once (hordeTally): each leader used to go through everyone
+            // in the city to count its own, every time it thought.)
+            hordeTally();
+            if (!z.leadSeen) {
+                z.leadSeen = true;
+                z.leadStart = lodFrame;
             }
+            // (Until a tally made since they took the lead, their followers are as last known: a new leader isn't
+            // counted as alone and made to give it up before anyone's had the chance to join.)
+            boolean fresh = tallyAt > z.leadStart;
+            int size = fresh ? 1 + (z.tallyFrame == tallyAt ? z.tallyN : 0) : Math.max(3, z.hordeSize);
+            int behind = fresh && z.tallyFrame == tallyAt ? z.tallyBehind : 0;
             z.hordeSize = size;
             // ((21.0) A horde this big has an alpha at its head.)
             if (size >= ALPHA_HORDE && !z.alpha) makeAlpha(z);
@@ -4301,6 +4344,7 @@ final class World {
             }
             return;
         }
+        z.leadSeen = false;
         if (z.hordeLeader != null) return;
         // ((21.0) Scattered when their alpha fell: on their own for a while.)
         if (z.scatterT > 0) return;
@@ -13191,9 +13235,11 @@ final class World {
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity o = entities.get(i);
             if (o == e || o.dead || o.type != Entity.SOLDIER || o.member != 1) continue;
+            // ((21.3) Counted from the grid round them, not by going through everyone in the city for each squad: with a
+            // few hundred squads in a big city that was millions of looks every couple of seconds per commander.)
             int near = 0;
-            for (int k = 0; k < n; k++) {
-                Entity q = entities.get(k);
+            for (int k = 0, m = gatherArmed(o.x, o.y, 120); k < m; k++) {
+                Entity q = gathered[k];
                 if (q.type == Entity.SOLDIER && Math.abs(q.x - o.x) < 120 && Math.abs(q.y - o.y) < 120) near++;
             }
             if (near > most) {
@@ -14590,6 +14636,9 @@ final class World {
         // ((14.5) The long dead have rotted: slower on their feet.)
         // ((20.0) And quicker or slower by the difficulty.)
         if (e.isUndead() && e.want > 0) e.want *= (1 - rot(e)) * zPace;
+        // ((21.3) A runner runs: wherever it's going - after prey, to a noise, roaming, with a horde - it goes there at
+        // a run, never a shamble.)
+        if (e.type == Entity.RUNNER && e.isUndead() && e.want > 0.5f && e != controlled) e.want = Math.max(e.want, e.runSpeed * zPace);
         // ((21.0) Tangled in razor wire.)
         if (defences.any() && e.isUndead() && e.want > 0) e.want *= defences.snag(this, e, dt);
         // ((15.0) A horse is quickest on grass, trails and open ground.)

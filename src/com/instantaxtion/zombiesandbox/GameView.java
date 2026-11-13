@@ -2920,6 +2920,15 @@ final class GameView extends View implements Menu.Host {
         if (scale > 0.7f) drawMarks(c, vx0, vy0, vx1, vy1);
         // ((19.5) Craters, cracks and ripples on the ground.)
         vfx.drawGround(c, vx0, vy0, vx1, vy1);
+        // ((21.3) Flames on the ground, under the people.)
+        for (int i = 0; i < World.MAXP; i++) {
+            if (world.plife[i] <= 0 || world.ptype[i] != World.P_FIRE) continue;
+            float x = world.px[i], y = world.py[i];
+            if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
+            float f = world.plife[i] / world.pmax[i];
+            fill.setColor(alpha(world.pcol[i], f));
+            c.drawCircle(x, y, world.psize[i] * (0.4f + f * 0.6f), fill);
+        }
 
         for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) drawZone(c, world.dispatch.zones.get(i));
         for (int i = 0, n = world.holdouts.size(); i < n; i++) {
@@ -3343,6 +3352,8 @@ final class GameView extends View implements Menu.Host {
             if (life <= 0) continue;
             float x = world.px[i], y = world.py[i];
             if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
+            // ((21.3) Flames were drawn here, over everyone running through them: now under them (drawGroundFire).)
+            if (world.ptype[i] == World.P_FIRE) continue;
             float f = life / world.pmax[i];
             int col = world.pcol[i];
             float size = world.psize[i];
@@ -7447,7 +7458,9 @@ final class GameView extends View implements Menu.Host {
         meterBottom = 0;
         meterRect.setEmpty();
         if (world.outbreak || world.warBannerTime > 0) {
-            float left = statsShown.left, right = Math.max(statsShown.right, left + 200 * dp), top = statsShown.bottom + 8 * dp;
+            // ((21.3) A set width, not that of the line of figures above it: as that line grew (the director's phase,
+            // the clock), the meter grew with it, most of the way across the screen.)
+            float left = statsShown.left, right = left + 210 * dp, top = statsShown.bottom + 8 * dp;
             if (!portrait) right = Math.min(right, Math.max(statsRect.right, topRects[0].left - 8 * dp));
             float bh = 10 * dp, b = Math.max(0.03f, Math.min(0.97f, world.warBalance));
             // An air strike on the way gets a red line of its own inside the panel.

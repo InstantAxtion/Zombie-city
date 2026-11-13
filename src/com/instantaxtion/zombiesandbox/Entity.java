@@ -159,6 +159,10 @@ final class Entity {
     transient float tNear = 999, escX, escY, senseAt, breakT;
     /** How bad the best way out is: the dead along it (a hundred more if it's walled off). */
     transient float escCost;
+    /** ((21.3) A horde leader's last tally (World.hordeTally): followers, those strung out behind, and when. */
+    transient int tallyN, tallyBehind, tallyFrame = -1;
+    transient int leadStart;
+    transient boolean leadSeen;
     /** ((21.0) Scattered from a horde whose alpha fell: seconds until they'll join another. */
     transient float scatterT;
     float roamX, roamY, feedTimer;
