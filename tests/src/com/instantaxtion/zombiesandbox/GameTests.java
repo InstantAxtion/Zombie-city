@@ -4180,6 +4180,92 @@ public final class GameTests {
                         "routine chatter is left off the radio, not what matters");
             }
         });
+        test("22.0: the dead follow engines; a mega horde; K9 sniffs; motorcycle scouts; mags shared; engineers dig in; alarms and chains; the shelter van; driving", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 220;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                float[] p = w.city.findWalkable(w.city.worldW() / 2, w.city.worldH() / 2);
+                // An engine going by: the dead within earshot turn to it.
+                Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                w.recount();
+                w.update(1 / 30f);
+                z.memory = 0;
+                z.noiseTimer = 0;
+                w.engineLure(p[0] + 80, p[1], 150);
+                check(z.noiseTimer > 0 && Math.abs(z.noiseX - (p[0] + 80)) < 1, "the dead turn towards an engine");
+                // A mega horde: hundreds, one horde behind an alpha.
+                java.util.ArrayList<Entity> mega = w.megaHorde(p[0], p[1]);
+                check(mega.size() >= 200 && mega.get(0).alpha && mega.get(0).leadsHorde, "a mega horde of " + mega.size() + " behind an alpha");
+                for (Entity m : mega) { m.dead = true; m.removed = true; }
+                w.update(1 / 30f);
+                w.evCount = 0;
+                // K9: the dog flushes out one of the dead lying low, and finds a bite.
+                Entity handler = w.spawnCop(Entity.ROLE_K9, p[0], p[1]);
+                Entity dog = null;
+                for (Entity e : w.entities) if (e.type == Entity.DOG && e.leader == handler) dog = e;
+                check(dog != null, "a K9 handler comes with a police dog");
+                Entity hidden = w.spawn(Entity.ZOMBIE, p[0] + 30, p[1]);
+                hidden.hidden = true;
+                Entity bitten = w.spawn(Entity.CIVILIAN, p[0] - 20, p[1]);
+                bitten.infected = true;
+                w.recount();
+                for (int f = 0; f < 30 * 3; f++) { w.update(1 / 30f); w.evCount = 0; }
+                check(!hidden.hidden || hidden.dead, "the dog flushes out the dead lying low");
+                check(bitten.sniffed, "and finds the bite");
+                // A motorcycle officer, out on patrol.
+                Entity rider = w.spawnCop(-4, p[0], p[1]);
+                check(rider != null && rider.rig != null && rider.rig.kind == Fleet.K_BIKE, "the Motorcycle cop rides a police motorcycle");
+                // Sharing a magazine.
+                Entity a = w.spawn(Entity.SOLDIER, p[0], p[1] + 200), b = w.spawn(Entity.SOLDIER, p[0] + 10, p[1] + 200);
+                b.ammo = 0;
+                b.reserve = 2;
+                int before = b.reserve;
+                a.magCd = 0;
+                a.reserve = a.magSize * 5;
+                w.recount();
+                for (int f = 0; f < 30 * 3 && b.reserve <= before; f++) { w.update(1 / 30f); w.evCount = 0; }
+                check(b.reserve > before, "a soldier with plenty passes a mag to one running low");
+                // A parked car caught by a blast burns out.
+                int carTile = -1;
+                for (int i = 0; i < w.city.tiles.length && carTile < 0; i++)
+                    if (w.city.tiles[i] == City.CAR && w.city.carKind.get(i) <= 1) carTile = i;
+                if (carTile >= 0) {
+                    float cx = (carTile % w.city.w + 0.5f) * City.T, cy = (carTile / w.city.w + 0.5f) * City.T;
+                    int chained = w.carsChained;
+                    w.explode(cx, cy, 60, 200);
+                    check(w.carsChained > chained && w.city.carKind.get(carTile) == 7, "a parked car in a blast burns out");
+                }
+                // A parked car knocked about sets its alarm off.
+                Fleet.Vehicle car = w.fleet.placeCar(p[0], p[1]);
+                if (car != null) {
+                    car.parked = true;
+                    car.speed = 0;
+                    car.driver = null;
+                    car.riders.clear();
+                    for (int k = 0; k < 20 && car.alarm <= 0; k++) w.fleet.tripAlarm(car, 1);
+                    check(car.alarm > 0, "a parked car's alarm goes off");
+                }
+                // The shelter van: people running from the dead climb in.
+                Fleet.Vehicle van = w.fleet.placeShelterVan(p[0], p[1] - 100);
+                check(van != null, "an armoured van parks");
+                Entity runner = w.spawn(Entity.CIVILIAN, van.x + 40, van.y);
+                runner.fleeTimer = 10;
+                w.recount();
+                for (int f = 0; f < 30 * 6 && !van.riders.contains(runner); f++) { runner.fleeTimer = 10; w.update(1 / 30f); w.evCount = 0; }
+                check(van.riders.contains(runner), "someone running from the dead shelters in the van");
+                // Driving it: the player in the driver's seat.
+                check(w.canDrive(van), "the van can be driven");
+                Entity me = w.spawn(Entity.COP, van.x, van.y);
+                w.controlled = me;
+                w.driveInto(me, van);
+                check(van.player == me, "the player takes the wheel");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

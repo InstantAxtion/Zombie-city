@@ -1348,7 +1348,7 @@ final class World {
 
     Entity spawn(int type, float x, float y) {
         // (No animals since 10.18: no dogs, and the dead that were dogs come as runners instead.)
-        if (type == Entity.DOG) return null;
+        if (type == Entity.DOG && !k9Spawning) return null;
         if (type == Entity.ZOMBIE_DOG) type = Entity.RUNNER;
         type = Entity.current(type);
         // (Help arriving from outside always gets out of its vehicles: the cap stretches for them.)
@@ -1525,6 +1525,8 @@ final class World {
 
     /** Spawns a police officer: a regular cop, a riot officer with a shield, or a K9 handler with a dog. */
     Entity spawnCop(int role, float x, float y) {
+        // ((22.0) A motorcycle officer: on the bike, out on patrol from the nearest road.)
+        if (role == -4) return fleet.startBikeAt(x, y);
         Entity e = spawn(Entity.COP, x, y);
         if (e == null) return null;
         if (role == Entity.ROLE_RIOT) {
@@ -1542,9 +1544,12 @@ final class World {
                 e.agency = -role;
                 e.body = role == -1 || city.country.ruralShirt == 0 ? city.country.hpShirt : city.country.ruralShirt;
             }
-        } else if (role == Entity.ROLE_K9 && !NO_ANIMALS) {
+        } else if (role == Entity.ROLE_K9) {
+            // ((22.0) Back again: the only animals in the city now are the police dogs.)
             e.role = Entity.ROLE_K9;
+            k9Spawning = true;
             Entity dog = spawn(Entity.DOG, x + 6, y + 4);
+            k9Spawning = false;
             if (dog != null) {
                 dog.leader = e;
                 dog.body = 0xFF8B5A2B;
@@ -1880,11 +1885,10 @@ final class World {
         }
         // (Games saved before 10.18 may have dogs in them: there are no animals now.)
         for (Entity e : entities)
-            if (e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG) {
+            if ((e.type == Entity.DOG && e.role != Entity.ROLE_K9) || e.type == Entity.ZOMBIE_DOG) {
                 e.dead = true;
                 e.removed = true;
             }
-        for (Entity e : entities) if (e.role == Entity.ROLE_K9 && e.type == Entity.COP) e.role = 0;
         findWilds();
         buildRoster();
         // ((11.7) A saved game well into it already knows.)
@@ -3268,6 +3272,51 @@ final class World {
      * Once a second (acting every ten). In an outbreak the army's engineers wire the streets leading into a safe zone
      * they're at: a coil at a time, up to ten a zone, on the roads and pavements just outside its wall.
      */
+    private float fortifyCd;
+    int sandbagsLaid;
+
+    /**
+     * ((22.0) Combat engineers dig in wherever they're holding: with the dead about but none on top of them, sandbags
+     * go down on the street between them and the trouble, a few at a time, up to six round each of them. Only the
+     * engineers build: the others fight.
+     */
+    private void engineersFortify() {
+        if (!outbreak || (fortifyCd -= 1) > 0) return;
+        fortifyCd = 12;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.SOLDIER || e.role != Entity.ROLE_ENGINEER || e.rig != null || e.ride != null) continue;
+            if (e.task != Dispatch.T_HOLD && e.task != Dispatch.T_POST && e.task != Dispatch.T_GUARD && e.task != Dispatch.T_CORDON) continue;
+            if (countZombiesNear(e.x, e.y, 60) > 0) continue;
+            float[] c = zombieCentre(e.x, e.y, 400);
+            if (c[2] < 1) continue;
+            int have = 0;
+            for (float[] b : barriers) if (hypot(b[0] - e.x, b[1] - e.y) < 90) have++;
+            if (have >= 6) continue;
+            float dx = c[0] - e.x, dy = c[1] - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            dx /= d;
+            dy /= d;
+            int laid = 0;
+            for (int k = -1; k <= 1 && have + laid < 6; k++) {
+                // A short line across the way they'd come, thirty-odd units out.
+                float bx = e.x + dx * 34 - dy * k * City.T, by = e.y + dy * 34 + dx * k * City.T;
+                int t = city.tileIndex(bx, by);
+                if (t < 0 || (city.tiles[t] != City.ROAD && city.tiles[t] != City.SIDEWALK)) continue;
+                float[] b = placeBarricade(bx, by);
+                if (b == null) continue;
+                b[2] = Math.max(b[2], Defences.SANDBAG_HP);
+                laid++;
+            }
+            if (laid > 0) {
+                sandbagsLaid += laid;
+                if (!e.fortifySaid) {
+                    e.fortifySaid = true;
+                    dispatch.chatter(Dispatch.WHO_MILITARY, e, "Engineers: sandbags going down at " + city.placeName(e.x, e.y) + ".", e.x, e.y);
+                }
+            }
+        }
+    }
+
     private void engineersWire() {
         if (!outbreak || dispatch.zones.isEmpty() || (wireCd -= 1) > 0) return;
         wireCd = 10;
@@ -3668,6 +3717,37 @@ final class World {
             dispatch.say(Dispatch.WHO_INFO, null, "A horde of about " + (n / 5 * 5) + " heard the noise on " + city.placeName(x, y)
                     + " and is surging towards it!", x, y);
         }
+    }
+
+    /**
+     * ((22.0) A sound only the dead pay attention to (an engine going by): those within radius turn towards it, and
+     * a horde with them. Nothing else - no alarm for the living, no mark on the fighting map.
+     */
+    void engineLure(float x, float y, float radius) {
+        if (hashSize < 0) return;
+        int cx0 = Math.max(0, (int) ((x - radius) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + radius) / CELL));
+        int cy0 = Math.max(0, (int) ((y - radius) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + radius) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
+                    float ddx = o.x - x, ddy = o.y - y;
+                    if (ddx * ddx + ddy * ddy > radius * radius) continue;
+                    // (Something better to do - prey in sight, or a louder noise not long ago - comes first.)
+                    if (o.memory > 0 || o.noiseTimer > 9) continue;
+                    o.noiseX = x;
+                    o.noiseY = y;
+                    o.noiseTimer = 7;
+                    Entity lead = o.leadsHorde ? o : o.hordeLeader;
+                    if (lead != null && !lead.dead && lead.memory <= 0 && lead.noiseTimer <= 9) {
+                        lead.noiseX = x;
+                        lead.noiseY = y;
+                        lead.noiseTimer = 7;
+                    }
+                }
+            }
     }
 
     void noise(float x, float y, float radius) {
@@ -4634,6 +4714,8 @@ final class World {
         return at;
     }
 
+    private float hordeDriftSaid;
+
     private void pickRoam(Entity z) {
         z.migrating = false;
         // ((14.5) A big horde, now and then: off across the whole city to the biggest crowd of the living.)
@@ -4707,6 +4789,33 @@ final class World {
                     City.District d = city.districtOf(p[0], p[1]);
                     dispatch.say(Dispatch.WHO_INFO, null, "A horde of about " + Math.max(5, z.hordeSize / 5 * 5) + " is heading out along the lanes towards "
                             + (d != null ? d.name : city.placeName(p[0], p[1])) + ".", z.x, z.y);
+                }
+                return;
+            }
+        }
+        // ((22.0) A horde with nothing to go after drifts on to the next district over, a few streets at a time, rather
+        // than milling about the same blocks: over a game the dead spread across the city.)
+        if (z.leadsHorde && rnd.nextFloat() < 0.35f) {
+            City.District here = city.districtOf(z.x, z.y), best = null;
+            float bestD = Float.MAX_VALUE;
+            for (int tries = 0; tries < 8; tries++) {
+                City.District d = city.districts.get(rnd.nextInt(city.districts.size()));
+                if (d == here || !d.labelled()) continue;
+                float dd = (float) World.hypot(d.cx - z.x, d.cy - z.y);
+                if (dd < 600 || dd > 2500) continue;
+                if (dd < bestD) {
+                    bestD = dd;
+                    best = d;
+                }
+            }
+            float[] p = best == null ? null : city.findWalkable(best.cx + rnd.nextFloat() * 120 - 60, best.cy + rnd.nextFloat() * 120 - 60);
+            if (p != null) {
+                z.roamX = p[0];
+                z.roamY = p[1];
+                if (z.hordeSize >= 12 && time > hordeDriftSaid) {
+                    hordeDriftSaid = time + 75;
+                    dispatch.say(Dispatch.WHO_INFO, null, "A horde of about " + Math.max(10, z.hordeSize / 5 * 5) + " is drifting from "
+                            + (here != null ? here.name : city.placeName(z.x, z.y)) + " towards " + best.name + ".", z.x, z.y);
                 }
                 return;
             }
@@ -5184,6 +5293,21 @@ final class World {
         return n;
     }
 
+    /** ((22.0) Whether the player can take this vehicle over and drive (or fly) it. */
+    boolean canDrive(Fleet.Vehicle v) {
+        boolean heli = v.type == Fleet.HELI && v.state == Fleet.IDLE && v.alt <= 0;
+        return !v.broken && !v.burnt && v.player == null && v.block == null && (heli || !Fleet.offRoad(v))
+                && v.type != Fleet.TRAIN && v.type != Fleet.BOAT && v.type != Fleet.JET;
+    }
+
+    /** ((22.0) e, the one the player now is, gets into the driver's seat of v. */
+    void driveInto(Entity e, Fleet.Vehicle v) {
+        fleet.takeWheel(v, e);
+        controlledCar = v;
+        e.dead = true;
+        e.removed = true;
+    }
+
     private Fleet.Vehicle carToEnter(Entity e) {
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = fleet.vehicles.get(i);
@@ -5482,7 +5606,43 @@ final class World {
         return ddx * ddx + ddy * ddy < reach * reach ? z : null;
     }
 
+    int sheltered;
+    private boolean k9Spawning;
+
+    /**
+     * ((22.0) Someone running from the dead with an armoured van parked as a shelter close by: for it, and in.
+     * False if there's none with room.
+     */
+    private boolean shelterStep(Entity e) {
+        Fleet.Vehicle best = null;
+        float bd = 150;
+        for (int i = fleet.shelters.size() - 1; i >= 0; i--) {
+            Fleet.Vehicle v = fleet.shelters.get(i);
+            if (v.broken || v.burnt || !fleet.vehicles.contains(v)) {
+                fleet.shelters.remove(i);
+                continue;
+            }
+            if (v.riders.size() >= Fleet.SHELTER_SEATS || Math.abs(v.speed) > 3) continue;
+            float d = (float) World.hypot(v.x - e.x, v.y - e.y);
+            if (d < bd) {
+                bd = d;
+                best = v;
+            }
+        }
+        if (best == null) return false;
+        if (bd < best.length() * 0.6f + 8) {
+            aboard(best, e);
+            sheltered++;
+            if (best.riders.size() == Fleet.SHELTER_SEATS)
+                dispatch.say(Dispatch.WHO_POLICE, null, "Police: The armoured van at " + city.placeName(best.x, best.y) + " is full.", best.x, best.y);
+            return true;
+        }
+        steer(e, (best.x - e.x) / bd, (best.y - e.y) / bd, e.runSpeed);
+        return true;
+    }
+
     private void thinkCivilian(Entity e, float dt) {
+        if (e.fleeTimer > 0 && e != controlled && e.leader == null && !fleet.shelters.isEmpty() && shelterStep(e)) return;
         // ((12.4) No hiding indoors in an outbreak: a plan to is dropped.)
         if (apocalypse() && e.task == Dispatch.T_HIDE && e != controlled) {
             e.task = Dispatch.T_NONE;
@@ -6836,11 +6996,26 @@ final class World {
             e.job = Entity.J_ERRANDS;
     }
 
+    /** ((22.0) The buildings of each kind, kept from one look to the next: going through every building in the city for
+     * each of thirty thousand residents was a fifth of making a new city.) */
+    private final java.util.HashMap<Integer, ArrayList<City.Building>> ofKind = new java.util.HashMap<Integer, ArrayList<City.Building>>();
+    private int ofKindFor = -1;
+
     private City.Building nearestOfKind(Entity e, int kind) {
+        if (ofKindFor != city.buildings.size()) {
+            ofKind.clear();
+            ofKindFor = city.buildings.size();
+        }
+        ArrayList<City.Building> list = ofKind.get(kind);
+        if (list == null) {
+            list = new ArrayList<City.Building>();
+            for (int i = 0, n = city.buildings.size(); i < n; i++) if (city.buildings.get(i).kind == kind) list.add(city.buildings.get(i));
+            ofKind.put(kind, list);
+        }
         City.Building best = null;
         float bd = Float.MAX_VALUE;
-        for (int i = 0, n = city.buildings.size(); i < n; i++) {
-            City.Building b = city.buildings.get(i);
+        for (int i = 0, n = list.size(); i < n; i++) {
+            City.Building b = list.get(i);
             if (b.kind != kind || b.collapsed || b.doorX == 0) continue;
             float d = (b.doorX - e.x) * (b.doorX - e.x) + (b.doorY - e.y) * (b.doorY - e.y);
             if (d < bd) {
@@ -7677,6 +7852,24 @@ final class World {
         return hordeFrom(x, y, -1, true);
     }
 
+    /**
+     * ((22.0) The mega horde: two hundred and fifty to three hundred and fifty of the dead in from the nearest edge,
+     * all one horde behind an alpha, heading for (x, y).
+     */
+    ArrayList<Entity> megaHorde(float x, float y) {
+        ArrayList<Entity> out = hordeFrom(x, y, 250 + rnd.nextInt(100), false);
+        if (out.isEmpty()) return out;
+        Entity lead = out.get(0);
+        if (!lead.alpha) makeAlpha(lead);
+        dispatch.say(Dispatch.WHO_INFO, null, "A mega horde of " + out.size() + " is pouring into town from "
+                + city.placeName(lead.x, lead.y) + "!", lead.x, lead.y, true);
+        timeline("A mega horde of " + out.size() + " comes into town", lead.x, lead.y);
+        megaHordes++;
+        return out;
+    }
+
+    int megaHordes;
+
     /** ((20.0) A horde of n (25 to 40 if n is negative) in from the nearest edge, heading for (x, y); said on the radio or not. */
     ArrayList<Entity> hordeFrom(float x, float y, int count, boolean announce) {
         ArrayList<Entity> out = new ArrayList<Entity>();
@@ -7684,10 +7877,12 @@ final class World {
         if (edge == null) return out;
         Entity lead = null;
         int n = count < 0 ? 25 + rnd.nextInt(15) : count;
+        // ((22.0) Spread out to fit: a big horde in one small blob was hundreds standing on each other.)
+        float spread = 50 * (float) Math.max(1, Math.sqrt(n / 35.0));
         for (int i = 0; i < n; i++) {
             float roll = rnd.nextFloat();
             int type = roll < 0.12f ? Entity.RUNNER : roll < 0.14f ? Entity.BRUTE : roll < 0.2f ? Entity.ZOMBIE_DOG : Entity.ZOMBIE;
-            Entity z = spawn(type, edge[0] + rnd.nextFloat() * 50 - 25, edge[1] + rnd.nextFloat() * 50 - 25);
+            Entity z = spawn(type, edge[0] + rnd.nextFloat() * spread - spread / 2, edge[1] + rnd.nextFloat() * spread - spread / 2);
             if (z == null) continue;
             out.add(z);
             z.noiseX = x + rnd.nextFloat() * 40 - 20;
@@ -8001,6 +8196,7 @@ final class World {
         director.tick(this);
         mopUp();
         engineersWire();
+        engineersFortify();
         sitrep();
         unstick();
         for (int i = incoming.size() - 1; i >= 0; i--) {
@@ -8859,7 +9055,96 @@ final class World {
     }
 
     /** Dogs stay by their owner, bark at zombies and go for them if their owner is in danger. */
+    private float shareSaid;
+    int carsChained;
+    int fallbacks;
+    int magsShared;
+
+    /**
+     * ((22.0) Someone with plenty passes a magazine to a partner close by who's running low (a quarter of their
+     * rounds or less), before they run dry - not only once they're out and have to come over for one.
+     */
+    private void shareAmmo(Entity e) {
+        int cx0 = Math.max(0, (int) ((e.x - 60) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + 60) / CELL));
+        int cy0 = Math.max(0, (int) ((e.y - 60) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + 60) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + zCount[c] + aCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o == e || o.dead || o.type != e.type || !o.canShoot() || o.gunKind() != e.gunKind()) continue;
+                    if (World.hypot(o.x - e.x, o.y - e.y) > 60) continue;
+                    float theirs = (o.ammo + o.reserve) / (float) Math.max(1, o.magSize + fullReserve(o));
+                    if (theirs > 0.25f) continue;
+                    int give = Math.min(e.reserve - e.magSize, o.magSize);
+                    if (give <= 0) return;
+                    e.reserve -= give;
+                    o.reserve += give;
+                    o.outOfAmmoSaid = false;
+                    magsShared++;
+                    if (time > shareSaid) {
+                        shareSaid = time + 30;
+                        dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                                Dispatch.name(o) + ", take a mag!", e.x, e.y);
+                    }
+                    return;
+                }
+            }
+    }
+
+    private float sniffSaid;
+
+    /**
+     * ((22.0) A police dog's nose, every second and a half: the dead hiding nearby - lying still, or shut in a building
+     * - are flushed out, and anyone carrying a bite it can smell is pointed out and kept out of the safe zones.
+     */
+    private void sniff(Entity dog, float dt) {
+        Entity handler = dog.leader;
+        if (handler == null || handler.dead || (dog.sniffT -= dt) > 0) return;
+        dog.sniffT = 1.5f;
+        int found = 0, bitten = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity o = entities.get(i);
+            if (o.dead || Math.abs(o.x - dog.x) > 140 || Math.abs(o.y - dog.y) > 140) continue;
+            if (o.isZombie() && (o.hidden || o.inSolid > 0) && World.hypot(o.x - dog.x, o.y - dog.y) < 140) {
+                o.hidden = false;
+                o.noiseX = dog.x;
+                o.noiseY = dog.y;
+                o.noiseTimer = 8;
+                found++;
+            } else if (o.type == Entity.CIVILIAN && o.infected && !o.sniffed && World.hypot(o.x - dog.x, o.y - dog.y) < 90) {
+                o.sniffed = true;
+                o.screened = true;
+                o.refused = true;
+                bitten++;
+            }
+        }
+        // Shut in a building close by: the dog scratches at the door and they come out.
+        City.Building b = null;
+        for (int k = 0; k < 5 && b == null; k++) {
+            City.Building o = city.buildingAt(dog.x + (k == 1 ? 40 : k == 2 ? -40 : 0), dog.y + (k == 3 ? 40 : k == 4 ? -40 : 0));
+            if (o != null && o.lurkers > 0 && !o.collapsed) b = o;
+        }
+        if (b != null && b.lurkers > 0) {
+            b.lurkers--;
+            spawn(Entity.ZOMBIE, b.doorX, b.doorY);
+            found++;
+        }
+        if (found + bitten == 0) return;
+        emit(Sfx.BARK, dog.x, dog.y);
+        if (time > sniffSaid) {
+            sniffSaid = time + 25;
+            dispatch.say(Dispatch.WHO_POLICE, handler, "K9 has a scent at " + city.placeName(dog.x, dog.y) + ": "
+                    + (found > 0 ? World.count(found, "of the dead", "of the dead") + " flushed out" : "")
+                    + (found > 0 && bitten > 0 ? ", and " : "") + (bitten > 0 ? World.count(bitten, "bite", "bites") + " found" : "") + ".", dog.x, dog.y);
+        }
+        k9Finds += found + bitten;
+    }
+
+    int k9Finds;
+
     private void thinkDog(Entity e, float dt) {
+        if (e.role == Entity.ROLE_K9) sniff(e, dt);
         if (boardRide(e)) return;
         Entity threat = nearest(e, 80, true, true);
         Entity owner = e.leader;
@@ -10553,6 +10838,10 @@ final class World {
         boolean dry = e.ammo <= 0 && e.reserve <= 0 && e.reload <= 0;
         float stock = (e.ammo + e.reserve) / (float) Math.max(1, e.magSize + fullReserve(e));
         e.lowCd -= dt;
+        if (stock > 0.55f && e.reserve >= e.magSize * 2 && (e.magCd -= dt) <= 0) {
+            e.magCd = 2;
+            shareAmmo(e);
+        }
         if (e.scout && !dry) {
             e.scout = false;
             dispatch.say(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Got some rounds. Back in the fight.", e.x, e.y);
@@ -11884,16 +12173,27 @@ final class World {
                 gx = px / pd;
                 gy = py / pd;
             }
-        } else if (e.ammo + e.reserve < fullReserve(e) * 0.4f) {
+        }
+        // ((22.0) Overwhelmed, with nobody holding behind them: back to their own station or base, where there are walls
+        // and others, not just a few steps from the dead - and with more of a will to get there.)
+        boolean overrun = e.protector == null && countZombiesNear(e.x, e.y, 110) >= 8;
+        if ((e.protector == null || e.protector.dead) && (overrun || e.ammo + e.reserve < fullReserve(e) * 0.4f)) {
             City.Facility f = restockPoint(e);
             if (f != null) {
                 float fx = f.x - e.x, fy = f.y - e.y, fd = (float) Math.sqrt(fx * fx + fy * fy) + 0.001f;
-                if ((fx * ax + fy * ay) / fd > -0.3f) {
-                    gx = fx / fd;
-                    gy = fy / fd;
+                if ((fx * ax + fy * ay) / fd > (overrun ? -0.6f : -0.3f)) {
+                    gx = fx / fd * (overrun ? 1.6f : 1);
+                    gy = fy / fd * (overrun ? 1.6f : 1);
+                    if (overrun && !e.fallbackSaid && fd > 200) {
+                        e.fallbackSaid = true;
+                        fallbacks++;
+                        dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Too many of them! Falling back to "
+                                + f.name.trim() + "!", e.x, e.y);
+                    }
                 }
             }
         }
+        if (!overrun) e.fallbackSaid = false;
         float tx = t.x - e.x, ty = t.y - e.y, td = (float) Math.sqrt(tx * tx + ty * ty) + 0.001f;
         float mx = ax * 0.6f + gx * 0.4f, my = ay * 0.6f + gy * 0.4f, ml = (float) Math.sqrt(mx * mx + my * my) + 0.001f;
         // Turning to fire: when one gets close, or they've opened a gap and can afford to.
@@ -15421,6 +15721,20 @@ final class World {
             // ((17.6) Not a helicopter up in the air: a blast on the ground doesn't reach it.)
             if (d < radius && !(v.type == Fleet.HELI && v.alt > 0.3f)) fleet.damage(v, damage * (1.1f - d / radius), d < radius * 0.5f);
         }
+        // ((22.0) Parked cars close to the blast burn out, and some of them go up in turn a moment later: a chain
+        // down a row of them.)
+        int pr = (int) (radius * 0.6f / City.T) + 1, burnt = 0;
+        int ptx = (int) (x / City.T), pty = (int) (y / City.T);
+        for (int ty = Math.max(0, pty - pr); ty <= Math.min(city.h - 1, pty + pr) && burnt < 6; ty++)
+            for (int tx = Math.max(0, ptx - pr); tx <= Math.min(city.w - 1, ptx + pr) && burnt < 6; tx++) {
+                float cxw = (tx + 0.5f) * City.T, cyw = (ty + 0.5f) * City.T;
+                if (hypot(cxw - x, cyw - y) > radius * 0.6f) continue;
+                if (!city.burnParkedCar(ty * city.w + tx)) continue;
+                burnt++;
+                carsChained++;
+                city.charTile(tx, ty);
+                if (rnd.nextFloat() < 0.45f) blastLater(cxw, cyw, 42, 140, 1.5f + rnd.nextFloat() * 2.5f);
+            }
         // Buildings: scorched walls, and enough of a hit brings one down.
         int bx0 = Math.max(0, (int) ((x - radius) / City.T)), bx1 = Math.min(city.w - 1, (int) ((x + radius) / City.T));
         int by0 = Math.max(0, (int) ((y - radius) / City.T)), by1 = Math.min(city.h - 1, (int) ((y + radius) / City.T));

@@ -35,15 +35,15 @@ final class GameView extends View implements Menu.Host {
             return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
     }
-    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest"};
+    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
-            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne"};
+            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde"};
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
-            -1, -2, -3, Entity.ROLE_SAR};
+            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_K9, -4};
     private static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
-            "Park ranger", "Search & rescue"};
+            "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
     private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
@@ -58,7 +58,9 @@ final class GameView extends View implements Menu.Host {
             "Body armour and a carbine; sent to the worst trouble",
             "Scoped rifle: picks off the dead from a long way off", "State trooper: works the highways, backs up the town",
             "County deputy: patrols the back roads", "Patrols the trails and dirt roads, guards the ranger station",
-            "Rescue specialist: finds the cut-off and gets them out"};
+            "Rescue specialist: finds the cut-off and gets them out",
+            "Handler and police dog: the dog sniffs out hidden zombies and bites",
+            "On a police motorcycle: patrols fast and calls in the hordes it passes"};
     private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
@@ -96,14 +98,16 @@ final class GameView extends View implements Menu.Host {
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
             "Flies from the station to watch the spot: marks the enemy there (better aim, no hiding in cover) and calls in what it sees",
             "Drag to lay coils: the dead tangle in it, slowed to a third and torn at, until it wears out",
-            "Two machine gunners behind sandbags with a crate of ammunition: they hold the spot"};
+            "Two machine gunners behind sandbags with a crate of ammunition: they hold the spot",
+            "Parked with its doors open: a dozen people running from the dead can shelter inside. Drive it away with them"};
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten",
             "Burns for 45 seconds: the dead for a long way round are drawn to it",
             "Six mines round the spot: only the dead set them off",
             "Eight mortar shells walked across the spot, a couple of seconds after the call",
-            "Six soldiers with a machine gun dropped on the spot, to hold it"};
+            "Six soldiers with a machine gun dropped on the spot, to hold it",
+            "Hundreds of the dead come in from the edge of town, heading for the spot"};
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_CLEAR = 3, BTN_MENU = 4, BTN_TOP = 5;
     /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
     private static final int TOP_BUTTONS = 6;
@@ -1125,6 +1129,8 @@ final class GameView extends View implements Menu.Host {
     /** (10.59) Simulation steps that failed and were skipped (see onDraw). */
     int simErrors;
     private static final float SIM_STEP = 1 / 30f;
+    /** ((22.0) How long a step of the simulation has been taking, in milliseconds (a running average). */
+    private float stepMs;
 
     /** (10.59) One splat on the ground: blood, a puddle, glass, tyre marks; fade is how much of it is left. */
     private void drawDecal(Canvas c, int i, float x, float y, float r, byte kind, float fade) {
@@ -1279,6 +1285,11 @@ final class GameView extends View implements Menu.Host {
             // (10.50) Faster speeds take longer steps rather than only more of them: on a phone the extra steps
             // used to be cut short by the time limit below, and 2x, 4x and 8x hardly ran any faster.
             float maxStep = speed >= 8 ? 0.08f : speed >= 4 ? 0.066f : speed >= 2 ? 0.05f : 0.034f;
+            // ((22.0) On a phone where a step takes a while, longer steps rather than more of them: two slow steps a
+            // frame made each frame slower, which made for two steps the next frame, and so on - the game ran at a
+            // crawl. One longer step a frame keeps it moving; the faster speeds already step this far.)
+            if (stepMs > 22) maxStep = Math.max(maxStep, 0.066f);
+            else if (stepMs > 12) maxStep = Math.max(maxStep, 0.05f);
             int steps = Math.max(1, (int) Math.ceil(total / maxStep));
             float step = total / steps;
             // Never spend much more than about half a frame simulating: when that's used up, what's left of the
@@ -1287,7 +1298,9 @@ final class GameView extends View implements Menu.Host {
             guardMemory(frameDt);
             try {
                 for (int i = 0; i < steps; i++) {
+                    long t0 = System.nanoTime();
                     world.update(step);
+                    stepMs += ((System.nanoTime() - t0) / 1e6f - stepMs) * 0.1f;
                     if (i < steps - 1 && System.nanoTime() - simStart > 14000000L) {
                         world.update(Math.min(0.1f, step * (steps - 1 - i)));
                         break;
@@ -1460,10 +1473,24 @@ final class GameView extends View implements Menu.Host {
         }
         if (inGame && hasGame) tuneQuality(rawDt, (System.nanoTime() - now) / 1e6f);
         if (running) {
-            if (!settings.batterySaver()) postInvalidateOnAnimation();
-            else postInvalidateDelayed(simPaused && !menu.isOpen() || menu.screen == Menu.PAUSE ? 100 : 33);
+            // ((22.0) The city only changes thirty times a second, and nothing's drawn in between those steps: with
+            // nobody touching the screen, it's drawn as often as it changes and no more. Drawing it again at the
+            // screen's 60 or 120 a second was most of the work on a fast screen, and left the simulation short.
+            // Panning, zooming, tapping and the menus still get every frame.)
+            boolean lively = menu.isOpen() || mode != MODE_NONE || panVX != 0 || panVY != 0 || System.nanoTime() - lastInputNs < 700_000_000L;
+            paced = !lively && !settings.batterySaver();
+            if (settings.batterySaver()) postInvalidateDelayed(simPaused && !menu.isOpen() || menu.screen == Menu.PAUSE ? 100 : 33);
+            else if (lively) postInvalidateOnAnimation();
+            else {
+                long spent = (System.nanoTime() - now) / 1_000_000L;
+                postInvalidateDelayed(Math.max(1, (simPaused ? 100 : 33) - spent));
+            }
         }
     }
+
+    /** ((22.0) When the screen was last touched, and whether frames are being drawn only as often as the city changes. */
+    private long lastInputNs;
+    private boolean paced;
 
     /**
      * Keeps the game smooth on slower phones: it watches how long each frame takes (and the frame rate) and,
@@ -1475,8 +1502,9 @@ final class GameView extends View implements Menu.Host {
     private void tuneQuality(float rawDt, float ms) {
         if (rawDt > 0.25f) return; // (a hitch: the app was paused, or a GC)
         workMs += (ms - workMs) * 0.05f;
-        boolean slow = workMs > 21 || (!settings.batterySaver() && fps > 0 && fps < 38);
-        boolean fast = workMs < 11 && (settings.batterySaver() || fps > 52);
+        boolean capped = settings.batterySaver() || paced;
+        boolean slow = workMs > 21 || (!capped && fps > 0 && fps < 38);
+        boolean fast = workMs < 11 && (capped || fps > 52);
         slowT = slow ? slowT + rawDt : 0;
         fastT = fast ? fastT + rawDt : 0;
         if (slowT > 2.5f && world.quality < World.Q_LOW) {
@@ -8033,6 +8061,34 @@ final class GameView extends View implements Menu.Host {
             text.setColor(0xFFB8BDC4);
             c.drawText(fitText(lines.get(i), cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
         }
+        // ((22.0) Drive it yourself: straight into the driver's seat, the joystick to steer.)
+        driveRect.setEmpty();
+        if (world.controlled == null && world.canDrive(v)) {
+            float bw = 74 * dp, bh = 30 * dp;
+            driveRect.set(left + cw - bw - 10 * dp, top + 8 * dp, left + cw - 10 * dp, top + 8 * dp + bh);
+            fill.setColor(0xFF2E7D4F);
+            c.drawRoundRect(driveRect, 8 * dp, 8 * dp, fill);
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(13 * dp);
+            text.setColor(0xFFFFFFFF);
+            c.drawText(v.type == Fleet.HELI ? "Fly" : "Drive", driveRect.centerX(), driveRect.centerY() + 4.5f * dp, text);
+            text.setTextAlign(Paint.Align.LEFT);
+        }
+    }
+
+    private final RectF driveRect = new RectF();
+
+    /** ((22.0) Into the driver's seat of v, as someone who'd be driving it: an officer, a soldier, or anyone. */
+    private void driveVehicle(Fleet.Vehicle v) {
+        int type = v.type == Fleet.CRUISER || Fleet.policeTruck(v) || v.kind == Fleet.K_POLICE_HELI || v.kind == Fleet.K_RESCUE_HELI ? Entity.COP
+                : Fleet.army(v) ? Entity.SOLDIER : Entity.CIVILIAN;
+        Entity e = world.spawn(type, v.x, v.y);
+        if (e == null) return;
+        takeControl(e);
+        world.driveInto(e, v);
+        follow = null;
+        followV = null;
+        world.say("You're driving. Steer with the stick; Get out to leave it.");
     }
 
     // ------------------------------------------------------------------ taking control
@@ -9238,6 +9294,9 @@ final class GameView extends View implements Menu.Host {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        // ((22.0) A finger on the screen: back to drawing at the screen's own rate, straight away.)
+        lastInputNs = System.nanoTime();
+        postInvalidateOnAnimation();
         if (loading) return true;
         if (hudHidden && !menu.isOpen()) {
             // The first tap brings the buttons back.
@@ -9370,6 +9429,11 @@ final class GameView extends View implements Menu.Host {
                 } else follow = p;
                 return true;
             }
+        if (world.controlled == null && followV != null && picker < 0 && !clearMenu && driveRect.contains(x, y)) {
+            click();
+            driveVehicle(followV);
+            return true;
+        }
         if (world.controlled == null && follow != null && !follow.dead && picker < 0 && !clearMenu && takeRect.contains(x, y)) {
             click();
             takeControl(follow);
@@ -10046,6 +10110,7 @@ final class GameView extends View implements Menu.Host {
                 case 10:
                     if (!world.mgNest(wx, wy).isEmpty()) made = Boolean.TRUE;
                     break;
+                case 11: made = world.fleet.placeShelterVan(wx, wy); break;
             }
         }
         if (made == null) {
@@ -10098,6 +10163,7 @@ final class GameView extends View implements Menu.Host {
             case 10:
                 if (world.mgNest(wx, wy).isEmpty()) world.say("No room for a nest there");
                 break;
+            case 11: made = world.fleet.placeShelterVan(wx, wy); break;
             default: made = world.placeMedkit(wx, wy); break;
         }
         if (made != null) lastAction.add(made);
@@ -10120,6 +10186,7 @@ final class GameView extends View implements Menu.Host {
                 break;
             case 9: world.barrage(wx, wy); break;
             case 10: lastAction.addAll(world.airborne(wx, wy)); break;
+            case 11: lastAction.addAll(world.megaHorde(wx, wy)); break;
             default: {
                 Entity bitten = world.infectAt(wx, wy);
                 world.say(bitten == null ? "Tap closer to someone" : "Bitten: " + Names.person(bitten.nameSeed));

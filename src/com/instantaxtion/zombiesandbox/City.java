@@ -391,6 +391,7 @@ final class City {
             // Downtown is compact; suburbs sprawl.
             kw[k] = d.type == DT_DOWNTOWN ? 1.25f : d.type == DT_SUBURB ? 0.85f : 1f;
         }
+        int prevBest = 0;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {
                 if (country >= 0 && (x < townX0 || y < townY0 || x >= townX1 || y >= townY1)) {
@@ -399,16 +400,20 @@ final class City {
                     continue;
                 }
                 float wx = x + wobX[y], wy = y + wobY[x];
-                int best = 0;
-                float bd = Float.MAX_VALUE;
+                // ((22.0) Starting from the district of the tile before, those too far off across alone are passed
+                // over: the same answer (the nearest, the first of any tied), for a fraction of the looking.)
+                int best = prevBest;
+                float bd = ((kx[best] - wx) * (kx[best] - wx) + (ky[best] - wy) * (ky[best] - wy)) * kw[best];
                 for (int k = 0; k < n; k++) {
-                    float weight = kw[k];
+                    float weight = kw[k], ax = (kx[k] - wx) * (kx[k] - wx) * weight;
+                    if (ax > bd) continue;
                     float dd = ((kx[k] - wx) * (kx[k] - wx) + (ky[k] - wy) * (ky[k] - wy)) * weight;
-                    if (dd < bd) {
+                    if (dd < bd || dd == bd && k < best) {
                         bd = dd;
                         best = k;
                     }
                 }
+                prevBest = best;
                 districtAt.set(y * w + x, (byte) (best));
                 if (y >= landH || (islandRects != null && island(x, y) < 0)) continue;
                 sx[best] += x;
@@ -510,7 +515,7 @@ final class City {
         return blocks;
     }
     /** 0 normal car, 1 police car, 2 army truck. */
-    private OffHeap.Bytes carKind;
+    OffHeap.Bytes carKind;
     private final List<float[]> helipads = new ArrayList<float[]>();
     private final List<float[]> tents = new ArrayList<float[]>();
     /**
@@ -1165,6 +1170,7 @@ final class City {
         c.scale(res, res);
         c.translate(-wx0, -wy0);
         c.clipRect(wx0, wy0, wx0 + size, wy0 + size);
+        setRes(res);
         regionOnly = true;
         rwx0 = wx0;
         rwy0 = wy0;
@@ -1229,6 +1235,7 @@ final class City {
         computeJunctions();
         Canvas canvas = new Canvas(bitmap);
         if (detail != 1f) canvas.scale(detail, detail);
+        setRes(detail);
         drawnRealistic = realistic;
         collectLabels = true;
         render(canvas);
@@ -1616,16 +1623,26 @@ final class City {
         int stamp = 0;
         boolean[] joined = new boolean[sizes.size()];
         joined[main] = true;
+        // ((22.0) Each piece's tiles listed once, in one pass over the map: looking through the whole map for each piece
+        // was the slowest part of making a big city.)
+        int nc = sizes.size();
+        int[] at = new int[nc + 1];
+        for (int i = 0; i < n; i++) if (comp[i] >= 0) at[comp[i] + 1]++;
+        for (int k = 0; k < nc; k++) at[k + 1] += at[k];
+        int[] byComp = new int[at[nc]], fill = Arrays.copyOf(at, nc);
+        for (int i = 0; i < n; i++) if (comp[i] >= 0) byComp[fill[comp[i]]++] = i;
         for (int id = 0; id < sizes.size(); id++) {
             if (joined[id] || sizes.get(id) < 4) continue;
             stamp++;
             int head = 0, tail = 0, goal = -1;
-            for (int i = 0; i < n; i++)
+            for (int k = at[id]; k < at[id + 1]; k++) {
+                int i = byComp[k];
                 if (comp[i] == id) {
                     q[tail++] = i;
                     seen[i] = stamp;
                     prev[i] = -1;
                 }
+            }
             int levelEnd = tail, depth = 0;
             // (A long way, if need be: across the fields the far side of the highway to a bridge.)
             while (head < tail && goal < 0 && depth <= 240) {
@@ -5117,6 +5134,18 @@ final class City {
                 }
             }
         return best;
+    }
+
+    /**
+     * ((22.0) A parked car caught by a blast burns out where it stands (kind 7, a blackened shell). True if there was one
+     * there to burn.
+     */
+    boolean burnParkedCar(int i) {
+        if (i < 0 || i >= tiles.length || tiles[i] != CAR || carKind.get(i) > 1) return false;
+        carKind.set(i, (byte) 7);
+        int x = i % w, y = i / w;
+        redrawArea(x * T - T, y * T - T, x * T + 2 * T, y * T + 2 * T);
+        return true;
     }
 
     /** (17.2) A parked car is driven off its lot (stolen): its space is left empty on the lot and on the map picture. */
@@ -8826,6 +8855,7 @@ final class City {
         Canvas c = new Canvas(bitmap);
         if (detail != 1f) c.scale(detail, detail);
         c.clipRect(x0, y0, x1, y1);
+        setRes(detail);
         regionOnly = true;
         rwx0 = x0;
         rwy0 = y0;
@@ -8954,6 +8984,19 @@ final class City {
 
     // ------------------------------------------------------------------ rendering
 
+    /**
+     * ((22.0) How many pixels to a world unit the picture being drawn has, and whether that's enough for the
+     * finest grain - specks under a pixel across, millions of them on a big map, which made a new city slow to
+     * paint and couldn't be seen. Close-ups are drawn finer and keep them.)
+     */
+    private float renderRes = 1;
+    private boolean fine = true;
+
+    private void setRes(float res) {
+        renderRes = res;
+        fine = res >= 1f;
+    }
+
     private void render(Canvas c) {
         Paint p = new Paint();
         p.setAntiAlias(true);
@@ -8965,6 +9008,9 @@ final class City {
         // smaller than full size.)
         p.setAntiAlias(false);
         for (int y = Y0; y < Y1; y++) {
+            // ((22.0) A run of tiles the same colour along a row goes down as one rectangle, not one each: the same
+            // picture, from a tenth of the drawing.)
+            int runCol = 0, runX = -1;
             for (int x = X0; x < X1; x++) {
                 byte t = tiles[y * w + x];
                 int col;
@@ -8999,9 +9045,20 @@ final class City {
                     else if (sf == SURF_CONCRETE) col = 0xFF77777A;
                     else if (sf == SURF_CHIPSEAL) col = 0xFF4A4946;
                 }
-                p.setColor(col);
-                // (A hair over each edge, so no seams show between tiles when the map is drawn smaller.)
-                c.drawRect(x * T, y * T, x * T + T + 0.75f, y * T + T + 0.75f, p);
+                if (runX >= 0 && col != runCol) {
+                    p.setColor(runCol);
+                    // (A hair over each edge, so no seams show between tiles when the map is drawn smaller.)
+                    c.drawRect(runX * T, y * T, x * T + 0.75f, y * T + T + 0.75f, p);
+                    runX = -1;
+                }
+                if (runX < 0) {
+                    runX = x;
+                    runCol = col;
+                }
+            }
+            if (runX >= 0) {
+                p.setColor(runCol);
+                c.drawRect(runX * T, y * T, X1 * T + 0.75f, y * T + T + 0.75f, p);
             }
         }
         p.setAntiAlias(true);
@@ -9040,14 +9097,17 @@ final class City {
                 } else if (t == GRASS || t == TREE || t == TRAIL) {
                     for (int k = 0; k < 6; k++) {
                         p.setColor(prnd.nextBoolean() ? 0xFF578A3F : 0xFF426B30);
-                        c.drawCircle(fx + prnd.nextFloat() * T, fy + prnd.nextFloat() * T, 0.9f, p);
+                        float sx = fx + prnd.nextFloat() * T, sy = fy + prnd.nextFloat() * T;
+                        if (fine) c.drawCircle(sx, sy, 0.9f, p);
                     }
                     // Tufts and the odd wildflower.
                     if (prnd.nextFloat() < 0.35f) {
                         p.setColor(0xFF3A6128);
                         float gx = fx + prnd.nextFloat() * T, gy = fy + prnd.nextFloat() * T;
-                        c.drawLine(gx, gy, gx - 1, gy - 2, p);
-                        c.drawLine(gx, gy, gx + 1, gy - 2, p);
+                        if (fine) {
+                            c.drawLine(gx, gy, gx - 1, gy - 2, p);
+                            c.drawLine(gx, gy, gx + 1, gy - 2, p);
+                        }
                     }
                     if (prnd.nextFloat() < 0.05f) {
                         int[] flowers = {0xFFF2E86B, 0xFFF2F2F2, 0xFFE87BB0, 0xFFB08AE8};
@@ -9495,7 +9555,7 @@ final class City {
                     for (int k = 0; k < 5; k++) {
                         p.setColor(r.nextBoolean() ? 0x14FFFFFF : 0x1A000000);
                         float gx = fx + r.nextFloat() * T, gy = fy + r.nextFloat() * T;
-                        c.drawRect(gx, gy, gx + 0.8f, gy + 0.8f, p);
+                        if (fine) c.drawRect(gx, gy, gx + 0.8f, gy + 0.8f, p);
                     }
                     // Patchy tarmac: lighter worn areas and darker fresh ones.
                     if (r.nextFloat() < 0.2f) {
@@ -9533,13 +9593,13 @@ final class City {
                     for (int k = 0; k < 4; k++) {
                         p.setColor(r.nextBoolean() ? 0x30A8D080 : 0x30284A18);
                         float gx = fx + r.nextFloat() * T, gy = fy + r.nextFloat() * T;
-                        c.drawRect(gx, gy, gx + 0.6f, gy + 1.6f, p);
+                        if (fine) c.drawRect(gx, gy, gx + 0.6f, gy + 1.6f, p);
                     }
                 } else if (t == LOT || t == BASE) {
                     for (int k = 0; k < 3; k++) {
                         p.setColor(r.nextBoolean() ? 0x10FFFFFF : 0x14000000);
                         float gx = fx + r.nextFloat() * T, gy = fy + r.nextFloat() * T;
-                        c.drawRect(gx, gy, gx + 0.8f, gy + 0.8f, p);
+                        if (fine) c.drawRect(gx, gy, gx + 0.8f, gy + 0.8f, p);
                     }
                 }
             }
@@ -9686,7 +9746,7 @@ final class City {
         for (int k = 0; k < n; k++) {
             p.setColor(r.nextInt(3) == 0 ? 0x14FFFFFF : 0x16000000);
             float gx = x0 + 2 + r.nextFloat() * (x1 - x0 - 4), gy = y0 + 2 + r.nextFloat() * (y1 - y0 - 4);
-            c.drawRect(gx, gy, gx + 0.9f, gy + 0.9f, p);
+            if (fine) c.drawRect(gx, gy, gx + 0.9f, gy + 0.9f, p);
         }
         // A few rain streaks and stains.
         for (int k = 0; k < 1 + n / 60; k++) {
@@ -12279,6 +12339,21 @@ final class City {
         float hl = kind == 2 || kind == 5 ? 7.8f : 7.5f, hw = kind == 2 || kind == 5 ? 4.8f : 4.2f;
         RectF rect = vertical ? new RectF(cx - hw, cy - hl, cx + hw, cy + hl) : new RectF(cx - hl, cy - hw, cx + hl, cy + hw);
         if (kind == 4) vertical = true;
+        if (kind == 7) {
+            // ((22.0) Burnt out: a blackened shell, the glass gone.)
+            p.setColor(0x55000000);
+            rect.offset(1.5f, 1.5f);
+            c.drawRoundRect(rect, 2.5f, 2.5f, p);
+            rect.offset(-1.5f, -1.5f);
+            p.setColor(0xFF2B2724);
+            c.drawRoundRect(rect, 2.5f, 2.5f, p);
+            p.setColor(0xFF151312);
+            if (vertical) c.drawRect(cx - hw + 1, cy - 4.5f, cx + hw - 1, cy + 5f, p);
+            else c.drawRect(cx - 5f, cy - hw + 1, cx + 4.5f, cy + hw - 1, p);
+            p.setColor(0xFF5A3A28);
+            c.drawCircle(cx + prnd.nextFloat() * 4 - 2, cy + prnd.nextFloat() * 4 - 2, 1.4f, p);
+            return;
+        }
         int color = kind == 6 ? 0xFF15171A : kind == 4 ? 0xFFC8302A : kind == 1 ? country.cruiserBody : kind == 2 ? 0xFF4F5A33 : kind == 3 ? 0xFFF2F2F2
                 : kind == 5 ? 0xFFE8862A
                 : CAR_COLORS[prnd.nextInt(CAR_COLORS.length)];
@@ -13458,8 +13533,25 @@ final class City {
         int n = junctions.size();
         int[] root = new int[n];
         for (int i = 0; i < n; i++) root[i] = i;
-        for (int i = 0; i < n; i++)
-            for (int k = i + 1; k < n; k++) {
+        // ((22.0) Only those near each other compared, through a coarse grid: every junction against every other was
+        // millions of comparisons on a big map.)
+        final int G = 32;
+        int gw = w / G + 2, gh = h / G + 2;
+        java.util.ArrayList<java.util.ArrayList<Integer>> grid = new java.util.ArrayList<java.util.ArrayList<Integer>>(gw * gh);
+        for (int g = 0; g < gw * gh; g++) grid.add(null);
+        for (int i = 0; i < n; i++) {
+            int[] a = junctions.get(i);
+            for (int gy = Math.max(0, (a[1] - 3) / G); gy <= Math.min(gh - 1, (a[3] + 3) / G); gy++)
+                for (int gx = Math.max(0, (a[0] - 3) / G); gx <= Math.min(gw - 1, (a[2] + 3) / G); gx++) {
+                    java.util.ArrayList<Integer> cell = grid.get(gy * gw + gx);
+                    if (cell == null) grid.set(gy * gw + gx, cell = new java.util.ArrayList<Integer>());
+                    cell.add(i);
+                }
+        }
+        for (java.util.ArrayList<Integer> cell : grid)
+            for (int ci = 0; cell != null && ci < cell.size(); ci++)
+            for (int ck = ci + 1; ck < cell.size(); ck++) {
+                int i = cell.get(ci), k = cell.get(ck);
                 int[] a = junctions.get(i), b = junctions.get(k);
                 if (a[0] - 3 <= b[2] && b[0] - 3 <= a[2] && a[1] - 3 <= b[3] && b[1] - 3 <= a[3]) {
                     int ra = i, rb = k;

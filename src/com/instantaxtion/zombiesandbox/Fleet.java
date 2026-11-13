@@ -274,6 +274,11 @@ final class Fleet {
         }
         /** A parked car's alarm going off (seconds left) after zombies bumped into it. */
         float alarm;
+        /** ((22.0) Seconds until its engine next carries to the dead round about; its alarm has gone off already. */
+        transient float engineCd;
+        transient boolean alarmed;
+        /** ((22.0) An armoured police van parked as a shelter: people running from the dead climb in. */
+        boolean shelter;
         /** ((11.5) Off screen, whether this step is the one it sits out.) */
         int lodTick;
         /** Police roadblocks: the safe zone this car is closing a road for, which way that road runs, cones out,
@@ -349,6 +354,7 @@ final class Fleet {
                 if (v.kind == K_IFV) return "Infantry fighting vehicle";
                 if (v.kind == K_GUNTRUCK) return "Army gun truck";
                 if (v.kind == K_HUMVEE) return (v.guardUnit ? Country.guard()[1] + " " : "") + "Humvee" + (v.loop ? "  -  base patrol" : "");
+                if (v.shelter) return "Armoured police van  -  shelter, " + v.riders.size() + " of " + SHELTER_SEATS + " inside";
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
                 if (v.kind == K_BEARCAT) return "Police BearCat";
                 if (v.kind == K_DOZER) return "Army engineers' bulldozer";
@@ -478,6 +484,7 @@ final class Fleet {
 
     void clear() {
         vehicles.clear();
+        shelters.clear();
     }
 
     /** (11.1) The army's (tanks, trucks, Humvees, its helicopters and boats) rather than the police's or anyone else's. */
@@ -1380,6 +1387,33 @@ final class Fleet {
         setKind(v, K_BEARCAT);
         v.passengerType = Entity.COP;
         v.timer = 0.3f;
+        return v;
+    }
+
+    /** ((22.0) The armoured vans parked as shelters, and how many people each takes. */
+    final ArrayList<Vehicle> shelters = new ArrayList<Vehicle>();
+    static final int SHELTER_SEATS = 12;
+
+    /**
+     * ((22.0) The Place tool's armoured police van: parked where it's put, doors open. People running from the dead
+     * nearby climb in, a dozen at most, and are safe inside until it's wrecked - or until someone drives them away.
+     */
+    Vehicle placeShelterVan(float x, float y) {
+        float[] p = city.nearestDrivable(x, y);
+        if (p == null) return null;
+        Vehicle v = make(TRUCK);
+        setKind(v, K_RIOT_VAN);
+        v.hp = v.maxHp = 700;
+        v.x = p[0];
+        v.y = p[1];
+        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
+        v.shelter = true;
+        v.parked = true;
+        v.state = IDLE;
+        v.speed = 0;
+        v.number = ++unitCount;
+        vehicles.add(v);
+        shelters.add(v);
         return v;
     }
 
@@ -2870,6 +2904,11 @@ final class Fleet {
                 v.lodTick = 0;
                 vdt = dt * lodEvery;
             } else v.lodTick = 0;
+            // ((22.0) The dead blundering into a parked car can set it off.)
+            if (v.type == CAR && !v.alarmed && w.zombies > 0 && (v.parked || v.state == ABANDONED) && (v.engineCd -= vdt) <= 0) {
+                v.engineCd = 1;
+                if (w.countZombiesNear(v.x, v.y, 14) > 0) tripAlarm(v, 0.2f);
+            }
             if (v.alarm > 0) {
                 // Whoop, whoop: every zombie for streets around comes to see.
                 v.alarm -= vdt;
@@ -2878,6 +2917,13 @@ final class Fleet {
                     w.emit(Sfx.HORN, v.x, v.y);
                     if (((int) v.alarm) % 4 == 0) w.noise(v.x, v.y, 180);
                 }
+            }
+            // ((22.0) The dead follow the sound of an engine: anything driving along draws those within earshot after
+            // it, a siren or a tank from furthest off. A horde can end up trailing a car down the street.)
+            if (w.zombies > 0 && v.type != HELI && v.type != TRAIN && v.type != BOAT && v.type != JET && !v.parked && !v.broken
+                    && Math.abs(v.speed) > 25 && (v.engineCd -= vdt) <= 0) {
+                v.engineCd = 2 + w.rnd.nextFloat();
+                w.engineLure(v.x, v.y, v.lightsOn() ? 230 : v.type == TANK ? 210 : v.type == TRUCK ? 150 : 110);
             }
             v.anim += vdt;
             // (Time spent crawling: nudging back and forth in a jam still counts.)
@@ -3090,6 +3136,7 @@ final class Fleet {
         // (Armour: the dead can claw at an APC or the riot van all day.)
         if (!blast && (v.kind == K_APC || v.kind == K_RIOT_VAN)) amount *= 0.3f;
         v.hp -= amount;
+        tripAlarm(v, 0.6f);
         if (v.broken) {
             if (!v.burnt && (blast || v.hp < -v.maxHp * 0.5f)) burn(v);
             return;
@@ -3138,7 +3185,24 @@ final class Fleet {
 
     private void burn(Vehicle v) {
         v.burnt = true;
-        if (w.rnd.nextFloat() < 0.3f) w.blastLater(v.x, v.y, 45, 150, 2 + w.rnd.nextFloat() * 4);
+        // ((22.0) Half of them go up now (a third before), and close enough to catch the next one: a street of parked
+        // cars can go one after another.)
+        if (w.rnd.nextFloat() < 0.5f) w.blastLater(v.x, v.y, 48, 160, 2 + w.rnd.nextFloat() * 4);
+    }
+
+    int alarms;
+
+    /**
+     * ((22.0) A parked car with nobody in it, knocked about: its alarm goes off (chance in a hundred: odds), whooping for
+     * twenty-five seconds and drawing every one of the dead for streets around. Once each.
+     */
+    void tripAlarm(Vehicle v, float odds) {
+        if (v.type != CAR || v.alarmed || v.burnt || v.driver != null || !v.riders.isEmpty() || !(v.parked || v.state == ABANDONED)) return;
+        if (w.rnd.nextFloat() >= odds) return;
+        v.alarmed = true;
+        v.alarm = 25;
+        alarms++;
+        w.noise(v.x, v.y, 220);
     }
 
     private void smoke(Vehicle v, float dt) {
@@ -5662,7 +5726,7 @@ final class Fleet {
         for (int i = 0; i < vehicles.size(); i++) {
             Vehicle v = vehicles.get(i);
             if ((v.type != CRUISER && v.type != TRUCK) || v.broken || v.burnt || v.player != null || v.standby || v.removedFromFleet
-                    || !v.crew.isEmpty() || v.block != null || v.zone != null || v.loop || v.leaving || v.state == PICKUP || v.state == MUSTER) continue;
+                    || !v.crew.isEmpty() || v.block != null || v.zone != null || v.loop || v.shelter || v.leaving || v.state == PICKUP || v.state == MUSTER) continue;
             if (!v.parked && v.state != ABANDONED) continue;
             v.reclaimCd -= 3;
             if (v.reclaimCd > 0 || crewOnFoot(v) > 0 || w.countZombiesNear(v.x, v.y, 120) > 0) continue;
@@ -6691,7 +6755,7 @@ final class Fleet {
         for (int i = 0, m = vehicles.size(); i < m; i++) {
             Vehicle o = vehicles.get(i);
             if (o.type != vtype || o.broken || o.burnt || o.player != null || o.removedFromFleet || !o.crew.isEmpty() || o.block != null
-                    || o.zone != null || o.loop || o.leaving || o.kind == K_BIKE || o.kind == K_DOZER || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
+                    || o.zone != null || o.loop || o.shelter || o.leaving || o.kind == K_BIKE || o.kind == K_DOZER || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
             if (!o.standby && !o.parked && o.state != ABANDONED) continue;
             float d = (float) World.hypot(o.x - sx, o.y - sy);
             if (d < bd && w.countZombiesNear(o.x, o.y, 80) == 0) {
@@ -6743,7 +6807,7 @@ final class Fleet {
                 for (int i = 0, m = vehicles.size(); i < m; i++) {
                     Vehicle o = vehicles.get(i);
                     if (!o.standby || o.type != TRUCK || o.broken || o.burnt || o.kind == K_BIKE || o.pickupFor != null || o.player != null
-                            || o.removedFromFleet || !o.crew.isEmpty() || o.block != null || o.zone != null || o.loop || o.leaving || o.supply > 0) continue;
+                            || o.removedFromFleet || !o.crew.isEmpty() || o.block != null || o.zone != null || o.loop || o.shelter || o.leaving || o.supply > 0) continue;
                     float d = (float) World.hypot(o.x - sx, o.y - sy);
                     if (d < best && w.countZombiesNear(o.x, o.y, 80) == 0) {
                         best = d;
@@ -6837,7 +6901,54 @@ final class Fleet {
         return false;
     }
 
+    /**
+     * ((22.0) A motorcycle officer scouts as they ride: a pack of the dead they pass is called in and marked for
+     * the others, like the army's recon.
+     */
+    private void bikeScout(Vehicle v, float dt) {
+        if ((v.reconCd -= dt) > 0) return;
+        v.reconCd = 1;
+        int n = w.countZombiesNear(v.x, v.y, 220);
+        if (n < 6) return;
+        for (int i = 0; i < w.dispatch.incidents.size(); i++) {
+            Dispatch.Incident inc = w.dispatch.incidents.get(i);
+            if (!inc.resolved && World.hypot(inc.x - v.x, inc.y - v.y) < 280) return;
+        }
+        Entity z = w.nearestZombie(v.x, v.y, 220);
+        if (z != null) w.dispatch.sighting(z.x, z.y, null);
+        bikeSightings++;
+        if (w.time - v.reconSaid > 25) {
+            v.reconSaid = w.time;
+            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "of the dead", "of the dead"))
+                    + " on " + city.placeName(v.x, v.y) + ". Calling it in.", v.x, v.y);
+        }
+    }
+
+    int bikeSightings;
+
+    /** ((22.0) A motorcycle officer put down on the nearest road, out on patrol (the Cop picker's Motorcycle cop). */
+    Entity startBikeAt(float x, float y) {
+        float[] start = city.nearestDrivable(x, y);
+        if (start == null) return null;
+        Vehicle v = make(CRUISER);
+        v.x = start[0];
+        v.y = start[1];
+        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
+        v.patrol = true;
+        v.station = city.nearestFacility(City.FACILITY_POLICE, x, y);
+        v.state = PATROL;
+        v.number = ++unitCount;
+        if (!newDestination(v)) return null;
+        setKind(v, K_BIKE);
+        Entity e = w.create(Entity.COP, v.x, v.y);
+        e.rig = v;
+        v.crew.add(e);
+        vehicles.add(v);
+        return e;
+    }
+
     private boolean updatePatrol(Vehicle v, float dt) {
+        if (v.kind == K_BIKE && !v.crew.isEmpty() && w.zombies > 0 && v.state != MUSTER) bikeScout(v, dt);
         v.checkCd -= dt;
         boolean check = v.checkCd <= 0;
         if (check) v.checkCd = 0.5f;

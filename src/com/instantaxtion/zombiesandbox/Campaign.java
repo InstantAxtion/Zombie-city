@@ -124,13 +124,13 @@ final class Campaign {
     // ---- Costs ----
 
     /** Each police officer by GameView.COP_ROLES order; -1 not to be had. */
-    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15};
+    static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15, 18, 14};
     /** Each soldier by GameView.MIL_ROLES order. */
     static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee, police drone, ((21.0) razor wire, MG nest. */
-    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45, 6, 90};
+    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45, 6, 90, 60};
     /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines, ((21.0) barrage, airborne squad. */
-    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, 80, 140};
+    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, 80, 140, -1};
 
     /** ((21.0) What things cost this commander: the Quartermaster and Fire support perks take some off. */
     static int[] placeCost(World w) {
