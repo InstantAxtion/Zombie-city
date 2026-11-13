@@ -2396,7 +2396,7 @@ public final class GameTests {
                 // The new roles.
                 // ((14.0) And the combat engineers and the mortar teams.)
                 // ((18.1) And the negotiator.)
-                check(Entity.ROLE_NAMES.length == 23 && "Negotiator".equals(Entity.ROLE_NAMES[Entity.ROLE_NEGOTIATOR]) && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
+                check(Entity.ROLE_NAMES.length == 21 && "Prison guard".equals(Entity.ROLE_NAMES[Entity.ROLE_PRISON_GUARD]) && "Mounted officer".equals(Entity.ROLE_NAMES[Entity.ROLE_MOUNTED]) && "Marine".equals(Entity.ROLE_NAMES[Entity.ROLE_MARINE])
                         && "Combat engineer".equals(Entity.ROLE_NAMES[Entity.ROLE_ENGINEER]) && "Mortar team".equals(Entity.ROLE_NAMES[Entity.ROLE_MORTAR]), "every role named");
             }
         });
@@ -4552,215 +4552,6 @@ public final class GameTests {
                 check(home.barricade <= 40.01f, "the door isn't shored up (" + home.barricade + ")");
             }
         });
-        test("17.0: a gang war - gangs on their turf, no zombies, police fight them, civilians only hurt in crossfire", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_ZOMBIES] = 3;
-                c.mode = CityConfig.MODE_GANGS;
-                c.seed = 21;
-                World w = new World(c);
-                w.populate(c);
-                w.recount();
-                check(w.hostileMode() && w.mode() == CityConfig.MODE_GANGS, "the game is a gang war");
-                int gang = 0, undead = 0, kits = 0, colours = 0;
-                java.util.HashSet<Integer> gangs = new java.util.HashSet<Integer>();
-                for (Entity e : w.entities) {
-                    if (e.isUndead()) undead++;
-                    if (e.type != Entity.GANGSTER) continue;
-                    gang++;
-                    gangs.add(e.squad);
-                    kits |= 1 << e.kit;
-                    if (e.body != 0 && e.head == World.GANG_COLORS[World.fmod(e.squad, World.GANG_COLORS.length)]) colours++;
-                    check(e.hasGun && e.ammo + e.reserve > 0, "every gang member is armed");
-                    check(e.isZombie() && e.isHostile() && !e.isUndead(), "a gang member is on the other side, and living");
-                }
-                check(undead == 0, "no zombies (" + undead + ")");
-                check(gang >= 20, "the gangs are out (" + gang + ")");
-                check(gangs.size() >= 2, "more than one gang (" + gangs.size() + ")");
-                check((kits & 7) == 7 && (kits & 8) != 0, "thugs, shooters, enforcers and a boss");
-                check(colours == gang, "each in their gang's colours");
-                check(w.zombieCount() == gang && w.outbreak, "they count as the other side, and it's on");
-                check(w.hostileReserve > 0, "more can be recruited");
-                for (boolean t : w.trait) check(!t, "no virus strain");
-                // Nobody unarmed is ever a target.
-                java.lang.reflect.Method ht = World.class.getDeclaredMethod("hostileTarget", Entity.class, float.class);
-                ht.setAccessible(true);
-                int shots = 0;
-                for (int i = 0; i < 30 * 40; i++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    if (i % 30 == 0)
-                        for (Entity e : w.entities) {
-                            if (e.dead || e.type != Entity.GANGSTER) continue;
-                            Entity t = (Entity) ht.invoke(w, e, 300f);
-                            if (t == null) continue;
-                            shots++;
-                            check(t.isArmed() || t.hasGun || t.isHostile() || t == w.controlled, "only the armed are targets");
-                            if (t.isHostile()) check(t.squad != e.squad, "a gang fights only its rivals");
-                        }
-                }
-                check(shots > 0, "the gangs found someone to fight");
-                int infected = 0;
-                for (Entity e : w.entities) if (!e.dead && (e.infected || e.isUndead())) infected++;
-                check(infected == 0, "nobody bitten or turned (" + infected + ")");
-                check(w.zombiesKilled > 0, "the police took some down (" + w.zombiesKilled + ")");
-                check(w.counts[Entity.COP] + w.counts[Entity.SOLDIER] > 0, "the police are still fighting");
-                // The messages speak of gangs, not the dead.
-                check(w.reword("THE DEAD ARE BACK").equals("THE GANGS ARE BACK"), "the dead become the gangs");
-                check(w.reword("3 zombies near the station").equals("3 gang members near the station"), "zombies become gang members");
-                // The spawn tool's kits, and they join the gang that's right there.
-                float[] p = w.city.randomWalkableInTown(new java.util.Random(4));
-                w.newHostileGroup(p[0], p[1]);
-                Entity a = w.spawnHostile(2, p[0], p[1]), b = w.spawnHostile(1, p[0] + 6, p[1]);
-                check(a != null && b != null && a.type == Entity.GANGSTER && a.kit == 2 && a.weapon == Entity.W_SHOTGUN
-                        && b.weapon == Entity.W_SMG && a.squad == b.squad, "spawned as one gang crew with their kits");
-                check(w.hostileTitle(a).contains(World.GANG_NAMES[World.fmod(a.squad, World.GANG_NAMES.length)]), "the card names the gang");
-                check(w.hostileDoing(a) != null, "and says what they're doing");
-            }
-        });
-        test("17.0: an invasion - squads in from the edge, objectives taken, waves, and a winner either way", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_ZOMBIES] = 3;
-                c.mode = CityConfig.MODE_ARMY;
-                c.seed = 22;
-                World w = new World(c);
-                w.populate(c);
-                w.recount();
-                int army = 0, kits = 0, nearEdge = 0;
-                java.util.HashSet<Integer> squads = new java.util.HashSet<Integer>();
-                float ww = w.city.worldW(), hh = w.city.worldH();
-                for (Entity e : w.entities) {
-                    if (e.type != Entity.INVADER) continue;
-                    army++;
-                    squads.add(e.squad);
-                    kits |= 1 << e.kit;
-                    check(e.body == World.ARMY_BODY && e.hasGun, "in the enemy's uniform, armed");
-                    if (Math.min(Math.min(e.x, e.y), Math.min(ww - e.x, hh - e.y)) < 300) nearEdge++;
-                }
-                check(army >= 20 && squads.size() >= 3, "squads of enemy soldiers (" + army + " in " + squads.size() + ")");
-                check(kits == 7, "riflemen, machine gunners and marksmen");
-                check(nearEdge > army / 2, "coming in from the edge (" + nearEdge + " of " + army + ")");
-                // Each squad heads for the nearest of the stations, bases and city hall.
-                for (int i = 0; i < 30 * 5; i++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                int headed = 0;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.INVADER && e.postX >= 0) headed++;
-                check(headed > 0, "they have objectives");
-                // An objective with the enemy there and none of the city's defenders: taken.
-                java.lang.reflect.Method take = World.class.getDeclaredMethod("nextObjective", float.class, float.class);
-                take.setAccessible(true);
-                java.lang.reflect.Field ox = World.class.getDeclaredField("objX"), oy = World.class.getDeclaredField("objY"),
-                        tk = World.class.getDeclaredField("objTaken");
-                ox.setAccessible(true);
-                oy.setAccessible(true);
-                tk.setAccessible(true);
-                int o = (Integer) take.invoke(w, 0f, 0f);
-                float tx = ((float[]) ox.get(w))[o], ty = ((float[]) oy.get(w))[o];
-                for (Entity e : w.entities) if (!e.dead && (e.isArmed()) && World.hypot(e.x - tx, e.y - ty) < 200) { e.dead = true; e.removed = true; }
-                int moved = 0;
-                for (Entity e : w.entities)
-                    if (!e.dead && e.type == Entity.INVADER && moved < 4) {
-                        e.x = tx + moved * 5;
-                        e.y = ty;
-                        e.postX = tx;
-                        e.postY = ty;
-                        moved++;
-                    }
-                for (int i = 0; i < 30 * 3 && !((boolean[]) tk.get(w))[o]; i++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(((boolean[]) tk.get(w))[o], "the enemy took an objective");
-                // Waves: with most of them down, more come in.
-                int before = w.hostileReserve;
-                for (Entity e : w.entities) if (e.type == Entity.INVADER) e.hp = 0;
-                for (int i = 0; i < 30 * 20 && w.hostileReserve == before; i++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(w.hostileReserve < before && w.counts[Entity.INVADER] > 0, "another squad came in");
-                // All of them gone, none to come: the city wins.
-                for (int i = 0; i < 30 * 20 && w.warResult == 0; i++) {
-                    w.hostileReserve = 0;
-                    for (Entity e : w.entities) if (e.isHostile()) e.hp = 0;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(w.warResult == 1 && "THE INVASION IS DEFEATED".equals(w.warBanner), "the city won (" + w.warBanner + ")");
-                // And the other way: every officer and soldier down, nobody left to send.
-                World l = new World(c);
-                l.populate(c);
-                l.recount();
-                for (int i = 0; i < 30 * 20 && l.warResult == 0; i++) {
-                    l.dispatch.policeReserve = l.dispatch.squadReserve = 0;
-                    // (Those in their cars and trucks too: out they come, and down.)
-                    for (Fleet.Vehicle v : new java.util.ArrayList<Fleet.Vehicle>(l.fleet.vehicles))
-                        if (!v.broken && (v.driver != null || !v.crew.isEmpty() || v.passengers > 0)) l.fleet.damage(v, 1e6f, true);
-                    for (Entity e : l.entities) if (e.isArmed()) e.hp = 0;
-                    l.update(1 / 30f);
-                    l.evCount = 0;
-                }
-                check(l.warResult == 2 && "THE CITY HAS FALLEN".equals(l.warBanner), "the enemy won (" + l.warBanner + ", armed " + (l.counts[Entity.COP] + l.counts[Entity.SOLDIER])
-                        + ", riding " + l.riding + ", enemy " + l.zombieCount() + ", outbreak " + l.outbreak + ", aftermath " + l.aftermath + ")");
-            }
-        });
-        test("17.0: a gang war or an invasion saves and loads back, mode and all", new Check() {
-            public void run() throws Exception {
-                for (int mode = 1; mode <= 2; mode++) {
-                    CityConfig c = new CityConfig();
-                    c.v[CityConfig.OPT_ZOMBIES] = 2;
-                    c.mode = mode;
-                    c.seed = 30 + mode;
-                    World w = new World(c);
-                    w.populate(c);
-                    for (int i = 0; i < 30 * 5; i++) {
-                        w.update(1 / 30f);
-                        w.evCount = 0;
-                    }
-                    File f = File.createTempFile("zcs", ".dat");
-                    SaveGame.save(w, f);
-                    World l = SaveGame.load(f);
-                    f.delete();
-                    check(l.city.cfg.mode == mode && l.hostileMode(), "the mode came back");
-                    check(l.hostileReserve == w.hostileReserve && l.hostileStart == w.hostileStart, "and the fighters still to come");
-                    int kw = 0, kl = 0, nw = 0, nl = 0;
-                    // ((17.2) Those riding in a stolen car too: on loading, they're out of it.)
-                    for (Entity e : w.entities) if (!e.dead && e.isHostile()) { nw++; kw += e.kit * 7 + e.squad; }
-                    for (Fleet.Vehicle v : w.fleet.vehicles) for (Entity e : v.riders) if (e.isHostile()) { nw++; kw += e.kit * 7 + e.squad; }
-                    for (Entity e : l.entities) if (!e.dead && e.isHostile()) { nl++; kl += e.kit * 7 + e.squad; }
-                    for (Fleet.Vehicle v : l.fleet.vehicles) for (Entity e : v.riders) if (e.isHostile()) { nl++; kl += e.kit * 7 + e.squad; }
-                    check(nw == nl && kw == kl, "each with their kit and gang or squad (" + nw + "/" + nl + ")");
-                }
-                // Drawn: the enemy tool and its picker for each mode, and the people on the map.
-                GameView v = new GameView(new android.app.Activity());
-                int[] size = {2400, 1080};
-                v.layout(size[0], size[1]);
-                Menu m = (Menu) field(v, "menu");
-                for (int mode = 1; mode <= 2; mode++) {
-                    CityConfig c = new CityConfig();
-                    c.v[CityConfig.OPT_ZOMBIES] = 2;
-                    c.mode = mode;
-                    v.startGame(c);
-                    v.awaitLoad();
-                    m.screen = Menu.NONE;
-                    for (int k = 0; k < 10; k++) draw(v, size);
-                    Field pk = GameView.class.getDeclaredField("picker");
-                    pk.setAccessible(true);
-                    pk.setInt(v, 6);
-                    draw(v, size);
-                    pk.setInt(v, -1);
-                    World w = (World) field(v, "world");
-                    Field fo = GameView.class.getDeclaredField("follow");
-                    fo.setAccessible(true);
-                    for (Entity e : w.entities) if (!e.dead && e.isHostile()) { fo.set(v, e); break; }
-                    draw(v, size);
-                    check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
-                }
-            }
-        });
         test("17.1: walk-in buildings - walls with doorways, sight through doors only, in and out on foot, visits, the dead follow", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -4875,186 +4666,6 @@ public final class GameTests {
                 check(zin, "the dead follow them in through the door");
             }
         });
-        test("17.2: open interiors; gang bosses in hideouts, raids, surrender and arrest, turf, corners, robberies, stolen cars", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_ZOMBIES] = 3;
-                c.mode = CityConfig.MODE_GANGS;
-                c.seed = 23;
-                World w = new World(c);
-                w.rnd.setSeed(23);
-                w.populate(c);
-                w.recount();
-                City city = w.city;
-                // Open floors in shops and offices, rooms in homes.
-                int open = 0, rooms = 0;
-                for (City.Building b : city.buildings) {
-                    if (!city.enterable(b)) continue;
-                    int in = Interiors.insideOf(b);
-                    if (Interiors.open(in)) {
-                        check(city.planOf(b).rooms.size() == 1, "an open floor is one room");
-                        open++;
-                    } else if (city.planOf(b).rooms.size() >= 2) rooms++;
-                }
-                check(open > 10 && rooms > 10, "open floors (" + open + ") and homes with rooms (" + rooms + ")");
-                // A boss to each gang, sat hidden in its hideout with two bodyguards.
-                java.lang.reflect.Method ho = World.class.getDeclaredMethod("hideout", int.class);
-                ho.setAccessible(true);
-                for (int f = 0; f < 30 * 3; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                int bosses = 0, guards = 0, gangs = 0;
-                for (int g = 0; g < World.GANG_NAMES.length; g++) {
-                    Entity b = w.gangBoss[g];
-                    if (b == null) continue;
-                    gangs++;
-                    if (b.kit == 3 && b.type == Entity.GANGSTER && b.weapon == Entity.W_REVOLVER && city.insideOf(b.x, b.y) == ho.invoke(w, g) && b.hidden) bosses++;
-                }
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.GANGSTER && e.kit == 2) guards++;
-                check(gangs >= 2 && bosses == gangs, "each gang's boss hidden in its hideout (" + bosses + " of " + gangs + ")");
-                check(guards >= gangs * 2, "with bodyguards (" + guards + ")");
-                check(w.districtOwner != null && w.turfVersion > 0, "turf held");
-                int held = 0;
-                for (int d : w.districtOwner) if (d >= 0) held++;
-                check(held >= 1, "gangs hold districts (" + held + ")");
-                // A beaten gang member with an officer right there gives up, is cuffed and walked off.
-                Entity cop = null, thug = null;
-                for (Entity e : w.entities) {
-                    if (e.dead) continue;
-                    if (cop == null && e.type == Entity.COP && e.ride == null && e.rig == null && city.insideOf(e.x, e.y) == null) cop = e;
-                    if (thug == null && e.type == Entity.GANGSTER && e.kit == 0 && city.insideOf(e.x, e.y) == null && !e.hidden) thug = e;
-                }
-                check(cop != null && thug != null, "an officer and a gang member");
-                w.surrender(thug);
-                // (Somewhere quiet for it: the officer would rightly see to a gunfight first.)
-                for (Entity e : w.entities) if (!e.dead && e.isHostile() && Math.hypot(e.x - thug.x, e.y - thug.y) < 350) { e.dead = true; e.removed = true; }
-                check(thug.type == Entity.CIVILIAN && thug.arrested == 1 && !thug.hasGun && w.arrests >= 1, "hands up, unarmed, not the enemy any more");
-                float[] near = city.findWalkable(thug.x + 20, thug.y);
-                cop.x = near[0];
-                cop.y = near[1];
-                cop.task = Dispatch.T_NONE;
-                boolean cuffed = false;
-                for (int f = 0; f < 30 * 45 && !cuffed; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    cuffed = thug.arrested == 2 || thug.removed;
-                }
-                check(cuffed, "an officer came and cuffed them (captor " + (thug.captor != null) + ", cop has " + (cop.escortee == thug) + ", d " + (int) Math.hypot(cop.x - thug.x, cop.y - thug.y)
-                        + ", captor d " + (thug.captor == null ? -1 : (int) Math.hypot(thug.captor.x - thug.x, thug.captor.y - thug.y)) + ", t " + (int) thug.arrestT + ", arrested " + thug.arrested + " dead " + thug.dead + ")");
-                // A robbery: in through the shop door, the alarm and the 911 call.
-                Entity robber = null;
-                for (Entity e : w.entities)
-                    if (robber == null && !e.dead && e.type == Entity.GANGSTER && e.kit <= 1 && !w.gangBrokenUp(e.squad) && e.ride == null) robber = e;
-                City.Building shop = null;
-                int quiet = Integer.MAX_VALUE;
-                for (City.Building b : city.buildings)
-                    if (b.kind == City.SHOP && city.enterable(b)) {
-                        int n = w.countZombiesNear(b.doorX, b.doorY, 250);
-                        if (n < quiet) {
-                            quiet = n;
-                            shop = b;
-                        }
-                    }
-                check(robber != null && shop != null, "a gang member and a shop");
-                robber.x = shop.doorX;
-                robber.y = shop.doorY;
-                robber.foe = null;
-                robber.foeT = 999;
-                robber.corner = 0;
-                robber.carJob = 0;
-                robber.robB = shop;
-                robber.robT = 0;
-                robber.robPhase = 0;
-                boolean robbed = false;
-                for (int f = 0; f < 30 * 20 && !robbed && !robber.dead && robber.type == Entity.GANGSTER; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    robbed = robber.robPhase == 1;
-                }
-                boolean said = false;
-                for (World.Moment mo : w.timeline) said |= mo.text.startsWith("Armed robbery");
-                check(robbed && said, "in through the door, robbing it, and it's reported");
-                // A stolen car: off a lot, with a crew aboard.
-                int tile = -1;
-                for (int i = 0; i < city.tiles.length && tile < 0; i++) {
-                    if (city.tiles[i] != City.CAR) continue;
-                    float tx = (i % city.w + 0.5f) * City.T, ty = (i / city.w + 0.5f) * City.T;
-                    if (city.parkedCarNear(tx, ty, 4) == i && w.countZombiesNear(tx, ty, 300) == 0 && city.nearestDrivable(tx, ty) != null
-                            && Math.hypot(city.nearestDrivable(tx, ty)[0] - tx, city.nearestDrivable(tx, ty)[1] - ty) < 50) tile = i;
-                }
-                check(tile >= 0, "a car parked on a lot");
-                float cx = (tile % city.w + 0.5f) * City.T, cy = (tile / city.w + 0.5f) * City.T;
-                float[] spot = city.findWalkable(cx, cy);
-                java.lang.reflect.Field jobs = World.class.getDeclaredField("carJobs");
-                jobs.setAccessible(true);
-                @SuppressWarnings("unchecked") java.util.ArrayList<float[]> jl = (java.util.ArrayList<float[]>) jobs.get(w);
-                int crew = 0, gang = -1;
-                for (Entity e : w.entities) {
-                    if (crew >= 2 || e.dead || e.type != Entity.GANGSTER || e.kit == 3 || w.gangBrokenUp(e.squad) || e.ride != null) continue;
-                    if (gang >= 0 && World.fmod(e.squad, World.GANG_NAMES.length) != gang) continue;
-                    gang = World.fmod(e.squad, World.GANG_NAMES.length);
-                    e.x = spot[0] + crew * 4;
-                    e.y = spot[1];
-                    e.foe = null;
-                    e.foeT = 999;
-                    e.corner = 0;
-                    e.robB = null;
-                    e.carJob = 9999;
-                    e.carX = spot[0];
-                    e.carY = spot[1];
-                    crew++;
-                }
-                jl.add(new float[]{9999, gang, tile, 0, -1});
-                boolean stolen = false;
-                for (int f = 0; f < 30 * 10 && !stolen; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    if (city.tiles[tile] == City.CAR) continue;
-                    for (Fleet.Vehicle v : w.fleet.vehicles)
-                        if (v.gang == gang && !v.riders.isEmpty() && Math.hypot(v.x - cx, v.y - cy) < 200) stolen = true;
-                }
-                check(stolen, "the car's gone from the lot, the gang aboard and away (tile " + city.tiles[tile] + ")");
-                // The boss goes down: the gang falls apart, and recruits no more.
-                int g0 = -1;
-                for (int g = 0; g < World.GANG_NAMES.length && g0 < 0; g++) if (w.gangBoss[g] != null) g0 = g;
-                Entity boss = w.gangBoss[g0];
-                boss.hp = 0;
-                for (int f = 0; f < 30 * 3; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(w.gangBrokenUp(g0), "the boss's gang is finished");
-                for (int f = 0; f < 30 * 60; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                int left = 0;
-                for (Entity e : w.entities)
-                    if (!e.dead && e.type == Entity.GANGSTER && World.fmod(e.squad, World.GANG_NAMES.length) == g0) left++;
-                check(left <= 3, "its members give up or get out of town (" + left + " left after a minute)");
-                // Saved and loaded: the gangs that are finished, the arrests, who's under arrest.
-                File file = File.createTempFile("zcs", ".dat");
-                SaveGame.save(w, file);
-                World l = SaveGame.load(file);
-                file.delete();
-                check(l.gangBroken == w.gangBroken && l.gangHadBoss == w.gangHadBoss && l.arrests == w.arrests, "gangs and arrests saved");
-                int aw = 0, al = 0;
-                for (Entity e : w.entities) if (!e.dead && e.arrested != 0) aw++;
-                for (Entity e : l.entities) if (!e.dead && e.arrested != 0) al++;
-                check(aw == al, "and who's under arrest (" + aw + "/" + al + ")");
-                // Drawn: the turf, the hideouts, people under arrest.
-                GameView v = new GameView(new android.app.Activity());
-                int[] size = {2400, 1080};
-                v.layout(size[0], size[1]);
-                Menu m = (Menu) field(v, "menu");
-                v.startGame(c);
-                v.awaitLoad();
-                m.screen = Menu.NONE;
-                for (int k = 0; k < 30; k++) draw(v, size);
-                check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
-            }
-        });
         test("17.3: the menu's city and the last game are let go of while the next one loads; the war bar adds up", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());
@@ -5078,7 +4689,6 @@ public final class GameTests {
                 java.lang.ref.WeakReference<Object> first = new java.lang.ref.WeakReference<Object>(field(v, "world"));
                 CityConfig c2 = new CityConfig();
                 c2.v[CityConfig.OPT_ZOMBIES] = 4;
-                c2.mode = CityConfig.MODE_GANGS;
                 v.startGame(c2);
                 for (int i = 0; i < 4 && first.get() != null; i++) {
                     System.gc();
@@ -5090,7 +4700,7 @@ public final class GameTests {
                 m.screen = Menu.NONE;
                 for (int k = 0; k < 10; k++) draw(v, size);
                 check(v.drawErrors == 0, "drew without an error");
-                // The war bar: the gangs count, and the police in their cars; not swamped by the crowd.
+                // The war bar: the dead against the city.
                 World w = (World) field(v, "world");
                 w.recount();
                 for (int i = 0; i < 30 * 3; i++) {
@@ -5098,175 +4708,17 @@ public final class GameTests {
                     w.evCount = 0;
                 }
                 check(w.outbreak, "the war's on");
-                check(w.warBalance > 0.2f && w.warBalance < 0.9f, "the bar shows a fight, not 97 to 3 (" + w.warBalance + ")");
-                // All of the other side gone: it says so.
-                for (int i = 0; i < 30 * 8; i++) {
-                    w.hostileReserve = 0;
-                    for (Entity e : w.entities) if (e.isHostile()) e.hp = 0;
+                // All of the dead gone: it says so.
+                for (int i = 0; i < 30 * 20; i++) {
+                    for (Entity e : w.entities) {
+                        if (e.isZombie()) e.hp = 0;
+                        e.infected = false;
+                    }
                     w.update(1 / 30f);
                     w.evCount = 0;
                     if (!w.outbreak) break;
                 }
                 check(w.warBalance > 0.9f || !w.outbreak, "and the city's side ahead once they're down (" + w.warBalance + ")");
-            }
-        });
-        test("17.4: the enemy's armour, air, artillery, drones and paratroopers; its ground and the occupation", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.v[CityConfig.OPT_ZOMBIES] = 3;
-                c.mode = CityConfig.MODE_ARMY;
-                c.seed = 24;
-                World w = new World(c);
-                w.rnd.setSeed(24);
-                w.populate(c);
-                w.recount();
-                City city = w.city;
-                int tanks = 0;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.enemy && v.type == Fleet.TANK) tanks++;
-                check(tanks >= 1, "enemy armour comes in with the first squads (" + tanks + ")");
-                check(!Fleet.army(w.fleet.vehicles.get(0)) || !w.fleet.vehicles.get(0).enemy, "the enemy's aren't the army's");
-                // A truck bringing a squad: it unloads them when there's a fight in reach.
-                float[] goal = w.enemyObjective(city.worldW() / 2, city.worldH() / 2);
-                float[] entry = city.edgeRoad(new java.util.Random(3));
-                Fleet.Vehicle truck = w.fleet.enemyIn(Fleet.ENEMY_APC, entry[0], entry[1], goal[0], goal[1]);
-                check(truck != null && truck.enemy && truck.kind == Fleet.K_APC, "an enemy APC on its way in");
-                java.lang.reflect.Method aboard = World.class.getDeclaredMethod("aboard", Fleet.Vehicle.class, Entity.class);
-                aboard.setAccessible(true);
-                java.lang.reflect.Method kit = World.class.getDeclaredMethod("kitOut", Entity.class, int.class, int.class);
-                kit.setAccessible(true);
-                for (int k = 0; k < 4; k++) {
-                    Entity e = w.spawn(Entity.INVADER, truck.x, truck.y);
-                    kit.invoke(w, e, 0, 999);
-                    aboard.invoke(w, truck, e);
-                }
-                w.recount();
-                check(w.counts[Entity.INVADER] >= 4, "the troops aboard count");
-                check(w.fleet.describe(truck).startsWith("Enemy"), "it's called the enemy's");
-                // Put city soldiers in its path: it stops and they climb out.
-                Entity s0 = null;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.SOLDIER && e.ride == null) { s0 = e; break; }
-                float[] near = city.findWalkable(truck.x + 60, truck.y);
-                s0.hp = s0.maxHp = 100000;
-                s0.x = near[0];
-                s0.y = near[1];
-                for (int f = 0; f < 30 * 3 && !truck.riders.isEmpty(); f++) {
-                    s0.x = near[0];
-                    s0.y = near[1];
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(truck.riders.isEmpty(), "the squad climbs out at the fight (state " + truck.state + ", in fleet " + w.fleet.vehicles.contains(truck) + ", riders " + truck.riders.size() + ", d " + (int) Math.hypot(s0.x - truck.x, s0.y - truck.y) + ", near " + w.cityForceNear(truck.x, truck.y, 200) + ", soldier dead " + s0.dead + ")");
-                // A city tank knocks out enemy armour in reach.
-                Fleet.Vehicle cityTank = null;
-                java.lang.reflect.Method placeTank = Fleet.class.getDeclaredMethod("placeTank", float.class, float.class);
-                placeTank.setAccessible(true);
-                cityTank = (Fleet.Vehicle) placeTank.invoke(w.fleet, truck.x + 150, truck.y);
-                if (cityTank == null) cityTank = (Fleet.Vehicle) placeTank.invoke(w.fleet, truck.x - 150, truck.y);
-                check(cityTank != null && !cityTank.enemy, "a city tank");
-                cityTank.x = truck.x + 120;
-                cityTank.y = truck.y;
-                boolean out = false;
-                for (int f = 0; f < 30 * 30 && !out; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    out = truck.broken || !w.fleet.vehicles.contains(truck);
-                }
-                check(out, "the city's tank knocks out the APC (hp " + truck.hp + ")");
-                // An attack helicopter: comes in and circles, and leaves once the enemy's beaten.
-                Fleet.Vehicle heli = w.fleet.enemyIn(Fleet.ENEMY_HELI, -100, city.worldH() / 2, goal[0], goal[1]);
-                check(heli != null && heli.type == Fleet.HELI && heli.enemy, "an enemy helicopter");
-                for (int f = 0; f < 30 * 2; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(heli.x > -100, "flying in");
-                // Paratroopers come down before they fight; drones go up; artillery falls.
-                java.lang.reflect.Field t = World.class.getDeclaredField("paraCd");
-                t.setAccessible(true);
-                java.lang.reflect.Field dc = World.class.getDeclaredField("droneCd");
-                dc.setAccessible(true);
-                java.lang.reflect.Field ac = World.class.getDeclaredField("artCd");
-                ac.setAccessible(true);
-                w.outbreakTime = Math.max(w.outbreakTime, 60);
-                w.hostileReserve = Math.max(w.hostileReserve, 20);
-                t.setFloat(w, 0);
-                dc.setFloat(w, 0);
-                ac.setFloat(w, 0);
-                int before = w.grenades.size();
-                java.lang.reflect.Method life = World.class.getDeclaredMethod("armyLife");
-                life.setAccessible(true);
-                life.invoke(w);
-                int para = 0;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.INVADER && e.paraT > 0) para++;
-                check(para >= 3, "paratroopers coming down (" + para + ")");
-                check(w.enemyDrones.size() >= 1 || w.grenades.size() > before, "a drone up or shells on the way");
-                // The ground it holds: a district with its troops and none of ours.
-                for (int f = 0; f < 30 * 6; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                java.lang.reflect.Method front = World.class.getDeclaredMethod("updateFront");
-                front.setAccessible(true);
-                // Clear one district of our side, put enemy soldiers in it.
-                int dIdx = city.districtIndex(city.worldW() / 2, city.worldH() / 2);
-                City.District dist = city.districts.get(dIdx);
-                for (Entity e : w.entities) if (!e.dead && e.isArmed() && city.districtIndex(e.x, e.y) == dIdx) { e.dead = true; e.removed = true; }
-                java.util.ArrayList<Entity> guards = new java.util.ArrayList<Entity>();
-                float[] spot = city.randomWalkableInTown(new java.util.Random(7));
-                for (int tries = 0; tries < 200 && city.districtIndex(spot[0], spot[1]) != dIdx; tries++) spot = city.randomWalkableInTown(new java.util.Random(tries));
-                for (int k = 0; k < 4; k++) {
-                    Entity e = w.spawn(Entity.INVADER, spot[0] + k * 6, spot[1]);
-                    kit.invoke(w, e, 0, 998);
-                    guards.add(e);
-                }
-                w.recount();
-                front.invoke(w);
-                check(w.enemyHolds(spot[0], spot[1]), "the enemy holds " + dist.name);
-                // Someone out in it: held, walked off, freed when the police get there.
-                Entity civ = w.spawn(Entity.CIVILIAN, spot[0] + 20, spot[1]);
-                civ.stayIn = null;
-                java.lang.reflect.Method occ = World.class.getDeclaredMethod("occupy");
-                occ.setAccessible(true);
-                for (int k = 0; k < 10 && civ.arrested != 3; k++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    civ.x = spot[0] + 20;
-                    civ.y = spot[1];
-                    occ.invoke(w);
-                }
-                check(civ.arrested == 3 || civ.stayIn != null, "held by the enemy, or indoors for the curfew");
-                if (civ.arrested == 3) {
-                    for (Entity g : guards) { g.dead = true; g.removed = true; }
-                    Entity cop = w.spawn(Entity.COP, civ.x + 10, civ.y);
-                    for (int f = 0; f < 30 * 3 && civ.arrested == 3; f++) {
-                        cop.x = civ.x + 10;
-                        cop.y = civ.y;
-                        w.update(1 / 30f);
-                        w.evCount = 0;
-                    }
-                    check(civ.arrested == 0 && w.freed >= 1, "freed by the police");
-                }
-                // The enemy beaten: its armour and air pull out, and the city wins.
-                for (int f = 0; f < 30 * 30 && w.warResult == 0; f++) {
-                    w.hostileReserve = 0;
-                    for (Entity e : w.entities) if (e.isHostile()) e.hp = 0;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(w.warResult == 1, "the city won (" + w.warResult + ")");
-                boolean pulling = true;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.enemy && !v.broken && v.state != Fleet.RETURN && v.state != Fleet.FLY_OUT) pulling = false;
-                check(pulling, "what's left of its armour pulls out");
-                // Drawn: the front, the armour, the drones.
-                GameView v = new GameView(new android.app.Activity());
-                int[] size = {2400, 1080};
-                v.layout(size[0], size[1]);
-                Menu m = (Menu) field(v, "menu");
-                v.startGame(c);
-                v.awaitLoad();
-                m.screen = Menu.NONE;
-                for (int k = 0; k < 20; k++) draw(v, size);
-                check(v.drawErrors == 0, "drew without an error (" + v.drawErrors + ")");
             }
         });
         test("17.5: the wounded go down and can be saved or bleed out; the after-action report", new Check() {
@@ -5335,15 +4787,6 @@ public final class GameTests {
                     }
                     check(alone.dead && w.bledOut > bled, "nobody got to them in time: bled out");
                 }
-                // Not shot at again while down.
-                Entity g = w.spawn(Entity.GANGSTER, 0, 0);
-                java.lang.reflect.Method foe = World.class.getDeclaredMethod("hostileFoe", Entity.class, Entity.class);
-                foe.setAccessible(true);
-                Entity lying = null;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP) { lying = e; break; }
-                lying.bleedT = 30;
-                check(!(Boolean) foe.invoke(w, g, lying), "the other side leaves the wounded be");
-                lying.bleedT = 0;
                 // Saved and loaded: the counts and who's down.
                 File file = File.createTempFile("zcs", ".dat");
                 SaveGame.save(w, file);
@@ -5357,19 +4800,24 @@ public final class GameTests {
                 Menu m = (Menu) field(v, "menu");
                 CityConfig c2 = new CityConfig();
                 c2.v[CityConfig.OPT_ZOMBIES] = 2;
-                c2.mode = CityConfig.MODE_GANGS;
                 v.startGame(c2);
                 v.awaitLoad();
                 for (int k = 0; k < 3; k++) draw(v, size);
                 m.screen = Menu.NONE;
                 World gw = (World) field(v, "world");
-                for (int f = 0; f < 30 * 30 && gw.warResult == 0; f++) {
-                    gw.hostileReserve = 0;
-                    for (Entity e : gw.entities) if (e.isHostile()) e.hp = 0;
+                for (int f = 0; f < 30 * 3; f++) {
                     gw.update(1 / 30f);
                     gw.evCount = 0;
                 }
-                check(gw.warResult == 1, "the gang war's over");
+                for (int f = 0; f < 30 * 30 && gw.warResult == 0; f++) {
+                    for (Entity e : gw.entities) {
+                        if (e.isZombie()) e.hp = 0;
+                        e.infected = false;
+                    }
+                    gw.update(1 / 30f);
+                    gw.evCount = 0;
+                }
+                check(gw.warResult == 1, "the outbreak's over");
                 gw.warBannerTime = 0;
                 draw(v, size);
                 check(m.screen == Menu.REPORT, "and the report's up");
@@ -5386,7 +4834,7 @@ public final class GameTests {
             public void run() throws Exception {
                 Campaign.Mission m0 = Campaign.MISSIONS[0];
                 CityConfig c = Campaign.config(0);
-                check(c.mission == 0 && c.mode == m0.mode && c.zombies() == m0.foes, "the mission's city and enemy");
+                check(c.mission == 0 && c.zombies() == m0.foes, "the mission's city and enemy");
                 World w = new World(c);
                 w.rnd.setSeed(3);
                 w.populate(c);
@@ -5469,7 +4917,13 @@ public final class GameTests {
                 int cops = gw.counts[Entity.COP], money = Campaign.budget(gw);
                 java.lang.reflect.Method cmd = GameView.class.getDeclaredMethod("commandAt", float.class, float.class);
                 cmd.setAccessible(true);
-                float tx = gw.city.worldW() / 2, ty = gw.city.worldH() / 2;
+                float tx = 0, ty = 0;
+                for (Entity e : gw.entities)
+                    if (!e.dead && e.type == Entity.CIVILIAN && e.ride == null && gw.city.insideOf(e.x, e.y) == null) {
+                        tx = e.x;
+                        ty = e.y;
+                        break;
+                    }
                 cmd.invoke(v, tx, ty);
                 gw.recount();
                 check(gw.counts[Entity.COP] == cops + 1 && Campaign.budget(gw) == money - Campaign.COP_COST[0], "a cop bought (" + cops + " -> "
@@ -5494,328 +4948,11 @@ public final class GameTests {
                 check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
             }
         });
-        test("18.1: heists - crews drive in, rob, take hostages; standoffs talked down; getaways; the ending; saves", new Check() {
+        test("18.4: a police drone sent to watch; looters; heavy destruction", new Check() {
             public void run() throws Exception {
+                check(Synth.TRACKS == 10, "ten pieces of music");
+                // A drone sent out: it gets there, and marks the dead under it.
                 CityConfig c = new CityConfig();
-                c.mode = CityConfig.MODE_HEIST;
-                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                c.v[CityConfig.OPT_ZOMBIES] = 4;
-                c.seed = 7;
-                World w = new World(c);
-                w.setMaxPopulation(5000);
-                w.rnd.setSeed(7);
-                w.populate(c);
-                check(w.hostileReserve >= 2 && w.counts[Entity.GANGSTER] == 0, "crews to come, none on the streets at first (" + w.hostileReserve + ")");
-                // A job: a crew drives in and goes in, the alarm goes, hostages are taken, the police box them in.
-                World.Heist h = null;
-                boolean robbed = false, inside = false, hostages = false, standoff = false;
-                for (int f = 0; f < 30 * 400 && !(standoff && inside); f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    for (World.Heist x : w.heists) {
-                        h = x;
-                        robbed |= x.phase >= World.H_ROB;
-                        hostages |= x.hostages > 0;
-                        standoff |= x.phase == World.H_STANDOFF;
-                        if (f % 15 == 0)
-                            for (Entity e : w.entities) if (!e.dead && e.squad == x.squad && w.city.insideOf(e.x, e.y) == x.b) inside = true;
-                    }
-                }
-                check(h != null && robbed, "a crew got to its target and the robbery's on");
-                check(inside, "robbers inside the building");
-                check(standoff || w.heistsStopped > 0, "the police boxed them in");
-                check(w.heistsStarted >= 1, "counted");
-                // Hostages: held where they are, freed once the police reach them with no robber by them.
-                Entity civ = null;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.arrested == 0 && e.ride == null) { civ = e; break; }
-                World.Heist fake = new World.Heist();
-                fake.squad = 999;
-                fake.b = w.city.buildings.get(0);
-                w.heists.add(fake);
-                civ.arrested = 3;
-                civ.heldBy = 999;
-                civ.postX = civ.x;
-                civ.postY = civ.y;
-                int freed = w.freed;
-                Entity cop = w.spawnCop(0, civ.x + 10, civ.y);
-                for (int f = 0; f < 60 && civ.arrested != 0; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(civ.arrested == 0 && w.freed > freed, "a hostage freed by an officer");
-                w.heists.remove(fake);
-                // A negotiator: a cop role of its own.
-                Entity neg = w.spawnCop(Entity.ROLE_NEGOTIATOR, civ.x, civ.y);
-                check(neg != null && neg.role == Entity.ROLE_NEGOTIATOR && "Negotiator".equals(Entity.ROLE_NAMES[neg.role]), "negotiators");
-                // Saved and loaded: the tally kept.
-                w.heistsEscaped = 1;
-                w.lootStolen = 123000;
-                File file = File.createTempFile("zcs", ".dat");
-                SaveGame.save(w, file);
-                World l = SaveGame.load(file);
-                file.delete();
-                check(l.mode() == CityConfig.MODE_HEIST && l.heistsEscaped == 1 && l.lootStolen == 123000 && l.heistsStarted == w.heistsStarted, "kept in a save");
-                // The getaway: a crew running for it in a car is shot at, and if it reaches the edge of town it's away.
-                World g = new World(Campaign.config(7));
-                g.setMaxPopulation(5000);
-                g.populate(g.city.cfg);
-                Campaign.begin(g, "");
-                g.hostileReserve = 0;
-                java.lang.reflect.Method start = World.class.getDeclaredMethod("startHeist");
-                start.setAccessible(true);
-                check((Boolean) start.invoke(g), "a heist started");
-                World.Heist gh = g.heists.get(0);
-                java.lang.reflect.Method esc = World.class.getDeclaredMethod("beginEscape", World.Heist.class, String.class);
-                esc.setAccessible(true);
-                // (Everyone out of the car at the door, then away.)
-                for (int f = 0; f < 30 * 120 && gh.phase == World.H_DRIVE; f++) {
-                    g.update(1 / 30f);
-                    g.evCount = 0;
-                }
-                if (g.heists.contains(gh) && gh.phase != World.H_ESCAPE) esc.invoke(g, gh, "test");
-                boolean drove = false;
-                for (int f = 0; f < 30 * 240 && g.heists.contains(gh); f++) {
-                    for (Entity e : g.entities) if (e.type == Entity.COP && !e.dead) e.hp = 0;
-                    g.update(1 / 30f);
-                    g.evCount = 0;
-                    drove |= gh.car != null && gh.car.gang == gh.squad && gh.phase == World.H_ESCAPE;
-                }
-                check(drove, "they drove off in the getaway car");
-                check(g.heistsEscaped == 1 && g.lootStolen > 0, "and with nobody to stop them, got away (" + g.heistsEscaped + ", $" + g.lootStolen + ")");
-            }
-        });
-        test("18.2: prison break - the riot, guards overpowered, the gate broken, escapes and recaptures, the ending, saves", new Check() {
-            public void run() throws Exception {
-                CityConfig c = new CityConfig();
-                c.mode = CityConfig.MODE_PRISON;
-                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                c.seed = 3;
-                c.normalize();
-                check(c.prisonIsland(), "a prison break is on the Prison Island");
-                World w = new World(c);
-                w.setMaxPopulation(5000);
-                w.rnd.setSeed(3);
-                w.populate(c);
-                check(w.city.prison != null && w.counts[Entity.GANGSTER] == 0 && w.riotStage == 0, "quiet at first");
-                // No zombies on the island: nobody's bitten.
-                boolean riot = false, armed = false, gate = false, out = false;
-                for (int f = 0; f < 30 * 200 && !(gate && out); f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    riot |= w.riotStage >= 1;
-                    gate |= w.riotStage == 2 && w.prisonFallen;
-                    if (f % 30 == 0)
-                        for (Entity e : w.entities)
-                            if (!e.dead && e.squad == World.RIOT_SQUAD && e.type == Entity.GANGSTER) {
-                                armed |= e.hasGun;
-                                out |= !w.inPrison(e.x, e.y);
-                            }
-                }
-                check(riot && w.riotTotal > 10, "the riot started (" + w.riotTotal + ")");
-                check(w.zombieCount() == w.counts[Entity.GANGSTER], "no zombies");
-                check(armed, "guards' shotguns taken");
-                check(gate, "the gate broken");
-                check(out, "rioters out over the causeway");
-                // A rioter badly hurt with the law right by: back in the cells.
-                Entity r = null;
-                for (Entity e : w.entities) if (!e.dead && e.squad == World.RIOT_SQUAD && e.type == Entity.GANGSTER) { r = e; break; }
-                if (r != null) {
-                    int before = w.recaptured;
-                    r.hp = 5;
-                    w.spawnCop(0, r.x + 8, r.y);
-                    for (int f = 0; f < 90 && r.type == Entity.GANGSTER && !r.dead; f++) {
-                        w.update(1 / 30f);
-                        w.evCount = 0;
-                    }
-                    check(r.dead || (r.type == Entity.CIVILIAN && w.recaptured > before), "a hurt rioter gives up");
-                }
-                // Saved and loaded.
-                File file = File.createTempFile("zcs", ".dat");
-                SaveGame.save(w, file);
-                World l = SaveGame.load(file);
-                file.delete();
-                check(l.mode() == CityConfig.MODE_PRISON && l.riotStage == w.riotStage && l.riotTotal == w.riotTotal && l.prisonEscaped == w.prisonEscaped
-                        && l.recaptured == w.recaptured && l.prisonFallen, "kept in a save");
-                // The end: nobody left rioting.
-                for (int f = 0; f < 30 * 300 && w.warResult == 0; f++) {
-                    for (Entity e : w.entities) if (e.type == Entity.GANGSTER) e.hp = 0;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(w.warResult == 1, "the riot's over and the city held (" + w.warResult + ", " + w.prisonEscaped + " of " + w.riotTotal + " away)");
-            }
-        });
-        test("18.3: cartel convoys and dirty cops; terror bombs made safe or going off; disasters; the alien mothership; saves; drawing", new Check() {
-            public void run() throws Exception {
-                // The cartel: a convoy sets off, an officer's bought.
-                CityConfig c = new CityConfig();
-                c.mode = CityConfig.MODE_CARTEL;
-                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                c.v[CityConfig.OPT_ZOMBIES] = 3;
-                c.seed = 21;
-                World w = new World(c);
-                w.setMaxPopulation(4000);
-                w.populate(c);
-                check(w.gangLike() && w.counts[Entity.GANGSTER] > 0 && w.gangHadBoss != 0, "cartel cells on their turf, with jefes");
-                java.lang.reflect.Method convoy = World.class.getDeclaredMethod("startConvoy");
-                convoy.setAccessible(true);
-                convoy.invoke(w);
-                boolean drove = false;
-                for (Fleet.Vehicle v : w.fleet.vehicles) drove |= v.getaway && v.gang >= 0 && !v.riders.isEmpty();
-                check(drove, "a convoy on the road");
-                java.lang.reflect.Field bribe = World.class.getDeclaredField("bribeCd");
-                bribe.setAccessible(true);
-                bribe.setFloat(w, 0);
-                java.lang.reflect.Method life = World.class.getDeclaredMethod("cartelLife");
-                life.setAccessible(true);
-                life.invoke(w);
-                check(w.corruptCops == 1, "an officer bought");
-                check(w.reword("THE GANGS ARE BROKEN").equals("THE CARTEL IS BROKEN"), "cartel words");
-                // Terror: a bomb made safe by the bomb squad; one left alone goes off.
-                CityConfig tc = new CityConfig();
-                tc.mode = CityConfig.MODE_TERROR;
-                tc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                tc.v[CityConfig.OPT_ZOMBIES] = 3;
-                tc.seed = 22;
-                World tw = new World(tc);
-                tw.setMaxPopulation(4000);
-                tw.populate(tc);
-                int techs = 0;
-                for (Entity e : tw.entities) if (!e.dead && e.role == Entity.ROLE_BOMB_TECH) techs++;
-                check(techs > 0 && tw.hostileReserve >= 3, "bomb squads at the stations, attacks to come");
-                float[] spot = tw.city.randomWalkableInTown(tw.rnd);
-                tw.plantBomb(spot[0], spot[1]);
-                float[] bomb = tw.bombs.get(0);
-                Entity tech = tw.spawnCop(Entity.ROLE_BOMB_TECH, bomb[0] + 3, bomb[1]);
-                tech.task = Dispatch.T_POST;
-                tech.postX = bomb[0];
-                tech.postY = bomb[1];
-                java.lang.reflect.Method tl = World.class.getDeclaredMethod("terrorLife");
-                tl.setAccessible(true);
-                java.lang.reflect.Field tcd = World.class.getDeclaredField("terrorCd");
-                tcd.setAccessible(true);
-                for (int s = 0; s < 12; s++) {
-                    tcd.setFloat(tw, 1000);
-                    tech.x = bomb[0] + 3;
-                    tech.y = bomb[1];
-                    tw.recount();
-                    tw.update(1 / 30f);
-                    tl.invoke(tw);
-                }
-                check(tw.bombsDefused == 1 && tw.bombs.isEmpty(), "made safe (" + tw.bombsDefused + ")");
-                tech.dead = true;
-                float[] far = tw.city.randomWalkableInTown(tw.rnd);
-                tw.plantBomb(far[0], far[1]);
-                tw.bombs.get(0)[2] = 1;
-                for (Entity e : tw.entities) if (e.type == Entity.COP || e.type == Entity.SOLDIER) e.dead = true;
-                tw.recount();
-                tl.invoke(tw);
-                check(tw.bombsExploded == 1, "and one left alone goes off");
-                tw.gunmen(far[0], far[1], 3);
-                int gm = 0;
-                for (Entity e : tw.entities) if (!e.dead && e.squad >= World.TERROR_SQUAD && e.type == Entity.GANGSTER) gm++;
-                check(gm >= 2, "gunmen");
-                // Disasters: each kind, buildings and people hurt; it ends.
-                CityConfig dc = new CityConfig();
-                dc.mode = CityConfig.MODE_DISASTER;
-                dc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                dc.v[CityConfig.OPT_ZOMBIES] = 3;
-                dc.seed = 23;
-                World dw = new World(dc);
-                dw.setMaxPopulation(4000);
-                dw.populate(dc);
-                check(dw.zombieCount() == 0 && dw.hostileReserve >= 3, "no enemy, disasters to come");
-                float[] mid = {dw.city.worldW() / 2, dw.city.worldH() / 2};
-                for (int k = 0; k < 4; k++) dw.startDisaster(k, mid[0], mid[1]);
-                float hp0 = 0;
-                for (City.Building b : dw.city.buildings) if (!b.collapsed) hp0 += b.hp;
-                for (int f = 0; f < 30 * 20; f++) {
-                    dw.update(1 / 30f);
-                    dw.evCount = 0;
-                }
-                float hp1 = 0;
-                for (City.Building b : dw.city.buildings) if (!b.collapsed) hp1 += b.hp;
-                check(hp1 < hp0, "buildings damaged");
-                boolean kinds[] = new boolean[4];
-                for (World.Hazard h : dw.hazards) kinds[h.kind] = true;
-                check(kinds[World.HZ_TORNADO] || dw.disastersDone > 0, "a tornado about");
-                dw.hostileReserve = 0;
-                for (int f = 0; f < 30 * 400 && dw.warResult == 0; f++) {
-                    dw.update(1 / 30f);
-                    dw.evCount = 0;
-                }
-                check(dw.warResult != 0 && dw.disastersDone >= 4, "the disasters end (" + dw.warResult + ", " + dw.disastersDone + ")");
-                // Aliens: the mothership, drones dropping under it; shot down, the drones power down.
-                CityConfig ac = new CityConfig();
-                ac.mode = CityConfig.MODE_ALIENS;
-                ac.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                ac.v[CityConfig.OPT_ZOMBIES] = 3;
-                ac.seed = 24;
-                World aw = new World(ac);
-                aw.setMaxPopulation(4000);
-                aw.populate(ac);
-                check(aw.motherAlive && aw.motherHp > 0 && aw.counts[Entity.INVADER] > 0, "the mothership and its drones");
-                aw.airstrike(aw.motherX, aw.motherY);
-                check(aw.motherHp < aw.motherMax, "an airstrike on it hurts it");
-                // Saved and loaded.
-                File file = File.createTempFile("zcs", ".dat");
-                SaveGame.save(aw, file);
-                World l = SaveGame.load(file);
-                file.delete();
-                check(l.motherAlive && Math.abs(l.motherHp - aw.motherHp) < 1 && l.mode() == CityConfig.MODE_ALIENS, "the mothership's kept in a save");
-                aw.motherHp = 1;
-                for (int f = 0; f < 30 * 120 && aw.warResult == 0; f++) {
-                    aw.update(1 / 30f);
-                    aw.evCount = 0;
-                }
-                check(!aw.motherAlive && aw.warResult == 1, "shot down, and its drones power down (" + aw.warResult + ", " + aw.counts[Entity.INVADER] + ")");
-                File f2 = File.createTempFile("zcs", ".dat");
-                SaveGame.save(tw, f2);
-                World l2 = SaveGame.load(f2);
-                f2.delete();
-                check(l2.bombsDefused == 1 && l2.bombsExploded == 1, "the bombs kept in a save");
-                // Every new mode drawn, with its disasters, bombs and mothership on screen.
-                for (int m = CityConfig.MODE_CARTEL; m <= CityConfig.MODE_ALIENS; m++) {
-                    GameView v = new GameView(new android.app.Activity());
-                    int[] size = {1080, 2000};
-                    v.layout(size[0], size[1]);
-                    Menu menu = (Menu) field(v, "menu");
-                    CityConfig vc = new CityConfig();
-                    vc.mode = m;
-                    vc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                    vc.v[CityConfig.OPT_ZOMBIES] = 2;
-                    v.startGame(vc);
-                    v.awaitLoad();
-                    for (int k = 0; k < 3; k++) draw(v, size);
-                    menu.screen = Menu.NONE;
-                    World gw = (World) field(v, "world");
-                    if (m == CityConfig.MODE_DISASTER) for (int k = 0; k < 4; k++) gw.startDisaster(k, gw.city.worldW() / 2, gw.city.worldH() / 2);
-                    if (m == CityConfig.MODE_TERROR) gw.plantBomb(gw.city.worldW() / 2, gw.city.worldH() / 2);
-                    float fx = m == CityConfig.MODE_ALIENS ? gw.motherX : gw.city.worldW() / 2, fy = m == CityConfig.MODE_ALIENS ? gw.motherY : gw.city.worldH() / 2;
-                    v.jumpTo(fx, fy);
-                    for (int k = 0; k < 60; k++) {
-                        gw.update(1 / 30f);
-                        gw.evCount = 0;
-                    }
-                    for (int k = 0; k < 3; k++) draw(v, size);
-                    menu.open(Menu.REPORT);
-                    draw(v, size);
-                    check(v.drawErrors == 0, CityConfig.MODES[m] + " drawn without an error (" + v.drawErrors + ")");
-                }
-            }
-        });
-        test("18.4: each mode's music; a police drone sent to watch; outbreak + looters; heavy destruction", new Check() {
-            public void run() throws Exception {
-                for (int k = Synth.THEME_STREET; k <= Synth.THEME_STORM; k++) {
-                    short[] pcm = Synth.music(k);
-                    int peak = 0;
-                    for (short s : pcm) peak = Math.max(peak, Math.abs(s));
-                    check(pcm.length >= 22050 * 8 && peak > 3000, "theme " + k + " has music in it (" + pcm.length + ", " + peak + ")");
-                }
-                check(Synth.TRACKS == 14, "fourteen pieces");
-                // A drone sent out: it gets there, and marks the enemy under it.
-                CityConfig c = new CityConfig();
-                c.mode = CityConfig.MODE_GANGS;
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 2;
                 c.seed = 31;
@@ -5823,7 +4960,7 @@ public final class GameTests {
                 w.setMaxPopulation(4000);
                 w.populate(c);
                 Entity foe = null;
-                for (Entity e : w.entities) if (!e.dead && e.isHostile() && e.kit < 3) { foe = e; break; }
+                for (Entity e : w.entities) if (!e.dead && e.isZombie()) { foe = e; break; }
                 float[] d = w.launchDrone(foe.x, foe.y);
                 for (int f = 0; f < 30 * 40; f++) {
                     w.update(1 / 30f);
@@ -5835,16 +4972,15 @@ public final class GameTests {
                     w.evCount = 0;
                 }
                 check(w.policeDrones.isEmpty(), "and home when its battery's done");
-                // Outbreak + looters: the dead, and looting gangs from the first minutes.
+                // Looters: once the outbreak's gone on a while, looting gangs form.
                 CityConfig lc = new CityConfig();
-                lc.mode = CityConfig.MODE_LOOTERS;
                 lc.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 lc.v[CityConfig.OPT_ZOMBIES] = 5;
                 lc.seed = 32;
                 World lw = new World(lc);
                 lw.setMaxPopulation(4000);
                 lw.populate(lc);
-                check(!lw.hostileMode() && lw.zombieCount() > 0, "a zombie outbreak");
+                check(lw.zombieCount() > 0, "a zombie outbreak");
                 java.lang.reflect.Field formed = World.class.getDeclaredField("gangsFormed");
                 formed.setAccessible(true);
                 for (int f = 0; f < 30 * 30; f++) {
@@ -5856,11 +4992,11 @@ public final class GameTests {
                 raid.setAccessible(true);
                 for (int k = 0; k < 600 && formed.getInt(lw) == 0; k++) {
                     lw.outbreak = true;
-                    lw.outbreakTime = Math.max(lw.outbreakTime, 25);
+                    lw.outbreakTime = Math.max(lw.outbreakTime, 400);
                     lw.recount();
                     raid.invoke(lw);
                 }
-                check(formed.getInt(lw) > 0, "looters out early (" + formed.getInt(lw) + " gangs by " + (int) lw.outbreakTime + "s)");
+                check(formed.getInt(lw) > 0, "looters out (" + formed.getInt(lw) + " gangs by " + (int) lw.outbreakTime + "s)");
                 // Heavy destruction: the same blast does far more.
                 float[] lost = new float[2];
                 for (int k = 0; k < 2; k++) {
@@ -5883,57 +5019,33 @@ public final class GameTests {
                 check(lost[1] > lost[0] * 1.2f, "heavy destruction does more (" + (int) lost[0] + " -> " + (int) lost[1] + ")");
             }
         });
-        test("18.5: a heist with hostages, bombs, disasters and drones under way are kept in a save", new Check() {
+        test("18.5: drones under way are kept in a save", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
-                c.mode = CityConfig.MODE_HEIST;
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 3;
                 c.seed = 41;
                 World w = new World(c);
                 w.setMaxPopulation(4000);
                 w.populate(c);
-                java.lang.reflect.Method start = World.class.getDeclaredMethod("startHeist");
-                start.setAccessible(true);
-                check((Boolean) start.invoke(w), "a heist");
-                World.Heist h = w.heists.get(0);
-                h.phase = World.H_STANDOFF;
-                h.talk = 7;
-                Entity hostage = null;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.ride == null) { hostage = e; break; }
-                hostage.arrested = 3;
-                hostage.heldBy = h.squad;
-                h.hostages = 1;
-                // (A bomb, a disaster and a drone too, whatever the mode.)
-                w.plantBomb(w.city.worldW() / 2, w.city.worldH() / 2);
-                w.startDisaster(World.HZ_FLOOD, w.city.worldW() / 3, w.city.worldH() / 3);
                 w.launchDrone(w.city.worldW() / 2, w.city.worldH() / 2);
                 File file = File.createTempFile("zcs", ".dat");
                 SaveGame.save(w, file);
                 World l = SaveGame.load(file);
                 file.delete();
-                check(l.heists.size() == 1 && l.heists.get(0).squad == h.squad && l.heists.get(0).phase == World.H_STANDOFF
-                        && Math.abs(l.heists.get(0).talk - 7) < 0.01f && l.heists.get(0).b != null
-                        && l.city.buildings.indexOf(l.heists.get(0).b) == w.city.buildings.indexOf(h.b), "the heist kept, at its standoff");
-                boolean held = false;
-                for (Entity e : l.entities) held |= !e.dead && e.arrested == 3 && e.heldBy == h.squad;
-                check(held, "the hostage still held by that crew");
-                check(l.bombs.size() == 1 && Math.abs(l.bombs.get(0)[2] - w.bombs.get(0)[2]) < 0.01f, "the bomb still ticking");
-                check(l.hazards.size() == w.hazards.size() && l.hazards.get(0).kind == World.HZ_FLOOD, "the flood still rising");
                 check(l.policeDrones.size() == 1, "the drone still up");
-                // And the game goes on from there.
                 for (int f = 0; f < 60; f++) {
                     l.update(1 / 30f);
                     l.evCount = 0;
                 }
-                check(l.heists.size() <= 1, "carries on");
+                check(l.zombieCount() > 0 || l.warResult != 0, "carries on");
             }
         });
         test("19.0: the Sound Update - new sounds, ambience beds, the mixer's groups, mono, deafening, captions, the Sound Lab", new Check() {
             public void run() throws Exception {
                 check(Sfx.MIN_GAP.length == Sfx.COUNT && Sfx.NAMES.length == Sfx.COUNT && Sfx.BUS.length == Sfx.COUNT, "every sound has its settings and a name");
                 // Every new sound: made, not silent, nothing broken in it.
-                for (int id = Sfx.TORNADO; id < Sfx.COUNT; id++)
+                for (int id = Sfx.CASH; id < Sfx.COUNT; id++)
                     for (int v = 0; v < Sfx.VARIANTS[id]; v++) {
                         short[] s = Synth.effect(id, v);
                         int peak = 0;
@@ -6012,15 +5124,18 @@ public final class GameTests {
                 draw(v, size);
                 java.lang.reflect.Method act = Menu.class.getDeclaredMethod("act", int.class);
                 act.setAccessible(true);
-                act.invoke(menu, 6000 + Sfx.TORNADO);
-                check(snd.lastPlayed == Sfx.TORNADO, "the Sound Lab plays a sound");
+                act.invoke(menu, 6000 + Sfx.PANIC);
+                check(snd.lastPlayed == Sfx.PANIC, "the Sound Lab plays a sound");
+                java.lang.reflect.Field pid = Menu.class.getDeclaredField("previewId");
+                pid.setAccessible(true);
+                check(pid.getInt(menu) == Sfx.PANIC, "and shows which one's playing");
                 act.invoke(menu, 7000 + Sfx.LOOP_BIRDS);
                 draw(v, size);
                 check(snd.loopGain[Sfx.LOOP_BIRDS] > 0.3f, "and an ambience bed");
                 check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
             }
         });
-        test("19.5: the Visuals Update - light, blasts, craters, smoke, wrecks burning, disasters, alien tracers, the screen's effects", new Check() {
+        test("19.5: the Visuals Update - light, blasts, craters, smoke, wrecks burning, the screen's effects", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
@@ -6060,19 +5175,6 @@ public final class GameTests {
                     for (int k = 0; k < 60; k++) fx.update(w, 1 / 30f, wx0, wy0, wx0 + 800, wy0 + 800, null);
                     check(!fx.sparks.isEmpty() || !fx.lights.isEmpty(), "a wreck burning");
                 }
-                // A quake cracks the ground; a fire throws embers and light.
-                w.evCount = 0;
-                w.emit(Sfx.QUAKE, cx, cy);
-                fx.events(w, vx0, vy0, vx1, vy1);
-                check(fx.cracks.size() > 10, "cracks after a quake (" + fx.cracks.size() + ")");
-                w.startDisaster(World.HZ_FIRE, cx, cy);
-                int maxSparks = 0, maxLights = 0;
-                for (int k = 0; k < 90; k++) {
-                    fx.update(w, 1 / 30f, vx0, vy0, vx1, vy1, null);
-                    maxSparks = Math.max(maxSparks, fx.sparks.size());
-                    maxLights = Math.max(maxLights, fx.lights.size());
-                }
-                check(maxSparks > 0 && maxLights > 0, "embers and firelight (" + maxSparks + ", " + maxLights + ")");
                 // Low effects: far less.
                 Visuals low = new Visuals();
                 low.quality = 0;
@@ -6087,23 +5189,7 @@ public final class GameTests {
                 w2.evCount = 0;
                 fx.events(w2, vx0, vy0, vx1, vy1);
                 check(fx.craters.isEmpty() && fx.count() == 0, "a new city starts clean");
-                // The aliens' shots are drawn green.
-                CityConfig ac = new CityConfig();
-                ac.mode = CityConfig.MODE_ALIENS;
-                ac.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
-                ac.v[CityConfig.OPT_ZOMBIES] = 3;
-                ac.seed = 62;
-                World aw = new World(ac);
-                aw.setMaxPopulation(4000);
-                aw.populate(ac);
-                boolean green = false;
-                for (int f = 0; f < 30 * 60 && !green; f++) {
-                    aw.update(1 / 30f);
-                    aw.evCount = 0;
-                    for (int k = 0; k < World.MAXT; k++) green |= aw.tlife[k] > 0 && aw.tgreen[k];
-                }
-                check(green, "green alien tracers");
-                // Drawn, all of it: the ground, above, and the screen (with every mode's colour and the bars).
+                // Drawn, all of it: the ground, above, and the screen (with and without the bars).
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(800, 800, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Canvas cv = new android.graphics.Canvas(bm);
                 fx.events(w, vx0, vy0, vx1, vy1);
@@ -6114,7 +5200,7 @@ public final class GameTests {
                 fx.drawAbove(cv, vx0, vy0, vx1, vy1);
                 fx.hurt = 1;
                 fx.daze = 1;
-                for (int m = 0; m < CityConfig.MODES.length; m++) fx.drawScreen(cv, 800, 800, 0.9f, m, m % 2 == 0);
+                for (int m = 0; m < 2; m++) fx.drawScreen(cv, 800, 800, 0.9f, m == 0);
                 check(true, "drawn");
             }
         });
@@ -6152,8 +5238,9 @@ public final class GameTests {
                 probe.y = open[1];
                 // Shots at someone behind cover hit half as often as at someone out in the open.
                 Entity shooter = w.spawn(Entity.COP, from[0], from[1]);
-                Entity hid = w.spawn(Entity.GANGSTER, spot[0], spot[1]);
-                hid.hp = hid.maxHp = 1e9f;
+                Entity hid = w.spawn(Entity.CIVILIAN, spot[0], spot[1]);
+                hid.hasGun = true;
+                hid.hp = hid.maxHp = 1e6f;
                 java.lang.reflect.Method fire = World.class.getDeclaredMethod("fire", Entity.class, Entity.class, float.class, float.class);
                 fire.setAccessible(true);
                 int hitsHid = 0, hitsOpen = 0;
@@ -6186,46 +5273,14 @@ public final class GameTests {
                 hid.lastAimT = -99;
                 for (int k = 0; k < 90; k++) cs.invoke(w, hid, 1 / 30f);
                 check(hid.suppress < 0.4f, "and it wears off");
-                // In a real gunfight, some of them make for cover, and get there.
-                CityConfig g = new CityConfig();
-                g.v[CityConfig.OPT_ZOMBIES] = 4;
-                g.mode = CityConfig.MODE_GANGS;
-                g.seed = 27;
-                World gw = new World(g);
-                gw.populate(g);
-                int going = 0, inCover = 0;
-                for (int f = 0; f < 30 * 25; f++) {
-                    gw.update(1 / 30f);
-                    gw.evCount = 0;
-                    if (f % 15 != 0) continue;
-                    for (Entity e : gw.entities) {
-                        if (e.dead || gw.time - e.lastAimT > 0.6f) continue;
-                        if (e.coverX >= 0) going++;
-                        if (gw.inCover(e, e.coverFromX, e.coverFromY)) inCover++;
-                    }
-                }
-                check(going > 10 && inCover > 10, "fighters make for cover and fight from it (" + going + " heading, " + inCover + " in cover)");
-                // Helicopters can be shot down: an enemy one over soldiers, a city one under gang fire.
+                // The city's helicopters can be shot down, but take more than one round.
                 CityConfig ac = new CityConfig();
                 ac.v[CityConfig.OPT_ZOMBIES] = 1;
-                ac.mode = CityConfig.MODE_ARMY;
                 ac.seed = 28;
                 World aw = new World(ac);
                 aw.populate(ac);
-                Entity sol = null;
-                for (Entity e : aw.entities) if (!e.dead && e.type == Entity.SOLDIER && e.ride == null) { sol = e; break; }
-                Fleet.Vehicle eh = aw.fleet.enemyIn(Fleet.ENEMY_HELI, sol.x - 60, sol.y, sol.x, sol.y);
-                float hp0 = eh.hp;
-                for (Entity e : aw.entities) if (!e.dead && e.type == Entity.SOLDIER && e.ride == null && Math.hypot(e.x - sol.x, e.y - sol.y) < 400) e.hp = e.maxHp = 1e6f;
-                for (int f = 0; f < 30 * 20 && !eh.broken; f++) {
-                    eh.x = sol.x + 40;
-                    eh.y = sol.y;
-                    aw.update(1 / 30f);
-                    aw.evCount = 0;
-                }
-                check(eh.hp < hp0, "soldiers' rifles hurt an enemy helicopter (" + eh.hp + " of " + hp0 + ")");
                 Fleet.Vehicle mine = null;
-                for (Fleet.Vehicle v : aw.fleet.vehicles) if (v.type == Fleet.HELI && !v.enemy) { mine = v; break; }
+                for (Fleet.Vehicle v : aw.fleet.vehicles) if (v.type == Fleet.HELI) { mine = v; break; }
                 if (mine != null) {
                     float m0 = mine.hp;
                     aw.fleet.damage(mine, 10, false);

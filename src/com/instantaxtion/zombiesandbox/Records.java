@@ -14,6 +14,14 @@ final class Records {
 
     Records(Context context) {
         prefs = context.getSharedPreferences("records", Context.MODE_PRIVATE);
+        // (19.6) Only the zombie missions are left: Dead City moved up from the seventh to the third.
+        if (prefs.getInt("zombiesOnly", 0) == 0) {
+            SharedPreferences.Editor ed = prefs.edit();
+            int dead = prefs.getInt("mission6", 0);
+            for (int i = 2; i <= 6; i++) ed.putInt("mission" + i, 0);
+            if (dead > 0) ed.putInt("mission2", dead);
+            ed.putInt("zombiesOnly", 1).apply();
+        }
     }
 
     int record(int i) {

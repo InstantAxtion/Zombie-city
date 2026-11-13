@@ -154,12 +154,6 @@ final class Fleet {
         /** Driving the riders to a safe zone. */
         boolean rescue;
         /** ((17.2) A car a gang has stolen, with its crew aboard: which gang (-1 none). */
-        int gang = -1;
-        /** ((17.4) The enemy army's: a truck or APC bringing a squad, a tank or an attack helicopter. */
-        boolean enemy;
-        /** ((18.1) A heist crew's getaway car: the police shoot at it while the crew's aboard. */
-        boolean getaway;
-        transient float enemyT;
         int number;
         /** Helicopter height (0 on the pad, 1 cruising) and how hard it is banking. */
         float alt, bank;
@@ -341,8 +335,6 @@ final class Fleet {
 
     /** What a vehicle is, for its card: "Police car - Unit 14 (Highway Patrol)", "Taxi", "Engine 2"... */
     String describe(Vehicle v) {
-        // ((17.4) The enemy's.)
-        if (v.enemy) return "Enemy " + (v.type == TANK ? "tank" : v.type == HELI ? "attack helicopter" : v.kind == K_APC ? "APC" : "troop truck");
         switch (v.type) {
             case CRUISER:
                 if (v.kind == K_BIKE) return "Police motorcycle  -  " + callsign(v);
@@ -370,11 +362,6 @@ final class Fleet {
 
     /** A short line about what a vehicle is doing, shown above it on the map. */
     String status(Vehicle v) {
-        // ((18.1) A heist crew's.)
-        if (v.getaway) return "Getaway car" + (v.broken ? ": Disabled" : v.gang >= 0 && !v.riders.isEmpty() ? ": Fleeing!" : ": Waiting");
-        // ((17.4) The enemy's.)
-        if (v.enemy) return describe(v) + (v.broken ? ": Knocked out" : v.state == DRIVE ? (v.riders.isEmpty() ? ": Advancing" : ": Bringing in troops")
-                : v.state == RETURN || v.state == FLY_OUT ? ": Pulling back" : v.type == HELI ? ": Attacking" : ": Firing!");
         String where = v.place != null ? v.place : null;
         switch (v.type) {
             case HELI:
@@ -492,7 +479,6 @@ final class Fleet {
 
     /** (11.1) The army's (tanks, trucks, Humvees, its helicopters and boats) rather than the police's or anyone else's. */
     static boolean army(Vehicle v) {
-        if (v.enemy) return false;
         if (v.type == TANK || v.type == JET || v.type == BOAT) return true;
         if (v.type == HELI) return v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI;
         return v.type == TRUCK && !policeTruck(v);
@@ -1135,7 +1121,7 @@ final class Fleet {
 
     private boolean route(Vehicle v, float x, float y) {
         // ((10.34) Patrol cars on their rounds share the budget too: there are a couple of hundred on a Gigantic map.)
-        if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.gang < 0) {
+        if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null) {
             if (routeBudget <= 0) return false;
             routeBudget--;
         }
@@ -1147,7 +1133,7 @@ final class Fleet {
         int[] field = scratchField();
         // ((16.8) An everyday trip gives up on a search that's gone on far longer than a drive of its length takes:
         // it can always go somewhere else. See City.searchCap.)
-        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.gang < 0;
+        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null;
         city.searchCap = casual ? 15000 : 0;
         try {
             return routeOn(v, x, y, field);
@@ -2204,153 +2190,6 @@ final class Fleet {
         return v;
     }
 
-    // ------------------------------------------------------------------ (17.4) the enemy army's vehicles
-
-    static final int ENEMY_TRUCK = 0, ENEMY_APC = 1, ENEMY_TANK = 2, ENEMY_HELI = 3;
-
-    /**
-     * An enemy vehicle coming in at (x, y) (the edge of the map) for (tx, ty): a truck or an APC (its squad aboard, added
-     * after), a tank, or an attack helicopter. Null if there's no way in.
-     */
-    Vehicle enemyIn(int what, float x, float y, float tx, float ty) {
-        Vehicle v = make(what == ENEMY_TANK ? TANK : what == ENEMY_HELI ? HELI : TRUCK);
-        v.enemy = true;
-        v.tx = tx;
-        v.ty = ty;
-        if (what == ENEMY_HELI) {
-            v.x = x;
-            v.y = y;
-            v.alt = 1;
-            v.hp = v.maxHp = 260;
-            v.state = FLY_IN;
-            v.angle = (float) Math.atan2(ty - y, tx - x);
-            vehicles.add(v);
-            return v;
-        }
-        float[] p = city.nearestDrivable(x, y);
-        if (p == null) return null;
-        v.x = p[0];
-        v.y = p[1];
-        v.angle = (float) Math.atan2(ty - p[1], tx - p[0]);
-        v.turret = v.angle;
-        if (what == ENEMY_APC) setKind(v, K_APC);
-        else if (what == ENEMY_TANK) v.hp = v.maxHp = 700;
-        v.state = DRIVE;
-        float[] q = city.nearestDrivable(tx, ty);
-        if (q == null || !route(v, q[0], q[1])) return null;
-        vehicles.add(v);
-        return v;
-    }
-
-    /**
-     * An enemy vehicle's step: on the road to the fighting (a squad aboard climbs out once there's a fight in reach, or
-     * at the end of the road), then holding there, its guns on the city's side (World.enemyGuns); a helicopter flies in,
-     * circles the fight and goes. A wreck: whoever's still aboard scrambles out.
-     */
-    private boolean updateEnemy(Vehicle v, float dt) {
-        v.cannonCd -= dt;
-        v.gunCd -= dt;
-        v.enemyT += dt;
-        if (v.broken) {
-            if (!v.riders.isEmpty()) arrive(v);
-            v.speed = 0;
-            v.alt = Math.max(0, v.alt - dt);
-            return v.type == HELI && v.alt <= 0 && v.enemyT > 1 && w.heliDown(v);
-        }
-        // The enemy's beaten: what's left of its armour and air pulls out.
-        if (w.enemyBeaten() && v.state != RETURN && v.state != FLY_OUT) {
-            if (v.type == HELI) {
-                v.state = FLY_OUT;
-                v.tx = v.x < city.worldW() / 2 ? -200 : city.worldW() + 200;
-                v.ty = v.y;
-            } else {
-                float[] out = exitNear(v.x, v.y);
-                if (out == null || !route(v, out[0], out[1])) return true;
-                v.state = RETURN;
-                v.stuckTimer = 0;
-            }
-        }
-        if (v.state == RETURN) {
-            v.stuckTimer += dt;
-            boolean moving = driveStep(v, dt, 50, 1);
-            return !moving || v.stuckTimer > 30 && !inView(v.x, v.y);
-        }
-        // (An empty troop truck that's stopped somewhere it shouldn't: away once nobody's looking.)
-        if (v.type == TRUCK && v.kind != K_APC && v.riders.isEmpty() && v.state == ENGAGE && !inView(v.x, v.y)) return true;
-        // (A troop truck has no gun of its own.)
-        if (!w.enemyBeaten() && (v.type != TRUCK || v.kind == K_APC)) w.enemyGuns(v, dt);
-        if (v.type == HELI) {
-            float spd = 75;
-            if (v.state == FLY_IN || v.state == CIRCLE) {
-                float dx = v.tx - v.x, dy = v.ty - v.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
-                if (d < 180) v.state = CIRCLE;
-                float a;
-                if (v.state == CIRCLE) a = (float) Math.atan2(dy, dx) + 1.35f;
-                else a = (float) Math.atan2(dy, dx);
-                v.angle = turnTo(v.angle, a, dt * 1.6f);
-                v.bank = Math.max(-1, Math.min(1, (a - v.angle) * 2));
-                v.x += (float) Math.cos(v.angle) * spd * dt;
-                v.y += (float) Math.sin(v.angle) * spd * dt;
-                // (Overhead for a minute and a half, then away.)
-                if (v.enemyT > 90) {
-                    v.state = FLY_OUT;
-                    float ww = city.worldW(), hh = city.worldH();
-                    v.tx = v.x < ww / 2 ? -200 : ww + 200;
-                    v.ty = v.y < hh / 2 ? -200 : hh + 200;
-                }
-                return false;
-            }
-            float dx = v.tx - v.x, dy = v.ty - v.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
-            v.angle = turnTo(v.angle, (float) Math.atan2(dy, dx), dt * 1.6f);
-            v.x += (float) Math.cos(v.angle) * spd * 1.3f * dt;
-            v.y += (float) Math.sin(v.angle) * spd * 1.3f * dt;
-            return d < 40 || v.x < -150 || v.y < -150 || v.x > city.worldW() + 150 || v.y > city.worldH() + 150;
-        }
-        if (v.state == DRIVE) {
-            v.stuckTimer += dt;
-            boolean moving = driveStep(v, dt, v.type == TANK ? 40 : 60, 1);
-            if (moving) w.runOver(v.x, v.y, v.type == TANK ? 10 : 8, Math.max(v.speed, 20), v.angle);
-            boolean contact = w.cityForceNear(v.x, v.y, v.type == TANK ? 260 : 200);
-            if (!moving || contact || v.stuckTimer > 12) {
-                // Out they get, and the vehicle holds here.
-                if (!v.riders.isEmpty()) {
-                    arrive(v);
-                    w.squadOut(v);
-                }
-                // ((17.4) A troop truck, its squad out, goes back for more; an APC stays to back them up.)
-                if (v.type == TRUCK && v.kind != K_APC) {
-                    float[] out = exitNear(v.x, v.y);
-                    if (out != null && route(v, out[0], out[1])) {
-                        v.state = RETURN;
-                        v.stuckTimer = 0;
-                        return false;
-                    }
-                    // (No way back out from here: gone once nobody's looking.)
-                    if (!inView(v.x, v.y)) return true;
-                }
-                v.state = ENGAGE;
-                v.speed = 0;
-                v.idleTimer = 0;
-            }
-            return false;
-        }
-        if (v.state == ENGAGE) {
-            v.speed = 0;
-            v.idleTimer = w.cityForceNear(v.x, v.y, 280) ? 0 : v.idleTimer + dt;
-            // Nothing to fight for a while: on, toward the next objective.
-            if (v.idleTimer > 25) {
-                float[] o = w.enemyObjective(v.x, v.y);
-                float[] q = o != null ? city.nearestDrivable(o[0], o[1]) : null;
-                v.idleTimer = 0;
-                if (q != null && World.hypot(q[0] - v.x, q[1] - v.y) > 120 && route(v, q[0], q[1])) {
-                    v.state = DRIVE;
-                    v.stuckTimer = 0;
-                }
-            }
-        }
-        return false;
-    }
-
     /** ((17.6) One of the city's helicopters shot down: spinning, losing height, and a fireball where it comes down. */
     private boolean heliCrash(Vehicle v, float dt) {
         v.angle += dt * 5;
@@ -2366,56 +2205,6 @@ final class Fleet {
                 + "Helicopter down on " + city.placeName(v.x, v.y) + "!", v.x, v.y, true);
         w.timeline("Helicopter shot down", v.x, v.y);
         return true;
-    }
-
-    /** (17.2) A car taken from a lot, ready for a gang to drive off in (not given anywhere to go yet). */
-    Vehicle stealCar(float x, float y) {
-        float[] p = city.nearestDrivable(x, y);
-        if (p == null || World.hypot(p[0] - x, p[1] - y) > 60) return null;
-        Vehicle v = make(CAR);
-        v.state = CRUISE;
-        v.x = p[0];
-        v.y = p[1];
-        pickModel(v, false);
-        v.angle = (float) Math.atan2(y - p[1], x - p[0]) + (float) Math.PI;
-        vehicles.add(v);
-        return v;
-    }
-
-    /** (17.2) Off it goes with the gang aboard, to (x, y). */
-    boolean gangDrive(Vehicle v, int gang, float x, float y) {
-        float[] p = city.nearestDrivable(x, y);
-        if (p == null) return false;
-        v.parked = false;
-        v.state = CRUISE;
-        v.timer = 0;
-        v.stuckTimer = 0;
-        v.gang = gang;
-        if (!route(v, p[0], p[1])) {
-            v.gang = -1;
-            return false;
-        }
-        return true;
-    }
-
-    /** (17.2) Out they get, and the car's left where it stopped. */
-    void gangOut(Vehicle v) {
-        arrive(v);
-        v.gang = -1;
-        v.parked = true;
-        v.speed = 0;
-        v.state = ABANDONED;
-        v.field = null;
-    }
-
-    /** (17.2) A stolen car with a gang aboard: fast through town (the shooting is World.driveBys), out at the end. */
-    private boolean gangCar(Vehicle v, float dt) {
-        giveWay(v, dt);
-        v.timer += dt;
-        boolean going = !v.broken && driveStep(v, dt, Math.min(junctionRule(v, dt), 95), 1f);
-        if (going) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        if (!going || v.broken || v.riders.isEmpty() || v.timer > 120) gangOut(v);
-        return false;
     }
 
     /** A police car with two officers, setting off on patrol from here. */
@@ -3098,7 +2887,6 @@ final class Fleet {
             v.crashCd -= vdt;
             boolean done;
             if (v.player != null) done = updatePlayerVehicle(v, vdt);
-            else if (v.enemy) done = updateEnemy(v, vdt);
             else if (v.type == HELI && v.broken) done = heliCrash(v, vdt);
             else if (v.type == HELI) done = updateHeli(v, vdt);
             else if (v.type == JET) done = updateJet(v, vdt);
@@ -3307,7 +3095,6 @@ final class Fleet {
         v.broken = true;
         v.parked = true;
         w.carsWrecked++;
-        if (v.enemy) w.enemyVehiclesLost++;
         // The crew bails out (and the driver). ((17.6) Not from a helicopter in the air: they go down with it.)
         if (v.type != HELI && !v.crew.isEmpty()) crewOut(v, true);
         if (v.type != HELI && v.driver != null) driverOut(v, true);
@@ -5239,7 +5026,9 @@ final class Fleet {
         else v.spin += turned;
         if (Math.abs(v.spin) > 7.5f && v.player == null) {
             v.spin = 0;
-            v.careful = 4;
+            // ((19.6) Round again while still flagged from the last time - a driver whose errand doesn't act on it,
+            // such as one on a call: longer at the careful crawl, which makes even a tight turn.)
+            v.careful = v.orbited ? 12 : 4;
             v.orbited = true;
             int own = city.tileIndex(v.x, v.y);
             if (v.field.get(own) < City.FAR) v.pathT = own;
@@ -5265,7 +5054,6 @@ final class Fleet {
      */
     private boolean updateTraffic(Vehicle v, float dt) {
         if (v.parked) return false;
-        if (v.gang >= 0) return gangCar(v, dt);
         if (fuel(v, dt)) return false;
         if (v.pulled) {
             // (Waiting for the officer: not stuck, not a jam.)
@@ -6216,8 +6004,7 @@ final class Fleet {
             // boats and helicopters bringing them in: they weren't counted till they climbed out.)
             for (int k = 0; k < v.riders.size(); k++) {
                 int t = v.riders.get(k).type;
-                // ((17.4) And the other side's, in a stolen car or an enemy truck.)
-                if (t == Entity.COP || t == Entity.SOLDIER || t >= Entity.GANGSTER) counts[t]++;
+                if (t == Entity.COP || t == Entity.SOLDIER) counts[t]++;
             }
             if (v.passengers > 0 && (v.passengerType == Entity.COP || v.passengerType == Entity.SOLDIER) && !v.removedFromFleet)
                 counts[v.passengerType] += v.passengers;
@@ -7712,23 +7499,6 @@ final class Fleet {
         if (v.state == WAIT) {
             v.timer -= dt;
             if (v.timer <= 0) v.state = DRIVE;
-            return false;
-        }
-        // ((17.4) The enemy's armour first: turret round, and the main gun on it.)
-        Vehicle ev = w.enemyVehicleNear(v.x, v.y, 320, true);
-        if (ev != null) {
-            float ea = (float) Math.atan2(ev.y - v.y, ev.x - v.x);
-            v.turret = turnTo(v.turret, ea, dt * 1.8f);
-            if (v.cannonCd <= 0 && Math.abs(World.angleDiff(v.turret, ea)) < 0.2f) {
-                v.cannonCd = 3.5f;
-                w.tankShell(v.x + (float) Math.cos(v.turret) * 14, v.y + (float) Math.sin(v.turret) * 14, ev.x, ev.y);
-                damage(ev, ev.type == TANK ? 300 : 500, true);
-            }
-            if (v.state == DRIVE) {
-                v.state = ENGAGE;
-                v.timer = 60;
-                v.speed = 0;
-            }
             return false;
         }
         // The turret tracks the nearest zombie; the cannon fires at crowds, the coax gun at stragglers.

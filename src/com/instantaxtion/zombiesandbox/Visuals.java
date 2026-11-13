@@ -149,19 +149,14 @@ final class Visuals {
         for (int i = 0; i < w.evCount; i++) {
             float x = w.evX[i], y = w.evY[i];
             int pt = w.evType[i];
-            if ((pt == Sfx.EXPLOSION || pt == Sfx.CANNON || pt == Sfx.BEAM || pt == Sfx.COLLAPSE || pt == Sfx.QUAKE) && pings.size() < 24)
-                pings.add(new float[]{x, y, 1.6f, pt == Sfx.COLLAPSE || pt == Sfx.QUAKE ? 1 : 0});
+            if ((pt == Sfx.EXPLOSION || pt == Sfx.CANNON || pt == Sfx.COLLAPSE) && pings.size() < 24)
+                pings.add(new float[]{x, y, 1.6f, pt == Sfx.COLLAPSE ? 1 : 0});
             if (x < vx0 - m || x > vx1 + m || y < vy0 - m || y > vy1 + m) continue;
             int t = w.evType[i];
             if (Sfx.gun(t)) {
                 if (quality >= 1) light(x, y, t == Sfx.MG || t == Sfx.SHOTGUN ? 34 : 24, 0.08f, G_FLASH, 0.55f, false);
-            } else if (t == Sfx.LASER) {
-                light(x, y, 30, 0.12f, G_GREEN, 0.7f, false);
             } else if (t == Sfx.EXPLOSION || t == Sfx.CANNON || t == Sfx.LAUNCHER) {
                 blast(w, x, y, t == Sfx.EXPLOSION ? 1f : 0.6f, vx0, vy0, vx1, vy1);
-            } else if (t == Sfx.BEAM) {
-                light(x, y, 150, 1.4f, G_GREEN, 0.9f, true);
-                blast(w, x, y, 0.8f, vx0, vy0, vx1, vy1);
             } else if (t == Sfx.COLLAPSE) {
                 for (int k = 0; k < cap(26); k++) {
                     float a = rnd.nextFloat() * 6.283f, s = 10 + rnd.nextFloat() * 40;
@@ -169,15 +164,9 @@ final class Visuals {
                             10 + rnd.nextFloat() * 12, 4 + rnd.nextFloat() * 4, 0.75f, 5);
                 }
                 smoulder.add(new float[]{x, y, 45, 1, 0});
-            } else if (t == Sfx.QUAKE) {
-                quakeCracks(x, y, vx0, vy0, vx1, vy1);
-            } else if (t == Sfx.CRASH || t == Sfx.SCREECH) {
+            } else if (t == Sfx.CRASH) {
                 for (int k = 0; k < cap(8); k++)
                     spark(x, y, rnd.nextFloat() * 160 - 80, rnd.nextFloat() * 160 - 80, 0.3f + rnd.nextFloat() * 0.3f, 0xFFFFD27A, false);
-            } else if (t == Sfx.SPLASH) {
-                for (int k = 0; k < 3; k++) ripples.add(new float[]{x + rnd.nextFloat() * 30 - 15, y + rnd.nextFloat() * 30 - 15, 2, 1.6f});
-            } else if (t == Sfx.DEFUSED) {
-                light(x, y, 50, 0.6f, G_GREEN, 0.6f, false);
             }
         }
         while (ripples.size() > cap(80)) ripples.remove(0);
@@ -216,25 +205,6 @@ final class Visuals {
         if (d < half) flash = Math.max(flash, 0.35f * size * (1 - d / half));
     }
 
-    private void quakeCracks(float x, float y, float vx0, float vy0, float vx1, float vy1) {
-        for (int k = 0; k < cap(16); k++) {
-            float a = rnd.nextFloat() * 6.283f;
-            float px = x + (float) Math.cos(a) * rnd.nextFloat() * 300, py = y + (float) Math.sin(a) * rnd.nextFloat() * 300;
-            int segs = 3 + rnd.nextInt(5);
-            float ang = rnd.nextFloat() * 6.283f, w = 0.8f + rnd.nextFloat() * 1.4f;
-            for (int s = 0; s < segs; s++) {
-                ang += (rnd.nextFloat() - 0.5f) * 1.2f;
-                float len = 6 + rnd.nextFloat() * 14;
-                float qx = px + (float) Math.cos(ang) * len, qy = py + (float) Math.sin(ang) * len;
-                if (cracks.size() >= cap(260)) cracks.remove(0);
-                cracks.add(new float[]{px, py, qx, qy, 0, w});
-                px = qx;
-                py = qy;
-                w *= 0.8f;
-            }
-            puff(px, py, 0, 0, 8, 2.5f, 0.8f, 4);
-        }
-    }
 
     /**
      * A frame on: lights fading, smoke rising and drifting, sparks and debris flying; and what's going on now -
@@ -363,44 +333,6 @@ final class Visuals {
                 puff(v.x, v.y, 0, -4, 3, 3, 0.55f, 3);
         }
         if (wrecked.size() > 200) wrecked.clear();
-        // The disasters.
-        for (int i = 0, n = w.hazards.size(); i < n; i++) {
-            World.Hazard h = w.hazards.get(i);
-            boolean on = h.x + h.r > vx0 - 200 && h.x - h.r < vx1 + 200 && h.y + h.r > vy0 - 200 && h.y - h.r < vy1 + 200;
-            if (!on || h.r <= 1) continue;
-            if (h.kind == World.HZ_FIRE) {
-                if (rnd.nextFloat() < dt * 10) {
-                    float a = rnd.nextFloat() * 6.283f, rr = rnd.nextFloat() * h.r;
-                    spark(h.x + (float) Math.cos(a) * rr, h.y + (float) Math.sin(a) * rr, rnd.nextFloat() * 10 - 5, -20 - rnd.nextFloat() * 30, 1.2f + rnd.nextFloat(), 0xFFFFA040, true);
-                }
-                if (rnd.nextFloat() < dt * 5) puff(h.x + rnd.nextFloat() * h.r - h.r / 2, h.y + rnd.nextFloat() * h.r - h.r / 2, 0, -10, 8, 6, 0.15f, 5);
-                if (rnd.nextFloat() < dt * 6) light(h.x, h.y, h.r * 2.6f, 0.35f, G_FIRE, 0.7f, true);
-            } else if (h.kind == World.HZ_TORNADO) {
-                for (int k = 0; k < 3; k++) {
-                    if (rnd.nextFloat() > dt * 30) continue;
-                    float a = rnd.nextFloat() * 6.283f, rr = h.r * (0.4f + rnd.nextFloat() * 0.9f);
-                    float tx = -(float) Math.sin(a), ty = (float) Math.cos(a);
-                    spark(h.x + (float) Math.cos(a) * rr, h.y + (float) Math.sin(a) * rr, tx * 140 + h.vx, ty * 140 + h.vy, 0.6f, 0xFF6E655A, false);
-                    if (rnd.nextFloat() < 0.4f) puff(h.x + (float) Math.cos(a) * rr, h.y + (float) Math.sin(a) * rr, tx * 60, ty * 60, 6, 1.5f, 0.6f, 6);
-                }
-            } else if (h.kind == World.HZ_FLOOD) {
-                if (rnd.nextFloat() < dt * 6 && ripples.size() < cap(80)) {
-                    float a = rnd.nextFloat() * 6.283f, rr = rnd.nextFloat() * h.r;
-                    ripples.add(new float[]{h.x + (float) Math.cos(a) * rr, h.y + (float) Math.sin(a) * rr, 2, 1.5f});
-                }
-            }
-        }
-        // Bombs: a red pulse.
-        for (float[] b : w.bombs) if (rnd.nextFloat() < dt * (b[2] < 20 ? 6 : 2)) light(b[0], b[1], 40, 0.25f, G_RED, 0.7f, false);
-        // The mothership's glow beneath it; its drones' green.
-        if (w.motherAlive) {
-            if (rnd.nextFloat() < dt * 4) light(w.motherX, w.motherY, 190, 0.5f, G_GREEN, 0.5f, true);
-        }
-        if (quality >= 2 && w.alienMode() && onScreen != null)
-            for (int i = 0, n = onScreen.size(); i < n; i++) {
-                Entity e = onScreen.get(i);
-                if (!e.dead && e.type == Entity.INVADER && rnd.nextFloat() < dt * 2) light(e.x, e.y, 14, 0.4f, G_GREEN, 0.5f, false);
-            }
     }
 
     /** Under the people and vehicles: craters, cracks and ripples. */
@@ -497,12 +429,9 @@ final class Visuals {
      * Over the whole screen: a vignette, the red edge of danger (tension) or of being hurt, a blast's flash, a daze,
      * the mode's colour, and black bars with the HUD hidden.
      */
-    void drawScreen(Canvas c, int w, int h, float tension, int mode, boolean cinematic) {
+    void drawScreen(Canvas c, int w, int h, float tension, boolean cinematic) {
         if (grading) {
-            int tint = mode == CityConfig.MODE_ALIENS ? 0x1840FF80 : mode == CityConfig.MODE_DISASTER ? 0x14A07040
-                    : mode == CityConfig.MODE_TERROR ? 0x12405870 : mode == CityConfig.MODE_PRISON ? 0x10C06020
-                    : mode == CityConfig.MODE_CARTEL ? 0x12B08030 : mode == CityConfig.MODE_ARMY ? 0x10807050
-                    : mode == CityConfig.MODE_HEIST ? 0x0E3050A0 : mode == CityConfig.MODE_GANGS ? 0x0C6030A0 : 0x0C406030;
+            int tint = 0x0C406030;
             fill.setColor(tint);
             c.drawRect(0, 0, w, h, fill);
         }

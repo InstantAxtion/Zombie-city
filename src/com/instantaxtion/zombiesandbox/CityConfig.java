@@ -53,18 +53,8 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
-    /** ((17.0) The game mode (not one of the eight in v): who the police and the army are up against. */
-    static final int OPT_MODE = 10;
-    static final String[] MODES = {"Zombies", "Gangs", "Enemy army", "Heist", "Prison break", "Cartel", "Terror", "Disasters", "Aliens", "Outbreak + looters"};
-    static final int MODE_ZOMBIES = 0, MODE_GANGS = 1, MODE_ARMY = 2, MODE_HEIST = 3, MODE_PRISON = 4, MODE_CARTEL = 5, MODE_TERROR = 6,
-            MODE_DISASTER = 7, MODE_ALIENS = 8, MODE_LOOTERS = 9;
-    /** ((17.0) See OPT_MODE. Not part of the city code: the same streets can be played any way. */
-    int mode;
     /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
     int mission = -1;
-
-    /** ((18.4) The dead on the streets: zombies, or zombies and looters. */
-    boolean zombieMode() { return mode == MODE_ZOMBIES || mode == MODE_LOOTERS; }
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
             "Reinforcements", "Country"};
     private static final String[][] VALUES = {
@@ -317,7 +307,6 @@ final class CityConfig implements OptionSet {
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
         // ((18.2) A prison break is on the Prison Island: it's the map with the prison.)
-        if (mode == MODE_PRISON) v[OPT_PRESET] = PRISON_ISLAND;
         // ((13.0) The island maps come at the biggest size: Colossal, 1280 tiles across (640 and 720 before).)
         if (v[OPT_PRESET] == ISLANDS || v[OPT_PRESET] == ARCHIPELAGO) v[OPT_SIZE] = COLOSSAL;
         if (removed(v[OPT_PRESET])) v[OPT_PRESET] = METROPOLIS;
@@ -380,7 +369,6 @@ final class CityConfig implements OptionSet {
         c.seed = seed;
         c.outskirts = outskirts;
         c.exodus = exodus;
-        c.mode = mode;
         c.mission = mission;
         c.civic = civic;
         for (int[] e : edits) c.edits.add(e.clone());
@@ -691,8 +679,8 @@ final class CityConfig implements OptionSet {
 
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
-    @Override public String[] values(int i) { return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_MODE ? MODES : VALUES[i]; }
-    @Override public int get(int i) { return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_MODE ? mode : v[i]; }
+    @Override public String[] values(int i) { return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : VALUES[i]; }
+    @Override public int get(int i) { return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : v[i]; }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
             outskirts = value;
@@ -700,11 +688,6 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_EXODUS) {
             exodus = value;
-            return;
-        }
-        if (i == OPT_MODE) {
-            mode = Math.max(0, Math.min(MODES.length - 1, value));
-            normalize();
             return;
         }
         v[i] = value;

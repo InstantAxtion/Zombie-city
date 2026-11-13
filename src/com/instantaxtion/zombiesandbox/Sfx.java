@@ -17,12 +17,10 @@ final class Sfx {
             CLIMB = 42,
             // ((14.4) The tension under the music as things get worse: a heartbeat over a low drone.)
             HEART = 43,
-            // ((19.0) The Sound Update: the disasters, the aliens, the bombs, the streets, the radio and the menus.)
-            TORNADO = 44, QUAKE = 45, SPLASH = 46, WHOOSH = 47, LASER = 48, BEAM = 49, TICK = 50, DEFUSED = 51,
-            SCREECH = 52, CUFFS = 53, RIOT = 54, CASH = 55, CHIME = 56, STAR = 57, STING_WIN = 58, STING_LOSE = 59,
-            STING_ALERT = 60, ERROR = 61, BUZZ = 62, DEBRIS = 63, WHINE = 64, SQUELCH = 65, MIL_RADIO = 66, TAP = 67,
-            PANIC = 68;
-    static final int COUNT = 69;
+            // ((19.0) The Sound Update: the streets, the radio and the menus. (19.6: the other modes' sounds went.))
+            CASH = 44, CHIME = 45, STAR = 46, STING_WIN = 47, STING_LOSE = 48, STING_ALERT = 49, ERROR = 50, BUZZ = 51,
+            DEBRIS = 52, WHINE = 53, SQUELCH = 54, MIL_RADIO = 55, TAP = 56, PANIC = 57;
+    static final int COUNT = 58;
 
     /** ((19.0) The mixer's groups, each with its own level: the guns, blasts, the voices of the living and the dead,
      * vehicles, everything else in the world, the radio, the menus and stings. */
@@ -31,10 +29,9 @@ final class Sfx {
     static final int[] BUS = new int[COUNT];
 
     /** ((19.0) The looping beds of ambience, mixed under everything: each follows what's on the screen. */
-    static final int LOOP_CITY = 0, LOOP_WIND = 1, LOOP_BIRDS = 2, LOOP_CROWD = 3, LOOP_WATER = 4, LOOP_FIRE = 5,
-            LOOP_STORM = 6, LOOP_FLOOD = 7, LOOP_HUM = 8, LOOP_TENSION = 9;
-    static final int LOOPS = 10;
-    static final String[] LOOP_NAMES = {"City", "Wind", "Birds", "Crowd", "Water", "Fire", "Storm", "Flood", "Mothership", "Tension"};
+    static final int LOOP_CITY = 0, LOOP_WIND = 1, LOOP_BIRDS = 2, LOOP_CROWD = 3, LOOP_WATER = 4, LOOP_TENSION = 5;
+    static final int LOOPS = 6;
+    static final String[] LOOP_NAMES = {"City", "Wind", "Birds", "Crowd", "Water", "Tension"};
 
     /** Shortest gap between two plays of the same sound, in seconds, so crowds don't turn into noise. */
     static final float[] MIN_GAP = {0.05f, 0.04f, 0.08f, 0.09f, 0.9f, 1.4f, 0.8f, 0f, 2f, 2f, 2f, 0.1f, 4f, 1.2f, 0.8f,
@@ -43,8 +40,7 @@ final class Sfx {
             0.08f, 0.06f, 0.6f, 0.9f, 0.2f,
             0.05f, 0.05f, 0.12f, 0.25f, 0.3f, 0.12f, 0.1f, 0.3f, 0.5f, 1.6f,
             // (19.0)
-            1.5f, 2f, 0.4f, 0.8f, 0.05f, 0.5f, 0.15f, 0.5f, 0.8f, 0.3f, 3f, 0.08f, 0.1f, 0.12f, 1f, 1f,
-            1f, 0.15f, 1f, 0.4f, 3f, 0.3f, 0.5f, 0.04f, 2f};
+            0.08f, 0.1f, 0.12f, 1f, 1f, 1f, 0.15f, 1f, 0.4f, 3f, 0.3f, 0.5f, 0.04f, 2f};
     /** Background sounds that get on the nerves when they loop; these fade and space out with repetition. */
     static final boolean[] REPEATS = new boolean[COUNT];
 
@@ -115,36 +111,21 @@ final class Sfx {
         PRIORITY[THUD] = 2;
         PRIORITY[GROAN] = PRIORITY[GROAN_DEEP] = 3;
         // ((19.0) The new sounds.)
-        for (int id : new int[] {TORNADO, QUAKE, BEAM}) {
-            VARIANTS[id] = 2;
-            PRIORITY[id] = 8;
-            MAX_VOICES[id] = 2;
-            ECHO[id] = 0.5f;
-        }
-        VARIANTS[LASER] = 4;
-        PRIORITY[LASER] = 6;
-        MAX_VOICES[LASER] = 5;
-        ECHO[LASER] = 0.35f;
-        for (int id : new int[] {TICK, DEFUSED, CUFFS, CASH, CHIME, STAR, STING_WIN, STING_LOSE, STING_ALERT, ERROR, TAP, SQUELCH, MIL_RADIO, WHINE}) {
+        for (int id : new int[] {CASH, CHIME, STAR, STING_WIN, STING_LOSE, STING_ALERT, ERROR, TAP, SQUELCH, MIL_RADIO, WHINE}) {
             VARIANTS[id] = 1;
             PRIORITY[id] = 8;
             MAX_VOICES[id] = 2;
             ECHO[id] = 0.05f;
         }
-        ECHO[TICK] = ECHO[CUFFS] = 0.1f;
-        PRIORITY[TICK] = 7;
         MAX_VOICES[STAR] = 3;
         PRIORITY[WHINE] = 9;
-        for (int id : new int[] {RIOT, PANIC}) {
+        for (int id : new int[] {PANIC}) {
             VARIANTS[id] = 3;
             PRIORITY[id] = 5;
             MAX_VOICES[id] = 2;
             ECHO[id] = 0.3f;
             REPEATS[id] = true;
         }
-        VARIANTS[SCREECH] = 3;
-        VARIANTS[SPLASH] = 3;
-        VARIANTS[WHOOSH] = 2;
         VARIANTS[DEBRIS] = 3;
         PRIORITY[DEBRIS] = 5;
         ECHO[DEBRIS] = 0.4f;
@@ -153,10 +134,10 @@ final class Sfx {
         REPEATS[BUZZ] = true;
         // The groups.
         java.util.Arrays.fill(BUS, BUS_WORLD);
-        for (int id = 0; id < COUNT; id++) if (gun(id) || id == LASER) BUS[id] = BUS_GUNS;
-        for (int id : new int[] {EXPLOSION, CANNON, COLLAPSE, LAUNCHER, BEAM, QUAKE, DEBRIS, CRASH}) BUS[id] = BUS_BLASTS;
-        for (int id : new int[] {BITE, GROAN, GROAN_DEEP, SCREAM, SHRIEK, SPIT, BARK, RIOT, PANIC}) BUS[id] = BUS_VOICES;
-        for (int id : new int[] {SIREN, AMB_SIREN, ROTOR, ENGINE, JET, HORN, SCREECH, BUZZ}) BUS[id] = BUS_VEHICLES;
+        for (int id = 0; id < COUNT; id++) if (gun(id)) BUS[id] = BUS_GUNS;
+        for (int id : new int[] {EXPLOSION, CANNON, COLLAPSE, LAUNCHER, DEBRIS, CRASH}) BUS[id] = BUS_BLASTS;
+        for (int id : new int[] {BITE, GROAN, GROAN_DEEP, SCREAM, SHRIEK, SPIT, BARK, PANIC}) BUS[id] = BUS_VOICES;
+        for (int id : new int[] {SIREN, AMB_SIREN, ROTOR, ENGINE, JET, HORN, BUZZ}) BUS[id] = BUS_VEHICLES;
         for (int id : new int[] {RADIO, PHONE, SQUELCH, MIL_RADIO}) BUS[id] = BUS_RADIO;
         for (int id : new int[] {CLICK, CASH, CHIME, STAR, STING_WIN, STING_LOSE, STING_ALERT, ERROR, TAP, WHINE}) BUS[id] = BUS_UI;
     }
@@ -164,11 +145,8 @@ final class Sfx {
     /** ((13.4) Moved here from the view.) How far a sound carries, compared with the usual (most of a screen). */
     static float carry(int type) {
         switch (type) {
-            case EXPLOSION: case CANNON: case COLLAPSE: case QUAKE: case BEAM: return 3.2f;
-            case TORNADO: case RIOT: return 2.6f;
-            case LASER: return 2f;
-            case TICK: case CUFFS: return 0.6f;
-            case SCREECH: case PANIC: case DEBRIS: return 1.4f;
+            case EXPLOSION: case CANNON: case COLLAPSE: return 3.2f;
+            case PANIC: case DEBRIS: return 1.4f;
             case ROTOR: case JET: return 2.6f;
             case SIREN: case AMB_SIREN: case ALARM: return 2.2f;
             case MG: case RIFLE: case SHOTGUN: case SNIPER: case HUNTING: case BURST: case CARBINE: case DMR: case LAUNCHER: return 2.2f;
@@ -213,8 +191,7 @@ final class Sfx {
             "Shriek", "Thud", "Siren", "Rotor", "Bark", "Horn", "Tank gun", "Machine gun", "Sniper", "Collapse", "Crash", "(unused)",
             "Ambulance", "Engine", "Jet", "Spit", "Burst", "Alarm", "Shield", "Shotgun", "Revolver", "Glass", "Pounding", "Hunting rifle",
             "SMG", "Carbine", "Marksman rifle", "Reload", "Dry fire", "Ricochet", "Melee", "Launcher", "Climb", "Heartbeat",
-            "Tornado", "Earthquake", "Splash", "Flames", "Alien laser", "Mothership beam", "Bomb tick", "Bomb defused", "Tyres",
-            "Handcuffs", "Riot", "Cash", "Objective", "Star", "Victory sting", "Defeat sting", "Alert sting", "Error", "Drone",
+            "Cash", "Objective", "Star", "Victory sting", "Defeat sting", "Alert sting", "Error", "Drone",
             "Debris", "Ringing ears", "Squelch", "Army radio", "Tap", "Crowd panic"};
 
     /** ((19.0) A sound of the menus and the mission, not of the world: never placed, muffled or echoed. */

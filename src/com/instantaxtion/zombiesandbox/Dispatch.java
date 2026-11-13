@@ -29,42 +29,6 @@ final class Dispatch {
             "Somebody bit a man outside my building on %s!",
     };
     /** ((17.2) The calls in a gang war, and in an invasion.) */
-    private static final String[] GANG_CALLS = {
-            "Shots fired on %s! It's the gangs again!",
-            "There are guys with guns on %s, a whole crew of them!",
-            "I can see %d of them near %s with guns. Please hurry!",
-            "Somebody just got shot outside my building on %s!",
-            "Gang members are shooting at the police on %s!",
-    };
-    private static final String[] ALIEN_CALLS = {
-            "There are things on %s! Not people! Green, with guns that shoot light!",
-            "The ship's beam just hit %s! Everything's on fire!",
-            "I can see %d of them near %s, marching. Please, send someone!",
-    };
-    private static final String[] TERROR_CALLS = {
-            "Someone's shooting people on %s! Just shooting everyone!",
-            "Gunmen on %s, they're dressed in black!",
-            "I can see %d of them near %s with rifles. Hurry, please!",
-    };
-    private static final String[] PRISON_CALLS = {
-            "There are prisoners on %s! In orange, the lot of them!",
-            "Escaped inmates on %s, they're smashing everything!",
-            "I can see %d of them near %s in prison clothes. Please hurry!",
-            "They're fighting the police on %s!",
-    };
-    private static final String[] HEIST_CALLS = {
-            "Men in masks with guns on %s! I think they've robbed somewhere!",
-            "Shots fired on %s! It's the robbers!",
-            "I can see %d of them near %s, masked, with guns. Please hurry!",
-            "They're shooting at the police on %s!",
-    };
-    private static final String[] ARMY_CALLS = {
-            "There are soldiers on %s and they're not ours!",
-            "Enemy troops coming down %s! Please hurry!",
-            "I can see %d of them near %s, in uniform, with rifles!",
-            "They're shooting at the police on %s!",
-            "Soldiers in tan uniforms on %s, they just blew up a car!",
-    };
 
     static final class Incident {
         float x, y, age, clearTimer, sceneTime;
@@ -494,7 +458,6 @@ final class Dispatch {
 
     /** As above; always set, it goes out even if the same was just said (a call for backup from another fight). */
     void say(int who, Entity speaker, String text, float x, float y, boolean always) {
-        text = w.reword(text);
         // ((13.8) The same kind of news again within a few seconds (a second "People are turning into monsters", a
         // third officer down in the same fight) is left out: it's on the map already.)
         String kind = kindOf(who, text);
@@ -634,9 +597,7 @@ final class Dispatch {
         }
         Incident inc = newIncident(zombie.x, zombie.y, count);
         if (inc == null) return;
-        String[] calls = w.mode() == CityConfig.MODE_GANGS || w.mode() == CityConfig.MODE_CARTEL ? GANG_CALLS : w.mode() == CityConfig.MODE_ALIENS ? ALIEN_CALLS
-                : w.mode() == CityConfig.MODE_TERROR ? TERROR_CALLS : w.mode() == CityConfig.MODE_ARMY ? ARMY_CALLS
-                : w.mode() == CityConfig.MODE_HEIST ? HEIST_CALLS : w.mode() == CityConfig.MODE_PRISON ? PRISON_CALLS : CALLS;
+        String[] calls = CALLS;
         String line = calls[rnd.nextInt(calls.length)];
         String text = line.contains("%d") ? String.format(java.util.Locale.US, line, count, inc.place) : String.format(java.util.Locale.US, line, inc.place);
         say(WHO_911, null, "\"" + text + "\"", inc.x, inc.y);

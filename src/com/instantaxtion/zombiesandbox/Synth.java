@@ -15,9 +15,7 @@ final class Synth {
     static final int RATE = 22050;
     static final int TRACK_MENU = 0, TRACK_GAME = 1, TRACK_CALM = 2, TRACK_ACTION = 3;
     /** (10.52) Two more of each mood, played in turn: 4-5 the game's, 6-7 the calm, 8-9 the fighting. */
-    static final int TRACKS = 14;
-    /** ((18.4) Each mode's own theme in place of the general in-game music: the street, the war, the aliens, the storm.) */
-    static final int THEME_STREET = 10, THEME_WAR = 11, THEME_ALIEN = 12, THEME_STORM = 13;
+    static final int TRACKS = 10;
 
     /** The track for a mood (TRACK_GAME, TRACK_CALM or TRACK_ACTION) in its variation 0 to 2. */
     static int variant(int mood, int v) {
@@ -86,17 +84,6 @@ final class Synth {
             case Sfx.LAUNCHER: out = launcher(r); break;
             case Sfx.CLIMB: out = climb(r); break;
             case Sfx.HEART: out = heart(); break;
-            case Sfx.TORNADO: out = tornado(r); break;
-            case Sfx.QUAKE: out = quake(r); break;
-            case Sfx.SPLASH: out = splash(r); break;
-            case Sfx.WHOOSH: out = whoosh(r); break;
-            case Sfx.LASER: out = laser(r); break;
-            case Sfx.BEAM: out = beam(r); break;
-            case Sfx.TICK: out = tick(); break;
-            case Sfx.DEFUSED: out = beeps(new float[]{1320, 1760, 2640}, 0.09f, 0.03f); break;
-            case Sfx.SCREECH: out = screech(r); break;
-            case Sfx.CUFFS: out = cuffs(r); break;
-            case Sfx.RIOT: out = crowd(r, 2.2f, 0.9f); break;
             case Sfx.PANIC: out = crowd(r, 1.4f, 1.6f); break;
             case Sfx.CASH: out = cash(r); break;
             case Sfx.CHIME: out = bell(new float[]{midi(76), midi(83)}, 0.14f, 0.9f); break;
@@ -764,109 +751,12 @@ final class Synth {
 
     // ------------------------------------------------------------------ (19.0) the new effects
 
-    private static float[] tornado(Random r) {
-        int n = (int) (2.6f * RATE);
-        float[] o = new float[n];
-        float lp = 0, bp = 0;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float w = r.nextFloat() * 2 - 1;
-            float k = 0.04f + 0.05f * (0.5f + 0.5f * (float) Math.sin(TAU * 0.8f * t + Math.sin(TAU * 2.3f * t)));
-            lp += (w - lp) * k;
-            bp += (lp - bp) * 0.3f;
-            float env = Math.min(1, t / 0.6f) * Math.min(1, (2.6f - t) / 0.8f);
-            o[i] = (lp - bp * 0.5f) * 5 * env + (float) Math.sin(TAU * 38 * t) * 0.25f * env;
-        }
-        return o;
-    }
 
-    private static float[] quake(Random r) {
-        int n = (int) (3.2f * RATE);
-        float[] o = new float[n];
-        float lp = 0, lp2 = 0;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float w = r.nextFloat() * 2 - 1;
-            lp += (w - lp) * 0.02f;
-            lp2 += (lp - lp2) * 0.05f;
-            float env = Math.min(1, t / 0.4f) * (float) Math.exp(-Math.max(0, t - 0.8f) * 1.3f);
-            float wob = 1 + 0.5f * (float) Math.sin(TAU * 3.1f * t);
-            o[i] = (lp2 * 14 + (float) Math.sin(TAU * (28 + 6 * Math.sin(TAU * 0.7f * t)) * t) * 0.5f) * env * wob
-                    + (r.nextFloat() < 0.002f ? (r.nextFloat() - 0.5f) * 0.8f : 0);
-        }
-        return o;
-    }
 
-    private static float[] splash(Random r) {
-        int n = (int) (0.7f * RATE);
-        float[] o = new float[n];
-        float lp = 0;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float w = r.nextFloat() * 2 - 1;
-            lp += (w - lp) * (0.5f - 0.4f * t / 0.7f);
-            float env = Math.min(1, t / 0.01f) * (float) Math.exp(-t * 6);
-            float bub = (float) Math.sin(TAU * (600 + 900 * (float) Math.exp(-t * 20)) * t) * (float) Math.exp(-t * 30) * 0.3f;
-            o[i] = lp * env + bub;
-        }
-        return o;
-    }
 
-    private static float[] whoosh(Random r) {
-        int n = (int) (0.9f * RATE);
-        float[] o = new float[n];
-        float lp = 0;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float w = r.nextFloat() * 2 - 1;
-            lp += (w - lp) * (0.05f + 0.25f * (float) Math.sin(Math.PI * t / 0.9f));
-            float env = (float) Math.sin(Math.PI * t / 0.9f);
-            float crack = r.nextFloat() < 0.004f ? (r.nextFloat() - 0.5f) * 1.5f : 0;
-            o[i] = lp * 2 * env + crack * env;
-        }
-        return o;
-    }
 
-    private static float[] laser(Random r) {
-        int n = (int) (0.22f * RATE);
-        float[] o = new float[n];
-        float f0 = 1800 + r.nextFloat() * 500, ph = 0;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float f = f0 * (float) Math.exp(-t * 9) + 180;
-            ph += TAU * f / RATE;
-            float env = Math.min(1, t / 0.002f) * (float) Math.exp(-t * 14);
-            o[i] = ((float) Math.sin(ph) * 0.7f + (float) Math.sin(ph * 2.01f) * 0.3f + (ph % TAU < Math.PI ? 0.2f : -0.2f)) * env;
-        }
-        return o;
-    }
 
-    private static float[] beam(Random r) {
-        int n = (int) (2.0f * RATE);
-        float[] o = new float[n];
-        float ph = 0, lp = 0;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float f = 110 + 40 * (float) Math.sin(TAU * 6 * t);
-            ph += TAU * f / RATE;
-            float w = r.nextFloat() * 2 - 1;
-            lp += (w - lp) * 0.15f;
-            float env = Math.min(1, t / 0.15f) * Math.min(1, (2f - t) / 0.4f);
-            float hit = t > 0.5f ? (float) Math.exp(-(t - 0.5f) * 3) : 0;
-            o[i] = ((float) Math.sin(ph) * 0.5f + (float) Math.sin(ph * 3) * 0.25f + lp * 0.4f) * env + lp * 2.5f * hit;
-        }
-        return o;
-    }
 
-    private static float[] tick() {
-        int n = (int) (0.06f * RATE);
-        float[] o = new float[n];
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            o[i] = ((float) Math.sin(TAU * 2400 * t) * 0.6f + (float) Math.sin(TAU * 3900 * t) * 0.3f) * (float) Math.exp(-t * 90);
-        }
-        return o;
-    }
 
     /** A few clean electronic beeps. */
     private static float[] beeps(float[] freqs, float len, float gap) {
@@ -883,36 +773,7 @@ final class Synth {
         return o;
     }
 
-    private static float[] screech(Random r) {
-        int n = (int) (1.1f * RATE);
-        float[] o = new float[n];
-        float ph = 0, lp = 0;
-        float f0 = 900 + r.nextFloat() * 300;
-        for (int i = 0; i < n; i++) {
-            float t = i / (float) RATE;
-            float f = f0 * (1 + 0.04f * (float) Math.sin(TAU * 31 * t)) - 150 * t;
-            ph += TAU * f / RATE;
-            float w = r.nextFloat() * 2 - 1;
-            lp += (w - lp) * 0.6f;
-            float env = Math.min(1, t / 0.03f) * Math.min(1, (1.1f - t) / 0.3f);
-            o[i] = ((float) Math.sin(ph) * 0.5f + (float) Math.sin(ph * 1.5f) * 0.2f + lp * 0.35f) * env;
-        }
-        return o;
-    }
 
-    private static float[] cuffs(Random r) {
-        int n = (int) (0.35f * RATE);
-        float[] o = new float[n];
-        for (int c = 0; c < 6; c++) {
-            int s0 = (int) ((0.02f + c * 0.035f + r.nextFloat() * 0.01f) * RATE);
-            float f = 3200 + r.nextFloat() * 1600;
-            for (int i = 0; i < 0.04f * RATE && s0 + i < n; i++) {
-                float t = i / (float) RATE;
-                o[s0 + i] += (float) Math.sin(TAU * f * t) * (float) Math.exp(-t * 160) * (c == 5 ? 1 : 0.5f);
-            }
-        }
-        return o;
-    }
 
     /** A crowd: many voices, shouting (a riot) or screaming (panic). */
     private static float[] crowd(Random r, float dur, float pitch) {
@@ -1143,41 +1004,6 @@ final class Synth {
                 }
                 break;
             }
-            case Sfx.LOOP_FIRE: {
-                for (int i = 0; i < m; i++) {
-                    float w = r.nextFloat() * 2 - 1;
-                    lp += (w - lp) * 0.04f;
-                    o[i] = lp * 5 + (r.nextFloat() < 0.003f ? (r.nextFloat() - 0.5f) * 1.6f : 0);
-                }
-                break;
-            }
-            case Sfx.LOOP_STORM: {
-                for (int i = 0; i < m; i++) {
-                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
-                    lp += (w - lp) * (0.03f + 0.03f * (float) Math.sin(TAU * t * 0.5f));
-                    lp2 += (lp - lp2) * 0.3f;
-                    o[i] = (lp - lp2 * 0.4f) * 8 + (float) Math.sin(TAU * 34 * t) * 0.15f;
-                }
-                break;
-            }
-            case Sfx.LOOP_FLOOD: {
-                for (int i = 0; i < m; i++) {
-                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
-                    lp += (w - lp) * 0.12f;
-                    lp2 += (lp - lp2) * 0.04f;
-                    o[i] = (lp - lp2) * 4 + lp2 * 3 * (0.8f + 0.2f * (float) Math.sin(TAU * t * 1.7f));
-                }
-                break;
-            }
-            case Sfx.LOOP_HUM: {
-                for (int i = 0; i < m; i++) {
-                    float t = i / (float) RATE;
-                    float ph = TAU * 55 * t;
-                    o[i] = (float) Math.sin(ph) * 0.5f + (float) Math.sin(ph * 1.5f + Math.sin(TAU * 0.5f * t)) * 0.3f
-                            + (float) Math.sin(ph * 4.02f) * 0.1f * (0.5f + 0.5f * (float) Math.sin(TAU * t / 2));
-                }
-                break;
-            }
             default: {
                 // Tension: a low, uneasy drone that swells.
                 for (int i = 0; i < m; i++) {
@@ -1225,10 +1051,6 @@ final class Synth {
             case 7: return calmTrack(2);
             case 8: return actionTrack(1);
             case 9: return actionTrack(2);
-            case THEME_STREET: return streetTheme();
-            case THEME_WAR: return warTheme();
-            case THEME_ALIEN: return alienTheme();
-            case THEME_STORM: return stormTheme();
             default: return gameTrack(0);
         }
     }
@@ -1315,115 +1137,9 @@ final class Synth {
         return toPcm(mix, 0.8f);
     }
 
-    /** ((18.4) The street: a slow, swung beat in a low minor key, a sparse bass and a muted keys riff. */
-    private static short[] streetTheme() {
-        float beat = 60f / 88f, bar = beat * 4;
-        int[][] chords = {{45, 48, 52}, {45, 48, 52}, {41, 45, 48}, {43, 46, 50}, {45, 48, 52}, {45, 48, 52}, {40, 43, 47}, {41, 44, 48}};
-        int n = (int) (bar * 8 * RATE);
-        float[] pad = new float[n], bass = new float[n], drums = new float[n], lead = new float[n];
-        Random r = new Random(301);
-        for (int b = 0; b < 8; b++) {
-            float t0 = b * bar;
-            int[] ch = chords[b];
-            for (int note : ch) addPadNote(pad, midi(note), t0, bar, 0.05f, 0.4f, 0.05f);
-            addBass(bass, midi(ch[0] - 24), t0, beat * 1.5f);
-            addBass(bass, midi(ch[0] - 24), t0 + beat * 2.5f, beat * 0.5f);
-            addBass(bass, midi(ch[0] - 17), t0 + beat * 3, beat);
-            for (int q = 0; q < 4; q++) {
-                float t = t0 + q * beat;
-                if (q == 0 || (q == 2 && b % 2 == 1)) addKick(drums, t);
-                if (q == 2 && b % 2 == 0) addKick(drums, t + beat * 0.66f);
-                if (q == 1 || q == 3) addSnare(drums, t, r);
-                addHat(drums, t, r, 0.1f);
-                addHat(drums, t + beat * 0.66f, r, 0.06f);
-            }
-            for (int s = 0; s < 4; s++) addPluck(lead, midi(ch[s % 3] + 12), t0 + s * beat + (s % 2 == 1 ? beat * 0.16f : 0), 0.35f, 0.06f);
-        }
-        lowpass(pad, 0.08f);
-        lowpass(bass, 0.1f);
-        echo(lead, 0.34f, 0.25f);
-        float[] mix = new float[n];
-        for (int i = 0; i < n; i++) mix[i] = (float) Math.tanh((pad[i] + bass[i] * 1.0f + drums[i] * 1.1f + lead[i] * 0.9f) * 1.3f);
-        return toPcm(mix, 0.8f);
-    }
 
-    /** ((18.4) The war: a marching snare, low brass-like pads and a drum roll at the end of each phrase. */
-    private static short[] warTheme() {
-        float beat = 60f / 100f, bar = beat * 4;
-        int[][] chords = {{38, 41, 45}, {38, 41, 45}, {34, 38, 41}, {33, 37, 40}, {38, 41, 45}, {36, 39, 43}, {34, 38, 41}, {33, 37, 40}};
-        int n = (int) (bar * 8 * RATE);
-        float[] pad = new float[n], bass = new float[n], drums = new float[n], lead = new float[n];
-        Random r = new Random(402);
-        for (int b = 0; b < 8; b++) {
-            float t0 = b * bar;
-            int[] ch = chords[b];
-            for (int note : ch) addPadNote(pad, midi(note + 12), t0, bar, 0.3f, 0.5f, 0.09f);
-            for (int e = 0; e < 4; e++) addBass(bass, midi(ch[0] - 12), t0 + e * beat, beat * 0.8f);
-            for (int q = 0; q < 4; q++) {
-                float t = t0 + q * beat;
-                if (q == 0) addKick(drums, t);
-                addSnare(drums, t + beat * 0.5f, r);
-                if (q % 2 == 0) addSnare(drums, t + beat * 0.75f, r);
-            }
-            if (b % 4 == 3) for (int s = 0; s < 8; s++) addSnare(drums, t0 + beat * 3 + s * beat / 8, r);
-            if (b >= 4) addPadNote(lead, midi(ch[2] + 12), t0, bar * 0.9f, 0.2f, 0.3f, 0.05f);
-        }
-        lowpass(pad, 0.12f);
-        lowpass(bass, 0.12f);
-        float[] mix = new float[n];
-        for (int i = 0; i < n; i++) mix[i] = (float) Math.tanh((pad[i] + bass[i] * 0.9f + drums[i] * 0.9f + lead[i]) * 1.3f);
-        return toPcm(mix, 0.8f);
-    }
 
-    /** ((18.4) The aliens: a fast, cold arpeggio over a whole-tone drone, and a slow pulse. */
-    private static short[] alienTheme() {
-        float beat = 60f / 96f, bar = beat * 4;
-        int[][] chords = {{48, 52, 56}, {50, 54, 58}, {48, 52, 56}, {46, 50, 54}};
-        int n = (int) (bar * 8 * RATE);
-        float[] pad = new float[n], bass = new float[n], drums = new float[n], lead = new float[n];
-        Random r = new Random(503);
-        for (int b = 0; b < 8; b++) {
-            float t0 = b * bar;
-            int[] ch = chords[b % 4];
-            addSine(pad, midi(ch[0] - 12), t0, bar, 0.5f, 0.5f, 0.12f);
-            addSine(pad, midi(ch[1] - 12), t0, bar, 0.5f, 0.5f, 0.06f);
-            for (int s = 0; s < 16; s++) addPluck(lead, midi(ch[s % 3] + 12 + (s / 3 % 2) * 12), t0 + s * beat / 4, 0.18f, 0.05f);
-            addKick(drums, t0);
-            addKick(drums, t0 + beat * 2.5f);
-            addHat(drums, t0 + beat * 1.5f, r, 0.05f);
-            addHat(drums, t0 + beat * 3.5f, r, 0.05f);
-            addBass(bass, midi(ch[0] - 24), t0, beat * 2);
-        }
-        echo(lead, 0.31f, 0.4f);
-        lowpass(bass, 0.1f);
-        float[] mix = new float[n];
-        for (int i = 0; i < n; i++) mix[i] = (float) Math.tanh((pad[i] + bass[i] * 0.8f + drums[i] * 0.8f + lead[i]) * 1.3f);
-        return toPcm(mix, 0.8f);
-    }
 
-    /** ((18.4) The storm: a driving low ostinato in sixteenths, swelling pads, no drums but a heartbeat kick. */
-    private static short[] stormTheme() {
-        float beat = 60f / 120f, bar = beat * 4;
-        int[][] chords = {{40, 43, 47}, {40, 43, 47}, {36, 40, 43}, {38, 42, 45}, {40, 43, 47}, {41, 45, 48}, {36, 40, 43}, {35, 39, 42}};
-        int n = (int) (bar * 8 * RATE);
-        float[] pad = new float[n], bass = new float[n], drums = new float[n], lead = new float[n];
-        for (int b = 0; b < 8; b++) {
-            float t0 = b * bar;
-            int[] ch = chords[b];
-            for (int note : ch) addPadNote(pad, midi(note + 12), t0, bar, 1.2f, 0.6f, 0.07f);
-            for (int e = 0; e < 16; e++) addPluck(bass, midi(ch[0] - 12 + (e % 4 == 2 ? 12 : 0)), t0 + e * beat / 4, 0.12f, 0.12f);
-            addKick(drums, t0);
-            addKick(drums, t0 + beat * 0.4f);
-            addKick(drums, t0 + beat * 2);
-            addKick(drums, t0 + beat * 2.4f);
-            if (b % 2 == 1) addPadNote(lead, midi(ch[2] + 24), t0, bar, 0.6f, 0.4f, 0.03f);
-        }
-        lowpass(bass, 0.2f);
-        echo(lead, 0.4f, 0.3f);
-        float[] mix = new float[n];
-        for (int i = 0; i < n; i++) mix[i] = (float) Math.tanh((pad[i] + bass[i] + drums[i] * 0.7f + lead[i]) * 1.3f);
-        return toPcm(mix, 0.8f);
-    }
 
     private static short[] gameTrack(int v) {
         float beat = 60f / (v == 1 ? 104f : v == 2 ? 120f : 112f), bar = beat * 4;

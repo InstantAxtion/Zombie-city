@@ -39,7 +39,8 @@ final class SaveGame {
             // Version 47: the map version the city was built to, itself.
             out.writeInt(cfg.civic);
             // ((17.0) Version 57: the game mode.)
-            out.writeInt(cfg.mode);
+            // (The game mode: only the dead now since 19.6, kept as 0.)
+            out.writeInt(0);
 
             out.writeFloat(w.time);
             out.writeInt(w.turned);
@@ -362,21 +363,21 @@ final class SaveGame {
             out.writeBoolean(w.prisonFallen);
             out.writeBoolean(w.prisonSeeded);
             // (Version 57, 17.0: the gangs' or the enemy's fighters still to come, and how many they started with.)
-            out.writeInt(w.hostileReserve);
-            out.writeInt(w.hostileStart);
-            out.writeInt(w.squadsMade);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
             // (Version 58, 17.2: the gangs that have had a boss and have fallen apart, and the arrests.)
-            out.writeInt(w.gangHadBoss);
-            out.writeInt(w.gangBroken);
-            out.writeInt(w.arrests);
-            out.writeInt(w.jailed);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
             // (Version 59, 17.5: the record for the after-action report: losses, the wounded, where the fighting was.)
             out.writeInt(w.copsLost);
             out.writeInt(w.soldiersLost);
             out.writeInt(w.woundedSaved);
             out.writeInt(w.bledOut);
             out.writeInt(w.enemyVehiclesLost);
-            out.writeInt(w.freed);
+            out.writeInt(0);
             // (Version 60, 18.0: the campaign mission.)
             out.writeInt(cfg.mission);
             out.writeFloat(w.missionStart);
@@ -384,60 +385,35 @@ final class SaveGame {
             out.writeInt(w.missionResult);
             out.writeInt(w.missionStars);
             // (Version 61, 18.1: heists. The jobs under way aren't kept: their crews make off once it's loaded.)
-            out.writeInt(w.heistsStarted);
-            out.writeInt(w.heistsStopped);
-            out.writeInt(w.heistsEscaped);
-            out.writeInt(w.lootStolen);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
             // (Version 62, 18.2: the prison break.)
-            out.writeInt(w.riotStage);
-            out.writeInt(w.riotTotal);
-            out.writeInt(w.prisonEscaped);
-            out.writeInt(w.recaptured);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
             // (Version 63, 18.3: the cartel, terror, disasters and the aliens. Bombs and disasters under way aren't kept.)
-            out.writeInt(w.shipments);
-            out.writeInt(w.convoysSeized);
-            out.writeInt(w.corruptCops);
-            out.writeInt(w.bombsPlanted);
-            out.writeInt(w.bombsDefused);
-            out.writeInt(w.bombsExploded);
-            out.writeInt(w.attacksMade);
-            out.writeInt(w.disastersDone);
-            out.writeInt(w.disasterCivStart);
-            out.writeBoolean(w.motherAlive);
-            out.writeFloat(w.motherX);
-            out.writeFloat(w.motherY);
-            out.writeFloat(w.motherHp);
-            out.writeFloat(w.motherMax);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeBoolean(false);
+            for (int k = 0; k < 4; k++) out.writeFloat(0);
             // (Version 64, 18.5: what was under way - heists, bombs, disasters and the police's drones.)
-            out.writeInt(w.heists.size());
-            for (World.Heist h : w.heists) {
-                out.writeInt(h.squad);
-                out.writeInt(w.city.buildings.indexOf(h.b));
-                out.writeInt(h.phase);
-                out.writeFloat(h.t);
-                out.writeInt(h.loot);
-                out.writeInt(h.hostages);
-                out.writeFloat(h.talk);
-                out.writeFloat(h.quiet);
-                out.writeInt(h.out);
-            }
-            out.writeInt(w.bombs.size());
-            for (float[] b : w.bombs) for (int k = 0; k < 4; k++) out.writeFloat(b[k]);
-            out.writeInt(w.hazards.size());
-            for (World.Hazard h : w.hazards) {
-                out.writeInt(h.kind);
-                out.writeFloat(h.x);
-                out.writeFloat(h.y);
-                out.writeFloat(h.r);
-                out.writeFloat(h.vx);
-                out.writeFloat(h.vy);
-                out.writeFloat(h.t);
-                out.writeFloat(h.life);
-                out.writeFloat(h.peak);
-            }
+            // ((19.6) No heists, bombs or disasters any more: none of them written.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
             out.writeInt(w.policeDrones.size());
             for (float[] pd : w.policeDrones) for (int k = 0; k < 6; k++) out.writeFloat(pd[k]);
-            out.writeInt(w.crewsMadeCount());
+            out.writeInt(0);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
         } finally {
@@ -525,13 +501,13 @@ final class SaveGame {
         // Version 56 (15.6): locked up in the island prison.
         out.writeBoolean(e.inmate);
         // Version 57 (17.0): a gang member's or enemy soldier's kit.
-        out.writeByte(e.kit);
+        out.writeByte(0); // (The other modes' kit, gone in 19.6.)
         // Version 58 (17.2): under arrest.
-        out.writeByte(e.arrested);
+        out.writeByte(0);
         // Version 59 (17.5): down and bleeding.
         out.writeFloat(e.bleedT);
-        // ((18.5) A hostage's captors.)
-        out.writeInt(e.heldBy);
+        // ((18.5) A hostage's captors; gone in 19.6.)
+        out.writeInt(-1);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -562,7 +538,8 @@ final class SaveGame {
             if (version >= 26) cfg.outskirts = in.readInt();
             if (version >= 41) cfg.exodus = in.readInt();
             int civic = version >= 47 ? in.readInt() : -1;
-            if (version >= 57) cfg.mode = Math.max(0, Math.min(CityConfig.MODES.length - 1, in.readInt()));
+            // (A game mode from before 19.6, when there were others: only the dead now.)
+            if (version >= 57) in.readInt();
             // (Cities saved before 10.4 were built without their government quarter.)
             cfg.civic = version >= 48 ? 27 : version >= 47 ? 26 : version >= 46 ? 25 : version >= 45 ? 24 : version >= 44 ? 23 : version >= 43 ? 22 : version >= 42 ? 21 : version >= 40 ? 20 : version >= 39 ? 19 : version >= 38 ? 18 : version >= 37 ? 17 : version >= 36 ? 16 : version >= 35 ? 15 : version >= 34 ? 14 : version >= 33 ? 13 : version >= 32 ? 12 : version >= 31 ? 11 : version >= 30 ? 11 : version >= 29 ? 10 : version >= 28 ? 9 : version >= 27 ? 8 : version >= 26 ? 7 : version >= 25 ? 6 : version >= 24 ? 5 : version >= 23 ? 4 : version >= 22 ? 3 : version >= 20 ? 2 : version >= 19 ? 1 : 0;
             if (civic >= 0) cfg.civic = civic;
@@ -910,15 +887,15 @@ final class SaveGame {
                 w.prisonSeeded = in.readBoolean();
             }
             if (version >= 57) {
-                w.hostileReserve = in.readInt();
-                w.hostileStart = in.readInt();
-                w.squadsMade = in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
             }
             if (version >= 58) {
-                w.gangHadBoss = in.readInt();
-                w.gangBroken = in.readInt();
-                w.arrests = in.readInt();
-                w.jailed = in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
             }
             if (version >= 59) {
                 w.copsLost = in.readInt();
@@ -926,7 +903,7 @@ final class SaveGame {
                 w.woundedSaved = in.readInt();
                 w.bledOut = in.readInt();
                 w.enemyVehiclesLost = in.readInt();
-                w.freed = in.readInt();
+                in.readInt();
                 if (version >= 60) {
                     int ms = in.readInt();
                     w.city.cfg.mission = Campaign.get(ms) != null ? ms : -1;
@@ -936,72 +913,48 @@ final class SaveGame {
                     w.missionStars = in.readInt();
                 }
                 if (version >= 61) {
-                    w.heistsStarted = in.readInt();
-                    w.heistsStopped = in.readInt();
-                    w.heistsEscaped = in.readInt();
-                    w.lootStolen = in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
                 }
                 if (version >= 62) {
-                    w.riotStage = in.readInt();
-                    w.riotTotal = in.readInt();
-                    w.prisonEscaped = in.readInt();
-                    w.recaptured = in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
                 }
                 if (version >= 63) {
-                    w.shipments = in.readInt();
-                    w.convoysSeized = in.readInt();
-                    w.corruptCops = in.readInt();
-                    w.bombsPlanted = in.readInt();
-                    w.bombsDefused = in.readInt();
-                    w.bombsExploded = in.readInt();
-                    w.attacksMade = in.readInt();
-                    w.disastersDone = in.readInt();
-                    w.disasterCivStart = in.readInt();
-                    w.motherAlive = in.readBoolean();
-                    w.motherX = in.readFloat();
-                    w.motherY = in.readFloat();
-                    w.motherHp = in.readFloat();
-                    w.motherMax = in.readFloat();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readBoolean();
+                    for (int k = 0; k < 4; k++) in.readFloat();
                 }
                 if (version >= 64) {
+                    // (Heists, bombs and disasters from before 19.6: read past.)
                     int hn = in.readInt();
                     for (int k = 0; k < hn; k++) {
-                        World.Heist h = new World.Heist();
-                        h.squad = in.readInt();
-                        int bi = in.readInt();
-                        h.b = bi >= 0 && bi < w.city.buildings.size() ? w.city.buildings.get(bi) : null;
-                        h.phase = in.readInt();
-                        h.t = in.readFloat();
-                        h.loot = in.readInt();
-                        h.hostages = in.readInt();
-                        h.talk = in.readFloat();
-                        h.quiet = in.readFloat();
-                        h.out = in.readInt();
-                        // (The getaway car isn't kept: a crew that was driving is on foot now.)
-                        if (h.b != null) {
-                            if (h.phase == World.H_DRIVE) h.t = Math.max(h.t, 150);
-                            w.heists.add(h);
-                        }
+                        for (int j = 0; j < 3; j++) in.readInt();
+                        in.readFloat();
+                        in.readInt();
+                        in.readInt();
+                        in.readFloat();
+                        in.readFloat();
+                        in.readInt();
                     }
                     int bn = in.readInt();
-                    for (int k = 0; k < bn; k++) {
-                        float[] b = new float[4];
-                        for (int j = 0; j < 4; j++) b[j] = in.readFloat();
-                        w.bombs.add(b);
-                    }
+                    for (int k = 0; k < bn * 4; k++) in.readFloat();
                     int zn = in.readInt();
                     for (int k = 0; k < zn; k++) {
-                        World.Hazard h = new World.Hazard();
-                        h.kind = in.readInt();
-                        h.x = in.readFloat();
-                        h.y = in.readFloat();
-                        h.r = in.readFloat();
-                        h.vx = in.readFloat();
-                        h.vy = in.readFloat();
-                        h.t = in.readFloat();
-                        h.life = in.readFloat();
-                        h.peak = in.readFloat();
-                        w.hazards.add(h);
+                        in.readInt();
+                        for (int j = 0; j < 8; j++) in.readFloat();
                     }
                     int dn = in.readInt();
                     for (int k = 0; k < dn; k++) {
@@ -1009,7 +962,7 @@ final class SaveGame {
                         for (int j = 0; j < 6; j++) pd[j] = in.readFloat();
                         w.policeDrones.add(pd);
                     }
-                    w.setCrewsMade(in.readInt());
+                    in.readInt();
                 }
                 int bm = in.readInt();
                 if (bm > 0) {
@@ -1097,10 +1050,10 @@ final class SaveGame {
         else if (e.isZombie()) e.risen = w.time;
         if (version >= 55) e.saved = in.readInt();
         if (version >= 56) e.inmate = in.readBoolean();
-        if (version >= 57) e.kit = in.readByte();
-        if (version >= 58) e.arrested = in.readByte();
+        if (version >= 57) in.readByte();
+        if (version >= 58) in.readByte();
         if (version >= 59) e.bleedT = in.readFloat();
-        if (version >= 64) e.heldBy = in.readInt();
+        if (version >= 64) in.readInt();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }

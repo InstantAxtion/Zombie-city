@@ -9,7 +9,7 @@ away from the middle of the screen as you pan, and the game plays in both portra
 
 ## Main menu
 
-- **Campaign** (18.0): seven missions to play in order as the commander - a set force, a budget to buy
+- **Campaign** (18.0): three missions (19.6: Patient Zero, The Long Night, Dead City) to play in order as the commander - a set force, a budget to buy
   more police, soldiers, vehicles and air support (earned by funding and by doing well), units that come in
   from the stations and bases and go where you send them, and an objective against the clock. Up to three
   stars a mission; veterans who make rank carry over to the next. New Game below is the sandbox.
@@ -19,8 +19,7 @@ away from the middle of the screen as you pan, and the game plays in both portra
   be called in (Off, Low, Medium or High, each spelled out: waves of police backup, army squads, tanks
   and helicopter sorties). Police and soldiers on duty are set by the size of the city (about one officer
   per 80 residents plus two per station; a garrison at the base if the map has one). Each map decides its
-  own buildings, layout, parks, police stations and military base. **Game mode** (17.0): Zombies, Gangs (rival street gangs on their turf), Enemy army (an invasion from
-  the edge of the map) Heist (18.1: armed crews rob banks and shops with hostages: stop them with a standoff or a chase), Prison break (18.2, on the Prison Island: a riot, then a breakout over the causeway), and (18.3) Cartel (convoys, safe houses, bought officers), Terror (gunmen and bombs for the bomb squad), Disasters (tornado, earthquake, flood, wildfire) Aliens (a mothership and its drones), or (18.4) Outbreak + looters (the zombies, and armed looting gangs from the first minute); only the first and last have zombies. **Randomize** rolls a random setup.
+  own buildings, layout, parks, police stations and military base. **Randomize** rolls a random setup.
   **City code** replays a city: every city has a code like `12-483920` (or `12-483920@2` for a city
   outside the USA; shown in the pause menu and stats), so you can play the same streets again or share
   them with a friend.
@@ -420,6 +419,8 @@ of the highway, towns of different shapes, mountains spread about with lone hill
 mounting up, and lighter running with big populations.
 
 **More police than soldiers (10.35):** the army on the map is never more than two in five of the police force.
+
+**Zombies only (19.6):** the game is the zombie outbreak and nothing else. The Game mode option is gone (CityConfig.mode, MODES, OPT_MODE), and with it the gangs, the enemy army, heists, the prison break, the cartel, terror, disasters, the aliens and Outbreak + looters (the ordinary looting gangs of a long outbreak are still there): their code in World, Fleet (enemy and gang vehicles), Dispatch (their calls), GameView (their tools, info, turf and hazard drawing), Visuals (their effects), Sfx and Synth (their 11 sounds, 4 ambience beds and 4 music themes; Sound's AUDIO_VERSION is 6 so the cache is rebuilt) and the negotiator and bomb squad roles. The campaign keeps its three zombie missions (Records moves Dead City's stars from slot 6 to 2 once). Saves keep the same format (version 64): the removed fields are written as zeros and skipped on load, old heists, bombs and hazards are read past, and any gang members or enemy soldiers in an old save come back as zombies (Entity.current). Also: every menu list scrolls by dragging (it only did on a few screens), and the Sound Lab shows what's playing - the pressed button lights with a play mark and a "now playing" panel with moving bars appears at the bottom.
 
 **The Visuals Update (19.5):** Visuals.java, held by GameView (vfx) and never seen by the simulation: events() turns the world's sound events near the screen into light (glow sprites made at start-up, one per colour), shockwaves, craters, debris, sparks, smoke, smouldering spots, quake cracks, ripples and minimap pings; update() ages them and adds what's going on (wrecks burning then smoking, hurt vehicles trailing smoke, fires, the tornado, floods, bombs, the mothership, alien drones); drawGround (after the marks), drawAbove (after the buildings and haze) and drawScreen (vignette, tension and hurt edges, daze, flash, the mode's colour, cinematic bars with the HUD hidden). World.tgreen marks the aliens' tracers. Settings 24 to 26: Effects, Screen effects, Colour grading.
 

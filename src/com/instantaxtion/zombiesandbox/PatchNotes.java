@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "19.5";
-    static final int VERSION_CODE = 195;
+    static final String VERSION = "19.6";
+    static final int VERSION_CODE = 196;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "19.6  -  Zombies only",
+                    "The game is the zombie outbreak and nothing else: the other game modes are gone - gang wars, the enemy army, heists, the prison break, the cartel, terror, disasters, the aliens and Outbreak + looters - and the Game mode option with them. (The looting gangs that form in a long outbreak are still there.)",
+                    "Gone with them: their enemies, vehicles, radio calls, tools, sounds, ambience and music themes, the negotiator and the bomb squad, and the mode colours on the screen.",
+                    "The campaign is the three zombie missions: Patient Zero, The Long Night and Dead City. Stars you'd won on Dead City are kept.",
+                    "Saves from before still load; any gang members or enemy soldiers in them come back as zombies.",
+                    "Menus: every list now scrolls when you drag it - settings, setup, patch notes, records, the campaign, the Sound Lab and the rest (before, only a few did).",
+                    "The Sound Lab: the button you press lights up with a play mark, and a \"now playing\" panel at the bottom shows the sound's name with moving bars while it plays (and the ambience bed you've got on).",
+            },
             {
                     "19.5  -  The Visuals Update",
                     "Light: gunfire throws a flash of light from every muzzle (the aliens' a green one); blasts light up the streets round them in a burst of orange with a white-hot flash at the heart; wrecks burn and flicker; wildfires glow; bombs pulse red; the mothership bathes the ground beneath it in green, and its beam lights up where it lands.",

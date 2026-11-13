@@ -674,7 +674,6 @@ final class Menu {
         c.clipRect(listArea);
         float y = top + 8 * dp - scroll;
         if (mission != null) y = missionSummary(c, world, mission, w, y, maxW, x0);
-        int mode = world.mode();
         // (A mission says how it ended above.)
         if (mission == null) {
             // How it ended.
@@ -698,87 +697,21 @@ final class Menu {
             y += 8 * dp;
         }
         // Each side's losses, side by side.
-        String other = mode == CityConfig.MODE_GANGS ? "The gangs" : mode == CityConfig.MODE_ARMY ? "The enemy" : mode == CityConfig.MODE_HEIST ? "The crews"
-                : mode == CityConfig.MODE_PRISON ? "The rioters" : mode == CityConfig.MODE_CARTEL ? "The cartel" : mode == CityConfig.MODE_TERROR ? "The attackers"
-                : mode == CityConfig.MODE_DISASTER ? "The disasters" : mode == CityConfig.MODE_ALIENS ? "The aliens" : "The dead";
+        String other = "The dead";
         String[][] ours = {
                 {"Police officers lost", String.valueOf(world.copsLost)},
                 {"Soldiers lost", String.valueOf(world.soldiersLost)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"Wounded saved", String.valueOf(world.woundedSaved)},
                 {"Bled out", String.valueOf(world.bledOut)},
-                {mode == CityConfig.MODE_ARMY ? "People freed" : mode == CityConfig.MODE_HEIST ? "Hostages freed" : mode == CityConfig.MODE_GANGS ? "Booked in at a station" : "People turned",
-                        String.valueOf(mode == CityConfig.MODE_ARMY || mode == CityConfig.MODE_HEIST ? world.freed : mode == CityConfig.MODE_GANGS ? world.jailed : world.turned)},
+                {"People turned", String.valueOf(world.turned)},
         };
-        String[][] theirs;
-        if (mode == CityConfig.MODE_GANGS) {
-            theirs = new String[][]{
-                    {"Taken out", String.valueOf(world.zombiesKilled)},
-                    {"Arrested", String.valueOf(world.arrests)},
-                    {"Gangs broken", String.valueOf(Integer.bitCount(world.gangBroken))},
-                    {"Still on the street", String.valueOf(world.zombieCount())},
-            };
-        } else if (mode == CityConfig.MODE_CARTEL) {
-            theirs = new String[][]{
-                    {"Convoys through", world.shipments + " of " + World.CARTEL_SHIPMENTS},
-                    {"Convoys seized", String.valueOf(world.convoysSeized)},
-                    {"Officers bought", String.valueOf(world.corruptCops)},
-                    {"Cells broken", String.valueOf(Integer.bitCount(world.gangBroken))},
-                    {"Arrested", String.valueOf(world.arrests)},
-                    {"Taken out", String.valueOf(world.zombiesKilled)},
-            };
-        } else if (mode == CityConfig.MODE_TERROR) {
-            theirs = new String[][]{
-                    {"Attacks", String.valueOf(world.attacksMade)},
-                    {"Bombs made safe", world.bombsDefused + " of " + world.bombsPlanted},
-                    {"Bombs that went off", String.valueOf(world.bombsExploded)},
-                    {"Gunmen taken out", String.valueOf(world.zombiesKilled)},
-            };
-        } else if (mode == CityConfig.MODE_DISASTER) {
-            theirs = new String[][]{
-                    {"Disasters", String.valueOf(world.disastersDone)},
-                    {"Buildings down", String.valueOf(world.collapsedCount)},
-                    {"Civilians lost", String.valueOf(world.civiliansLost)},
-                    {"Injured saved", String.valueOf(world.woundedSaved)},
-            };
-        } else if (mode == CityConfig.MODE_ALIENS) {
-            theirs = new String[][]{
-                    {"Mothership", world.motherAlive ? (int) (100 * world.motherHp / Math.max(1, world.motherMax)) + "% left" : "Shot down"},
-                    {"Drones destroyed", String.valueOf(world.zombiesKilled)},
-                    {"Places taken", String.valueOf(world.checkpoints().length / 2)},
-                    {"Still fighting", String.valueOf(world.zombieCount())},
-            };
-        } else if (mode == CityConfig.MODE_PRISON) {
-            theirs = new String[][]{
-                    {"Rioted", String.valueOf(world.riotTotal)},
-                    {"Back in the cells", String.valueOf(world.recaptured)},
-                    {"Got away", String.valueOf(world.prisonEscaped)},
-                    {"Taken out", String.valueOf(world.zombiesKilled)},
-                    {"Still loose", String.valueOf(world.zombieCount())},
-            };
-        } else if (mode == CityConfig.MODE_HEIST) {
-            theirs = new String[][]{
-                    {"Heists stopped", world.heistsStopped + " of " + world.heistsStarted},
-                    {"Got away", String.valueOf(world.heistsEscaped)},
-                    {"Money taken", "$" + String.format(java.util.Locale.US, "%,d", world.lootStolen)},
-                    {"Arrested", String.valueOf(world.arrests)},
-                    {"Taken out", String.valueOf(world.zombiesKilled)},
-            };
-        } else if (mode == CityConfig.MODE_ARMY) {
-            theirs = new String[][]{
-                    {"Soldiers killed", String.valueOf(world.zombiesKilled)},
-                    {"Vehicles knocked out", String.valueOf(world.enemyVehiclesLost)},
-                    {"Places taken", String.valueOf(world.checkpoints().length / 2)},
-                    {"Still fighting", String.valueOf(world.zombieCount())},
-            };
-        } else {
-            theirs = new String[][]{
-                    {"Destroyed", String.valueOf(world.zombiesKilled)},
-                    {"Most at once", String.valueOf(world.peakZombies)},
-                    {"Biggest horde", String.valueOf(world.biggestHorde)},
-                    {"Still walking", String.valueOf(world.zombieCount())},
-            };
-        }
+        String[][] theirs = {
+                {"Destroyed", String.valueOf(world.zombiesKilled)},
+                {"Most at once", String.valueOf(world.peakZombies)},
+                {"Biggest horde", String.valueOf(world.biggestHorde)},
+                {"Still walking", String.valueOf(world.zombieCount())},
+        };
         boolean wide = maxW > 520 * dp;
         float colW = wide ? (maxW - 12 * dp) / 2 : maxW;
         float yA = y, yB = wide ? y : y + 30 * dp + ours.length * 22 * dp + 16 * dp;
@@ -793,7 +726,7 @@ final class Menu {
         for (int i = 0; i < n; i++) max = Math.max(max, Math.max(world.histArmed[i], world.histZombies[i]));
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(12 * dp);
-        String[] keys = {"Police & army", world.city.cfg.zombieMode() ? "Zombies" : world.enemyLabel()};
+        String[] keys = {"Police & army", "Zombies"};
         int[] cols = {0xFFE8C547, 0xFFFF7A5A};
         float kx = chart.left + 14 * dp;
         for (int k = 0; k < 2; k++) {
@@ -974,7 +907,6 @@ final class Menu {
         c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
                 + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
         y += 28 * dp;
-        String[] modes = CityConfig.MODES;
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
             Campaign.Mission m = Campaign.MISSIONS[i];
             boolean open = records == null || records.unlocked(i);
@@ -1000,7 +932,7 @@ final class Menu {
             c.drawText(m.title, x0 + 56 * dp, y + 24 * dp, text);
             plain.setTextSize(11.5f * dp);
             plain.setColor(ACCENT);
-            c.drawText(modes[m.mode].toUpperCase(java.util.Locale.US) + "   " + World.clock(m.limit) + "   $" + m.budget, x0 + 56 * dp, y + 40 * dp, plain);
+            c.drawText((m.goal == Campaign.G_SURVIVE ? "SURVIVE" : "CLEAR THE CITY") + "   " + World.clock(m.limit) + "   $" + m.budget, x0 + 56 * dp, y + 40 * dp, plain);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setTextSize(18 * dp);
             text.setColor(stars > 0 ? 0xFFFFD54A : 0x55FFFFFF);
@@ -1346,7 +1278,7 @@ final class Menu {
         String[][] totals = {
                 {"Time", World.clock(t)},
                 {"People now", String.valueOf(world.humanCount() + world.hiding + world.riding + world.visiting)},
-                {world.enemyLabel() + " now", String.valueOf(world.zombieCount())},
+                {"Zombies now", String.valueOf(world.zombieCount())},
                 {"Most zombies at once", String.valueOf(world.peakZombies)},
                 {"Zombies killed", String.valueOf(world.zombiesKilled)},
                 // ((12.0) And by whom.)
@@ -1995,27 +1927,6 @@ final class Menu {
                 y += 12 * dp;
             }
         }
-        // ((17.0) The game mode: who the police and the army are up against.)
-        y = segRow(c, CityConfig.OPT_MODE, "Game mode", lx, y, lw);
-        plain.setTextSize(12.5f * dp);
-        plain.setColor(MUTED);
-        plain.setTextAlign(Paint.Align.LEFT);
-        y -= 6 * dp;
-        String[] modeInfo = {"Zombies: an outbreak of the dead. The bitten turn, and the city fights for its life.",
-                "Gangs: armed street gangs hold their turf and take on the police and the army. No zombies: civilians run from the shooting, and can be caught in it.",
-                "Enemy army: an invading army's squads march on the city's police stations and bases, more coming in waves. No zombies: civilians run from the fighting, and can be caught in it.",
-                "Heist: armed crews hit the city's banks and shops one after another, taking hostages. Box them in for a standoff and talk them out, or chase the getaway car before it reaches the edge of town.",
-                "Prison break (on the Prison Island): the inmates riot and go for the guards, take their guns, and break out over the causeway into the city. Hold them on the causeway and round them up before they get clear of town.",
-                "Cartel: cartel cells hold their turf and run convoys of product out of town from their safe houses, and buy off police officers. Stop five convoys getting through, take down the jefes, and break the cartel.",
-                "Terror: one attack after another - gunmen opening fire in busy streets, and bombs left in crowds. The bomb squad has 90 seconds to make each one safe.",
-                "Disasters: no enemy, just a tornado, an earthquake, a flash flood and a wildfire, one after another. Get the injured out and keep the death toll down.",
-                "Aliens: a mothership hovers over the city, dropping drones that march on the stations and bases, and burning the streets with its beam. Bring it down with rockets, tanks and helicopters.",
-                "Outbreak + looters: the zombie outbreak, and with it armed looting gangs from the first minute - up to twelve of them - stripping the shops and shooting anyone in their way."};
-        for (String line : wrap(modeInfo[Math.max(0, Math.min(modeInfo.length - 1, config.mode))], lw - 4 * dp, plain)) {
-            c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
-            y += 16 * dp;
-        }
-        y += 12 * dp;
         int[] fc = previewForce;
         boolean known = fc != null && previewResidents > 0 && config.code().equals(previewKey);
         // (10.50) How many people are about isn't a choice: they come and go from their homes as they please.

@@ -6,8 +6,7 @@ final class Entity {
             BRUTE = 8, CRAWLER = 9, SCREAMER = 10, ZOMBIE_DOG = 11, SPITTER = 12, BLOATER = 13,
             /** (Firefighters went in 10.49: any in an old save load as civilians.) */
             FIREFIGHTER = 14,
-            /** ((17.0) The other game modes' enemies, on the side the dead take in a zombie game: a gang member, and a
-             * soldier of an enemy army. Armed people - they shoot, never bite, and nobody turns.) */
+            /** (The other game modes' gang members and enemy soldiers went in 19.6: any in an old save load as zombies.) */
             GANGSTER = 15, INVADER = 16;
     static final int TYPE_COUNT = 17;
 
@@ -19,6 +18,7 @@ final class Entity {
         switch (t) {
             case CRAWLER: case BLOATER: case SPITTER: case SCREAMER: return ZOMBIE;
             case FIREFIGHTER: case MEDIC: case RAIDER: return CIVILIAN;
+            case GANGSTER: case INVADER: return ZOMBIE;
             default: return t;
         }
     }
@@ -51,13 +51,9 @@ final class Entity {
     static final int ROLE_MOUNTED = 18, ROLE_TRAFFIC = 19;
     /** ((15.6) The guards at the island prison.) */
     static final int ROLE_PRISON_GUARD = 20;
-    /** ((18.1) A police negotiator: talks robbers in a standoff out (three times as fast as any other officer). */
-    static final int ROLE_NEGOTIATOR = 21;
-    /** ((18.3) The bomb squad: makes a bomb safe in seconds (anyone else takes four times as long). */
-    static final int ROLE_BOMB_TECH = 22;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard", "Negotiator", "Bomb technician"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -196,21 +192,6 @@ final class Entity {
     /** ((17.1) When they were last finding their way in, out of or round a building: they squeeze past each other there. */
     transient float inT = -9;
     /**
-     * ((17.2) Under arrest: 1 hands up, waiting for an officer; 2 cuffed and being walked to the station. With who has
-     * them (and, for that officer, who they're taking in).
-     */
-    byte arrested;
-    /** ((18.1) A hostage: the heist crew holding them (World.HEIST_SQUAD on), or -1. */
-    int heldBy = -1;
-    transient float arrestT, escortT;
-    transient Entity captor, escortee;
-    /** ((17.2) A gang member's errands: a shop to rob, a car to steal (the job and where it is), a corner to keep (1 or 2). */
-    transient City.Building robB;
-    transient float robT, carX, carY;
-    transient int robPhase, carJob, corner;
-    /** ((17.2) An officer on a raid on a gang's hideout: the building, and how long it's been going. */
-    transient City.Building raidB;
-    /**
      * ((17.5) Down and bleeding out: seconds left (0 not down; -1 bled out, to die now). With who's coming to help them,
      * and, for a helper, who they're helping and how long they've been at it.
      */
@@ -222,14 +203,6 @@ final class Entity {
      * (coverX -1 for none) and when they next look for one; and how pinned down they are by fire coming their way (0-1).
      */
     transient float coverFromX, coverFromY, lastAimT = -99, coverT, coverX = -1, coverY, suppress;
-    /** ((17.4) An enemy paratrooper still coming down (seconds). */
-    transient float paraT;
-    transient float raidT;
-    /** ((17.0) A gang member's or enemy soldier's kit: 0 the basic one, 1 the automatic, 2 the heavy or the scoped. */
-    int kit;
-    /** ((17.0) Who they're fighting, looked for again every so often (foeT). */
-    transient Entity foe;
-    transient float foeT;
     /** ((14.2) A raider who's opened fire on people lately: police, soldiers and armed survivors shoot back while this lasts.) */
     transient float hostileT;
     /** ((14.2) The shop a raider gang's leader is on the way to strip.) */
@@ -420,26 +393,18 @@ final class Entity {
     float emerged = -999;
     boolean retreatSaid;
 
-    /**
-     * On the enemy's side: one of the dead, or ((17.0) in the other game modes) a gang member or an enemy soldier. Who
-     * the police and the army fight, and who everyone else runs from. (See isUndead for the dead themselves.)
-     */
+    /** One of the dead: who the police and the army fight, and who everyone else runs from. */
     boolean isZombie() {
-        return (type >= ZOMBIE && type <= BLOATER) || type >= GANGSTER;
+        return type >= ZOMBIE && type <= BLOATER;
     }
 
     static boolean isZombieType(int type) {
-        return (type >= ZOMBIE && type <= BLOATER) || type >= GANGSTER;
+        return type >= ZOMBIE && type <= BLOATER;
     }
 
     /** ((17.0) One of the dead themselves: they bite, rot, shamble, climb, get back up. */
     boolean isUndead() {
         return type >= ZOMBIE && type <= BLOATER;
-    }
-
-    /** ((17.0) A gang member or an enemy soldier: living, armed, on the enemy's side. */
-    boolean isHostile() {
-        return type >= GANGSTER;
     }
 
     boolean isArmed() {
