@@ -5929,6 +5929,97 @@ public final class GameTests {
                 check(l.heists.size() <= 1, "carries on");
             }
         });
+        test("19.0: the Sound Update - new sounds, ambience beds, the mixer's groups, mono, deafening, captions, the Sound Lab", new Check() {
+            public void run() throws Exception {
+                check(Sfx.MIN_GAP.length == Sfx.COUNT && Sfx.NAMES.length == Sfx.COUNT && Sfx.BUS.length == Sfx.COUNT, "every sound has its settings and a name");
+                // Every new sound: made, not silent, nothing broken in it.
+                for (int id = Sfx.TORNADO; id < Sfx.COUNT; id++)
+                    for (int v = 0; v < Sfx.VARIANTS[id]; v++) {
+                        short[] s = Synth.effect(id, v);
+                        int peak = 0;
+                        for (short x : s) peak = Math.max(peak, Math.abs(x));
+                        check(s.length > Synth.RATE / 50 && peak > 4000, Sfx.NAMES[id] + " take " + v + " (" + s.length + ", " + peak + ")");
+                    }
+                // The ambience beds: the right length, not silent, and no click where they loop round.
+                for (int l = 0; l < Sfx.LOOPS; l++) {
+                    short[] s = Synth.ambience(l);
+                    int peak = 0;
+                    for (short x : s) peak = Math.max(peak, Math.abs(x));
+                    check(s.length == (int) (Synth.LOOP_SECONDS * Synth.RATE) && peak > 4000, Sfx.LOOP_NAMES[l] + " bed (" + s.length + ", " + peak + ")");
+                    int seam = Math.abs(s[s.length - 1] - s[0]);
+                    check(seam < peak * 0.6f, Sfx.LOOP_NAMES[l] + " loops without a click (" + seam + " of " + peak + ")");
+                }
+                // The mixer: a bed playing; a group turned off; mono; deafened.
+                Mixer m = new Mixer(48000);
+                m.setLoopSamples(Sfx.LOOP_WIND, Synth.ambience(Sfx.LOOP_WIND));
+                m.setLoop(Sfx.LOOP_WIND, 0.8f, 0.5f, 0);
+                float[] buf = new float[512 * 2];
+                float energy = 0;
+                for (int k = 0; k < 60; k++) {
+                    m.render(buf, 512);
+                    for (float f : buf) energy += f * f;
+                }
+                check(energy > 1 && m.loopGain(Sfx.LOOP_WIND) > 0.4f, "an ambience bed plays (" + energy + ")");
+                m.setLoop(Sfx.LOOP_WIND, 0, 0, 0);
+                for (int k = 0; k < 200; k++) m.render(buf, 512);
+                check(m.loopGain(Sfx.LOOP_WIND) < 0.02f, "and fades away");
+                m.setSamples(Sfx.PISTOL, new short[][]{Synth.effect(Sfx.PISTOL, 0)});
+                m.setBus(Sfx.BUS_GUNS, 0);
+                m.trigger(Sfx.PISTOL, 1, 0, 0, 1);
+                m.render(buf, 512);
+                check(m.playing() == 0, "a group turned right down plays nothing");
+                m.setBus(Sfx.BUS_GUNS, 1);
+                m.setMono(true);
+                m.trigger(Sfx.PISTOL, 1, 1, 0, 1);
+                m.render(buf, 512);
+                boolean same = true;
+                for (int f = 0; f < 512; f++) same &= Math.abs(buf[f * 2] - buf[f * 2 + 1]) < 1e-5f;
+                check(same, "mono: the same in both ears");
+                m.setMono(false);
+                m.shock(1);
+                check(m.shockLevel() > 0.9f, "deafened by a blast");
+                for (int k = 0; k < 400; k++) m.render(buf, 512);
+                check(m.shockLevel() < 0.01f, "and it wears off");
+                // The game: the ambience follows the screen; captions for sounds off it.
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2000};
+                v.layout(size[0], size[1]);
+                Menu menu = (Menu) field(v, "menu");
+                Settings st = (Settings) field(v, "settings");
+                st.set(22, 1);
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                c.seed = 51;
+                v.startGame(c);
+                v.awaitLoad();
+                for (int k = 0; k < 3; k++) draw(v, size);
+                menu.screen = Menu.NONE;
+                World w = (World) field(v, "world");
+                for (int k = 0; k < 12; k++) draw(v, size);
+                Sound snd = (Sound) field(v, "sound");
+                check(snd.loopGain[Sfx.LOOP_CITY] > 0, "the city's hum under the game");
+                w.emit(Sfx.RIFLE, w.city.worldW() / 2 + 2000, w.city.worldH() / 2);
+                java.lang.reflect.Field cam = GameView.class.getDeclaredField("camX");
+                cam.setAccessible(true);
+                v.jumpTo(w.city.worldW() / 2, w.city.worldH() / 2);
+                w.emit(Sfx.RIFLE, w.city.worldW() / 2 + 700, w.city.worldH() / 2);
+                draw(v, size);
+                java.util.List<?> caps = (java.util.List<?>) field(v, "captions");
+                check(!caps.isEmpty(), "a caption for gunfire off the screen");
+                // The Sound Lab draws, and plays what's tapped.
+                menu.open(Menu.SOUNDS);
+                draw(v, size);
+                java.lang.reflect.Method act = Menu.class.getDeclaredMethod("act", int.class);
+                act.setAccessible(true);
+                act.invoke(menu, 6000 + Sfx.TORNADO);
+                check(snd.lastPlayed == Sfx.TORNADO, "the Sound Lab plays a sound");
+                act.invoke(menu, 7000 + Sfx.LOOP_BIRDS);
+                draw(v, size);
+                check(snd.loopGain[Sfx.LOOP_BIRDS] > 0.3f, "and an ambience bed");
+                check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

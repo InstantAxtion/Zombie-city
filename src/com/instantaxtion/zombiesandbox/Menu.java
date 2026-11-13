@@ -61,12 +61,15 @@ final class Menu {
         /** Asks the player to type a city code (shows the current one to copy or edit). */
         void askCityCode(String current);
 
+        /** ((19.0) The Sound Lab: plays a sound as it is. */
+        void preview(int sfx);
+
         /** (12.0) Puts text on the clipboard; false if it couldn't. */
         boolean copyText(String label, String text);
     }
 
     static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
-            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12, REPORT = 13, CAMPAIGN = 14;
+            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12, REPORT = 13, CAMPAIGN = 14, SOUNDS = 15;
     /** ((15.1) How many save slots there are (the autosave besides): six, up from three.) */
     static final int SLOTS = 6;
 
@@ -78,7 +81,10 @@ final class Menu {
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
             A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000,
-            A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30, A_CAMPAIGN = 31, A_RETRY = 32, A_NEXT = 33, A_MISSION = 5000;
+            A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30, A_CAMPAIGN = 31, A_RETRY = 32, A_NEXT = 33, A_MISSION = 5000,
+            A_SOUNDS = 34, A_SFX = 6000, A_LOOP = 7000;
+    /** ((19.0) The ambience bed being tried in the Sound Lab, or -1. */
+    int previewLoop = -1;
     /** ((12.0) Which messages the radio log shows: 0 all, else one kind (Dispatch.WHO_* + 1).) */
     private int logFilter;
 
@@ -175,7 +181,7 @@ final class Menu {
     }
 
     void open(int s) {
-        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP || s == REPORT || s == CAMPAIGN) {
+        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP || s == REPORT || s == CAMPAIGN || s == SOUNDS) {
             if (screen == MAIN || screen == PAUSE || screen == NONE) returnTo = screen;
         } else {
             returnTo = MAIN;
@@ -253,6 +259,7 @@ final class Menu {
             case TOP: drawTop(c, w, h); break;
             case REPORT: drawReport(c, w, h); break;
             case CAMPAIGN: drawCampaign(c, w, h); break;
+            case SOUNDS: drawSounds(c, w, h); break;
             case REPLAY: drawReplay(c, w, h, dt); break;
         }
         for (Button b : buttons) drawButton(c, b);
@@ -508,6 +515,7 @@ final class Menu {
         if (slots) tiles.add(new Object[]{"Load Game", A_LOAD});
         tiles.add(new Object[]{"Settings", A_SETTINGS});
         tiles.add(new Object[]{"Records", A_RECORDS});
+        tiles.add(new Object[]{"Sound Lab", A_SOUNDS});
         tiles.add(new Object[]{settings.hasUnreadNotes() ? "What's New  •" : "What's New", A_NOTES});
         tiles.add(new Object[]{"Quit", A_QUIT});
         float tw = (colW - gap) / 2;
@@ -1006,6 +1014,57 @@ final class Menu {
             y += ch + 10 * dp;
         }
         text.setTextAlign(Paint.Align.LEFT);
+        c.restore();
+        contentHeight = y + scroll - top + 10 * dp;
+        clampScroll();
+        drawScrollHint(c, w);
+    }
+
+    /** ((19.0) The Sound Lab: every sound to try, by group, and the ambience beds to switch on one at a time. */
+    private void drawSounds(Canvas c, int w, int h) {
+        float top = header(c, w, h, "Sound Lab");
+        float side = 16 * dp, maxW = Math.min(w - side * 2, 760 * dp), x0 = (w - maxW) / 2;
+        listArea.set(0, top, w, h - 8 * dp);
+        c.save();
+        c.clipRect(listArea);
+        float y = top + 4 * dp - scroll;
+        plain.setTextAlign(Paint.Align.LEFT);
+        plain.setTextSize(13 * dp);
+        plain.setColor(MUTED);
+        for (String line : wrap("Every sound in the game, made on the phone as it runs. Tap one to hear it. The ambience beds play under the menu "
+                + "while they're switched on.", maxW, plain)) {
+            c.drawText(line, x0, y + 13 * dp, plain);
+            y += 18 * dp;
+        }
+        y += 6 * dp;
+        String[] groups = {"Guns", "Blasts", "Voices", "Vehicles", "The world", "Radio", "Menus & missions"};
+        int cols = maxW > 520 * dp ? 4 : 3;
+        float gap = 8 * dp, bw = (maxW - gap * (cols - 1)) / cols, bh = 40 * dp;
+        // The ambience beds first.
+        y = section(c, "AMBIENCE", x0, y + 8 * dp);
+        int first = buttons.size();
+        for (int l = 0; l < Sfx.LOOPS; l++) {
+            int col = l % cols;
+            float bx = x0 + col * (bw + gap);
+            if (col == 0 && l > 0) y += bh + gap;
+            if (y + bh > listArea.top && y < listArea.bottom)
+                button((previewLoop == l ? "■ " : "▶ ") + Sfx.LOOP_NAMES[l], A_LOOP + l, previewLoop == l, bx, y, bx + bw, y + bh);
+        }
+        y += bh + gap;
+        for (int g = 0; g < Sfx.BUSES; g++) {
+            y = section(c, groups[g].toUpperCase(java.util.Locale.US), x0, y + 8 * dp);
+            int k = 0;
+            for (int id = 0; id < Sfx.COUNT; id++) {
+                if (Sfx.BUS[id] != g || id == 21) continue;
+                int col = k % cols;
+                float bx = x0 + col * (bw + gap);
+                if (col == 0 && k > 0) y += bh + gap;
+                if (y + bh > listArea.top && y < listArea.bottom) button(Sfx.NAMES[id], A_SFX + id, false, bx, y, bx + bw, y + bh);
+                k++;
+            }
+            y += bh + gap;
+        }
+        sameSize(first);
         c.restore();
         contentHeight = y + scroll - top + 10 * dp;
         clampScroll();
@@ -2211,6 +2270,15 @@ final class Menu {
     }
 
     private void act(int action) {
+        if (action >= A_LOOP && action < A_LOOP + Sfx.LOOPS) {
+            int l = action - A_LOOP;
+            previewLoop = previewLoop == l ? -1 : l;
+            return;
+        }
+        if (action >= A_SFX && action < A_SFX + Sfx.COUNT) {
+            host.preview(action - A_SFX);
+            return;
+        }
         if (action >= A_MISSION) {
             int id = action - A_MISSION;
             if (Campaign.get(id) != null && (records == null || records.unlocked(id))) host.startGame(Campaign.config(id));
@@ -2344,6 +2412,9 @@ final class Menu {
                 break;
             case A_REPORT:
                 open(REPORT);
+                break;
+            case A_SOUNDS:
+                open(SOUNDS);
                 break;
             case A_CAMPAIGN:
                 open(CAMPAIGN);

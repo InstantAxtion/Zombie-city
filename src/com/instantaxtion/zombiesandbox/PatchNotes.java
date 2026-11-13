@@ -2,11 +2,25 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.6";
-    static final int VERSION_CODE = 186;
+    static final String VERSION = "19.0";
+    static final int VERSION_CODE = 190;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "19.0  -  The Sound Update",
+                    "Ambience: ten beds of sound now play under everything, each following what's on the screen. The city's traffic hum (busier with more cars about, distant and dull when zoomed out). Wind, stronger zoomed out and roaring as a tornado nears. Birdsong over parks and trees when it's quiet, falling silent in a fight. The murmur of a crowd where people are gathered. Waves by the sea and lakes. The crackle of a wildfire, the rush of a flood, the howl of a tornado and the throb of the alien mothership, each from its side of the screen as you get near. A low drone of tension under a big fight.",
+                    "25 new sounds: a tornado's roar, an earthquake's rumble with its aftershock, splashing floodwater and roaring flames; the aliens' laser guns (their drones no longer sound like rifles) and the mothership's beam; a bomb's tick (quicker in the last 20 seconds) and the bomb squad's all-clear beeps; tyres screeching as a getaway car or cartel convoy pulls away; handcuffs at every arrest and recapture; the roar of a prison riot; crowds screaming as people panic; rubble raining down after a collapse; a police drone's buzz.",
+                    "The radio: each message has its own sound - a phone ringing for a 911 call, the army's double beep, the police radio's hiss - and the squelch as it ends.",
+                    "Stings: a short piece of music under each big announcement - bright for a win, dark for a loss, an alert for the rest - and a chime for each star you win in a mission.",
+                    "Missions: a cash-register ring for every purchase, an error buzz when you can't afford something or it isn't yours to use, and a chime for every step towards the objective (an arrest, a heist stopped, a bomb made safe, a gang broken...). The pickers tap.",
+                    "Shell shock: a blast right by the middle of the screen while you're zoomed in deafens you - your ears ring and everything goes dull, clearing over a few seconds. (Settings: Shell shock.)",
+                    "Walls: sounds from inside a building are muffled and quieter.",
+                    "Sound captions (Settings, off at first): words at the edge of the screen for the sounds that matter, with an arrow for where they're coming from - gunfire, explosions, sirens, screaming, alarms, helicopters, crashes, bombs ticking, collapses, riots, tornadoes, earthquakes, alien fire, the mothership's beam - for playing with the sound off, or to tell where a fight is.",
+                    "New sound settings: Ambience, Radio chatter and Menu & mission sounds, each with its own level; Mono audio, for one ear or one speaker; Dynamic range: Night, which brings the loud down and the quiet up for listening low; Sound captions; Shell shock.",
+                    "The Sound Lab, on the main menu: every sound in the game, by group, to tap and hear, and each ambience bed to switch on and listen to.",
+                    "Behind the scenes: the mixer now has groups (guns, blasts, voices, vehicles, the world, the radio, the menus) with their own levels; looping beds that glide in and out; a whole-mix muffle for deafening; a mono mode; and a night-mode limiter. All of it is still made on the phone, the first time the game runs after the update.",
+            },
             {
                     "18.6  -  Looters form reliably; a leaner test suite",
                     "Outbreak + looters: a looting gang now forms round a leader who picks up a gun along with those beside them, so gangs appear within the first minute every time. (Before, guns went to people scattered all over the city, and a gang sometimes never came together.) They can form from 20 seconds into the outbreak.",

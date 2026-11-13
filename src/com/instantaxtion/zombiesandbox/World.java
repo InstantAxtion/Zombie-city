@@ -3825,8 +3825,8 @@ final class World {
         }
         tracer(e.x + (float) Math.cos(e.angle) * 6, e.y + (float) Math.sin(e.angle) * 6, v.x + rnd.nextFloat() * 6 - 3, v.y + rnd.nextFloat() * 6 - 3);
         particle(e.x + (float) Math.cos(e.angle) * 7, e.y + (float) Math.sin(e.angle) * 7, 0, 0, 0.06f, 2.6f, 0xFFFFE9A0, P_FLASH);
-        emit(e.weapon == Entity.W_SHOTGUN ? Sfx.SHOTGUN : e.weapon == Entity.W_SMG ? Sfx.SMG : e.weapon == Entity.W_DMR ? Sfx.DMR
-                : e.weapon == Entity.W_RIFLE ? (e.kit == 1 ? Sfx.MG : Sfx.RIFLE) : Sfx.PISTOL, e.x, e.y);
+        emit(e.type == Entity.INVADER && alienMode() ? Sfx.LASER : e.weapon == Entity.W_SHOTGUN ? Sfx.SHOTGUN : e.weapon == Entity.W_SMG ? Sfx.SMG
+                : e.weapon == Entity.W_DMR ? Sfx.DMR : e.weapon == Entity.W_RIFLE ? (e.kit == 1 ? Sfx.MG : Sfx.RIFLE) : Sfx.PISTOL, e.x, e.y);
         if (rnd.nextFloat() < 0.25f) noise(e.x, e.y, gunLoudness(e));
     }
 
@@ -4017,6 +4017,7 @@ final class World {
 
     /** A gang member gives up to the police: hands up, the gun dropped, on the city's side of the count now. */
     void surrender(Entity e) {
+        emit(Sfx.CUFFS, e.x, e.y);
         int g = fmod(e.squad, GANG_NAMES.length);
         counts[e.type]--;
         e.type = Entity.CIVILIAN;
@@ -5075,6 +5076,7 @@ final class World {
                             h.car = null;
                         } else {
                             v.getaway = true;
+                            emit(Sfx.SCREECH, v.x, v.y);
                             dispatch.say(Dispatch.WHO_911, null, "911: They just drove off from " + city.placeName(b.doorX, b.doorY)
                                     + " in a " + fleet.describe(v).toLowerCase(java.util.Locale.US) + "!", v.x, v.y, true);
                         }
@@ -5313,6 +5315,11 @@ final class World {
         // The riot spreads while it's going their way.
         if (riotStage >= 1 && inmates > 0 && ((int) riotT) % 15 == 0 && rioters > 0 && rioters < riotTotal * 2 + 40) joinRiot(Math.max(2, inmates / 12));
         if (riotStage == 1 && (guards <= 1 || riotT > 60)) breakout();
+        // (The roar of the riot, while it lasts, from where most of them are.)
+        if (rioters > 5 && ((int) riotT) % 6 == 0) {
+            float[] c = prisonCentre();
+            emit(Sfx.RIOT, riotStage == 2 ? (city.prisonGate[0] + 1.5f) * City.T : c[0], riotStage == 2 ? city.prisonGate[1] * City.T : c[1]);
+        }
         // Over: nobody left rioting, and nobody left to join.
         if (warResult == 0 && rioters == 0 && (riotStage == 2 || inmates == 0 || riotT > 20)) {
             boolean held = prisonEscaped * 3 < riotTotal;
@@ -5364,6 +5371,7 @@ final class World {
         }
         float[] p = prisonCentre();
         emit(Sfx.ALARM, p[0], p[1]);
+        emit(Sfx.RIOT, p[0], p[1]);
         banner("PRISON RIOT", "Inmates have attacked the guards on the island. " + riotTotal + " of them are rioting.");
         dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Riot at the island prison! The guards are under attack. All units to the seafront and the causeway!",
                 p[0], p[1], true);
@@ -5418,6 +5426,7 @@ final class World {
         e.arrested = prisonFallen ? (byte) 1 : 0;
         e.arrestT = 0;
         e.body = 0xFFE07A2A;
+        emit(Sfx.CUFFS, e.x, e.y);
         recaptured++;
         arrests++;
         recountLive();
@@ -5664,6 +5673,7 @@ final class World {
         }
         v.getaway = true;
         convoys.add(v);
+        emit(Sfx.SCREECH, p[0], p[1]);
         // ((The tip-off: someone saw them load up.))
         dispatch.say(Dispatch.WHO_911, null, "911 tip: \"A car just left a house on " + city.placeName(p[0], p[1]) + " full of guys with guns and packages. "
                 + "They're heading out of town.\"", p[0], p[1], true);
@@ -5756,6 +5766,7 @@ final class World {
             if (b[3] >= DEFUSE) {
                 bombs.remove(i);
                 bombsDefused++;
+                emit(Sfx.DEFUSED, b[0], b[1]);
                 dispatch.say(Dispatch.WHO_POLICE, null, "Bomb Squad: Device on " + city.placeName(b[0], b[1]) + " made safe.", b[0], b[1], true);
                 timeline("Bomb defused", b[0], b[1]);
             } else if (b[2] <= 0) {
@@ -5809,6 +5820,7 @@ final class World {
         float[] p = x < 0 ? busySpot() : city.findWalkable(x, y);
         if (p == null) return;
         bombs.add(new float[]{p[0], p[1], 90, 0});
+        emit(Sfx.TICK, p[0], p[1]);
         bombsPlanted++;
         timeline("A bomb left on " + city.placeName(p[0], p[1]), p[0], p[1]);
     }
@@ -6015,6 +6027,7 @@ final class World {
         }
         hazards.add(h);
         emit(Sfx.ALARM, h.x, h.y);
+        emit(kind == HZ_TORNADO ? Sfx.TORNADO : kind == HZ_QUAKE ? Sfx.QUAKE : kind == HZ_FLOOD ? Sfx.SPLASH : Sfx.WHOOSH, Math.max(0, h.x), Math.max(0, h.y));
         dispatch.say(Dispatch.WHO_INFO, null, "Emergency alert: " + line, Math.max(0, h.x), Math.max(0, h.y), true);
         timeline(DISASTER_NAMES[kind] + " near " + city.placeName(Math.max(0, h.x), Math.max(0, h.y)), Math.max(0, h.x), Math.max(0, h.y));
         banner(DISASTER_NAMES[kind].toUpperCase(java.util.Locale.US), line);
@@ -6054,6 +6067,7 @@ final class World {
         if (h.kind == HZ_QUAKE) {
             if (h.peak > 0 && h.t == 20) {
                 shake = 1.5f;
+                emit(Sfx.QUAKE, h.x, h.y);
                 quake(h.x, h.y, 450, 0.45f);
                 dispatch.say(Dispatch.WHO_INFO, null, "Emergency alert: Aftershock!", h.x, h.y);
             }
@@ -6062,6 +6076,10 @@ final class World {
         float r = h.r;
         if (r <= 1) return;
         float dmg = h.kind == HZ_TORNADO ? 22 : h.kind == HZ_FIRE ? 14 : 3;
+        // ((19.0) Its own sounds now and then: the roar, the water, the flames.)
+        if (rnd.nextFloat() < (h.kind == HZ_TORNADO ? 0.6f : 0.25f))
+            emit(h.kind == HZ_TORNADO ? Sfx.TORNADO : h.kind == HZ_FLOOD ? Sfx.SPLASH : Sfx.WHOOSH,
+                    h.x + (rnd.nextFloat() - 0.5f) * r, h.y + (rnd.nextFloat() - 0.5f) * r);
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
             if (e.dead || e.ride != null) continue;
@@ -6186,6 +6204,7 @@ final class World {
                 beamX = p[0];
                 beamY = p[1];
                 beamT = 2;
+                emit(Sfx.BEAM, p[0], p[1]);
                 explode(p[0], p[1], 60, 500);
                 shake = Math.max(shake, 0.8f);
             }
@@ -6247,6 +6266,7 @@ final class World {
             d[0] += dx / dl * step;
             d[1] += dy / dl * step;
             d[5] -= dt;
+            if (((int) (d[4] * 2)) % 3 == 0 && rnd.nextFloat() < dt * 2) emit(Sfx.BUZZ, d[0], d[1]);
             if (d[5] > 0 || World.hypot(d[0] - d[2], d[1] - d[3]) > 60) continue;
             d[5] = 6;
             // What it sees: the other side in numbers gets the police sent; a bomb gets the bomb squad.
@@ -11018,6 +11038,7 @@ final class World {
 
     /** Panic: everyone near a point screams and runs. */
     void panic(float x, float y) {
+        emit(Sfx.PANIC, x, y);
         int n = 0;
         for (int i = 0, c = entities.size(); i < c; i++) {
             Entity e = entities.get(i);
@@ -16806,6 +16827,11 @@ final class World {
             tracer(mx, my, ex, ey);
         }
         particle(mx, my, 0, 0, 0.06f, soldier ? 3.2f : 2.6f, 0xFFFFE9A0, P_FLASH);
+        // ((19.0) The aliens' guns: a beam's whine, not a bang.)
+        if (e.type == Entity.INVADER && alienMode()) {
+            emit(Sfx.LASER, e.x, e.y);
+            return;
+        }
         int gunSound = e.weapon == Entity.W_SHOTGUN ? Sfx.SHOTGUN : e.weapon == Entity.W_HUNTING ? Sfx.HUNTING : e.weapon == Entity.W_REVOLVER ? Sfx.REVOLVER
                 : e.weapon == Entity.W_SMG ? Sfx.SMG : e.weapon == Entity.W_CARBINE ? Sfx.CARBINE : e.weapon == Entity.W_DMR ? Sfx.DMR : -1;
         if (gunSound >= 0) emit(gunSound, e.x, e.y);
@@ -18853,6 +18879,7 @@ final class World {
             particle(b.x0 + rnd.nextFloat() * (b.x1 - b.x0), b.y0 + rnd.nextFloat() * (b.y1 - b.y0), rnd.nextFloat() * 40 - 20,
                     rnd.nextFloat() * 40 - 20, 2.5f + rnd.nextFloat() * 2, 6 + rnd.nextFloat() * 6, 0xFF9A948A, P_SMOKE);
         emit(Sfx.COLLAPSE, cx, cy);
+        emit(Sfx.DEBRIS, cx + (rnd.nextFloat() - 0.5f) * 20, cy + (rnd.nextFloat() - 0.5f) * 20);
         shake = Math.min(2f, shake + 1f);
         noise(cx, cy, 400);
         // ((18.4) Heavy destruction: debris thrown wide, and the buildings next to it hit hard enough to come down too.)

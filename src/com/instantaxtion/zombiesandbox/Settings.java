@@ -9,13 +9,17 @@ final class Settings implements OptionSet {
     private static final String[] ON_OFF = {"Off", "On"};
     private static final String[] LABELS = {"Music", "Sound effects", "View", "Blood", "Health bars",
             "Screen shake", "Show FPS", "Max population", "Radio messages", "Minimap",
-            "Text & buttons", "Battery saver", "Name tags", "Graphics", "Vibration", "Radio lines on screen", "Destruction"};
+            "Text & buttons", "Battery saver", "Name tags", "Graphics", "Vibration", "Radio lines on screen", "Destruction",
+            // ((19.0) The Sound Update.)
+            "Ambience", "Radio chatter", "Menu & mission sounds", "Mono audio", "Dynamic range", "Sound captions", "Shell shock"};
     private static final String[][] VALUES = {VOLUME, VOLUME, {"Bird's-eye", "3D"}, ON_OFF, ON_OFF, ON_OFF, ON_OFF,
             {"Auto", "2500", "5000", "8000", "12000"}, ON_OFF, ON_OFF, {"Small", "Normal", "Large"}, ON_OFF, ON_OFF,
-            {"Classic", "Realistic"}, ON_OFF, {"1", "2", "3", "4"}, {"Normal", "Heavy"}};
+            {"Classic", "Realistic"}, ON_OFF, {"1", "2", "3", "4"}, {"Normal", "Heavy"},
+            VOLUME, VOLUME, VOLUME, ON_OFF, {"Full", "Night"}, ON_OFF, ON_OFF};
     private static final String[] KEYS = {"music", "sfx", "buildings3d", "gore", "healthBars", "shake", "fps",
-            "maxPop2", "radio", "minimap", "uiSize", "battery", "nameTags", "graphics", "vibration", "feedLines", "destruction"};
-    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0};
+            "maxPop2", "radio", "minimap", "uiSize", "battery", "nameTags", "graphics", "vibration", "feedLines", "destruction",
+            "ambience", "radioVol", "uiVol", "mono", "nightMode", "captions", "shellShock"};
+    private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 3, 3, 3, 0, 0, 0, 1};
     /** 0 is Auto: room for everyone who lives in the city, and plenty of zombies. */
     private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000};
 
@@ -43,6 +47,18 @@ final class Settings implements OptionSet {
     boolean vibration() { return v[14] == 1; }
     /** ((18.4) Heavy destruction: blasts tear buildings apart, and a collapse brings down what's next to it. */
     boolean heavyDestruction() { return v[16] == 1; }
+    /** ((19.0) The levels of the ambience, the radio and the menus' and missions' sounds, 0 to 1. */
+    float ambience() { return v[17] / 4f; }
+    float radioVolume() { return v[18] / 4f; }
+    float uiVolume() { return v[19] / 4f; }
+    /** One channel for both ears. */
+    boolean mono() { return v[20] == 1; }
+    /** Night mode: the loud brought down, the quiet lifted. */
+    boolean nightMode() { return v[21] == 1; }
+    /** Words on the screen for the sounds that matter, with which way they came from. */
+    boolean captions() { return v[22] == 1; }
+    /** Ringing ears and dulled hearing after a blast close by. */
+    boolean shellShock() { return v[23] == 1; }
     /** ((12.0) How many radio messages show at once along the top.) */
     int feedLines() { return v[15] + 1; }
     boolean radio() { return v[8] == 1; }

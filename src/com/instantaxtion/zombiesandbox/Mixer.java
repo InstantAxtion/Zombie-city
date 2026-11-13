@@ -55,6 +55,77 @@ final class Mixer {
 
     private float master = 1, env, loud;
 
+    // ---- (19.0) The Sound Update ----
+
+    /** Each group's level (the guns, blasts, voices, vehicles, the world, the radio, the menus). */
+    private final float[] bus = {1, 1, 1, 1, 1, 1, 1};
+    /** Everything in the middle: for one ear, or one speaker. */
+    private volatile boolean mono;
+    /** Night mode: the loud brought down and the quiet brought up, for listening low. */
+    private volatile boolean night;
+    /** How deafened the listener is by a blast close by, 0 to 1: everything muffled, easing back over a few seconds. */
+    private volatile float shock;
+    private float shockLp0, shockLp1;
+
+    /** The ambience beds: each a sample looping for ever, at a level that glides to where it's asked to be. */
+    private static final class Loop {
+        short[] data;
+        double pos;
+        float gain, target, pan, panTarget, muffle, lp;
+    }
+
+    private final Loop[] loops = new Loop[Sfx.LOOPS];
+    private float ambience = 1;
+
+    void setLoopSamples(int loop, short[] data) {
+        Loop l = new Loop();
+        l.data = data;
+        l.pos = loop * 7919 % Math.max(1, data.length);
+        loops[loop] = l;
+    }
+
+    boolean loopReady(int loop) {
+        return loops[loop] != null;
+    }
+
+    /** How loud an ambience bed should be (0 off), where (-1 left to 1 right), and how muffled (0 to 1). */
+    void setLoop(int loop, float gain, float pan, float muffle) {
+        Loop l = loops[loop];
+        if (l == null) return;
+        l.target = Math.max(0, Math.min(1, gain));
+        l.panTarget = Math.max(-1, Math.min(1, pan));
+        l.muffle = Math.max(0, Math.min(1, muffle));
+    }
+
+    float loopGain(int loop) {
+        return loops[loop] == null ? 0 : loops[loop].gain;
+    }
+
+    void setBus(int b, float v) {
+        bus[b] = Math.max(0, Math.min(1.5f, v));
+    }
+
+    void setAmbience(float v) {
+        ambience = Math.max(0, Math.min(1.5f, v));
+    }
+
+    void setMono(boolean m) {
+        mono = m;
+    }
+
+    void setNight(boolean n) {
+        night = n;
+    }
+
+    /** A blast close by: the ears ring and everything goes dull for a while (0 to 1, the most kept). */
+    void shock(float amount) {
+        shock = Math.max(shock, Math.max(0, Math.min(1, amount)));
+    }
+
+    float shockLevel() {
+        return shock;
+    }
+
     Mixer(int outRate) {
         rate = outRate;
         step0 = Synth.RATE / (float) outRate;
@@ -126,6 +197,9 @@ final class Mixer {
     private void start(int id, float gain, float pan, float dist, float pitch) {
         short[][] takes = samples[id];
         if (takes == null || takes.length == 0 || gain <= 0.001f) return;
+        gain *= bus[Sfx.BUS[id]];
+        if (gain <= 0.001f) return;
+        if (mono) pan = 0;
         int prio = Sfx.PRIORITY[id];
         // Too many of this one already: the oldest of them makes way.
         int same = 0;
@@ -238,21 +312,66 @@ final class Mixer {
             v.cl = cl;
             v.cr = cr;
         }
+        mixLoops(out, frames);
         float relEnv = (float) Math.exp(-1.0 / (0.15 * rate)), atkEnv = (float) Math.exp(-1.0 / (0.001 * rate));
+        // ((19.0) Deafened by a blast: a low-pass over the whole mix that opens back up over about three seconds.)
+        float sh = shock, shK = 1 - 0.93f * sh;
+        shock = Math.max(0, sh - frames / (3f * rate));
+        // (Night mode: a gentler, earlier limiter, and the quiet lifted.)
+        float lim = night ? 0.35f : 0.7f, makeup = night ? 1.6f : 1f;
         float relLoud = (float) Math.exp(-1.0 / (0.8 * rate));
         for (int f = 0; f < frames; f++) {
             reverb(send[f]);
-            float l = (out[f * 2] + wet[0] * 0.32f) * master, r = (out[f * 2 + 1] + wet[1] * 0.32f) * master;
+            float l = (out[f * 2] + wet[0] * 0.32f) * master * makeup, r = (out[f * 2 + 1] + wet[1] * 0.32f) * master * makeup;
+            if (sh > 0.01f) {
+                shockLp0 += (l - shockLp0) * shK;
+                shockLp1 += (r - shockLp1) * shK;
+                l = shockLp0 * (1 - 0.4f * sh);
+                r = shockLp1 * (1 - 0.4f * sh);
+            }
+            if (mono) l = r = (l + r) * 0.5f;
             // The limiter: above 0.7 the whole mix comes down, quickly, and goes back up over a moment.
             float peak = Math.max(Math.abs(l), Math.abs(r));
             env = peak > env ? peak + (env - peak) * atkEnv : env * relEnv;
-            float g = env > 0.7f ? 0.7f / env : 1;
+            float g = env > lim ? lim / env : 1;
             l *= g;
             r *= g;
             loud = Math.max(peak, loud * relLoud);
             // (And anything still over the top rounded off, not clipped.)
             out[f * 2] = soft(l);
             out[f * 2 + 1] = soft(r);
+        }
+    }
+
+    /** ((19.0) The ambience beds, under everything (and under the echo: they're everywhere already). */
+    private void mixLoops(float[] out, int frames) {
+        float glide = 1 - (float) Math.exp(-frames / (0.6 * rate));
+        for (Loop l : loops) {
+            if (l == null) continue;
+            float tg = l.target * ambience * master;
+            l.gain += (tg - l.gain) * glide;
+            l.pan += (l.panTarget - l.pan) * glide;
+            if (l.gain < 0.0005f && tg == 0) continue;
+            float a = ((mono ? 0 : l.pan) + 1) * (float) (Math.PI / 4);
+            float gl = l.gain * (float) Math.cos(a), gr = l.gain * (float) Math.sin(a);
+            float k = Math.max(0.05f, 1 - 0.95f * l.muffle);
+            short[] d = l.data;
+            int n = d.length;
+            double pos = l.pos;
+            float lp = l.lp;
+            for (int f = 0; f < frames; f++) {
+                int i = (int) pos;
+                int j = i + 1 >= n ? 0 : i + 1;
+                float fr = (float) (pos - i);
+                float x = (d[i] + (d[j] - d[i]) * fr) * (1f / 32768f);
+                lp += (x - lp) * k;
+                out[f * 2] += lp * gl;
+                out[f * 2 + 1] += lp * gr;
+                pos += step0;
+                if (pos >= n) pos -= n;
+            }
+            l.pos = pos;
+            l.lp = lp;
         }
     }
 

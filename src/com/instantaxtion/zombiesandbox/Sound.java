@@ -23,7 +23,7 @@ import java.io.FileInputStream;
  */
 final class Sound {
     /** Bump when the synthesized audio changes so old cached files are regenerated. */
-    private static final int AUDIO_VERSION = 4;
+    private static final int AUDIO_VERSION = 5;
     /** (10.52) The music on its own: ten pieces now. */
     private static final int MUSIC_VERSION = 3;
     /** Frames mixed at a time: about 5 ms. */
@@ -159,6 +159,27 @@ final class Sound {
         mixer.trigger(id, Math.max(0, volume) * g, pan, distance, 1);
     }
 
+    // ------------------------------------------------------------------ (19.0) ambience, groups, deafening
+
+    /** An ambience bed's level (0 off), where it is (-1 left to 1 right) and how muffled (0 to 1). */
+    void setLoop(int loop, float gain, float pan, float muffle) {
+        if (mixer != null) mixer.setLoop(loop, gain, pan, muffle);
+    }
+
+    /** The levels of the groups and the ambience, and the listening options. */
+    void setMix(float[] buses, float ambience, boolean mono, boolean night) {
+        if (mixer == null) return;
+        for (int b = 0; b < buses.length && b < Sfx.BUSES; b++) mixer.setBus(b, buses[b]);
+        mixer.setAmbience(ambience);
+        mixer.setMono(mono);
+        mixer.setNight(night);
+    }
+
+    /** A blast close by: ringing ears, and everything dull for a while. */
+    void shock(float amount) {
+        if (mixer != null && !paused) mixer.shock(amount);
+    }
+
     // ------------------------------------------------------------------ making the sounds
 
     private void prepareAudio() {
@@ -181,6 +202,21 @@ final class Sound {
                 if (s != null) takes[got++] = s;
             }
             if (got > 0) mixer.setSamples(i, got == takes.length ? takes : java.util.Arrays.copyOf(takes, got));
+        }
+        // ((19.0) The ambience beds.)
+        for (int l = 0; l < Sfx.LOOPS && !released && mixer != null; l++) {
+            File f = new File(ctx.getCacheDir(), "sfx" + AUDIO_VERSION + "_loop" + l + ".wav");
+            short[] s = null;
+            if (f.exists()) s = readWav(f);
+            if (s == null) {
+                try {
+                    s = Synth.ambience(l);
+                    writeSafely(f, s);
+                } catch (Exception e) {
+                    s = null;
+                }
+            }
+            if (s != null && s.length > 100) mixer.setLoopSamples(l, s);
         }
         // Menu music first: it is what the player hears first.
         for (int track = 0; track < Synth.TRACKS && !released; track++) {

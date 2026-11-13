@@ -86,6 +86,31 @@ final class Synth {
             case Sfx.LAUNCHER: out = launcher(r); break;
             case Sfx.CLIMB: out = climb(r); break;
             case Sfx.HEART: out = heart(); break;
+            case Sfx.TORNADO: out = tornado(r); break;
+            case Sfx.QUAKE: out = quake(r); break;
+            case Sfx.SPLASH: out = splash(r); break;
+            case Sfx.WHOOSH: out = whoosh(r); break;
+            case Sfx.LASER: out = laser(r); break;
+            case Sfx.BEAM: out = beam(r); break;
+            case Sfx.TICK: out = tick(); break;
+            case Sfx.DEFUSED: out = beeps(new float[]{1320, 1760, 2640}, 0.09f, 0.03f); break;
+            case Sfx.SCREECH: out = screech(r); break;
+            case Sfx.CUFFS: out = cuffs(r); break;
+            case Sfx.RIOT: out = crowd(r, 2.2f, 0.9f); break;
+            case Sfx.PANIC: out = crowd(r, 1.4f, 1.6f); break;
+            case Sfx.CASH: out = cash(r); break;
+            case Sfx.CHIME: out = bell(new float[]{midi(76), midi(83)}, 0.14f, 0.9f); break;
+            case Sfx.STAR: out = bell(new float[]{midi(84), midi(88), midi(91)}, 0.07f, 0.8f); break;
+            case Sfx.STING_WIN: out = sting(new int[]{60, 64, 67, 72}, new int[]{48, 55}, 0.16f, true); break;
+            case Sfx.STING_LOSE: out = sting(new int[]{62, 60, 56, 55}, new int[]{43, 50}, 0.3f, false); break;
+            case Sfx.STING_ALERT: out = sting(new int[]{69, 72, 69, 76}, new int[]{45}, 0.12f, false); break;
+            case Sfx.ERROR: out = errorBuzz(); break;
+            case Sfx.BUZZ: out = droneBuzz(r); break;
+            case Sfx.DEBRIS: out = debris(r); break;
+            case Sfx.WHINE: out = whine(); break;
+            case Sfx.SQUELCH: out = squelch(r); break;
+            case Sfx.MIL_RADIO: out = beeps(new float[]{1050, 1050}, 0.06f, 0.05f); break;
+            case Sfx.TAP: out = tap(); break;
             default: out = click(); break;
         }
         if (variant > 0) out = vary(out, 1 + (r.nextFloat() - 0.5f) * (Sfx.gun(id) ? 0.12f : 0.18f));
@@ -735,6 +760,441 @@ final class Synth {
                     * smooth(Math.min(1, (0.6f - t) / 0.05f));
         }
         return o;
+    }
+
+    // ------------------------------------------------------------------ (19.0) the new effects
+
+    private static float[] tornado(Random r) {
+        int n = (int) (2.6f * RATE);
+        float[] o = new float[n];
+        float lp = 0, bp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float w = r.nextFloat() * 2 - 1;
+            float k = 0.04f + 0.05f * (0.5f + 0.5f * (float) Math.sin(TAU * 0.8f * t + Math.sin(TAU * 2.3f * t)));
+            lp += (w - lp) * k;
+            bp += (lp - bp) * 0.3f;
+            float env = Math.min(1, t / 0.6f) * Math.min(1, (2.6f - t) / 0.8f);
+            o[i] = (lp - bp * 0.5f) * 5 * env + (float) Math.sin(TAU * 38 * t) * 0.25f * env;
+        }
+        return o;
+    }
+
+    private static float[] quake(Random r) {
+        int n = (int) (3.2f * RATE);
+        float[] o = new float[n];
+        float lp = 0, lp2 = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.02f;
+            lp2 += (lp - lp2) * 0.05f;
+            float env = Math.min(1, t / 0.4f) * (float) Math.exp(-Math.max(0, t - 0.8f) * 1.3f);
+            float wob = 1 + 0.5f * (float) Math.sin(TAU * 3.1f * t);
+            o[i] = (lp2 * 14 + (float) Math.sin(TAU * (28 + 6 * Math.sin(TAU * 0.7f * t)) * t) * 0.5f) * env * wob
+                    + (r.nextFloat() < 0.002f ? (r.nextFloat() - 0.5f) * 0.8f : 0);
+        }
+        return o;
+    }
+
+    private static float[] splash(Random r) {
+        int n = (int) (0.7f * RATE);
+        float[] o = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * (0.5f - 0.4f * t / 0.7f);
+            float env = Math.min(1, t / 0.01f) * (float) Math.exp(-t * 6);
+            float bub = (float) Math.sin(TAU * (600 + 900 * (float) Math.exp(-t * 20)) * t) * (float) Math.exp(-t * 30) * 0.3f;
+            o[i] = lp * env + bub;
+        }
+        return o;
+    }
+
+    private static float[] whoosh(Random r) {
+        int n = (int) (0.9f * RATE);
+        float[] o = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * (0.05f + 0.25f * (float) Math.sin(Math.PI * t / 0.9f));
+            float env = (float) Math.sin(Math.PI * t / 0.9f);
+            float crack = r.nextFloat() < 0.004f ? (r.nextFloat() - 0.5f) * 1.5f : 0;
+            o[i] = lp * 2 * env + crack * env;
+        }
+        return o;
+    }
+
+    private static float[] laser(Random r) {
+        int n = (int) (0.22f * RATE);
+        float[] o = new float[n];
+        float f0 = 1800 + r.nextFloat() * 500, ph = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float f = f0 * (float) Math.exp(-t * 9) + 180;
+            ph += TAU * f / RATE;
+            float env = Math.min(1, t / 0.002f) * (float) Math.exp(-t * 14);
+            o[i] = ((float) Math.sin(ph) * 0.7f + (float) Math.sin(ph * 2.01f) * 0.3f + (ph % TAU < Math.PI ? 0.2f : -0.2f)) * env;
+        }
+        return o;
+    }
+
+    private static float[] beam(Random r) {
+        int n = (int) (2.0f * RATE);
+        float[] o = new float[n];
+        float ph = 0, lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float f = 110 + 40 * (float) Math.sin(TAU * 6 * t);
+            ph += TAU * f / RATE;
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.15f;
+            float env = Math.min(1, t / 0.15f) * Math.min(1, (2f - t) / 0.4f);
+            float hit = t > 0.5f ? (float) Math.exp(-(t - 0.5f) * 3) : 0;
+            o[i] = ((float) Math.sin(ph) * 0.5f + (float) Math.sin(ph * 3) * 0.25f + lp * 0.4f) * env + lp * 2.5f * hit;
+        }
+        return o;
+    }
+
+    private static float[] tick() {
+        int n = (int) (0.06f * RATE);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            o[i] = ((float) Math.sin(TAU * 2400 * t) * 0.6f + (float) Math.sin(TAU * 3900 * t) * 0.3f) * (float) Math.exp(-t * 90);
+        }
+        return o;
+    }
+
+    /** A few clean electronic beeps. */
+    private static float[] beeps(float[] freqs, float len, float gap) {
+        int n = (int) ((len + gap) * freqs.length * RATE) + 1;
+        float[] o = new float[n];
+        for (int k = 0; k < freqs.length; k++) {
+            int s0 = (int) (k * (len + gap) * RATE);
+            for (int i = 0; i < len * RATE && s0 + i < n; i++) {
+                float t = i / (float) RATE;
+                float env = Math.min(1, t / 0.004f) * Math.min(1, (len - t) / 0.01f);
+                o[s0 + i] += (float) Math.sin(TAU * freqs[k] * t) * env * 0.8f + (float) Math.sin(TAU * freqs[k] * 2 * t) * env * 0.15f;
+            }
+        }
+        return o;
+    }
+
+    private static float[] screech(Random r) {
+        int n = (int) (1.1f * RATE);
+        float[] o = new float[n];
+        float ph = 0, lp = 0;
+        float f0 = 900 + r.nextFloat() * 300;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float f = f0 * (1 + 0.04f * (float) Math.sin(TAU * 31 * t)) - 150 * t;
+            ph += TAU * f / RATE;
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.6f;
+            float env = Math.min(1, t / 0.03f) * Math.min(1, (1.1f - t) / 0.3f);
+            o[i] = ((float) Math.sin(ph) * 0.5f + (float) Math.sin(ph * 1.5f) * 0.2f + lp * 0.35f) * env;
+        }
+        return o;
+    }
+
+    private static float[] cuffs(Random r) {
+        int n = (int) (0.35f * RATE);
+        float[] o = new float[n];
+        for (int c = 0; c < 6; c++) {
+            int s0 = (int) ((0.02f + c * 0.035f + r.nextFloat() * 0.01f) * RATE);
+            float f = 3200 + r.nextFloat() * 1600;
+            for (int i = 0; i < 0.04f * RATE && s0 + i < n; i++) {
+                float t = i / (float) RATE;
+                o[s0 + i] += (float) Math.sin(TAU * f * t) * (float) Math.exp(-t * 160) * (c == 5 ? 1 : 0.5f);
+            }
+        }
+        return o;
+    }
+
+    /** A crowd: many voices, shouting (a riot) or screaming (panic). */
+    private static float[] crowd(Random r, float dur, float pitch) {
+        int n = (int) (dur * RATE);
+        float[] o = new float[n];
+        for (int v = 0; v < 14; v++) {
+            float f0 = (140 + r.nextFloat() * 220) * pitch, start = r.nextFloat() * dur * 0.5f, len = 0.3f + r.nextFloat() * (dur - start) * 0.8f;
+            float ph = 0, vib = 4 + r.nextFloat() * 4;
+            int s0 = (int) (start * RATE);
+            for (int i = 0; i < len * RATE && s0 + i < n; i++) {
+                float t = i / (float) RATE;
+                float f = f0 * (1 + 0.06f * (float) Math.sin(TAU * vib * t) + (pitch > 1.2f ? 0.3f * t : -0.1f * t));
+                ph += TAU * f / RATE;
+                float env = Math.min(1, t / 0.08f) * Math.min(1, (len - t) / 0.15f);
+                float voice = (float) Math.sin(ph) + 0.5f * (float) Math.sin(ph * 2) + 0.3f * (float) Math.sin(ph * 3);
+                o[s0 + i] += voice * env * 0.12f;
+            }
+        }
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.3f;
+            float t = i / (float) RATE;
+            o[i] += lp * 0.15f * Math.min(1, t / 0.2f) * Math.min(1, (dur - t) / 0.3f);
+        }
+        return o;
+    }
+
+    private static float[] cash(Random r) {
+        float[] a = beeps(new float[]{2093, 2637}, 0.05f, 0.01f);
+        float[] b = bell(new float[]{2637, 3136}, 0.0f, 0.6f);
+        int n = a.length + b.length;
+        float[] o = new float[n];
+        System.arraycopy(a, 0, o, 0, a.length);
+        for (int i = 0; i < b.length; i++) o[a.length / 2 + i] += b[i] * 0.8f;
+        for (int i = 0; i < (int) (0.08f * RATE) && i < n; i++) o[i] += (r.nextFloat() - 0.5f) * 0.3f * (float) Math.exp(-i / (0.02f * RATE));
+        return o;
+    }
+
+    /** Struck bells, one after another (gap 0: together). */
+    private static float[] bell(float[] freqs, float gap, float len) {
+        int n = (int) ((len + gap * freqs.length) * RATE);
+        float[] o = new float[n];
+        for (int k = 0; k < freqs.length; k++) {
+            int s0 = (int) (k * gap * RATE);
+            for (int i = 0; s0 + i < n; i++) {
+                float t = i / (float) RATE;
+                float env = Math.min(1, t / 0.003f) * (float) Math.exp(-t * 5);
+                o[s0 + i] += ((float) Math.sin(TAU * freqs[k] * t) + 0.35f * (float) Math.sin(TAU * freqs[k] * 2.76f * t) * (float) Math.exp(-t * 9)) * env * 0.5f;
+            }
+        }
+        return o;
+    }
+
+    /** A short musical sting: a phrase over a chord, rising and bright (a win) or falling and dark. */
+    private static float[] sting(int[] notes, int[] chord, float noteLen, boolean bright) {
+        float dur = noteLen * notes.length + 1.4f;
+        int n = (int) (dur * RATE);
+        float[] pad = new float[n], lead = new float[n];
+        for (int c : chord) addPadNote(pad, midi(c), 0, dur - 0.9f, 0.05f, 0.8f, 0.1f);
+        for (int k = 0; k < notes.length; k++) {
+            boolean last = k == notes.length - 1;
+            addPluck(lead, midi(notes[k]), k * noteLen, last ? 1.0f : 0.35f, 0.16f);
+            if (bright) addPluck(lead, midi(notes[k] + 12), k * noteLen, last ? 0.8f : 0.25f, 0.05f);
+        }
+        echo(lead, 0.18f, 0.25f);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) o[i] = (float) Math.tanh((pad[i] + lead[i]) * 1.5f);
+        return o;
+    }
+
+    private static float[] errorBuzz() {
+        int n = (int) (0.22f * RATE);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float env = Math.min(1, t / 0.005f) * (t < 0.09f || t > 0.12f ? 1 : 0) * Math.min(1, (0.22f - t) / 0.02f);
+            float sq = (float) Math.sin(TAU * 150 * t) > 0 ? 0.6f : -0.6f;
+            o[i] = (sq + (float) Math.sin(TAU * 300 * t) * 0.3f) * env;
+        }
+        return o;
+    }
+
+    private static float[] droneBuzz(Random r) {
+        int n = (int) (1.5f * RATE);
+        float[] o = new float[n];
+        float ph = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            ph += TAU * (210 + 8 * (float) Math.sin(TAU * 1.3f * t)) / RATE;
+            float saw = (float) ((ph / TAU) % 1.0) * 2 - 1;
+            float env = Math.min(1, t / 0.2f) * Math.min(1, (1.5f - t) / 0.4f);
+            o[i] = (saw * 0.4f + (float) Math.sin(ph * 2) * 0.3f + (r.nextFloat() - 0.5f) * 0.1f) * env;
+        }
+        return o;
+    }
+
+    private static float[] debris(Random r) {
+        int n = (int) (1.4f * RATE);
+        float[] o = new float[n];
+        for (int k = 0; k < 40; k++) {
+            int s0 = (int) (Math.pow(r.nextFloat(), 1.6) * 1.1f * RATE);
+            float f = 200 + r.nextFloat() * 1600, d = 20 + r.nextFloat() * 60;
+            for (int i = 0; i < 0.12f * RATE && s0 + i < n; i++) {
+                float t = i / (float) RATE;
+                o[s0 + i] += ((r.nextFloat() - 0.5f) * 0.8f + (float) Math.sin(TAU * f * t) * 0.4f) * (float) Math.exp(-t * d) * 0.5f;
+            }
+        }
+        lowpass(o, 0.5f);
+        return o;
+    }
+
+    private static float[] whine() {
+        int n = (int) (2.4f * RATE);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float env = Math.min(1, t / 0.05f) * (float) Math.exp(-t * 1.3f);
+            o[i] = (float) Math.sin(TAU * 3800 * t) * env * 0.4f + (float) Math.sin(TAU * 3812 * t) * env * 0.2f;
+        }
+        return o;
+    }
+
+    private static float[] squelch(Random r) {
+        int n = (int) (0.16f * RATE);
+        float[] o = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.7f;
+            float env = Math.min(1, t / 0.005f) * Math.min(1, (0.16f - t) / 0.02f);
+            o[i] = (lp - w * 0.3f) * env * 0.6f + (t > 0.12f ? (float) Math.sin(TAU * 1400 * t) * 0.3f : 0);
+        }
+        return o;
+    }
+
+    private static float[] tap() {
+        int n = (int) (0.035f * RATE);
+        float[] o = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            o[i] = (float) Math.sin(TAU * 900 * t) * (float) Math.exp(-t * 160) * 0.7f;
+        }
+        return o;
+    }
+
+    // ------------------------------------------------------------------ (19.0) the ambience loops
+
+    /** Seconds each ambience loop runs before it starts again (seamlessly). */
+    static final float LOOP_SECONDS = 6;
+
+    /** A bed of ambience that loops without a seam (its end faded into its start). */
+    static short[] ambience(int loop) {
+        Random r = new Random(9100 + loop * 31L);
+        int n = (int) (LOOP_SECONDS * RATE), fade = (int) (0.8f * RATE);
+        float[] o = new float[n + fade];
+        int m = o.length;
+        float lp = 0, lp2 = 0, bp = 0;
+        switch (loop) {
+            case Sfx.LOOP_CITY: {
+                // Traffic: a low rumble, cars passing now and then, a far horn.
+                for (int i = 0; i < m; i++) {
+                    float w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.02f;
+                    lp2 += (lp - lp2) * 0.1f;
+                    o[i] = lp2 * 6;
+                }
+                for (int k = 0; k < 6; k++) {
+                    float at = r.nextFloat() * (LOOP_SECONDS - 2), len = 1.5f + r.nextFloat();
+                    float l = 0;
+                    for (int i = 0; i < len * RATE; i++) {
+                        float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                        l += (w - l) * 0.08f;
+                        o[(int) (at * RATE) + i] += l * 2.5f * (float) Math.sin(Math.PI * t / len);
+                    }
+                }
+                addSine(o, 415, 3.2f, 0.4f, 0.02f, 0.1f, 0.04f);
+                addSine(o, 523, 3.2f, 0.4f, 0.02f, 0.1f, 0.03f);
+                break;
+            }
+            case Sfx.LOOP_WIND: {
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                    float k = 0.01f + 0.02f * (0.5f + 0.5f * (float) Math.sin(TAU * t / LOOP_SECONDS * 2 + Math.sin(TAU * t / LOOP_SECONDS)));
+                    lp += (w - lp) * k;
+                    bp += (lp - bp) * 0.3f;
+                    o[i] = (lp - bp * 0.7f) * 9;
+                }
+                break;
+            }
+            case Sfx.LOOP_BIRDS: {
+                for (int i = 0; i < m; i++) {
+                    float w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.3f;
+                    o[i] = (w - lp) * 0.02f;
+                }
+                for (int k = 0; k < 14; k++) {
+                    float at = r.nextFloat() * (LOOP_SECONDS - 0.6f), f0 = 2600 + r.nextFloat() * 2200;
+                    int notes = 2 + r.nextInt(4);
+                    for (int q = 0; q < notes; q++) {
+                        float s = at + q * 0.09f, len = 0.06f + r.nextFloat() * 0.05f;
+                        for (int i = 0; i < len * RATE; i++) {
+                            float t = i / (float) RATE;
+                            float f = f0 * (1 + 0.25f * (float) Math.sin(Math.PI * t / len) * (q % 2 == 0 ? 1 : -1));
+                            o[(int) (s * RATE) + i] += (float) Math.sin(TAU * f * t) * (float) Math.sin(Math.PI * t / len) * 0.25f;
+                        }
+                    }
+                }
+                break;
+            }
+            case Sfx.LOOP_CROWD: {
+                float[] c = crowd(r, LOOP_SECONDS + 0.8f, 1f);
+                for (int i = 0; i < m && i < c.length; i++) o[i] = c[i] * 0.6f;
+                for (int i = 0; i < m; i++) {
+                    float w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.08f;
+                    o[i] += lp * 0.3f;
+                }
+                break;
+            }
+            case Sfx.LOOP_WATER: {
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.05f;
+                    float wave = 0.5f + 0.5f * (float) Math.sin(TAU * t / 3);
+                    o[i] = lp * 4 * (0.4f + wave * 0.8f);
+                }
+                break;
+            }
+            case Sfx.LOOP_FIRE: {
+                for (int i = 0; i < m; i++) {
+                    float w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.04f;
+                    o[i] = lp * 5 + (r.nextFloat() < 0.003f ? (r.nextFloat() - 0.5f) * 1.6f : 0);
+                }
+                break;
+            }
+            case Sfx.LOOP_STORM: {
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * (0.03f + 0.03f * (float) Math.sin(TAU * t * 0.5f));
+                    lp2 += (lp - lp2) * 0.3f;
+                    o[i] = (lp - lp2 * 0.4f) * 8 + (float) Math.sin(TAU * 34 * t) * 0.15f;
+                }
+                break;
+            }
+            case Sfx.LOOP_FLOOD: {
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+                    lp += (w - lp) * 0.12f;
+                    lp2 += (lp - lp2) * 0.04f;
+                    o[i] = (lp - lp2) * 4 + lp2 * 3 * (0.8f + 0.2f * (float) Math.sin(TAU * t * 1.7f));
+                }
+                break;
+            }
+            case Sfx.LOOP_HUM: {
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE;
+                    float ph = TAU * 55 * t;
+                    o[i] = (float) Math.sin(ph) * 0.5f + (float) Math.sin(ph * 1.5f + Math.sin(TAU * 0.5f * t)) * 0.3f
+                            + (float) Math.sin(ph * 4.02f) * 0.1f * (0.5f + 0.5f * (float) Math.sin(TAU * t / 2));
+                }
+                break;
+            }
+            default: {
+                // Tension: a low, uneasy drone that swells.
+                for (int i = 0; i < m; i++) {
+                    float t = i / (float) RATE;
+                    float sw = 0.6f + 0.4f * (float) Math.sin(TAU * t / LOOP_SECONDS);
+                    o[i] = ((float) Math.sin(TAU * 49 * t) * 0.5f + (float) Math.sin(TAU * 51.5f * t) * 0.4f + (float) Math.sin(TAU * 73.4f * t) * 0.2f) * sw;
+                }
+            }
+        }
+        // The seam: the tail fades into the head.
+        float[] seam = new float[n];
+        for (int i = 0; i < n; i++) seam[i] = o[i];
+        for (int i = 0; i < fade; i++) {
+            float a = i / (float) fade;
+            seam[i] = o[i] * a + o[n + i] * (1 - a);
+        }
+        return toPcm(seam, 0.7f);
     }
 
     private static float[] click() {

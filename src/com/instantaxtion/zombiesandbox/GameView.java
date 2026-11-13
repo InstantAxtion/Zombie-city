@@ -571,6 +571,9 @@ final class GameView extends View implements Menu.Host {
         world.gore = settings.gore();
         world.heavy = settings.heavyDestruction();
         sound.setVolumes(settings.music(), settings.sfx());
+        // ((19.0) The groups: the radio and the menus' sounds on their own levels; the listening options.)
+        float[] buses = {1, 1, 1, 1, 1, settings.radioVolume() * 1.2f, settings.uiVolume() * 1.2f};
+        sound.setMix(buses, settings.ambience(), settings.mono(), settings.nightMode());
         realistic = settings.realistic();
         City.realistic = realistic;
         if (world.city.drawnRealistic != realistic) world.redrawCity();
@@ -960,6 +963,11 @@ final class GameView extends View implements Menu.Host {
         savedCamY = camY;
         savedScale = scale;
         menu.open(Menu.MAIN);
+    }
+
+    @Override
+    public void preview(int sfx) {
+        sound.play(sfx, 0.85f, 0);
     }
 
     @Override
@@ -1396,6 +1404,14 @@ final class GameView extends View implements Menu.Host {
         // Headlines: one at a time, each for a few seconds.
         if (world.bannerSeq != seenBanner) {
             seenBanner = world.bannerSeq;
+            // ((19.0) A sting under each big announcement: bright for a win, dark for a loss, an alert for the rest.)
+            if (world.warBanner != null && hasGame && !menu.isOpen()) {
+                String b = world.warBanner;
+                boolean won = world.warResult == 1 || world.missionResult == 1, lost = world.warResult == 2 || world.missionResult == 2;
+                sound.play(won ? Sfx.STING_WIN : lost ? Sfx.STING_LOSE : Sfx.STING_ALERT, 0.8f, 0);
+                if (world.missionResult == 1 && b.startsWith("MISSION"))
+                    for (int s = 0; s < world.missionStars; s++) later(1.1f + s * 0.35f, Sfx.STAR, 0.7f);
+            }
             if (world.warBanner != null) {
                 boolean good = world.warBanner.contains("SURVIVES") || world.warBanner.contains("TURNING");
                 headline(world.warBanner, world.warSub, good ? 0xFF8FB8FF : 0xFF9BE070);
@@ -1416,9 +1432,14 @@ final class GameView extends View implements Menu.Host {
             distantSounds(dt, 1f);
         }
         if (world.dispatch.messageCount != lastMessageCount) {
-            if (inGame && settings.radio()) sound.play(Sfx.RADIO, 0.5f, 0);
+            if (inGame && settings.radio()) radioSound();
             lastMessageCount = world.dispatch.messageCount;
         }
+        if (inGame) {
+            ambience(dt);
+            missionSounds();
+        } else ambienceQuiet();
+        playLater(dt);
 
         // ((11.3) Something going wrong while drawing (or memory running out zoomed right in) costs a frame, not
         // the game: the map's close-ups are let go of if it's memory, and what went wrong is shown briefly.)
@@ -2453,10 +2474,196 @@ final class GameView extends View implements Menu.Host {
             float vol = master * Math.min(k == 0 ? 0.3f : 0.35f, (k == 2 ? 0.12f : 0.1f) + 0.03f * (float) (Math.log(n) / Math.log(2)));
             int id = k == 0 ? farGun : k == 1 ? Sfx.EXPLOSION : Sfx.SIREN;
             sound.play(id, vol, pan, 1);
+            if (settings.captions()) caption(id, pan, 0);
             // (Gunfire every second or so while it lasts; blasts now and then; a siren seldom.)
             farCd[k] = k == 0 ? 0.8f + rnd.nextFloat() * 1.2f : k == 1 ? 3 + rnd.nextFloat() * 3 : 9 + rnd.nextFloat() * 6;
             farCount[k] = 0;
             farX[k] = 0;
+        }
+    }
+
+    // ------------------------------------------------------------------ (19.0) the Sound Update
+
+    private float shockCd;
+    /** Sounds to play a moment from now: {seconds left, id, volume}. */
+    private final java.util.ArrayList<float[]> soon = new java.util.ArrayList<float[]>();
+
+    private void buzzError() {
+        sound.play(Sfx.ERROR, 0.6f, 0);
+    }
+
+    private void later(float seconds, int id, float vol) {
+        soon.add(new float[]{seconds, id, vol});
+    }
+
+    private void playLater(float dt) {
+        shockCd -= dt;
+        for (int i = soon.size() - 1; i >= 0; i--) {
+            float[] s = soon.get(i);
+            s[0] -= dt;
+            if (s[0] > 0) continue;
+            soon.remove(i);
+            sound.play((int) s[1], s[2], 0);
+        }
+    }
+
+    /** The radio as each message comes in: a phone for a 911 call, the army's two beeps, the police's hiss; then the squelch. */
+    private void radioSound() {
+        java.util.ArrayList<Dispatch.Message> log = world.dispatch.log;
+        String who = log.isEmpty() ? "" : log.get(log.size() - 1).who;
+        String w = who == null ? "" : who.toLowerCase(java.util.Locale.US);
+        if (w.startsWith("911")) sound.play(Sfx.PHONE, 0.35f, 0);
+        else if (w.contains("milit") || w.contains("command") || w.contains("army")) sound.play(Sfx.MIL_RADIO, 0.45f, 0);
+        else sound.play(Sfx.RADIO, 0.5f, 0);
+        later(0.9f + rnd.nextFloat() * 0.3f, Sfx.SQUELCH, 0.3f);
+    }
+
+    /** ((19.0) A mission's sounds: money spent, a step towards the objective. */
+    private int lastProgress = -1, lastSpent;
+
+    private void missionSounds() {
+        if (!commander()) {
+            lastProgress = -1;
+            return;
+        }
+        int p = world.arrests + world.heistsStopped + world.bombsDefused + Integer.bitCount(world.gangBroken) + world.convoysSeized
+                + world.recaptured + world.freed / 5 + world.disastersDone + (world.motherAlive ? 0 : 1);
+        if (lastProgress >= 0 && p > lastProgress && world.missionResult == 0) sound.play(Sfx.CHIME, 0.5f, 0);
+        lastProgress = p;
+        if (world.spent > lastSpent && world.spent - lastSpent < 100000) sound.play(Sfx.CASH, 0.55f, 0);
+        lastSpent = world.spent;
+    }
+
+    // ---- The ambience ----
+
+    private float ambT;
+    private final int[] ambSample = new int[4];
+
+    /** In the menus: just the city's hum behind them, the rest faded. */
+    private void ambienceQuiet() {
+        for (int l = 0; l < Sfx.LOOPS; l++)
+            sound.setLoop(l, menu.screen == Menu.SOUNDS && menu.previewLoop == l ? 0.6f : l == Sfx.LOOP_CITY && hasGame && menu.screen != Menu.SOUNDS ? 0.08f : 0, 0, 0);
+    }
+
+    /**
+     * The beds of sound under everything, from what's on the screen: traffic and the city's hum, wind (more zoomed out
+     * and in a storm), birds in the parks when it's quiet, a crowd where people are gathered, water by the sea or a
+     * lake, and the fires, floods, tornadoes and the mothership near the screen; a low drone of tension under a fight.
+     */
+    private void ambience(float dt) {
+        ambT -= dt;
+        if (ambT > 0) return;
+        ambT = 0.25f;
+        float vw = getWidth() / scale, vh = getHeight() / scale, cx = camX + vw / 2, cy = camY + vh / 2;
+        float zoomOut = Math.max(0, Math.min(1, (1.4f - scale) / 1.2f));
+        // What's on the screen: people, people running, cars; trees and water from a sample of the ground.
+        int people = 0, fleeing = 0;
+        for (int i = 0, n = onScreen.size(); i < n; i++) {
+            Entity e = onScreen.get(i);
+            if (e.dead || e.type != Entity.CIVILIAN) continue;
+            people++;
+            if (e.fleeTimer > 0) fleeing++;
+        }
+        int cars = 0;
+        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = world.fleet.vehicles.get(i);
+            if (Math.abs(v.x - cx) < vw * 0.7f && Math.abs(v.y - cy) < vh * 0.7f && v.speed > 5) cars++;
+        }
+        int trees = 0, water = 0, samples = 0;
+        City city = world.city;
+        for (int gy = 0; gy < 5; gy++)
+            for (int gx = 0; gx < 5; gx++) {
+                int t = city.tileIndex(camX + vw * (gx + 0.5f) / 5, camY + vh * (gy + 0.5f) / 5);
+                if (t < 0) continue;
+                samples++;
+                int k = city.tiles[t];
+                if (k == City.WATER) water++;
+                else if (k == City.TREE || k == City.GRASS) trees++;
+            }
+        float calm = Math.max(0, 1 - intensity * 1.6f);
+        float wTrees = samples == 0 ? 0 : trees / (float) samples, wWater = samples == 0 ? 0 : water / (float) samples;
+        sound.setLoop(Sfx.LOOP_CITY, 0.10f + Math.min(0.25f, cars * 0.03f) + 0.08f * zoomOut, 0, 0.35f * zoomOut);
+        float storm = 0;
+        for (World.Hazard h : world.hazards) if (h.kind == World.HZ_TORNADO) storm = Math.max(storm, 1 - Math.min(1, (float) World.hypot(h.x - cx, h.y - cy) / 1200f));
+        sound.setLoop(Sfx.LOOP_WIND, 0.04f + 0.18f * zoomOut + 0.3f * storm, 0, 0.2f);
+        sound.setLoop(Sfx.LOOP_BIRDS, wTrees * calm * (1 - zoomOut) * 0.35f, 0, 0);
+        sound.setLoop(Sfx.LOOP_CROWD, Math.min(0.35f, people * 0.006f) * (1 - zoomOut * 0.6f), 0, 0.2f);
+        if (fleeing >= 8 && rnd.nextFloat() < 0.15f) sound.play(Sfx.PANIC, Math.min(0.5f, fleeing * 0.02f), (rnd.nextFloat() - 0.5f) * 0.6f, 0.2f);
+        sound.setLoop(Sfx.LOOP_WATER, wWater * 0.5f, 0, 0.1f);
+        // The disasters and the mothership: by how near they are, from their side.
+        float[] near = {0, 0, 0, 0}, pan = {0, 0, 0, 0};
+        for (World.Hazard h : world.hazards) {
+            int k = h.kind == World.HZ_FIRE ? 0 : h.kind == World.HZ_FLOOD ? 1 : h.kind == World.HZ_TORNADO ? 2 : -1;
+            if (k < 0 || h.r <= 1) continue;
+            float d = Math.max(0, (float) World.hypot(h.x - cx, h.y - cy) - h.r);
+            float g = Math.max(0, 1 - d / (vw * 1.5f));
+            if (g > near[k]) {
+                near[k] = g;
+                pan[k] = Math.max(-1, Math.min(1, (h.x - cx) / (vw / 2)));
+            }
+        }
+        if (world.motherAlive) {
+            near[3] = Math.max(0, 1 - (float) World.hypot(world.motherX - cx, world.motherY - cy) / (vw * 2.5f));
+            pan[3] = Math.max(-1, Math.min(1, (world.motherX - cx) / (vw / 2)));
+        }
+        sound.setLoop(Sfx.LOOP_FIRE, near[0] * 0.6f, pan[0] * 0.7f, 0);
+        sound.setLoop(Sfx.LOOP_FLOOD, near[1] * 0.55f, pan[1] * 0.7f, 0);
+        sound.setLoop(Sfx.LOOP_STORM, near[2] * 0.75f, pan[2] * 0.7f, 0);
+        sound.setLoop(Sfx.LOOP_HUM, near[3] * 0.55f + (world.motherAlive ? 0.05f : 0), pan[3] * 0.6f, 0);
+        sound.setLoop(Sfx.LOOP_TENSION, Math.max(0, intensity - 0.45f) * 0.35f, 0, 0.3f);
+        // Bombs ticking on the screen, quicker near the end.
+        for (float[] b : world.bombs)
+            if (Math.abs(b[0] - cx) < vw * 0.6f && Math.abs(b[1] - cy) < vh * 0.6f && (b[2] > 20 ? rnd.nextFloat() < 0.25f : true))
+                sound.play(Sfx.TICK, b[2] < 20 ? 0.55f : 0.35f, Math.max(-1, Math.min(1, (b[0] - cx) / (vw / 2))) * 0.7f, 0);
+    }
+
+    // ---- Captions ----
+
+    /** On the screen now: {kind, x direction, y direction, seconds left}. */
+    private final java.util.ArrayList<float[]> captions = new java.util.ArrayList<float[]>();
+    private static final String[] CAPTION_TEXT = {"Gunfire", "Explosion", "Siren", "Screaming", "Alarm", "Helicopter", "Crash", "Bomb ticking",
+            "Building collapsing", "Riot", "Tornado", "Earthquake", "Alien fire", "The mothership's beam", "Horde"};
+
+    private void caption(int type, float dx, float dy) {
+        int k = Sfx.gun(type) ? 0 : type == Sfx.EXPLOSION || type == Sfx.CANNON || type == Sfx.LAUNCHER ? 1 : type == Sfx.SIREN || type == Sfx.AMB_SIREN ? 2
+                : type == Sfx.SCREAM || type == Sfx.PANIC ? 3 : type == Sfx.ALARM ? 4 : type == Sfx.ROTOR ? 5 : type == Sfx.CRASH || type == Sfx.SCREECH ? 6
+                : type == Sfx.TICK ? 7 : type == Sfx.COLLAPSE || type == Sfx.DEBRIS ? 8 : type == Sfx.RIOT ? 9 : type == Sfx.TORNADO ? 10
+                : type == Sfx.QUAKE ? 11 : type == Sfx.LASER ? 12 : type == Sfx.BEAM ? 13 : type == Sfx.GROAN_DEEP ? 14 : -1;
+        if (k < 0) return;
+        float d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        for (float[] c : captions)
+            if ((int) c[0] == k && (c[1] * dx + c[2] * dy) / d > 0.7f) {
+                c[3] = 2.5f;
+                return;
+            }
+        if (captions.size() >= 5) captions.remove(0);
+        captions.add(new float[]{k, dx / d, dy / d, 2.5f});
+    }
+
+    private void drawCaptions(Canvas c, float dt) {
+        if (captions.isEmpty()) return;
+        float w = getWidth(), h = getHeight(), top = topRects[0].bottom + 60 * dp, bottom = barTop - 70 * dp;
+        text.setTextSize(13 * dp);
+        text.setTextAlign(Paint.Align.CENTER);
+        for (int i = captions.size() - 1; i >= 0; i--) {
+            float[] cp = captions.get(i);
+            cp[3] -= dt;
+            if (cp[3] <= 0) {
+                captions.remove(i);
+                continue;
+            }
+            float ax = cp[1], ay = cp[2];
+            // Towards the edge of the screen on its side.
+            float sx = w / 2 + ax * (w / 2 - 90 * dp), sy = (top + bottom) / 2 + ay * ((bottom - top) / 2 - 20 * dp);
+            String arrow = Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? "→" : "←") : (ay > 0 ? "↓" : "↑");
+            String s = (ax < -0.5f || ay < -0.5f ? arrow + " " : "") + CAPTION_TEXT[(int) cp[0]] + (ax >= -0.5f && ay >= -0.5f ? " " + arrow : "");
+            float tw = text.measureText(s) + 20 * dp;
+            int alpha = (int) (Math.min(1, cp[3]) * 220);
+            fill.setColor((alpha << 24) | 0x101216);
+            oval.set(sx - tw / 2, sy - 16 * dp, sx + tw / 2, sy + 10 * dp);
+            c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
+            text.setColor((Math.min(255, alpha + 35) << 24) | 0xFFE6A0);
+            c.drawText(s, sx, sy + 2 * dp, text);
         }
     }
 
@@ -2484,6 +2691,23 @@ final class GameView extends View implements Menu.Host {
             }
             float f = d / r;
             float vol = master * (1 - 0.85f * f) * (1 - 0.15f * f * f);
+            // ((19.0) From inside a building: through its walls, duller and quieter.)
+            if (!Sfx.ui(type) && world.city.insideOf(world.evX[i], world.evY[i]) != null) {
+                f = Math.min(1, f + 0.4f);
+                vol *= 0.7f;
+            }
+            // ((19.0) Off the screen: a caption for it, from its side.)
+            if (settings.captions() && master >= 1 && (Math.abs(ddx) > vw / 2 || Math.abs(ddy) > vh / 2)) caption(type, ddx, ddy);
+            // ((19.0) A big blast right by the middle of the screen, zoomed in: ringing ears.)
+            if (master >= 1 && settings.shellShock() && (type == Sfx.EXPLOSION || type == Sfx.CANNON || type == Sfx.BEAM || type == Sfx.QUAKE)
+                    && d < 90 && scale > 1.2f && shockCd <= 0) {
+                float amt = Math.min(1, (1 - d / 90) * (scale / 2.5f));
+                if (amt > 0.25f) {
+                    sound.shock(amt);
+                    sound.play(Sfx.WHINE, 0.25f + 0.35f * amt, 0);
+                    shockCd = 4;
+                }
+            }
             if (type == Sfx.GROAN || type == Sfx.GROAN_DEEP || type == Sfx.SCREAM) vol *= 0.6f;
             // ((11.7) Gunshots a bit louder, near and far.)
             if (Sfx.gun(type)) vol *= 1.3f;
@@ -7688,6 +7912,7 @@ final class GameView extends View implements Menu.Host {
         else if (commander()) drawMissionPanel(c);
 
         drawHeadlines(c);
+        if (settings.captions()) drawCaptions(c, frameDt);
         // ((12.0) Clear of the tab that folds the tool bar away: cards and lines here used to sit over it.)
         float infoY = barTop - 24 * dp;
         drawConvoys(c);
@@ -9316,7 +9541,7 @@ final class GameView extends View implements Menu.Host {
             // Choosing from the open picker; a tap anywhere else just closes it.
             for (int k = 0; k < pickerCount; k++)
                 if (pickerRects[k].contains(x, y)) {
-                    click();
+                    sound.play(Sfx.TAP, 0.7f, 0);
                     setVariant(picker, k);
                     picker = -1;
                     return true;
@@ -9924,6 +10149,7 @@ final class GameView extends View implements Menu.Host {
                 lastAction.add(e);
             }
             if (made.isEmpty()) {
+                buzzError();
                 world.say(budget < cost ? "Not enough money: " + name + " costs $" + cost + ", you have $" + budget : "No room for them there");
                 return;
             }
@@ -9939,11 +10165,13 @@ final class GameView extends View implements Menu.Host {
         String[] names = tool == TOOL_PLACE ? PLACE_NAMES : EVENT_NAMES;
         if (cost == null) return;
         if (v >= cost.length || cost[v] < 0) {
+            buzzError();
             world.say(names[v] + " isn't yours to use in a mission");
             return;
         }
         if (budget < cost[v]) {
-            world.say("Not enough money: " + names[v] + " costs $" + cost[v] + ", you have $" + budget);
+            buzzError();
+                world.say("Not enough money: " + names[v] + " costs $" + cost[v] + ", you have $" + budget);
             return;
         }
         Object made = null;
