@@ -37,7 +37,7 @@ final class GameView extends View implements Menu.Host {
     }
     private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
-            "City alarm", "Infect", "Flare", "Mines", "Night / Day", "Weather"};
+            "City alarm", "Infect", "Flare", "Mines"};
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
@@ -75,12 +75,6 @@ final class GameView extends View implements Menu.Host {
         return n;
     }
 
-    /** ((20.0) The time of day, and the weather when it isn't clear, for the line at the top. */
-    private String skyText() {
-        Sky k = world.sky;
-        return k.timeText() + (k.weather != Sky.CLEAR || k.rain > 0.3f ? " " + k.weatherText() : "");
-    }
-
     private String rowLabel(int t) {
         return ROW_LABELS[t];
     }
@@ -104,9 +98,8 @@ final class GameView extends View implements Menu.Host {
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten",
-            "Burns for 45 seconds: light for the living at night, and the dead are drawn to it",
-            "Six mines round the spot: only the dead set them off", "Skips to nightfall, or to morning",
-            "Changes the weather: clear, rain, fog, storm"};
+            "Burns for 45 seconds: the dead for a long way round are drawn to it",
+            "Six mines round the spot: only the dead set them off"};
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5, BTN_TOP = 6;
     private static final int TOP_BUTTONS = 7;
     private static final int[] SPEEDS = {1, 2, 4, 8};
@@ -316,9 +309,6 @@ final class GameView extends View implements Menu.Host {
     /** The main menu's live demo city in the background: a Tiny one. */
     private void menuCity() {
         CityConfig demo = new CityConfig();
-        // ((20.0) The city behind the menus: always a clear day.)
-        demo.timeOfDay = Sky.TIME_DAY;
-        demo.weather = Sky.CLEAR + 1;
         // (Not the Islands: it's too big to build behind the menu.)
         do demo.v[CityConfig.OPT_PRESET] = rnd.nextInt(CityConfig.ISLANDS);
         while (CityConfig.retired(CityConfig.OPT_PRESET, demo.v[CityConfig.OPT_PRESET]));
@@ -2515,7 +2505,7 @@ final class GameView extends View implements Menu.Host {
             lastProgress = -1;
             return;
         }
-        int p = world.zombiesKilled / 25 + world.woundedSaved;
+        int p = world.zombiesKilled / 25;
         if (lastProgress >= 0 && p > lastProgress && world.missionResult == 0) sound.play(Sfx.CHIME, 0.5f, 0);
         lastProgress = p;
         if (world.spent > lastSpent && world.spent - lastSpent < 100000) sound.play(Sfx.CASH, 0.55f, 0);
@@ -2571,11 +2561,7 @@ final class GameView extends View implements Menu.Host {
         float wTrees = samples == 0 ? 0 : trees / (float) samples, wWater = samples == 0 ? 0 : water / (float) samples;
         sound.setLoop(Sfx.LOOP_CITY, 0.10f + Math.min(0.25f, cars * 0.03f) + 0.08f * zoomOut, 0, 0.35f * zoomOut);
         sound.setLoop(Sfx.LOOP_WIND, 0.04f + 0.18f * zoomOut, 0, 0.2f);
-        // ((20.0) No birdsong at night or in the rain: crickets in the dark, and the rain itself.)
-        float dark = world.sky.dark(), rain = world.sky.rain;
-        sound.setLoop(Sfx.LOOP_BIRDS, wTrees * calm * (1 - zoomOut) * 0.35f * (1 - dark) * (1 - rain), 0, 0);
-        sound.setLoop(Sfx.LOOP_RAIN, rain * 0.55f, 0, 0.1f * zoomOut);
-        sound.setLoop(Sfx.LOOP_NIGHT, dark * calm * (1 - rain) * (0.12f + 0.25f * wTrees) * (1 - zoomOut * 0.5f), 0, 0);
+        sound.setLoop(Sfx.LOOP_BIRDS, wTrees * calm * (1 - zoomOut) * 0.35f, 0, 0);
         sound.setLoop(Sfx.LOOP_CROWD, Math.min(0.35f, people * 0.006f) * (1 - zoomOut * 0.6f), 0, 0.2f);
         if (fleeing >= 8 && rnd.nextFloat() < 0.15f) sound.play(Sfx.PANIC, Math.min(0.5f, fleeing * 0.02f), (rnd.nextFloat() - 0.5f) * 0.6f, 0.2f);
         sound.setLoop(Sfx.LOOP_WATER, wWater * 0.5f, 0, 0.1f);
@@ -2587,12 +2573,12 @@ final class GameView extends View implements Menu.Host {
     /** On the screen now: {kind, x direction, y direction, seconds left}. */
     private final java.util.ArrayList<float[]> captions = new java.util.ArrayList<float[]>();
     private static final String[] CAPTION_TEXT = {"Gunfire", "Explosion", "Siren", "Screaming", "Alarm", "Helicopter", "Crash",
-            "Building collapsing", "Horde", "Thunder"};
+            "Building collapsing", "Horde"};
 
     private void caption(int type, float dx, float dy) {
         int k = Sfx.gun(type) ? 0 : type == Sfx.EXPLOSION || type == Sfx.CANNON || type == Sfx.LAUNCHER ? 1 : type == Sfx.SIREN || type == Sfx.AMB_SIREN ? 2
                 : type == Sfx.SCREAM || type == Sfx.PANIC ? 3 : type == Sfx.ALARM ? 4 : type == Sfx.ROTOR ? 5 : type == Sfx.CRASH ? 6
-                : type == Sfx.COLLAPSE || type == Sfx.DEBRIS ? 7 : type == Sfx.GROAN_DEEP ? 8 : type == Sfx.THUNDER ? 9 : -1;
+                : type == Sfx.COLLAPSE || type == Sfx.DEBRIS ? 7 : type == Sfx.GROAN_DEEP ? 8 : -1;
         if (k < 0) return;
         float d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
         for (float[] c : captions)
@@ -7223,26 +7209,11 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(alpha(0xFF7CFF3A, 0.35f + 0.25f * (float) Math.sin(world.time * 5)));
             c.drawCircle(r * 0.08f, 0, r * 0.58f, fill);
         }
-        if (e.bleedT > 0) {
-            // ((17.5) Down: flat out, a pool of blood spreading.)
-            fill.setColor(0x88600A0A);
-            c.drawCircle(-r * 0.2f, 0, r * (1.2f + Math.min(1.2f, (90 - e.bleedT) / 60f)), fill);
-        }
         if (e.hurt > 0) {
             fill.setColor(alpha(0xFFFFFFFF, e.hurt * 0.7f));
             c.drawCircle(0, 0, r * 1.05f, fill);
         }
         c.restore();
-        if (e.bleedT > 0 && scale > 1.2f * dp) {
-            // ((17.5) A red cross over the wounded, pulsing when there's little time left.)
-            float bx = e.x, by = e.y - r * 2.6f, br = r * 0.85f;
-            boolean urgent = e.bleedT < 15 && ((int) (world.time * 4)) % 2 == 0;
-            fill.setColor(urgent ? 0xFFFFD0D0 : 0xF0FFFFFF);
-            c.drawCircle(bx, by, br, fill);
-            fill.setColor(0xFFD8302A);
-            c.drawRect(bx - br * 0.18f, by - br * 0.6f, bx + br * 0.18f, by + br * 0.6f, fill);
-            c.drawRect(bx - br * 0.6f, by - br * 0.18f, bx + br * 0.6f, by + br * 0.18f, fill);
-        }
         if (anim && e.type == Entity.RUNNER && spd > 30) {
             // Speed lines behind a sprinting runner.
             float ux = -e.vx / spd, uy = -e.vy / spd;
@@ -7529,10 +7500,10 @@ final class GameView extends View implements Menu.Host {
                     : world.aftermath == World.AFTER_FALLEN ? "   City fallen" : "";
             int secs0 = (int) world.time;
             String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   Zombies " + world.zombieCount()
-                    + phase + "   " + skyText();
+                    + phase + "   " + World.clock(secs0);
             // (Short of the buttons along the top in landscape.)
             float room = (portrait ? getWidth() - 10 * dp : topRects[0].left - 8 * dp) - statsRect.left - 24 * dp;
-            String clock = "   " + skyText();
+            String clock = "   " + World.clock(secs0);
             if (text.measureText(line) > room) line = line.substring(0, line.length() - clock.length());
             if (text.measureText(line) > room && !phase.isEmpty()) line = line.substring(0, line.length() - phase.length());
             float tw = Math.min(text.measureText(line), room);
@@ -8599,8 +8570,6 @@ final class GameView extends View implements Menu.Host {
     }
 
     private String doing(Entity e) {
-        if (e.bleedT > 0) return "Down and bleeding: " + (int) Math.ceil(e.bleedT) + "s" + (e.rescuer != null ? ", help is coming" : ", needs help");
-        if (e.rescueOf != null) return "Going to help someone who's down";
         if (e.isUndead()) {
             // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)
             if (e.stun > 0) return "Knocked back, dazed";
@@ -10032,18 +10001,6 @@ final class GameView extends View implements Menu.Host {
             case 8:
                 if (world.layMines(wx, wy) == 0) world.say("No room for mines there");
                 break;
-            case 9: {
-                boolean toNight = !world.sky.night();
-                world.sky.skipTo(toNight);
-                world.say(toNight ? "Night is falling" : "The sun is coming up");
-                break;
-            }
-            case 10: {
-                int next = (world.sky.weather + 1) % Sky.NAMES.length;
-                world.sky.setWeather(next);
-                world.say("Weather: " + Sky.NAMES[next]);
-                break;
-            }
             default: {
                 Entity bitten = world.infectAt(wx, wy);
                 world.say(bitten == null ? "Tap closer to someone" : "Bitten: " + Names.person(bitten.nameSeed));

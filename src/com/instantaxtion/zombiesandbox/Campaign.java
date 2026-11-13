@@ -15,9 +15,9 @@ final class Campaign {
 
     /** What winning a mission takes. */
     static final int G_CLEAR = 0, G_SURVIVE = 1;
-    /** ((20.0) Hold out until dawn; get goalN people out of the city; save goalN of the wounded; destroy goalN of the dead. */
-    static final int G_DAWN = 2, G_EVAC = 3, G_RESCUE = 4, G_KILLS = 5;
-    static final String[] GOAL_NAMES = {"CLEAR THE CITY", "SURVIVE", "HOLD UNTIL DAWN", "EVACUATE", "SAVE THE WOUNDED", "BODY COUNT"};
+    /** ((20.0) Get goalN people out of the city; destroy goalN of the dead. */
+    static final int G_EVAC = 2, G_KILLS = 3;
+    static final String[] GOAL_NAMES = {"CLEAR THE CITY", "SURVIVE", "EVACUATE", "BODY COUNT"};
 
     static final class Mission {
         final String title, brief;
@@ -26,22 +26,12 @@ final class Campaign {
         final int budget, income, limit, goal, goalN;
         /** Two stars more: civilians lost no more than starCivilians, and police and soldiers lost no more than starLosses. */
         final int starCivilians, starLosses;
-        /** ((20.0) The sky and the rules: the Time and Weather settings, the hour it starts (or -1), how hard, who flees, the power. */
-        int time = Sky.TIME_DAY, weather = Sky.CLEAR + 1, difficulty = Director.NORMAL, exodus = CityConfig.EXODUS_OFF;
-        float startClock = -1;
-        boolean blackout;
+        /** ((20.0) The rules: how hard, and whether people flee the city. */
+        int difficulty = Director.NORMAL, exodus = CityConfig.EXODUS_OFF;
 
-        Mission sky(int time, int weather, float startClock) {
-            this.time = time;
-            this.weather = weather;
-            this.startClock = startClock;
-            return this;
-        }
-
-        Mission rules(int difficulty, int exodus, boolean blackout) {
+        Mission rules(int difficulty, int exodus) {
             this.difficulty = difficulty;
             this.exodus = exodus;
-            this.blackout = blackout;
             return this;
         }
 
@@ -69,25 +59,21 @@ final class Campaign {
     static final Mission[] MISSIONS = {
             new Mission("Patient Zero", "A handful of infected in a quiet town. The local police are all you have: put it down before it spreads.",
                     6, CityConfig.SMALL, 24, 0, 10, 41207, 250, 40, 600, G_CLEAR, 0, 40, 8),
-            new Mission("The Long Night", "Forty of the dead in the suburbs, more getting up, and the sun going down. You don't have to win - just keep the town standing until dawn.",
-                    2, CityConfig.SMALL, 30, 8, 40, 88315, 320, 60, 480, G_DAWN, 0, 150, 10).sky(Sky.TIME_CYCLE, Sky.CLEAR + 1, 0.79f),
+            new Mission("The Long Night", "Forty of the dead in the suburbs and more getting up. You don't have to win - just keep the town standing until the army can get there.",
+                    2, CityConfig.SMALL, 30, 8, 40, 88315, 320, 60, 480, G_SURVIVE, 0, 150, 10),
             new Mission("Dead City", "Downtown is overrun: ninety of the dead and the numbers climbing. Clear the city.",
                     1, CityConfig.MEDIUM, 40, 20, 90, 64019, 700, 120, 1200, G_CLEAR, 0, 200, 20),
-            // ((20.0) Seven more, each with its own objective, hour and weather.)
+            // ((20.0) Five more, with new objectives and harder rules.)
             new Mission("Exodus", "The city can't be held. Buses and trains are running: keep the roads to them open and get four hundred and fifty people out before it falls.",
-                    0, CityConfig.MEDIUM, 36, 12, 90, 51731, 450, 90, 900, G_EVAC, 450, 220, 14).rules(Director.NORMAL, CityConfig.EXODUS_ALL, false),
-            new Mission("Whiteout", "Fog off the hills, and something moving in it. Nobody can see past the end of the street - them included. Clear the village.",
-                    9, CityConfig.SMALL, 22, 6, 35, 77342, 300, 50, 780, G_CLEAR, 0, 60, 8).sky(Sky.TIME_DAY, Sky.FOG + 1, -1),
-            new Mission("Triage", "The industrial district is a battlefield and the wounded are lying where they fell. Get to them before the dead do: bring twenty of them back alive.",
-                    3, CityConfig.SMALL, 30, 16, 110, 30977, 420, 80, 900, G_RESCUE, 20, 200, 26),
-            new Mission("Storm Front", "Night, a storm overhead, and thunder walking the dead through the streets. Keep the old town alive for ten minutes.",
-                    5, CityConfig.SMALL, 34, 14, 60, 91853, 480, 90, 600, G_SURVIVE, 0, 180, 16).sky(Sky.TIME_NIGHT, Sky.STORM + 1, -1),
-            new Mission("Body Count", "They keep coming in from the country. Command wants seven hundred of them destroyed before nightfall changes the odds.",
-                    8, CityConfig.MEDIUM, 40, 30, 120, 12011, 700, 130, 1080, G_KILLS, 700, 260, 24).rules(Director.HARD, CityConfig.EXODUS_OFF, false),
-            new Mission("Blackout", "The power station is gone and it's the middle of the night. No street lights, no mercy: bring flares, and clear the campus.",
-                    7, CityConfig.SMALL, 32, 12, 45, 45589, 600, 100, 960, G_CLEAR, 0, 120, 14).sky(Sky.TIME_NIGHT, Sky.CLEAR + 1, -1).rules(Director.NORMAL, CityConfig.EXODUS_OFF, true),
-            new Mission("Last Stand", "Everything that's left has fallen back on the base. The sun is setting, and every horde for miles knows where you are. Hold until dawn.",
-                    11, CityConfig.MEDIUM, 30, 50, 60, 68111, 1000, 160, 600, G_DAWN, 0, 400, 40).sky(Sky.TIME_CYCLE, Sky.CLEAR + 1, 0.79f).rules(Director.HARD, CityConfig.EXODUS_OFF, false),
+                    0, CityConfig.MEDIUM, 36, 12, 90, 51731, 450, 90, 900, G_EVAC, 450, 220, 14).rules(Director.NORMAL, CityConfig.EXODUS_ALL),
+            new Mission("Containment", "It's reached the villages. A small force and a lot of open country: clear it before it gets any further.",
+                    9, CityConfig.SMALL, 22, 6, 40, 77342, 300, 50, 780, G_CLEAR, 0, 80, 10),
+            new Mission("Overrun", "The old town is full of them and they're tougher than anything you've fought. Keep it alive for ten minutes.",
+                    5, CityConfig.SMALL, 34, 14, 45, 91853, 480, 90, 600, G_SURVIVE, 0, 180, 16).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            new Mission("Body Count", "They keep coming in from the country. Command wants seven hundred of them destroyed.",
+                    8, CityConfig.MEDIUM, 40, 30, 120, 12011, 700, 130, 1080, G_KILLS, 700, 260, 24).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            new Mission("Last Stand", "Everything that's left has fallen back on the base, and every horde for miles knows where you are. Hold for ten minutes.",
+                    11, CityConfig.MEDIUM, 30, 50, 90, 68111, 1000, 160, 600, G_SURVIVE, 0, 400, 40).rules(Director.HARD, CityConfig.EXODUS_OFF),
     };
 
     /**
@@ -115,8 +101,6 @@ final class Campaign {
         c.v[CityConfig.OPT_RESERVES] = 0;
         c.v[CityConfig.OPT_COUNTRY] = Country.USA;
         c.seed = m.seed;
-        c.timeOfDay = m.time;
-        c.weather = m.weather;
         c.difficulty = m.difficulty;
         c.exodus = m.exodus;
         c.mission = id;
@@ -132,8 +116,8 @@ final class Campaign {
     static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee. */
     static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45};
-    /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines, night/day, weather. */
-    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, -1, -1};
+    /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines. */
+    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35};
 
     /** The kind of unit a mission ends on, from what's paid for (for the budget's sake). */
     static int income(World w) {
@@ -146,7 +130,7 @@ final class Campaign {
         Mission m = w.mission();
         if (m == null) return 0;
         int minutes = (int) (missionTime(w) / 60);
-        return m.income * minutes + w.zombiesKilled + w.woundedSaved * 5;
+        return m.income * minutes + w.zombiesKilled;
     }
 
     static int budget(World w) {
@@ -167,10 +151,7 @@ final class Campaign {
 
     static int timeLeft(World w) {
         Mission m = w.mission();
-        if (m == null) return 0;
-        // ((20.0) Until dawn: what's left of the day, and then of the night.)
-        if (m.goal == G_DAWN) return (int) (w.sky.night() ? w.sky.untilDawn() : w.sky.untilNight() + Sky.DAY_SECONDS * 0.44f);
-        return Math.max(0, (int) Math.ceil(m.limit - missionTime(w)));
+        return m == null ? 0 : Math.max(0, (int) Math.ceil(m.limit - missionTime(w)));
     }
 
     // ---- Running a mission ----
@@ -187,12 +168,6 @@ final class Campaign {
         w.dispatch.squadReserve = 0;
         w.dispatch.tankReserve = 0;
         w.dispatch.swatTeams = 0;
-        // ((20.0) The mission's hour, and its power cut.)
-        if (m.startClock >= 0) {
-            w.sky.clock = m.startClock;
-            w.sky.resume();
-        }
-        if (m.blackout) w.blackout = true;
         trim(w, Entity.COP, m.cops);
         trim(w, Entity.SOLDIER, m.soldiers);
         int vets = applyVeterans(w, roster);
@@ -262,9 +237,7 @@ final class Campaign {
         String time = World.clock(m.limit);
         switch (m.goal) {
             case G_SURVIVE: return "Keep the city standing for " + time + ".";
-            case G_DAWN: return "Keep the city standing until dawn.";
             case G_EVAC: return "Get " + m.goalN + " people out of the city within " + time + ".";
-            case G_RESCUE: return "Save " + m.goalN + " of the wounded within " + time + ".";
             case G_KILLS: return "Destroy " + m.goalN + " of the dead within " + time + ".";
             default: return "Destroy every zombie within " + time + ".";
         }
@@ -274,7 +247,7 @@ final class Campaign {
     static int count(World w) {
         Mission m = w.mission();
         if (m == null) return -1;
-        return m.goal == G_EVAC ? w.fled : m.goal == G_RESCUE ? w.woundedSaved : m.goal == G_KILLS ? w.zombiesKilled : -1;
+        return m.goal == G_EVAC ? w.fled : m.goal == G_KILLS ? w.zombiesKilled : -1;
     }
 
     /** How the main objective's going, short. */
@@ -282,8 +255,7 @@ final class Campaign {
         Mission m = w.mission();
         if (m == null) return "";
         int n = count(w);
-        if (n >= 0) return Math.min(n, m.goalN) + " / " + m.goalN + (m.goal == G_EVAC ? " out" : m.goal == G_RESCUE ? " saved" : " destroyed");
-        if (m.goal == G_DAWN) return w.sky.night() ? "Dawn in " + World.clock((int) w.sky.untilDawn()) : "Night falls in " + World.clock((int) w.sky.untilNight());
+        if (n >= 0) return Math.min(n, m.goalN) + " / " + m.goalN + (m.goal == G_EVAC ? " out" : " destroyed");
         return w.zombieCount() + (m.goal == G_SURVIVE ? " zombies left standing" : " zombies left");
     }
 
@@ -301,16 +273,11 @@ final class Campaign {
         boolean won;
         switch (m.goal) {
             case G_SURVIVE: won = w.warResult == 1 || (out && w.warResult != 2); break;
-            // (Dawn after a night that fell during the mission; there's no clock to run out but the sun.)
-            case G_DAWN:
-                won = w.warResult == 1 || (w.warResult != 2 && w.nightsSurvived > 0);
-                out = false;
-                break;
-            case G_EVAC: case G_RESCUE: case G_KILLS: won = count(w) >= m.goalN; break;
+            case G_EVAC: case G_KILLS: won = count(w) >= m.goalN; break;
             default: won = w.warResult == 1;
         }
         // (A counted objective isn't lost with the city cleared early: there's nobody left to count, so it's won.)
-        if (!won && w.warResult == 1 && m.goal != G_CLEAR) won = m.goal == G_KILLS || m.goal == G_RESCUE || m.goal == G_EVAC;
+        if (!won && w.warResult == 1) won = m.goal == G_KILLS || m.goal == G_EVAC;
         if (!won) {
             if (w.warResult == 2) why = "The city has fallen.";
             else if (out) why = "Out of time.";

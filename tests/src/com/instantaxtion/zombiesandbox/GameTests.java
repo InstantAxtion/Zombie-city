@@ -4721,78 +4721,22 @@ public final class GameTests {
                 check(w.warBalance > 0.9f || !w.outbreak, "and the city's side ahead once they're down (" + w.warBalance + ")");
             }
         });
-        test("17.5: the wounded go down and can be saved or bleed out; the after-action report", new Check() {
+        test("17.5: the after-action report; nobody goes down wounded any more", new Check() {
             public void run() throws Exception {
+                // ((20.0) Shot is shot: no going down to bleed and be saved.)
                 CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 25;
                 World w = new World(c);
-                w.rnd.setSeed(25);
                 w.populate(c);
-                w.recount();
-                java.lang.reflect.Method cleanup = World.class.getDeclaredMethod("cleanup");
-                cleanup.setAccessible(true);
-                // Shot (not bitten): most go down rather than die.
-                int down = 0, dead = 0, tried = 0;
-                for (Entity e : new java.util.ArrayList<Entity>(w.entities)) {
-                    if (tried >= 40 || e.dead || e.type != Entity.CIVILIAN || e.ride != null) continue;
-                    tried++;
-                    e.hp = -5;
-                    cleanup.invoke(w);
-                    if (!e.dead && e.bleedT > 0 && e.hp > 0) down++;
-                    else if (e.dead) dead++;
-                }
-                check(down > tried / 3 && dead > 0, "some go down, some die outright (" + down + " down, " + dead + " dead of " + tried + ")");
-                // Bitten: no going down.
-                Entity bitten = null;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.bleedT == 0) { bitten = e; break; }
-                bitten.killedByZombie = true;
-                bitten.hp = -1;
-                cleanup.invoke(w);
-                check(bitten.dead, "the bitten don't go down, they die");
-                // Down, and an officer comes to them and gets them back up.
-                Entity hurt = null;
-                for (Entity e : w.entities) if (!e.dead && e.bleedT > 0) { hurt = e; break; }
-                Entity cop = null;
-                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && e.rig == null) { cop = e; break; }
-                float[] near = w.city.findWalkable(hurt.x + 30, hurt.y);
-                cop.x = near[0];
-                cop.y = near[1];
-                cop.task = Dispatch.T_NONE;
-                int savedBefore = w.woundedSaved;
-                for (int f = 0; f < 30 * 25 && hurt.bleedT > 0 && !hurt.dead; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                }
-                check(!hurt.dead && hurt.bleedT == 0 && hurt.hp > 1 && w.woundedSaved > savedBefore, "someone patched them up (" + hurt.bleedT + ", hp " + hurt.hp + ")");
-                // Left alone: they bleed out.
-                Entity alone = null;
-                for (Entity e : w.entities) if (!e.dead && e.bleedT > 0) { alone = e; break; }
-                if (alone == null) {
-                    for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.bleedT == 0 && e.ride == null) { alone = e; break; }
-                    alone.hp = -5;
-                    for (int k = 0; k < 20 && alone.bleedT <= 0 && !alone.dead; k++) {
-                        alone.hp = -5;
-                        cleanup.invoke(w);
-                    }
-                }
-                if (alone != null && !alone.dead && alone.bleedT > 0) {
-                    alone.bleedT = 0.5f;
-                    if (alone.rescuer != null) alone.rescuer.rescueOf = null;
-                    alone.rescuer = null;
-                    int bled = w.bledOut;
-                    for (int f = 0; f < 30 * 2; f++) {
-                        w.update(1 / 30f);
-                        w.evCount = 0;
-                    }
-                    check(alone.dead && w.bledOut > bled, "nobody got to them in time: bled out");
-                }
-                // Saved and loaded: the counts and who's down.
-                File file = File.createTempFile("zcs", ".dat");
-                SaveGame.save(w, file);
-                World l = SaveGame.load(file);
-                file.delete();
-                check(l.woundedSaved == w.woundedSaved && l.bledOut == w.bledOut, "the record's kept");
+                Entity shot = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.ride == null) { shot = e; break; }
+                int n = w.entities.size();
+                shot.hp = 0;
+                w.update(1 / 30f);
+                w.evCount = 0;
+                check(shot.dead && !w.entities.contains(shot) && w.entities.size() < n, "someone with no health left is dead at once");
                 // The report: drawn, at the end of a game it opens itself.
                 GameView v = new GameView(new android.app.Activity());
                 int[] size = {1080, 2000};
@@ -5204,69 +5148,44 @@ public final class GameTests {
                 check(true, "drawn");
             }
         });
-        test("20.0: day and night, weather - the clock, sight, the dead at night, flares, mines, thunder, saves", new Check() {
+        test("20.0: flares draw the dead, mines go off under them, both kept in a save and drawn", new Check() {
             public void run() throws Exception {
-                // The clock: day at noon, night at midnight, dusk and dawn between.
-                Sky k = new Sky(1);
-                k.clock = 0.5f;
-                check(k.light() == 1 && !k.night() && k.plain() && "12:00".equals(k.timeText()), "noon");
-                k.clock = 0;
-                check(k.light() == 0 && k.night() && k.dark() == 1 && "00:00".equals(k.timeText()), "midnight");
-                k.clock = 0.8f;
-                check(k.light() > 0 && k.light() < 1, "dusk");
-                k.clock = Sky.START;
-                check(k.untilNight() > 300 && k.untilNight() < 420 && k.untilDawn() == 0, "night about six minutes off at the start (" + k.untilNight() + ")");
-                check(k.sightLiving(0) == 1 && k.sightDead() == 1 && k.pace() == 1 && k.hearing() == 1 && k.aim(0) == 1, "nothing changed by day");
-                k.clock = 0;
-                check(k.sightLiving(0) < 0.6f && k.sightLiving(0.5f) > k.sightLiving(0) && k.sightLiving(1) == 1 && k.sightDead() > k.sightLiving(0)
-                        && k.pace() > 1.1f && k.hearing() > 1 && k.aim(0) < 0.85f, "night: the living see less, the dead are quicker");
-                // A city at night.
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
-                c.timeOfDay = Sky.TIME_NIGHT;
-                c.weather = Sky.CLEAR + 1;
                 c.seed = 71;
                 World w = new World(c);
                 w.setMaxPopulation(3000);
                 w.populate(c);
                 w.update(1 / 30f);
-                check(w.sky.night() && w.sky.dark() == 1, "always night");
                 Entity cop = null;
                 for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { cop = e; break; }
                 check(cop != null, "a cop on the street");
-                w.blackout = true;
-                float dim = w.sightOf(cop);
-                check(dim < 0.6f && w.litAt(cop.x, cop.y) == 0, "in the dark with the power out (" + dim + ")");
-                w.blackout = false;
-                check(w.sightOf(cop) >= dim, "street lights help");
-                // A flare: light for the living, and the dead drawn to it.
-                Entity z = w.spawn(Entity.ZOMBIE, cop.x + 150, cop.y);
-                if (z == null) z = w.spawn(Entity.ZOMBIE, cop.x - 150, cop.y);
-                check(z != null, "one of the dead near");
+                // A flare: the dead are drawn to it, and it burns out.
                 float fx = cop.x, fy = cop.y;
+                Entity z = w.spawn(Entity.ZOMBIE, fx + 150, fy);
+                if (z == null) z = w.spawn(Entity.ZOMBIE, fx - 150, fy);
+                check(z != null, "one of the dead near");
+                for (Entity e : w.entities) if (!e.isZombie()) e.ammo = e.reserve = 0;
                 w.flare(fx, fy);
-                check(w.flares.size() == 1 && w.litAt(fx, fy) == 1 && w.sightOf(cop) == 1, "a flare lights the spot");
-                cop.hp = cop.maxHp = 1e6f;
+                check(w.flares.size() == 1 && w.flaresFired == 1, "a flare burning");
                 boolean lured = false;
                 for (int f = 0; f < 90; f++) {
                     z.memory = 0;
+                    z.hp = z.maxHp;
                     w.update(1 / 30f);
                     w.evCount = 0;
                     lured |= z.noiseTimer > 0 && World.hypot(z.noiseX - fx, z.noiseY - fy) < 60;
                 }
-                check(lured || z.dead, "the dead are drawn to it");
+                check(lured, "the dead are drawn to it");
                 for (int f = 0; f < 30 * (int) World.FLARE_LIFE; f++) {
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
-                boolean mine = false;
-                for (float[] fl : w.flares) mine |= fl[0] == fx && fl[1] == fy;
-                check(!mine, "and it burns out");
+                check(w.flares.isEmpty(), "and it burns out");
                 // Mines: armed after a moment, set off by the dead and not by the living.
                 for (Entity e : w.entities) if (e.isZombie()) e.hp = 0;
-                float[] spot = {fx, fy};
-                int laid = w.layMines(spot[0], spot[1]);
+                int laid = w.layMines(fx, fy);
                 check(laid > 0 && w.mines.size() == laid, "mines laid (" + laid + ")");
                 float[] m0 = w.mines.get(0);
                 Entity walker = w.spawn(Entity.CIVILIAN, m0[0], m0[1]);
@@ -5276,8 +5195,7 @@ public final class GameTests {
                     w.evCount = 0;
                 }
                 check(w.mines.size() == laid && w.minesBlown == 0, "the living don't set them off");
-                // (Nobody near has a round left to shoot it with first.)
-                for (Entity e : w.entities) if (!e.isZombie() && World.hypot(e.x - m0[0], e.y - m0[1]) < 500) e.ammo = e.reserve = 0;
+                for (Entity e : w.entities) if (!e.isZombie()) e.ammo = e.reserve = 0;
                 Entity zm = w.spawn(Entity.ZOMBIE, m0[0] + 2, m0[1]);
                 zm.hp = zm.maxHp = 1e5f;
                 for (int f = 0; f < 60 && w.minesBlown == 0; f++) {
@@ -5292,64 +5210,42 @@ public final class GameTests {
                     w.evCount = 0;
                 }
                 check(w.minesBlown == 1 && w.mines.size() == laid - 1 && (zm.dead || zm.hp < zm.maxHp), "one of the dead does (" + w.minesBlown + " blown, "
-                        + w.mines.size() + " of " + laid + " left, hp " + zm.hp + "/" + zm.maxHp + ", mine " + m0[0] + "," + m0[1] + "," + m0[2] + " z " + zm.x + "," + zm.y
-                        + " dead " + zm.dead + " removed " + zm.removed + " in list " + w.mines.contains(m0) + " ents " + w.entities.contains(zm) + ")");
+                        + w.mines.size() + " of " + laid + " left)");
                 // Saved and loaded.
-                w.flare(spot[0], spot[1]);
-                w.nightsSurvived = 3;
-                w.sky.clock = 0.1f;
+                w.flare(fx, fy);
+                w.director.nextHorde = 123;
                 File file = File.createTempFile("zcs", ".dat");
                 SaveGame.save(w, file);
                 World l = SaveGame.load(file);
                 file.delete();
-                check(l.city.cfg.timeOfDay == Sky.TIME_NIGHT && l.city.cfg.weather == Sky.CLEAR + 1 && l.city.cfg.difficulty == Director.NORMAL
-                        && Math.abs(l.sky.clock - 0.1f) < 0.001f && l.nightsSurvived == 3 && l.flares.size() == w.flares.size()
-                        && l.mines.size() == w.mines.size() && l.minesBlown == 1, "the sky, flares and mines are kept in a save");
-                // Weather: fog and rain, and a storm's thunder.
-                CityConfig sc = new CityConfig();
-                sc.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
-                sc.v[CityConfig.OPT_ZOMBIES] = 2;
-                sc.timeOfDay = Sky.TIME_DAY;
-                sc.weather = Sky.STORM + 1;
-                sc.seed = 72;
-                World sw = new World(sc);
-                sw.populate(sc);
-                check(sw.sky.rain == 1 && sw.sky.hearing() < 0.75f && sw.sky.sightDead() < 1 && !sw.sky.plain(), "a storm: rain that muffles and dims");
-                boolean thunder = false;
-                for (int f = 0; f < 30 * 40 && !thunder; f++) {
-                    sw.update(1 / 30f);
-                    for (int i = 0; i < sw.evCount; i++) thunder |= sw.evType[i] == Sfx.THUNDER;
-                    sw.evCount = 0;
-                }
-                check(thunder, "thunder");
-                sw.sky.setWeather(Sky.FOG);
-                for (int f = 0; f < 30 * 20; f++) {
-                    sw.update(1 / 30f);
-                    sw.evCount = 0;
-                }
-                check(sw.sky.fog > 0.9f && sw.sky.rain < 0.1f && sw.sky.sightLiving(1) < 0.6f, "the storm gives way to fog (" + sw.sky.fog + ", " + sw.sky.rain + ")");
-                // Changing weather changes.
-                Sky dyn = new Sky(5);
-                dyn.configure(Sky.TIME_DAY, Sky.W_DYNAMIC);
-                boolean changed = false;
-                for (int f = 0; f < 1500 && !changed; f++) {
-                    dyn.update(sw, 1);
-                    changed |= dyn.weather != Sky.CLEAR;
-                }
-                check(changed && dyn.clock == 0.5f, "weather comes in by itself; the sun stays put on Always day");
+                check(l.city.cfg.difficulty == Director.NORMAL && l.flares.size() == 1 && l.mines.size() == w.mines.size() && l.minesBlown == 1
+                        && l.director.nextHorde == 123, "flares, mines and the director are kept in a save");
+                // Drawn.
+                Visuals fx2 = new Visuals();
+                android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+                fx2.events(w, fx - 300, fy - 300, fx + 300, fy + 300);
+                fx2.drawAbove(cv, fx - 300, fy - 300, fx + 300, fy + 300);
+                check(true, "drawn");
+                // The tools: named, described and priced.
+                java.lang.reflect.Field names = GameView.class.getDeclaredField("EVENT_NAMES"), info = GameView.class.getDeclaredField("EVENT_INFO");
+                names.setAccessible(true);
+                info.setAccessible(true);
+                String[] en = (String[]) names.get(null), ei = (String[]) info.get(null);
+                check(en.length == 9 && ei.length == en.length && Campaign.EVENT_COST.length == en.length && "Flare".equals(en[7]) && "Mines".equals(en[8]),
+                        "flares and mines among the events");
+                check(Campaign.EVENT_COST[7] > 0 && Campaign.EVENT_COST[8] > 0, "a commander pays for them");
             }
         });
-        test("20.0: nightfall in an outbreak, the director by difficulty, tougher dead, the score", new Check() {
+        test("20.0: difficulty, the director's hordes and pacing, the score", new Check() {
             public void run() throws Exception {
-                int[] came = new int[4];
                 float[] hp = new float[4];
-                World normal = null;
+                World[] ws = new World[4];
                 for (int d = 0; d < 4; d++) {
                     CityConfig c = new CityConfig();
                     c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
                     c.v[CityConfig.OPT_ZOMBIES] = 3;
                     c.difficulty = d;
-                    c.weather = Sky.CLEAR + 1;
                     c.seed = 73;
                     World w = new World(c);
                     w.populate(c);
@@ -5357,186 +5253,133 @@ public final class GameTests {
                     Entity z = null;
                     for (Entity e : w.entities) if (e.type == Entity.ZOMBIE) { z = e; break; }
                     hp[d] = z.maxHp;
-                    for (int f = 0; f < 30 * 3; f++) {
-                        w.update(1 / 30f);
-                        w.evCount = 0;
-                    }
-                    check(w.outbreak, "an outbreak");
-                    // Dusk: a few seconds on, night falls.
-                    w.sky.clock = 0.815f;
-                    int before = w.zombieCount() + w.turned;
-                    for (int f = 0; f < 30 * 6 && !w.sky.night(); f++) {
-                        w.outbreak = true;
-                        w.update(1 / 30f);
-                        w.evCount = 0;
-                    }
-                    check(w.sky.night(), "night falls");
-                    came[d] = w.director.hordes;
-                    boolean said = false;
-                    for (World.Moment m : w.timeline) said |= m.text.equals("Night falls");
-                    check(said, "and it's on the timeline");
-                    if (d == Director.NORMAL) normal = w;
+                    ws[d] = w;
                 }
                 check(hp[0] < hp[1] && hp[1] < hp[2] && hp[2] < hp[3], "the dead are tougher the harder it is");
-                check(came[0] == 0 && came[1] == 1 && came[3] == 1, "a horde at nightfall, except on Easy (" + came[0] + ", " + came[1] + ", " + came[3] + ")");
-                // Dawn: the night's counted, and scored.
-                World w = normal;
-                int score0 = w.score();
-                w.sky.clock = 0.255f;
-                for (int f = 0; f < 30 * 8 && w.nightsSurvived == 0; f++) {
+                // A horde from outside once the outbreak's gone on a while - never on Easy.
+                for (int d = 0; d < 4; d += 1) {
+                    World w = ws[d];
+                    Director dir = new Director(d, 9);
                     w.outbreak = true;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
+                    int zs = w.zombieCount();
+                    for (int t = 0; t < 420; t++) {
+                        dir.stress = 0;
+                        dir.tick(w);
+                    }
+                    w.recount();
+                    if (d == Director.EASY) check(dir.hordes == 0 && dir.stragglers == 0 && dir.sieges == 0 && w.zombieCount() == zs, "nothing from outside on Easy");
+                    else check(dir.hordes >= 1 && w.zombieCount() > zs, Director.NAMES[d] + ": a horde comes in (" + dir.hordes + ", " + zs + " -> " + w.zombieCount() + ")");
+                    if (d == Director.NORMAL) check(dir.stragglers == 0 && dir.sieges == 0, "no stragglers early on Normal, and no sieges");
+                    if (d >= Director.HARD) check(dir.stragglers >= 1, "stragglers from the start on " + Director.NAMES[d]);
                 }
-                check(w.nightsSurvived == 1 && !w.sky.night() && w.sky.days == 1, "made it through the night");
-                w.zombiesKilled += 50;
-                check(w.score() > score0 + 400, "a night and fifty kills score (" + score0 + " -> " + w.score() + ")");
-                // The director: pressure builds to a peak, then a breather.
+                // On Hard, in time, a siege.
+                World hw = ws[Director.HARD];
                 Director dir = new Director(Director.HARD, 9);
-                CityConfig hc = new CityConfig();
-                hc.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
-                hc.v[CityConfig.OPT_ZOMBIES] = 4;
-                hc.difficulty = Director.HARD;
-                hc.timeOfDay = Sky.TIME_DAY;
-                hc.weather = Sky.CLEAR + 1;
-                hc.seed = 74;
-                World hw = new World(hc);
-                hw.populate(hc);
-                hw.outbreak = true;
-                dir.tick(hw);
-                dir.tick(hw);
-                check(dir.phase == Director.BUILD, "building");
-                boolean peaked = false, rested = false;
-                for (int t = 0; t < 60; t++) {
-                    hw.civiliansLost += 6;
-                    dir.tick(hw);
-                    peaked |= dir.phase == Director.PEAK;
-                }
-                check(peaked, "a peak when people are dying fast (" + dir.stress + ")");
-                for (int t = 0; t < 120; t++) {
-                    dir.tick(hw);
-                    rested |= dir.phase == Director.RESPITE;
-                }
-                check(rested && dir.phase == Director.BUILD, "then a respite, then building again");
-                // Hard: stragglers in from the country by day.
-                int zs = hw.zombieCount();
-                for (int t = 0; t < 400 && dir.stragglers == 0; t++) {
+                for (int t = 0; t < 600 && dir.sieges == 0; t++) {
                     hw.outbreak = true;
                     dir.stress = 0;
                     dir.tick(hw);
                 }
-                hw.recount();
-                check(dir.stragglers == 1 && hw.zombieCount() > zs, "stragglers come in on Hard (" + zs + " -> " + hw.zombieCount() + ")");
+                check(dir.sieges == 1, "a siege on Hard");
+                // Pressure builds to a peak, then a breather; nothing's sent at the peak.
+                Director p = new Director(Director.HARD, 9);
+                World pw = ws[Director.NIGHTMARE];
+                pw.outbreak = true;
+                p.tick(pw);
+                p.tick(pw);
+                check(p.phase == Director.BUILD, "building");
+                boolean peaked = false, rested = false;
+                for (int t = 0; t < 60; t++) {
+                    pw.civiliansLost += 6;
+                    p.tick(pw);
+                    peaked |= p.phase == Director.PEAK;
+                }
+                check(peaked, "a peak when people are dying fast (" + p.stress + ")");
+                for (int t = 0; t < 120; t++) {
+                    p.stress = Math.min(p.stress, 0.3f);
+                    p.tick(pw);
+                    rested |= p.phase == Director.RESPITE;
+                }
+                check(rested && p.phase == Director.BUILD, "then a respite, then building again");
                 // Easy: supplies dropped to a force that's losing.
                 Director easy = new Director(Director.EASY, 9);
-                hw.warBalance = 0.1f;
-                hw.outbreakTime = 300;
-                easy.tick(hw);
-                easy.tick(hw);
+                World ew = ws[Director.EASY];
+                ew.outbreak = true;
+                ew.warBalance = 0.1f;
+                ew.outbreakTime = 300;
+                easy.tick(ew);
+                easy.tick(ew);
                 check(easy.reliefs == 1, "relief on Easy");
+                // The score: kills count, and more on a harder game.
+                World a = ws[Director.NORMAL], b = ws[Director.NIGHTMARE];
+                a.zombiesKilled = b.zombiesKilled = 100;
+                a.civiliansLost = b.civiliansLost = 0;
+                a.copsLost = b.copsLost = a.soldiersLost = b.soldiersLost = 0;
+                check(a.score() == 1000 && b.score() > a.score() * 2, "a hundred kills score, more on Nightmare (" + a.score() + ", " + b.score() + ")");
+                // The New Game screen's option.
+                CityConfig oc = new CityConfig();
+                check(oc.values(CityConfig.OPT_DIFFICULTY).length == 4 && oc.get(CityConfig.OPT_DIFFICULTY) == Director.NORMAL, "difficulty on the New Game screen");
+                oc.set(CityConfig.OPT_DIFFICULTY, 3);
+                check(oc.copy().difficulty == 3, "kept when the city's played again");
             }
         });
-        test("20.0: the campaign's ten missions and their objectives; the new tools' costs; night drawn", new Check() {
+        test("20.0: the campaign's eight missions and their objectives", new Check() {
             public void run() throws Exception {
-                check(Campaign.MISSIONS.length == 10, "ten missions");
+                check(Campaign.MISSIONS.length == 8, "eight missions");
                 for (int i = 0; i < Campaign.MISSIONS.length; i++) {
                     Campaign.Mission m = Campaign.MISSIONS[i];
                     CityConfig mc = Campaign.config(i);
-                    check(mc.mission == i && mc.timeOfDay == m.time && mc.weather == m.weather && mc.difficulty == m.difficulty && mc.exodus == m.exodus,
-                            m.title + ": the mission's sky and rules");
+                    check(mc.mission == i && mc.difficulty == m.difficulty && mc.exodus == m.exodus, m.title + ": the mission's rules");
                     check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
                 }
-                // One small city stands in for each objective.
-                CityConfig c = Campaign.config(4);
+                // One small city stands in for each counted objective.
+                CityConfig c = Campaign.config(5);
                 World w = new World(c);
                 w.setMaxPopulation(1800);
                 w.populate(c);
                 Campaign.begin(w, "");
-                check(w.sky.fog == 1 && w.sightOf(w.entities.get(0)) < 0.7f, "Whiteout is in fog");
-                java.lang.reflect.Method life = World.class.getDeclaredMethod("cityLife");
-                life.setAccessible(true);
-                int[][] cases = {{3, 0}, {5, 0}, {7, 0}, {1, 0}};
-                for (int[] cs : cases) {
-                    int id = cs[0];
+                check(w.difficulty == Director.HARD, "Overrun is on Hard");
+                for (int id : new int[]{3, 6}) {
                     Campaign.Mission m = Campaign.MISSIONS[id];
                     w.city.cfg.mission = id;
                     w.missionResult = 0;
                     w.missionStart = w.time;
                     w.fled = 0;
-                    w.woundedSaved = 0;
                     w.zombiesKilled = 0;
-                    w.nightsSurvived = 0;
-                    check(w.mission() == m && !Campaign.goalText(w).isEmpty() && !Campaign.progress(w).isEmpty(), m.title + " says what it wants");
+                    check(w.mission() == m && !Campaign.goalText(w).isEmpty() && Campaign.progress(w).startsWith("0 / " + m.goalN), m.title + " says what it wants");
                     Campaign.tick(w);
                     check(w.missionResult == 0, m.title + ": not won yet");
                     if (m.goal == Campaign.G_EVAC) w.fled = m.goalN;
-                    else if (m.goal == Campaign.G_RESCUE) w.woundedSaved = m.goalN;
-                    else if (m.goal == Campaign.G_KILLS) w.zombiesKilled = m.goalN;
-                    else w.nightsSurvived = 1;
+                    else w.zombiesKilled = m.goalN;
                     Campaign.tick(w);
                     check(w.missionResult == 1 && w.missionStars >= 1, m.title + ": won on its objective (" + w.missionResult + ")");
                 }
-                // Until dawn has no clock to run out.
-                w.city.cfg.mission = 1;
+                // And they run out of time like the rest.
+                w.city.cfg.mission = 6;
                 w.missionResult = 0;
-                w.nightsSurvived = 0;
-                w.missionStart = w.time - 5000;
+                w.zombiesKilled = 0;
+                w.missionStart = w.time - Campaign.MISSIONS[6].limit - 1;
                 Campaign.tick(w);
-                check(w.missionResult == 0 && Campaign.timeLeft(w) > 0, "holding until dawn isn't timed out");
-                // The power stays out in Blackout.
-                CityConfig bc = Campaign.config(8);
-                check(bc.timeOfDay == Sky.TIME_NIGHT && Campaign.MISSIONS[8].blackout, "Blackout: night, no power");
-                // The new tools: named, described and priced.
-                java.lang.reflect.Field names = GameView.class.getDeclaredField("EVENT_NAMES"), info = GameView.class.getDeclaredField("EVENT_INFO");
-                names.setAccessible(true);
-                info.setAccessible(true);
-                String[] en = (String[]) names.get(null), ei = (String[]) info.get(null);
-                check(en.length == 11 && ei.length == en.length && Campaign.EVENT_COST.length == en.length && "Flare".equals(en[7]) && "Mines".equals(en[8]),
-                        "flares and mines among the events");
-                check(Campaign.EVENT_COST[7] > 0 && Campaign.EVENT_COST[8] > 0 && Campaign.EVENT_COST[9] < 0 && Campaign.EVENT_COST[10] < 0,
-                        "a commander pays for flares and mines, and can't turn the sky");
-                // Night, rain and fog drawn, with lights in the dark.
-                CityConfig nc = new CityConfig();
-                nc.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
-                nc.v[CityConfig.OPT_ZOMBIES] = 2;
-                nc.timeOfDay = Sky.TIME_NIGHT;
-                nc.weather = Sky.STORM + 1;
-                nc.seed = 75;
+                check(w.missionResult == 2, "out of time");
+                // The campaign screen draws with all of them.
                 GameView v = new GameView(new android.app.Activity());
                 int[] size = {1080, 2000};
                 v.layout(size[0], size[1]);
                 Menu menu = (Menu) field(v, "menu");
-                v.startGame(nc);
-                v.awaitLoad();
                 for (int i = 0; i < 3; i++) draw(v, size);
-                menu.screen = Menu.NONE;
-                World gw = (World) field(v, "world");
-                gw.flare(gw.city.worldW() / 2, gw.city.worldH() / 2);
-                gw.layMines(gw.city.worldW() / 2, gw.city.worldH() / 2);
-                gw.sky.fog = 0.5f;
-                for (int i = 0; i < 6; i++) draw(v, size);
-                Visuals fx = (Visuals) field(v, "vfx");
-                check(fx.nightLights > 0, "lights in the dark (" + fx.nightLights + ")");
-                check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
-                Sound snd = (Sound) field(v, "sound");
-                check(snd.loopGain[Sfx.LOOP_RAIN] > 0.3f, "the rain's heard");
-                // The setup screen with the new options.
-                menu.open(Menu.SETUP);
+                menu.open(Menu.CAMPAIGN);
                 java.lang.reflect.Field sc = Menu.class.getDeclaredField("scroll");
                 sc.setAccessible(true);
+                for (int i = 0; i < 4; i++) {
+                    sc.setFloat(menu, i * 500);
+                    draw(v, size);
+                }
+                menu.open(Menu.SETUP);
                 for (int i = 0; i < 5; i++) {
                     sc.setFloat(menu, i * 500);
                     draw(v, size);
                 }
-                check(v.drawErrors == 0, "the setup screen draws (" + v.drawErrors + ")");
-                CityConfig oc = new CityConfig();
-                check(oc.values(CityConfig.OPT_DIFFICULTY).length == 4 && oc.values(CityConfig.OPT_TIME).length == 3 && oc.values(CityConfig.OPT_WEATHER).length == 5
-                        && oc.get(CityConfig.OPT_DIFFICULTY) == Director.NORMAL, "difficulty, time and weather on the New Game screen");
-                oc.set(CityConfig.OPT_DIFFICULTY, 3);
-                oc.set(CityConfig.OPT_TIME, 2);
-                oc.set(CityConfig.OPT_WEATHER, 3);
-                CityConfig cp = oc.copy();
-                check(cp.difficulty == 3 && cp.timeOfDay == 2 && cp.weather == 3, "kept when the city's played again");
+                check(v.drawErrors == 0, "the campaign and setup screens draw (" + v.drawErrors + ")");
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {

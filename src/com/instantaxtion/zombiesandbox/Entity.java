@@ -192,13 +192,6 @@ final class Entity {
     /** ((17.1) When they were last finding their way in, out of or round a building: they squeeze past each other there. */
     transient float inT = -9;
     /**
-     * ((17.5) Down and bleeding out: seconds left (0 not down; -1 bled out, to die now). With who's coming to help them,
-     * and, for a helper, who they're helping and how long they've been at it.
-     */
-    float bleedT;
-    transient Entity rescuer, rescueOf;
-    transient float rescueT;
-    /**
      * ((17.6) Cover: where the one they're trading shots with is and when they last fired, the spot they're making for
      * (coverX -1 for none) and when they next look for one; and how pinned down they are by fire coming their way (0-1).
      */

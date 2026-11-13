@@ -39,8 +39,8 @@ final class SaveGame {
             // Version 47: the map version the city was built to, itself.
             out.writeInt(cfg.civic);
             // ((17.0) Version 57: the game mode.)
-            // (The game mode until 19.6. From version 65 (20.0): the time of day, weather and difficulty settings.)
-            out.writeInt(cfg.timeOfDay | cfg.weather << 4 | cfg.difficulty << 8);
+            // (The game mode until 19.6. From version 65 (20.0): the difficulty, in bits 8 to 11.)
+            out.writeInt(cfg.difficulty << 8);
 
             out.writeFloat(w.time);
             out.writeInt(w.turned);
@@ -374,9 +374,9 @@ final class SaveGame {
             // (Version 59, 17.5: the record for the after-action report: losses, the wounded, where the fighting was.)
             out.writeInt(w.copsLost);
             out.writeInt(w.soldiersLost);
-            out.writeInt(w.woundedSaved);
-            out.writeInt(w.bledOut);
-            out.writeInt(w.enemyVehiclesLost);
+            out.writeInt(0); // (The wounded saved and bled out, until 20.0.)
+            out.writeInt(0);
+            out.writeInt(0);
             out.writeInt(0);
             // (Version 60, 18.0: the campaign mission.)
             out.writeInt(cfg.mission);
@@ -416,15 +416,16 @@ final class SaveGame {
             out.writeInt(0);
             out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
             if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
-            // (Version 65, 20.0: the sky, the director, flares and mines.)
-            out.writeFloat(w.sky.clock);
-            out.writeInt(w.sky.days);
-            out.writeInt(w.sky.timeMode);
-            out.writeInt(w.sky.weather);
-            out.writeFloat(w.sky.weatherLeft);
-            out.writeFloat(w.sky.rain);
-            out.writeFloat(w.sky.fog);
-            out.writeInt(w.nightsSurvived);
+            // (Version 65, 20.0: the director, flares and mines. The first eight were the clock and the weather, taken
+            // out again before 20.0 was done: the next horde and siege are kept in two of their places.)
+            out.writeFloat(w.director.nextHorde);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeFloat(w.director.nextSiege);
+            out.writeFloat(0);
+            out.writeFloat(0);
+            out.writeInt(0);
             out.writeInt(w.flaresFired);
             out.writeInt(w.minesBlown);
             out.writeInt(w.director.phase);
@@ -527,7 +528,7 @@ final class SaveGame {
         // Version 58 (17.2): under arrest.
         out.writeByte(0);
         // Version 59 (17.5): down and bleeding.
-        out.writeFloat(e.bleedT);
+        out.writeFloat(0);
         // ((18.5) A hostage's captors; gone in 19.6.)
         out.writeInt(-1);
     }
@@ -563,12 +564,8 @@ final class SaveGame {
             // (A game mode from before 19.6, when there were others: only the dead now.)
             if (version >= 57) {
                 int packed = in.readInt();
-                // ((20.0) From version 65 the old game mode's place holds the time, weather and difficulty settings.)
-                if (version >= 65) {
-                    cfg.timeOfDay = Math.min(2, packed & 15);
-                    cfg.weather = Math.min(4, packed >> 4 & 15);
-                    cfg.difficulty = Math.min(3, packed >> 8 & 15);
-                }
+                // ((20.0) From version 65 the old game mode's place holds the difficulty.)
+                if (version >= 65) cfg.difficulty = Math.min(3, packed >> 8 & 15);
             }
             // (Cities saved before 10.4 were built without their government quarter.)
             cfg.civic = version >= 48 ? 27 : version >= 47 ? 26 : version >= 46 ? 25 : version >= 45 ? 24 : version >= 44 ? 23 : version >= 43 ? 22 : version >= 42 ? 21 : version >= 40 ? 20 : version >= 39 ? 19 : version >= 38 ? 18 : version >= 37 ? 17 : version >= 36 ? 16 : version >= 35 ? 15 : version >= 34 ? 14 : version >= 33 ? 13 : version >= 32 ? 12 : version >= 31 ? 11 : version >= 30 ? 11 : version >= 29 ? 10 : version >= 28 ? 9 : version >= 27 ? 8 : version >= 26 ? 7 : version >= 25 ? 6 : version >= 24 ? 5 : version >= 23 ? 4 : version >= 22 ? 3 : version >= 20 ? 2 : version >= 19 ? 1 : 0;
@@ -930,9 +927,9 @@ final class SaveGame {
             if (version >= 59) {
                 w.copsLost = in.readInt();
                 w.soldiersLost = in.readInt();
-                w.woundedSaved = in.readInt();
-                w.bledOut = in.readInt();
-                w.enemyVehiclesLost = in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
                 in.readInt();
                 if (version >= 60) {
                     int ms = in.readInt();
@@ -1000,15 +997,18 @@ final class SaveGame {
                     for (int i = 0; i < bm; i++) w.battleMap[i] = in.readFloat();
                 }
                 if (version >= 65) {
-                    w.sky.clock = in.readFloat();
-                    w.sky.days = in.readInt();
-                    w.sky.timeMode = in.readInt();
-                    w.sky.weather = in.readInt();
-                    w.sky.weatherLeft = in.readFloat();
-                    w.sky.rain = in.readFloat();
-                    w.sky.fog = in.readFloat();
-                    w.sky.resume();
-                    w.nightsSurvived = in.readInt();
+                    float nh = in.readFloat();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    float ns = in.readFloat();
+                    in.readFloat();
+                    in.readFloat();
+                    in.readInt();
+                    // (A save from the first 20.0 had the time of day and the weather's timer here: under a minute
+                    // means that, not a horde nearly due.)
+                    if (nh >= 1) w.director.nextHorde = nh;
+                    if (ns >= 60) w.director.nextSiege = ns;
                     w.flaresFired = in.readInt();
                     w.minesBlown = in.readInt();
                     w.director.phase = in.readInt();
@@ -1106,7 +1106,7 @@ final class SaveGame {
         if (version >= 56) e.inmate = in.readBoolean();
         if (version >= 57) in.readByte();
         if (version >= 58) in.readByte();
-        if (version >= 59) e.bleedT = in.readFloat();
+        if (version >= 59) in.readFloat();
         if (version >= 64) in.readInt();
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;

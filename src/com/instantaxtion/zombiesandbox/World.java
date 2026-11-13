@@ -663,12 +663,10 @@ final class World {
         cellCount = new int[gw * gh];
         // ((13.5) In place of three arrays of where the next of each kind went.)
         hashCnt = new int[gw * gh * 3];
-        // ((20.0) The sky and the director, each with dice of their own, so nothing else's luck changes with them.)
-        long skySeed = testSeed >= 0 ? testSeed + 7 : new Random().nextLong();
-        sky = new Sky(skySeed);
-        sky.configure(cfg.timeOfDay, cfg.weather);
+        // ((20.0) The director, with dice of its own, so nothing else's luck changes with it.)
         difficulty = Math.max(0, Math.min(3, cfg.difficulty));
-        director = new Director(difficulty, skySeed * 31 + 5);
+        zPace = Director.Z_SPEED[difficulty];
+        director = new Director(difficulty, (testSeed >= 0 ? testSeed + 7 : new Random().nextLong()) * 31 + 5);
         // ((11.5) No courthouse armoury: the government buildings are just buildings now.)
         if (false) {
             City.Building b = city.courthouse;
@@ -2065,7 +2063,7 @@ final class World {
                 city.computeFields(entities, fieldTurn, !fieldTurn);
             } else city.computeFields(entities);
         }
-        skyStep(dt);
+        toolsStep(dt);
         dispatch.update(dt);
         if ((rosterCd -= dt) <= 0) {
             rosterCd = 5;
@@ -2598,8 +2596,6 @@ final class World {
     }
 
     private Entity nearest(Entity from, float radius, boolean wantZombie, boolean needLos) {
-        // ((20.0) Looking any distance: only as far as the dark, the rain and the fog let them see.)
-        if (radius > 60 && skyDim) radius = Math.max(60, radius * sightOf(from));
         float best = radius * radius;
         Entity res = null;
         float fx = from.x, fy = from.y, reach2 = (radius + GRID_SLACK) * (radius + GRID_SLACK);
@@ -2837,12 +2833,6 @@ final class World {
             if (e.task == Dispatch.T_NONE) afterRide(e, e.rideFrom);
             e.rideFrom = null;
         }
-        // ((17.5) Down and bleeding.)
-        if (e.bleedT > 0) {
-            downedStep(e, dt);
-            return;
-        }
-        if (e.rescueOf != null && rescueStep(e, dt)) return;
         // ((17.1) Going into a building, spending time in one, or getting out of one.)
         if (WALK_IN && indoorThink(e, dt)) return;
         if (e.task == Dispatch.T_BOARD) {
@@ -2890,52 +2880,25 @@ final class World {
 
     // ------------------------------------------------------------------ (18.4) police drones
 
-    // ---- ((20.0) The sky, the director, flares and mines ----
+    // ---- ((20.0) The director, the difficulty, flares and mines ----
 
-    final Sky sky;
     final Director director;
     /** Easy, Normal, Hard or Nightmare (Director.NAMES). */
     final int difficulty;
-    /** Whether the sky is changing anything just now, and how quick the dead are for it (and for the difficulty). */
-    private boolean skyDim;
-    private float zPace = 1;
+    /** How quick the dead are for the difficulty. */
+    private final float zPace;
     /** Flares burning: x, y, seconds left. Mines laid: x, y, seconds until armed. */
     final ArrayList<float[]> flares = new ArrayList<float[]>();
     final ArrayList<float[]> mines = new ArrayList<float[]>();
-    int nightsSurvived, flaresFired, minesBlown;
-    private boolean nightInOutbreak;
-    private float skyTick, illumCd, handFlareCd, playerFlareCd;
-    static final float FLARE_LIGHT = 260, FLARE_LIFE = 45, FLARE_LURE = 330, MINE_TRIGGER = 9, MINE_ARM = 3;
+    int flaresFired, minesBlown;
+    private float toolTick;
+    static final float FLARE_LIFE = 45, FLARE_LURE = 330, MINE_TRIGGER = 9, MINE_ARM = 3;
 
-    /** How well lit a spot is at night, 0 to 1: full by a flare, half under the street lights while the power's on. */
-    float litAt(float x, float y) {
-        for (int i = 0, n = flares.size(); i < n; i++) {
-            float[] f = flares.get(i);
-            float dx = f[0] - x, dy = f[1] - y;
-            if (dx * dx + dy * dy < FLARE_LIGHT * FLARE_LIGHT) return 1;
-        }
-        if (blackout) return 0;
-        int t = city.tileIndex(x, y);
-        if (t < 0) return 0;
-        byte k = city.tiles[t];
-        return k == City.ROAD || k == City.SIDEWALK || k == City.PLAZA ? 0.5f : 0.2f;
-    }
-
-    /** How far someone sees just now, of the usual. */
-    float sightOf(Entity e) {
-        return e.isUndead() ? sky.sightDead() : sky.sightLiving(sky.dark() > 0 ? litAt(e.x, e.y) : 1);
-    }
-
-    private void skyStep(float dt) {
-        sky.update(this, dt);
-        skyDim = !sky.plain();
-        zPace = sky.pace() * Director.Z_SPEED[difficulty];
-        if (handFlareCd > 0) handFlareCd -= dt;
-        if (playerFlareCd > 0) playerFlareCd -= dt;
-        if (flares.isEmpty() && mines.isEmpty() && !sky.night()) return;
-        skyTick -= dt;
-        boolean tick = skyTick <= 0;
-        if (tick) skyTick = 1;
+    private void toolsStep(float dt) {
+        if (flares.isEmpty() && mines.isEmpty()) return;
+        toolTick -= dt;
+        boolean tick = toolTick <= 0;
+        if (tick) toolTick = 1;
         for (int i = flares.size() - 1; i >= 0; i--) {
             float[] f = flares.get(i);
             f[2] -= dt;
@@ -2943,7 +2906,7 @@ final class World {
                 flares.remove(i);
                 continue;
             }
-            // The dead are drawn to the light.
+            // The dead are drawn to it.
             if (tick) lure(f[0], f[1], FLARE_LURE);
         }
         for (int i = mines.size() - 1; i >= 0; i--) {
@@ -2957,27 +2920,6 @@ final class World {
                 mines.remove(i);
                 minesBlown++;
                 explode(m[0], m[1], 42, 260);
-            }
-        }
-        // At night in an outbreak, the army's mortars put illumination up over the worst of the fighting.
-        if (tick && sky.night() && outbreak && (illumCd -= 1) <= 0) {
-            illumCd = 25;
-            if (counts[Entity.SOLDIER] > 0 && city.nearestFacility(City.FACILITY_BASE, city.worldW() / 2, city.worldH() / 2) != null
-                    && fightHeat != null) {
-                int best = -1;
-                float bv = 1.5f;
-                for (int k = 0; k < fightHeat.length; k++)
-                    if (fightHeat[k] > bv) {
-                        bv = fightHeat[k];
-                        best = k;
-                    }
-                if (best >= 0) {
-                    float fx = (best % heatW() + 0.5f) * HEAT_CELL, fy = (best / heatW() + 0.5f) * HEAT_CELL;
-                    if (litAt(fx, fy) < 1) {
-                        illuminate(fx, fy);
-                        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Illumination going up over " + city.placeName(fx, fy) + ".", fx, fy);
-                    }
-                }
             }
         }
     }
@@ -3017,17 +2959,13 @@ final class World {
             }
     }
 
-    /** A flare fired to burn on the ground: light for the living for most of a minute, and the dead drawn to it. */
+    /** A flare burning on the ground for most of a minute: the dead for a long way round are drawn to it. */
     void flare(float x, float y) {
-        illuminate(x, y);
-        say("Flare burning at " + city.placeName(x, y));
-    }
-
-    private void illuminate(float x, float y) {
         if (flares.size() >= 12) flares.remove(0);
         flares.add(new float[]{x, y, FLARE_LIFE});
         flaresFired++;
         emit(Sfx.FLARE, x, y);
+        say("Flare burning at " + city.placeName(x, y));
     }
 
     /** A handful of mines laid round a spot: armed after a few seconds, set off by the dead only. Returns how many. */
@@ -3045,47 +2983,12 @@ final class World {
         return laid;
     }
 
-    void nightFell() {
-        nightInOutbreak = outbreak;
-        timeline("Night falls");
-        if (outbreak) {
-            dispatch.say(Dispatch.WHO_INFO, null, "Night is falling" + (blackout ? ", and the power's out" : "")
-                    + ". The dead are quicker in the dark, and nobody can see far.", city.worldW() / 2, city.worldH() / 2);
-            emit(Sfx.STING_ALERT, city.worldW() / 2, city.worldH() / 2);
-        }
-        director.nightFell(this);
-    }
-
-    void dawnBroke() {
-        timeline("Dawn");
-        if (outbreak && nightInOutbreak) {
-            nightsSurvived++;
-            dispatch.say(Dispatch.WHO_INFO, null, "Dawn. The city has made it through "
-                    + (nightsSurvived == 1 ? "the night." : nightsSurvived + " nights."), city.worldW() / 2, city.worldH() / 2);
-        }
-        nightInOutbreak = false;
-    }
-
-    void weatherChanged(int was, int now) {
-        String[] coming = {"The weather is clearing.", "Rain is moving in: harder to see, harder to hear.", "Fog is rolling in: nobody can see past the end of the street.",
-                "A storm is breaking over the city: the thunder will stir the dead."};
-        if (outbreak) dispatch.say(Dispatch.WHO_INFO, null, coming[now], city.worldW() / 2, city.worldH() / 2);
-        timeline(now == Sky.CLEAR ? "The weather clears" : Sky.NAMES[now] + " over the city");
-    }
-
-    /** A clap of thunder over a spot: heard a long way off, and the dead there turn towards it. */
-    void thunder(float x, float y) {
-        emit(Sfx.THUNDER, x, y);
-        if (zombies > 0) lure(x, y, 420);
-    }
-
     /**
-     * How well the city has done, as one number: the dead destroyed, the wounded saved, nights lived through and
-     * everyone still alive, less those lost, and more for a harder game.
+     * How well the city has done, as one number: the dead destroyed and a city saved with everyone still alive in
+     * it, less those lost, and more for a harder game.
      */
     int score() {
-        float s = zombiesKilled * 10 + woundedSaved * 40 + nightsSurvived * 500 + (warResult == 1 ? 1500 + humans * 2 : 0)
-                - civiliansLost * 4 - (copsLost + soldiersLost) * 6;
+        float s = zombiesKilled * 10 + (warResult == 1 ? 1500 + humans * 2 : 0) - civiliansLost * 4 - (copsLost + soldiersLost) * 6;
         if (mission() != null && missionResult == 1) s += 1000 * missionStars;
         return Math.max(0, Math.round(s * Director.SCORE[difficulty]));
     }
@@ -3152,157 +3055,8 @@ final class World {
         }
     }
 
-    // ------------------------------------------------------------------ (17.5) the wounded
-
-    /** Shot or blown up rather than bitten: going down hurt, to bleed out unless someone gets to them. */
-    static final boolean WOUNDS = true;
-    /** Police and soldiers killed, the wounded saved, those who bled out, and the enemy's vehicles knocked out. */
-    int copsLost, soldiersLost, woundedSaved, bledOut, enemyVehiclesLost;
-
-    private boolean goDown(Entity e) {
-        if (!WOUNDS || e.bleedT != 0 || e.removed || e == controlled || e.ride != null) return false;
-        if (e.type != Entity.CIVILIAN && e.type != Entity.COP && e.type != Entity.SOLDIER) return false;
-        // (Bitten, or blown apart, or riddled: no.)
-        if (e.killedByZombie || e.infected || e.gibbed || e.hp < -45) return false;
-        if (rnd.nextFloat() > (e.type == Entity.CIVILIAN ? 0.55f : 0.7f)) return false;
-        e.hp = 1;
-        e.bleedT = 35 + rnd.nextFloat() * 30;
-        e.aiming = false;
-        e.stun = 0;
-        e.stayIn = null;
-        if (e.task != Dispatch.T_SHELTER) e.task = Dispatch.T_NONE;
-        if (e.rescueOf != null) {
-            e.rescueOf.rescuer = null;
-            e.rescueOf = null;
-        }
-        if (e.isArmed() && rnd.nextFloat() < 0.5f)
-            dispatch.say(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null,
-                    (e.type == Entity.SOLDIER ? "Military: Man down on " : "Police: Officer down on ") + city.placeName(e.x, e.y) + "! "
-                            + Dispatch.name(e) + " is hit and needs a medic!", e.x, e.y);
-        return true;
-    }
-
-    /** Down: lying there, bleeding out, until someone patches them up (on their feet, weak) or it's too late. */
-    private void downedStep(Entity e, float dt) {
-        e.bleedT -= dt;
-        e.aiming = false;
-        e.fleeTimer = 0;
-        steer(e, 0, 0, 0);
-        // (Patched up by a combat medic: see medicStep.)
-        if (e.hp >= 15) {
-            revive(e, null);
-            return;
-        }
-        if (e.bleedT <= 0) {
-            e.bleedT = -1;
-            e.hp = 0;
-            bledOut++;
-        }
-    }
-
-    private void revive(Entity d, Entity by) {
-        d.bleedT = 0;
-        d.hp = Math.max(d.hp, d.maxHp * 0.3f);
-        d.rescuer = null;
-        woundedSaved++;
-        if (d.type == Entity.CIVILIAN) {
-            d.fleeTimer = 4;
-            d.aware = true;
-        }
-        if (by != null) {
-            by.saved++;
-            if (rnd.nextFloat() < 0.35f) {
-                String who = d.isArmed() ? Dispatch.name(d) : Names.person(d.nameSeed);
-                dispatch.chatter(by.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, by,
-                        "Got " + who + " back on their feet on " + city.placeName(d.x, d.y) + ".", d.x, d.y);
-            }
-        }
-    }
-
-    /** Is it too hot round someone down for anyone but a soldier to go to them? */
-    private boolean underFire(float x, float y) {
-        return countZombiesNear(x, y, 70) > 0;
-    }
-
-    /**
-     * Once a second: someone to go to each of the wounded - a combat medic first, then an officer or soldier close by
-     * with nothing more pressing, or a brave civilian. Nobody goes into the thick of it but soldiers.
-     */
-    private void rescueLife() {
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity d = entities.get(i);
-            if (d.dead || d.bleedT <= 0) continue;
-            if (d.rescuer != null && !d.rescuer.dead && d.rescuer.rescueOf == d) continue;
-            d.rescuer = null;
-            boolean hot = underFire(d.x, d.y);
-            Entity best = null;
-            float bd = Float.MAX_VALUE;
-            for (int k = 0, m = gatherLiving(d.x, d.y, 260); k < m; k++) {
-                Entity o = gathered[k];
-                if (o == d || o.dead || o.bleedT > 0 || o.rescueOf != null || o.ride != null || o == controlled
-                        || o.stayIn != null) continue;
-                float dist = (float) World.hypot(o.x - d.x, o.y - d.y);
-                if (dist > 260) continue;
-                if (o.isArmed()) {
-                    if (o.aiming || (hot && o.type != Entity.SOLDIER)) continue;
-                    if (o.role == Entity.ROLE_CORPSMAN) dist *= 0.3f;
-                } else if (o.type == Entity.CIVILIAN) {
-                    if (hot || o.fleeTimer > 0 || bravery(o) < 0.5f || o.leader != null) continue;
-                    dist *= 1.6f;
-                } else continue;
-                if (dist < bd) {
-                    bd = dist;
-                    best = o;
-                }
-            }
-            if (best == null) continue;
-            best.rescueOf = d;
-            best.rescueT = 0;
-            best.treatT = 0;
-            d.rescuer = best;
-        }
-    }
-
-    /** Off to someone down, and seeing to them there. False when something else needs doing first. */
-    private boolean rescueStep(Entity e, float dt) {
-        Entity d = e.rescueOf;
-        if (d == null || d.dead || d.bleedT <= 0 || d.rescuer != e) {
-            e.rescueOf = null;
-            return false;
-        }
-        // (A fight on top of them comes first; a civilian with the dead coming gives up and runs.)
-        if (nearest(e, e.isArmed() ? 45 : 70, true, true) != null) {
-            if (!e.isArmed()) {
-                e.rescueOf = null;
-                d.rescuer = null;
-            }
-            return false;
-        }
-        e.rescueT += dt;
-        float dist = (float) World.hypot(d.x - e.x, d.y - e.y);
-        if (dist > 9) {
-            if (e.rescueT > 45) {
-                e.rescueOf = null;
-                d.rescuer = null;
-                return false;
-            }
-            walkToSpot(e, d.x + 5, d.y, e.runSpeed * 0.85f);
-            e.treatT = 0;
-            return true;
-        }
-        steer(e, 0, 0, 0);
-        e.aiming = false;
-        e.angle = turn(e.angle, (float) Math.atan2(d.y - e.y, d.x - e.x), dt * 4);
-        e.treatT += dt;
-        float need = e.role == Entity.ROLE_CORPSMAN && e.type == Entity.SOLDIER ? 3 : e.isArmed() ? 6 : 8;
-        if (e.treatT >= need) {
-            e.treatT = 0;
-            e.rescueOf = null;
-            revive(d, e);
-        }
-        return true;
-    }
-
+    /** Police and soldiers killed. (The wounded of 17.5 - going down, bleeding out, being saved - went in 20.0.) */
+    int copsLost, soldiersLost;
 
     // ------------------------------------------------------------------ (17.6) cover and suppression
 
@@ -3331,7 +3085,7 @@ final class World {
      */
     private void coverStep(Entity e, float dt) {
         if (e.suppress > 0) e.suppress = Math.max(0, e.suppress - dt * 0.35f);
-        if (e == controlled || e.ride != null || e.isUndead() || e.bleedT > 0 || time - e.lastAimT > 0.6f) {
+        if (e == controlled || e.ride != null || e.isUndead() || time - e.lastAimT > 0.6f) {
             e.coverX = -1;
             return;
         }
@@ -3408,8 +3162,6 @@ final class World {
 
     void noise(float x, float y, float radius) {
         scareBirds(x, y, radius);
-        // ((20.0) Sound carries further in the still of the night, and not as far through rain.)
-        if (skyDim) radius *= sky.hearing();
         // (10.32) How loud the fighting has been round here lately, for hordes further off to come to.
         if (fightHeat == null) fightHeat = new float[heatW() * heatW()];
         int hx = Math.min(heatW() - 1, Math.max(0, (int) (x / HEAT_CELL))), hy = Math.min(heatW() - 1, Math.max(0, (int) (y / HEAT_CELL)));
@@ -4426,8 +4178,6 @@ final class World {
         // ((10.59) A sleepy drift, until something wakes them: see surge.)
         // ((14.5) On a march across the city, a steadier pace.)
         float pace = z.speed * (z.hordeWait ? 0.22f : z.migrating ? 0.55f : 0.38f);
-        // ((20.0) Hordes drift by day and walk with a purpose at night.)
-        if (skyDim) pace *= 1 + 0.6f * sky.dark();
         if (z.leadsHorde && d > 150) zombieWalkTo(z, z.roamX, z.roamY, pace);
         else steer(z, ddx / d, ddy / d, pace);
     }
@@ -4846,8 +4596,8 @@ final class World {
     /** Search each place once. */
     private final java.util.HashSet<City.Building> searched = new java.util.HashSet<City.Building>();
     static final int CA_ENTER_CAR = 0, CA_EXIT_CAR = 1, CA_ENTER = 2, CA_EXIT = 3, CA_BARRICADE = 4, CA_SEARCH = 5,
-            CA_RALLY = 6, CA_GRENADE = 7, CA_SQUAD = 8, CA_FLARE = 9;
-    static final String[] CA_NAMES = {"Get in", "Get out", "Go inside", "Go out", "Barricade", "Search", "Rally", "Grenade", "Squad", "Flare"};
+            CA_RALLY = 6, CA_GRENADE = 7, CA_SQUAD = 8;
+    static final String[] CA_NAMES = {"Get in", "Get out", "Go inside", "Go out", "Barricade", "Search", "Rally", "Grenade", "Squad"};
     /** ((14.7) What the one you're playing is shooting at, for their squad to shoot at too. */
     Entity ctrlTarget;
     /** (14.7) The most a squad you lead can have, and how far round you they're gathered from. */
@@ -4875,8 +4625,6 @@ final class World {
         // ((14.7) An officer or soldier leads a squad of their own; anyone else rallies people.)
         out[n++] = e.isArmed() ? CA_SQUAD : CA_RALLY;
         if (e.grenades > 0 && e.grenadeCd <= 0) out[n++] = CA_GRENADE;
-        // ((20.0) In the dark, a police officer or soldier you're playing has flares to throw.)
-        if ((e.type == Entity.COP || e.type == Entity.SOLDIER) && sky.dark() > 0.3f && playerFlareCd <= 0 && n < out.length) out[n++] = CA_FLARE;
         return n;
     }
 
@@ -5022,13 +4770,6 @@ final class World {
                     o.squadSlot = got++;
                 }
                 say(got == 0 ? "Nobody near enough to follow you" : got + (got == 1 ? " follows you" : " follow you") + ": they shoot at what you shoot at");
-                break;
-            }
-            case CA_FLARE: {
-                if (playerFlareCd > 0) return;
-                float face = e.want > 1 ? (float) Math.atan2(e.my, e.mx) : e.angle;
-                playerFlareCd = 20;
-                illuminate(e.x + (float) Math.cos(face) * 70, e.y + (float) Math.sin(face) * 70);
                 break;
             }
             case CA_GRENADE: {
@@ -7628,7 +7369,7 @@ final class World {
                 dispatch.say(Dispatch.WHO_INFO, null, "The power station has been overrun. The power is out across the city: no more sirens or broadcasts.",
                         p.doorX, p.doorY);
             } else if (blackout && !p.collapsed && powerThreat == 0 && countZombiesNear(p.doorX, p.doorY, 200) == 0
-                    && peopleNear(p.doorX, p.doorY, 120) && !(mission() != null && mission().blackout)) {
+                    && peopleNear(p.doorX, p.doorY, 120)) {
                 blackout = false;
                 dispatch.say(Dispatch.WHO_INFO, null, "Engineers have the power station running again. The lights are back on.", p.doorX, p.doorY);
             }
@@ -7653,7 +7394,6 @@ final class World {
         fieldSupplies();
         raiders();
         if (WALK_IN) countInside();
-        if (WOUNDS) rescueLife();
         if (city.cfg.mission >= 0) Campaign.tick(this);
         director.tick(this);
         fieldHospital();
@@ -10143,8 +9883,6 @@ final class World {
             case Entity.W_HUNTING: range = Math.max(range, 280); break;
             case Entity.W_DMR: range = Math.max(range, 300); break;
         }
-        // ((20.0) At night, in rain or fog they can't shoot at what they can't see.)
-        if (skyDim) range = Math.max(70, range * sightOf(e));
         if (e.role == Entity.ROLE_COMMANDER && soldier) command(e, dt);
         // ((15.0) Up on a horse, a mounted officer sees the dead round them - whatever they're doing - and marks them
         // for the units nearby.)
@@ -12655,12 +12393,6 @@ final class World {
     /** Aims and shoots. Returns false if the shot is blocked by someone standing in the way. */
     private boolean aimAndFire(Entity e, Entity t, float d, float range, float dt) {
         e.aiming = true;
-        // ((20.0) A fight in the dark: police and soldiers put a flare down by what they're shooting at, to see by.)
-        if (skyDim && handFlareCd <= 0 && (e.type == Entity.COP || e.type == Entity.SOLDIER) && e != controlled && d > 45
-                && sky.dark() > 0.6f && litAt(t.x, t.y) < 1) {
-            handFlareCd = 14;
-            illuminate(t.x + (e.x - t.x) * 0.3f, t.y + (e.y - t.y) * 0.3f);
-        }
         // ((17.6) Trading shots with someone who can shoot back: cover counts.)
         if (t.isArmed() || t.hasGun) {
             e.coverFromX = t.x;
@@ -13027,8 +12759,6 @@ final class World {
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
         accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e)));
-        // ((20.0) Shooting in the dark, the rain or the fog: not as true.)
-        if (skyDim && !e.isUndead()) accuracy *= sky.aim(litAt(e.x, e.y));
         if (e.ammo <= 0 && e.reserve > 0) {
             e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f * (dc != null ? dc[3] : 1);
             emit(Sfx.RELOAD, e.x, e.y);
@@ -14248,7 +13978,7 @@ final class World {
             if (e.stamina < 0) e.stamina = 0;
         }
         // ((14.5) The long dead have rotted: slower on their feet.)
-        // ((20.0) And quicker in the dark, and by the difficulty.)
+        // ((20.0) And quicker or slower by the difficulty.)
         if (e.isUndead() && e.want > 0) e.want *= (1 - rot(e)) * zPace;
         // ((15.0) A horse is quickest on grass, trails and open ground.)
         if (e.role == Entity.ROLE_MOUNTED && e.type == Entity.COP && e.want > 0) {
@@ -14579,8 +14309,6 @@ final class World {
     private void cleanup() {
         for (int i = entities.size() - 1; i >= 0; i--) {
             Entity e = entities.get(i);
-            // ((17.5) Not always dead: down, wounded, and bleeding out.)
-            if (e.hp <= 0 && !e.dead && goDown(e)) continue;
             if (e.hp <= 0) e.dead = true;
             if (!e.dead) continue;
             int last = entities.size() - 1;
@@ -14597,7 +14325,6 @@ final class World {
     private void onDeath(Entity e) {
         if (e.type == Entity.COP) copsLost++;
         if (e.type == Entity.SOLDIER) soldiersLost++;
-        if (e.rescuer != null && e.rescuer.rescueOf == e) e.rescuer.rescueOf = null;
         if (e.kills > 0 && !e.isZombie()) {
             fallenHeroes.add(new int[]{e.nameSeed, e.type, e.role, e.kills});
             if (fallenHeroes.size() > 40) fallenHeroes.remove(0);
