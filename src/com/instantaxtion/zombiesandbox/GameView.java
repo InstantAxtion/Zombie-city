@@ -1414,7 +1414,7 @@ final class GameView extends View implements Menu.Host {
         int saves = c.getSaveCount();
         try {
             drawWorld(c);
-            // ((19.5) Over the whole screen, in the game: the vignette, danger, flashes, the mode's colour, cinematic bars.)
+            // ((19.5) Over the whole screen, in the game: danger, flashes, the colour grade, cinematic bars.)
             if (!menu.isOpen() && hasGame) vfx.drawScreen(c, getWidth(), getHeight(), intensity, hudHidden);
             if (menu.isOpen()) menu.draw(c, getWidth(), getHeight(), dt);
             else if (!hudHidden) {

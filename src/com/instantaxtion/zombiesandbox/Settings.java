@@ -64,7 +64,7 @@ final class Settings implements OptionSet {
     boolean shellShock() { return v[23] == 1; }
     /** ((19.5) How much of the effects is drawn: 0 low to 3 ultra. */
     int effects() { return v[24]; }
-    /** The vignette, flashes and the red of danger over the screen. */
+    /** Flashes and the red of danger over the screen. */
     boolean screenEffects() { return v[25] == 1; }
     /** Each mode's own colour over the city. */
     boolean colourGrading() { return v[26] == 1; }

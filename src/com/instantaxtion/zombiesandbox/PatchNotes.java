@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "19.6";
-    static final int VERSION_CODE = 196;
+    static final String VERSION = "19.7";
+    static final int VERSION_CODE = 197;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "19.7  -  No vignette",
+                    "The dark vignette round the edges of the screen is gone: the edges are as bright as the middle. The red edge when things are tense or you're hurt, a blast's flash and the daze stay (under Screen effects, as before).",
+            },
             {
                     "19.6  -  Zombies only",
                     "The game is the zombie outbreak and nothing else: the other game modes are gone - gang wars, the enemy army, heists, the prison break, the cartel, terror, disasters, the aliens and Outbreak + looters - and the Game mode option with them. (The looting gangs that form in a long outbreak are still there.)",

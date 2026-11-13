@@ -13,7 +13,7 @@ import java.util.Random;
  * ((19.5) The Visuals Update: everything drawn for the look of it and nothing else - the simulation never sees any of
  * it. Light thrown by gunfire, blasts, fires and the mothership; shockwaves, craters, flying debris and sparks; smoke
  * rising from wrecks and ruins and drifting with the wind; embers, floodwater ripples, a tornado's debris, the ground
- * cracking in a quake; and over the whole screen a vignette, flashes, the red of danger, a daze after a blast close by,
+ * cracking in a quake; and over the whole screen flashes, the red of danger, a daze after a blast close by,
  * each mode's own colour, and black bars for a cinematic look with the HUD hidden. Fed from the world's sound events
  * (every bang the city makes is something to see as well) and from what's going on, once a frame.
  */
@@ -426,7 +426,7 @@ final class Visuals {
     }
 
     /**
-     * Over the whole screen: a vignette, the red edge of danger (tension) or of being hurt, a blast's flash, a daze,
+     * Over the whole screen: the red edge of danger (tension) or of being hurt, a blast's flash, a daze,
      * the mode's colour, and black bars with the HUD hidden.
      */
     void drawScreen(Canvas c, int w, int h, float tension, boolean cinematic) {
@@ -436,17 +436,8 @@ final class Visuals {
             c.drawRect(0, 0, w, h, fill);
         }
         if (screen && quality >= 1) {
-            // The vignette: the edges a little darker, in bands.
-            int bands = 6;
+            // ((19.7) No vignette: the edges stay as bright as the middle.)
             float edge = Math.min(w, h) * 0.18f;
-            for (int k = 0; k < bands; k++) {
-                float t = (k + 1) / (float) bands, in = edge * (1 - t);
-                fill.setColor(alpha(0xFF000000, 0.045f));
-                c.drawRect(0, 0, w, in, fill);
-                c.drawRect(0, h - in, w, h, fill);
-                c.drawRect(0, in, in, h - in, fill);
-                c.drawRect(w - in, in, w, h - in, fill);
-            }
             float red = Math.max(hurt, tension > 0.6f ? (tension - 0.6f) * (0.6f + 0.4f * (float) Math.sin(time * 4)) : 0);
             if (red > 0.01f) {
                 for (int k = 0; k < 5; k++) {
