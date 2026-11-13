@@ -2,11 +2,31 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "20.0";
-    static final int VERSION_CODE = 201;
+    static final String VERSION = "21.0";
+    static final int VERSION_CODE = 210;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "21.0  -  The Command Update",
+                    "Fixed - nobody fought indoors: police and soldiers inside a building never fired a shot. Only someone already aiming was allowed to fight in there, and nobody inside ever got as far as aiming - so they walked out past whatever was in the room with them. They now open fire on any of the dead they can see from where they stand, and walk out only when there's nothing to shoot.",
+                    "Fixed - orders into buildings: police and soldiers ordered to a spot inside a building go to its door, in through the rooms, and stay. An order into a building used to end at its wall.",
+                    "Fixed - the last zombie: the end of an outbreak was often a wait for one zombie nobody could find. Three causes, all fixed. The dead inside a building who heard a noise outside walked at the wall between them and stayed there: they now come out by the door. One wedged inside something solid is put back out in the open. And with a dozen or fewer left, the mop-up begins (below).",
+                    "The mop-up: once only twelve of the dead are left, spotters call out where each one is. A green ring marks each on the screen and green arrows at the edge point to those off it. Each is marked for the units near it, hears them and comes for them; a unit with no shot at it goes in after it; and one that hasn't stirred from inside a building for forty seconds is driven out through its door. In testing, missions that ran out of time with one zombie left now finish.",
+                    "Alphas: a horde of twelve or more has an alpha at its head - two and a half times as tough, ringed in dark red. When it sights prey it roars and the whole horde surges. Kill it and the horde comes apart: stunned for a moment, then every one for itself for half a minute. Snipers, marksmen and anyone with a scoped rifle pick the alpha out first; everyone else favours it. Alphas killed are on the report, and score.",
+                    "Razor wire: a new tool (Place; drag to lay a line). The dead walk straight into it: tangled, they go at a third of their pace and it tears at them until they die or the coil wears through - about three ordinary zombies a coil; a brute tears through far quicker. The living step through it.",
+                    "Machine-gun nests: a new tool (Place). Two machine gunners behind a horseshoe of sandbags, open towards the road, with a crate of ammunition. They hold the spot.",
+                    "Mortar barrage: a new tool (Events). Eight shells walked across the spot a couple of seconds after the call.",
+                    "Airborne squad: a new tool (Events). Six soldiers, a machine gunner among them, dropped on the spot to hold it.",
+                    "Engineers: in an outbreak the army's engineers wire the streets leading into a safe zone they're at, a coil at a time, up to ten a zone.",
+                    "Fire discipline: at a distance, a line of guns now works along the front of a crowd instead of everyone shooting the same zombie. One that's nearly on them still gets every gun there is, and brutes and alphas take all the fire going.",
+                    "Hordes from outside are pointed out: a red arrow at the edge of the screen, with how many, for the first half minute after one comes in.",
+                    "The situation: every two and a half minutes of an outbreak, a line on the radio with how many of the dead there are, the hordes and where the biggest is, the alphas, and how many police, soldiers and people are left. The line at the top of the screen now shows how hard the dead are pressing (Building, Peak, Respite) or Mopping up.",
+                    "Commander perks: the stars you win in the campaign now earn perks, one for every three stars, in force in every mission after: Body armour, Marksmanship, Logistics, Quartermaster, Funding, Sappers, Fire support and Old hands. They're listed on the Campaign screen with the next one to earn. Missions only, never the sandbox.",
+                    "The campaign has twelve missions (eight before) and two new objectives. The Precinct: hold the police station for eight minutes - it's lost if the dead have it, with nobody of yours there, for twenty seconds. Headcount: keep five hundred and fifty people alive for ten minutes. Kill Zone: a handful of officers and a lot of money for wire, nests and mines. Endgame: the last city, on Nightmare. Commanders can buy razor wire ($6), nests ($90), barrages ($80) and airborne squads ($140).",
+                    "Fixed - a rare crash while a new city was loading: the roofs were drawn with one shape shared between the thread building the city and the one drawing the screen.",
+                    "Two new sounds: razor wire, and an alpha's roar.",
+            },
             {
                     "20.0  -  The Gameplay Update",
                     "Difficulty: Easy, Normal, Hard and Nightmare, on the New Game screen. The harder it is, the quicker and tougher the dead are, the more often a bite infects and the less a bullet does - and the more a game scores.",

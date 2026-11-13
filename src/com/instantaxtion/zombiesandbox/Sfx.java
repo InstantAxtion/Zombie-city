@@ -21,8 +21,10 @@ final class Sfx {
             CASH = 44, CHIME = 45, STAR = 46, STING_WIN = 47, STING_LOSE = 48, STING_ALERT = 49, ERROR = 50, BUZZ = 51,
             DEBRIS = 52, WHINE = 53, SQUELCH = 54, MIL_RADIO = 55, TAP = 56, PANIC = 57,
             // ((20.0) The new tools.)
-            FLARE = 58;
-    static final int COUNT = 59;
+            FLARE = 58,
+            // ((21.0) Razor wire, and an alpha's roar.)
+            WIRE = 59, ROAR = 60;
+    static final int COUNT = 61;
 
     /** ((19.0) The mixer's groups, each with its own level: the guns, blasts, the voices of the living and the dead,
      * vehicles, everything else in the world, the radio, the menus and stings. */
@@ -42,7 +44,7 @@ final class Sfx {
             0.08f, 0.06f, 0.6f, 0.9f, 0.2f,
             0.05f, 0.05f, 0.12f, 0.25f, 0.3f, 0.12f, 0.1f, 0.3f, 0.5f, 1.6f,
             // (19.0)
-            0.08f, 0.1f, 0.12f, 1f, 1f, 1f, 0.15f, 1f, 0.4f, 3f, 0.3f, 0.5f, 0.04f, 2f, 0.5f};
+            0.08f, 0.1f, 0.12f, 1f, 1f, 1f, 0.15f, 1f, 0.4f, 3f, 0.3f, 0.5f, 0.04f, 2f, 0.5f, 0.6f, 3f};
     /** Background sounds that get on the nerves when they loop; these fade and space out with repetition. */
     static final boolean[] REPEATS = new boolean[COUNT];
 
@@ -133,6 +135,13 @@ final class Sfx {
         ECHO[DEBRIS] = 0.4f;
         VARIANTS[FLARE] = 2;
         PRIORITY[FLARE] = 6;
+        VARIANTS[WIRE] = 3;
+        PRIORITY[WIRE] = 3;
+        MAX_VOICES[WIRE] = 2;
+        VARIANTS[ROAR] = 2;
+        PRIORITY[ROAR] = 8;
+        MAX_VOICES[ROAR] = 2;
+        ECHO[ROAR] = 0.5f;
         VARIANTS[BUZZ] = 1;
         MAX_VOICES[BUZZ] = 1;
         REPEATS[BUZZ] = true;
@@ -140,7 +149,7 @@ final class Sfx {
         java.util.Arrays.fill(BUS, BUS_WORLD);
         for (int id = 0; id < COUNT; id++) if (gun(id)) BUS[id] = BUS_GUNS;
         for (int id : new int[] {EXPLOSION, CANNON, COLLAPSE, LAUNCHER, DEBRIS, CRASH}) BUS[id] = BUS_BLASTS;
-        for (int id : new int[] {BITE, GROAN, GROAN_DEEP, SCREAM, SHRIEK, SPIT, BARK, PANIC}) BUS[id] = BUS_VOICES;
+        for (int id : new int[] {BITE, GROAN, GROAN_DEEP, SCREAM, SHRIEK, SPIT, BARK, PANIC, ROAR}) BUS[id] = BUS_VOICES;
         for (int id : new int[] {SIREN, AMB_SIREN, ROTOR, ENGINE, JET, HORN, BUZZ}) BUS[id] = BUS_VEHICLES;
         for (int id : new int[] {RADIO, PHONE, SQUELCH, MIL_RADIO}) BUS[id] = BUS_RADIO;
         for (int id : new int[] {CLICK, CASH, CHIME, STAR, STING_WIN, STING_LOSE, STING_ALERT, ERROR, TAP, WHINE}) BUS[id] = BUS_UI;
@@ -149,6 +158,8 @@ final class Sfx {
     /** ((13.4) Moved here from the view.) How far a sound carries, compared with the usual (most of a screen). */
     static float carry(int type) {
         switch (type) {
+            case ROAR: return 2.4f;
+            case WIRE: return 0.7f;
             case EXPLOSION: case CANNON: case COLLAPSE: return 3.2f;
             case PANIC: case DEBRIS: return 1.4f;
             case ROTOR: case JET: return 2.6f;
@@ -196,7 +207,7 @@ final class Sfx {
             "Ambulance", "Engine", "Jet", "Spit", "Burst", "Alarm", "Shield", "Shotgun", "Revolver", "Glass", "Pounding", "Hunting rifle",
             "SMG", "Carbine", "Marksman rifle", "Reload", "Dry fire", "Ricochet", "Melee", "Launcher", "Climb", "Heartbeat",
             "Cash", "Objective", "Star", "Victory sting", "Defeat sting", "Alert sting", "Error", "Drone",
-            "Debris", "Ringing ears", "Squelch", "Army radio", "Tap", "Crowd panic", "Flare"};
+            "Debris", "Ringing ears", "Squelch", "Army radio", "Tap", "Crowd panic", "Flare", "Razor wire", "Alpha roar"};
 
     /** ((19.0) A sound of the menus and the mission, not of the world: never placed, muffled or echoed. */
     static boolean ui(int id) {

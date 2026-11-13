@@ -23,7 +23,7 @@ import java.io.FileInputStream;
  */
 final class Sound {
     /** Bump when the synthesized audio changes so old cached files are regenerated. */
-    private static final int AUDIO_VERSION = 8;
+    private static final int AUDIO_VERSION = 9;
     /** (10.52) The music on its own: ten pieces now. */
     private static final int MUSIC_VERSION = 3;
     /** Frames mixed at a time: about 5 ms. */

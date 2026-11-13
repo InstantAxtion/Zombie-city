@@ -17,7 +17,11 @@ final class Campaign {
     static final int G_CLEAR = 0, G_SURVIVE = 1;
     /** ((20.0) Get goalN people out of the city; destroy goalN of the dead. */
     static final int G_EVAC = 2, G_KILLS = 3;
-    static final String[] GOAL_NAMES = {"CLEAR THE CITY", "SURVIVE", "EVACUATE", "BODY COUNT"};
+    /** ((21.0) Hold a site (the main police station) for the time; keep at least goalN people alive for the time. */
+    static final int G_DEFEND = 4, G_PROTECT = 5;
+    static final String[] GOAL_NAMES = {"CLEAR THE CITY", "SURVIVE", "EVACUATE", "BODY COUNT", "HOLD THE STATION", "PROTECT THE PEOPLE"};
+    /** How long a defended site can be in the hands of the dead, with nobody armed there, before it's lost (seconds). */
+    static final int SITE_LOST = 20;
 
     static final class Mission {
         final String title, brief;
@@ -74,6 +78,15 @@ final class Campaign {
                     8, CityConfig.MEDIUM, 40, 30, 120, 12011, 700, 130, 1080, G_KILLS, 700, 260, 24).rules(Director.HARD, CityConfig.EXODUS_OFF),
             new Mission("Last Stand", "Everything that's left has fallen back on the base, and every horde for miles knows where you are. Hold for ten minutes.",
                     11, CityConfig.MEDIUM, 30, 50, 90, 68111, 1000, 160, 600, G_SURVIVE, 0, 400, 40).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            // ((21.0) Four more: a site to hold, people to keep alive, a killing ground to build, and the end of it.)
+            new Mission("The Precinct", "Every horde in the district is making for the station - it's where the radio is. If the dead take it and there's nobody of yours left inside for twenty seconds, it's over. Hold it for eight minutes.",
+                    0, CityConfig.SMALL, 26, 8, 75, 23671, 500, 100, 480, G_DEFEND, 0, 200, 16).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            new Mission("Headcount", "Nobody's asking you to win this one. Five hundred and fifty people have to be alive in ten minutes' time: that's the whole job.",
+                    2, CityConfig.SMALL, 30, 10, 70, 59029, 450, 90, 600, G_PROTECT, 550, 250, 16),
+            new Mission("Kill Zone", "A handful of officers, a lot of money, and the dead walking in from the country. Wire, sandbags, mines and machine guns: build a killing ground and count three hundred and fifty.",
+                    6, CityConfig.SMALL, 14, 6, 40, 80429, 900, 120, 900, G_KILLS, 350, 120, 10).rules(Director.HARD, CityConfig.EXODUS_OFF),
+            new Mission("Endgame", "This is the last city. A hundred and fifty of the worst of them, and everything you've learned. Clear it.",
+                    8, CityConfig.MEDIUM, 50, 40, 150, 37991, 1200, 160, 1500, G_CLEAR, 0, 320, 40).rules(Director.NIGHTMARE, CityConfig.EXODUS_OFF),
     };
 
     /**
@@ -114,10 +127,27 @@ final class Campaign {
     static final int[] COP_COST = {10, 15, 25, 20, 12, 12, 12, 15};
     /** Each soldier by GameView.MIL_ROLES order. */
     static final int[] MIL_COST = {15, 60, 25, 25, 12, 25, 30, 20, 20, 20, 40};
-    /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee. */
-    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45};
-    /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines. */
-    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35};
+    /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee, police drone, ((21.0) razor wire, MG nest. */
+    static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45, 6, 90};
+    /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines, ((21.0) barrage, airborne squad. */
+    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, 80, 140};
+
+    /** ((21.0) What things cost this commander: the Quartermaster and Fire support perks take some off. */
+    static int[] placeCost(World w) {
+        if (!Perks.has(w, Perks.QUARTERMASTER)) return PLACE_COST;
+        int[] c = PLACE_COST.clone();
+        for (int k : new int[]{4, 5, 9}) c[k] = (c[k] + 1) / 2;
+        return c;
+    }
+
+    static int[] eventCost(World w) {
+        boolean q = Perks.has(w, Perks.QUARTERMASTER), f = Perks.has(w, Perks.FIRE_SUPPORT);
+        if (!q && !f) return EVENT_COST;
+        int[] c = EVENT_COST.clone();
+        if (q) for (int k : new int[]{3, 7, 8}) c[k] = (c[k] + 1) / 2;
+        if (f) for (int k : new int[]{4, 9}) c[k] = c[k] * 2 / 3;
+        return c;
+    }
 
     /** The kind of unit a mission ends on, from what's paid for (for the budget's sake). */
     static int income(World w) {
@@ -130,12 +160,13 @@ final class Campaign {
         Mission m = w.mission();
         if (m == null) return 0;
         int minutes = (int) (missionTime(w) / 60);
-        return m.income * minutes + w.zombiesKilled;
+        int income = Perks.has(w, Perks.FUNDING) ? m.income * 6 / 5 : m.income;
+        return income * minutes + w.zombiesKilled;
     }
 
     static int budget(World w) {
         Mission m = w.mission();
-        return m == null ? 0 : m.budget + earned(w) - w.spent;
+        return m == null ? 0 : (Perks.has(w, Perks.LOGISTICS) ? m.budget * 6 / 5 : m.budget) + earned(w) - w.spent;
     }
 
     /** Pays for something if there's the money; false (and nothing spent) if not. */
@@ -158,8 +189,15 @@ final class Campaign {
 
     /** A mission's first moments: the clock starts, veterans from the last missions report in, the briefing. */
     static void begin(World w, String roster) {
+        begin(w, roster, 0);
+    }
+
+    /** ((21.0) With the stars the commander has won so far, for their perks. */
+    static void begin(World w, String roster, int stars) {
         Mission m = w.mission();
         if (m == null) return;
+        w.perkStars = stars;
+        w.siteT = 0;
         w.missionStart = w.time;
         w.spent = 0;
         w.missionResult = 0;
@@ -172,7 +210,8 @@ final class Campaign {
         trim(w, Entity.SOLDIER, m.soldiers);
         int vets = applyVeterans(w, roster);
         w.dispatch.say(Dispatch.WHO_INFO, null, "Mission: " + m.title + ". " + goalText(w) + (vets > 0 ? " "
-                + World.count(vets, "veteran is", "veterans are") + " back with you." : ""), w.city.worldW() / 2, w.city.worldH() / 2);
+                + World.count(vets, "veteran is", "veterans are") + " back with you." : "")
+                + (Perks.count(stars) > 0 ? " " + World.count(Perks.count(stars), "perk", "perks") + " in force." : ""), w.city.worldW() / 2, w.city.worldH() / 2);
     }
 
     /**
@@ -239,6 +278,8 @@ final class Campaign {
             case G_SURVIVE: return "Keep the city standing for " + time + ".";
             case G_EVAC: return "Get " + m.goalN + " people out of the city within " + time + ".";
             case G_KILLS: return "Destroy " + m.goalN + " of the dead within " + time + ".";
+            case G_DEFEND: return "Hold " + siteName(w) + " for " + time + ".";
+            case G_PROTECT: return "Keep " + m.goalN + " people alive for " + time + ".";
             default: return "Destroy every zombie within " + time + ".";
         }
     }
@@ -250,12 +291,35 @@ final class Campaign {
         return m.goal == G_EVAC ? w.fled : m.goal == G_KILLS ? w.zombiesKilled : -1;
     }
 
+    /** ((21.0) The site a mission is about holding: the police station nearest the middle of town. */
+    static final float SITE_REACH = 110;
+
+    /** How far round a site counts as at it: the whole of its yard, and a little beyond. */
+    static float reach(City.Facility f) {
+        return Math.max(SITE_REACH, f.r + 40);
+    }
+
+    static City.Facility site(World w) {
+        return w.city.nearestFacility(City.FACILITY_POLICE, w.city.worldW() / 2, w.city.worldH() / 2);
+    }
+
+    static String siteName(World w) {
+        City.Facility f = site(w);
+        return f == null || f.name == null ? "the station" : f.name;
+    }
+
     /** How the main objective's going, short. */
     static String progress(World w) {
         Mission m = w.mission();
         if (m == null) return "";
         int n = count(w);
         if (n >= 0) return Math.min(n, m.goalN) + " / " + m.goalN + (m.goal == G_EVAC ? " out" : " destroyed");
+        if (m.goal == G_DEFEND) {
+            City.Facility f = site(w);
+            int at = f == null ? 0 : w.countZombiesNear(f.x, f.y, reach(f));
+            return w.siteT > 0 ? "STATION OVERRUN: lost in " + Math.max(0, SITE_LOST - (int) w.siteT) + "s" : at + " of the dead at the station";
+        }
+        if (m.goal == G_PROTECT) return w.humans + " alive (" + m.goalN + " needed)";
         return w.zombieCount() + (m.goal == G_SURVIVE ? " zombies left standing" : " zombies left");
     }
 
@@ -274,6 +338,25 @@ final class Campaign {
         switch (m.goal) {
             case G_SURVIVE: won = w.warResult == 1 || (out && w.warResult != 2); break;
             case G_EVAC: case G_KILLS: won = count(w) >= m.goalN; break;
+            case G_DEFEND: {
+                // (Overrun: the dead at the doors in numbers, and nobody armed there to answer them.)
+                City.Facility f = site(w);
+                boolean overrun = f != null && w.countZombiesNear(f.x, f.y, reach(f)) >= 6 && w.armedNear(f.x, f.y, reach(f) + 30) == 0;
+                w.siteT = overrun ? w.siteT + 1 : Math.max(0, w.siteT - 2);
+                if (w.siteT >= SITE_LOST) {
+                    finish(w, 2, siteName(w) + " has fallen.");
+                    return;
+                }
+                won = w.warResult == 1 || (out && w.warResult != 2);
+                break;
+            }
+            case G_PROTECT:
+                if (t > 5 && w.humans < m.goalN) {
+                    finish(w, 2, "Too many lost: only " + w.humans + " left alive.");
+                    return;
+                }
+                won = w.warResult == 1 || (out && w.warResult != 2);
+                break;
             default: won = w.warResult == 1;
         }
         // (A counted objective isn't lost with the city cleared early: there's nobody left to count, so it's won.)
@@ -343,7 +426,7 @@ final class Campaign {
             }
         });
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < Math.min(MAX_VETERANS, best.size()); i++) {
+        for (int i = 0; i < Math.min(Perks.has(w, Perks.OLD_HANDS) ? 16 : MAX_VETERANS, best.size()); i++) {
             Entity e = best.get(i);
             sb.append(e.type).append(',').append(e.kills).append(',').append(e.nameSeed).append(';');
         }

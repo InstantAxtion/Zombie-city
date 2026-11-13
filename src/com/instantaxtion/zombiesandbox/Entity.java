@@ -139,6 +139,23 @@ final class Entity {
     /** Zombie hordes: members follow a leader who roams the city. */
     Entity hordeLeader;
     boolean leadsHorde;
+    /** ((21.0) The alpha at the head of a big horde: far tougher; when it falls the horde scatters. */
+    boolean alpha;
+    /** ((21.0) How many guns picked this one out lately, and until when that counts (fire is spread along a crowd). */
+    transient int aimN;
+    transient float aimT;
+    /** ((21.0) How many looks running they've been standing inside something solid (World.unstick). */
+    transient byte inSolid;
+    /** ((21.0) Sent in after one of the last of the dead (the mop-up): seconds until they're let go again. */
+    transient float sweepT;
+    /** ((21.0) In the mop-up: where one of the last of the dead was last seen to move, and for how many seconds it hasn't. */
+    transient float mopX, mopY;
+    transient int mopT;
+    /** ((21.0) Indoors and armed: whether there's one of the dead to shoot from where they stand, looked for a few times a second. */
+    transient float indoorLook;
+    transient boolean indoorSees;
+    /** ((21.0) Scattered from a horde whose alpha fell: seconds until they'll join another. */
+    transient float scatterT;
     float roamX, roamY, feedTimer;
     /**
      * (10.58) The dead at a door that holds: how long this one has been at it, and the building it gave up on (and

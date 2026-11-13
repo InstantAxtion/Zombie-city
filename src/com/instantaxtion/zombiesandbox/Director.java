@@ -120,6 +120,11 @@ final class Director {
 
     /** Where the dead make for: where most of the living are, near enough. */
     private float[] target(World w) {
+        // ((21.0) In a mission to hold a site, that's where they all make for.)
+        if (w.mission() != null && w.mission().goal == Campaign.G_DEFEND) {
+            City.Facility f = Campaign.site(w);
+            if (f != null) return new float[]{f.x + (rnd.nextFloat() - 0.5f) * 80, f.y + (rnd.nextFloat() - 0.5f) * 80};
+        }
         float sx = 0, sy = 0;
         int n = 0;
         for (int i = rnd.nextInt(7), m = w.entities.size(); i < m; i += 7) {

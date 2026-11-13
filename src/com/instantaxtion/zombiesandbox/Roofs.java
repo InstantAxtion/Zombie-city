@@ -14,13 +14,23 @@ final class Roofs {
     private Roofs() {
     }
 
-    private static final Path path = new Path();
-    private static final RectF oval = new RectF();
+    /**
+     * ((21.0) One path to each thread: roofs are drawn by the thread building a city and by the one drawing the screen's
+     * close-ups, and with a single path shared between them one could reset it halfway through the other's roof - a
+     * rare crash while a new city was loading.)
+     */
+    private static final ThreadLocal<Path> PATHS = new ThreadLocal<Path>() {
+        @Override
+        protected Path initialValue() {
+            return new Path();
+        }
+    };
 
     // ------------------------------------------------------------------ shapes
 
     private static void quad(Canvas c, Paint p, int col, float ax, float ay, float bx, float by, float cx, float cy,
                              float dx, float dy) {
+        Path path = PATHS.get();
         path.reset();
         path.moveTo(ax, ay);
         path.lineTo(bx, by);

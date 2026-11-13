@@ -99,6 +99,8 @@ final class Synth {
             case Sfx.MIL_RADIO: out = beeps(new float[]{1050, 1050}, 0.06f, 0.05f); break;
             case Sfx.TAP: out = tap(); break;
             case Sfx.FLARE: out = flare(r); break;
+            case Sfx.WIRE: out = wire(r); break;
+            case Sfx.ROAR: out = roar(r); break;
             default: out = click(); break;
         }
         if (variant > 0) out = vary(out, 1 + (r.nextFloat() - 0.5f) * (Sfx.gun(id) ? 0.12f : 0.18f));
@@ -760,6 +762,41 @@ final class Synth {
 
 
     /** A few clean electronic beeps. */
+    /** ((21.0) Razor wire: taut steel plucked and scraped, ringing a moment. */
+    private static float[] wire(Random r) {
+        float dur = 0.5f;
+        int n = (int) (dur * RATE);
+        float[] o = new float[n];
+        float f0 = 620 + r.nextFloat() * 380, lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+            lp += (w - lp) * 0.6f;
+            float ring = ((float) Math.sin(TAU * f0 * t) + 0.6f * (float) Math.sin(TAU * f0 * 2.76f * t) + 0.35f * (float) Math.sin(TAU * f0 * 5.4f * t))
+                    * (float) Math.exp(-t * 9);
+            float scrape = (w - lp) * (float) Math.exp(-t * 22) * 0.8f;
+            o[i] = ring * 0.5f + scrape;
+        }
+        return o;
+    }
+
+    /** ((21.0) An alpha's roar: a long, tearing bellow that drops as it goes. */
+    private static float[] roar(Random r) {
+        float dur = 1.7f + r.nextFloat() * 0.3f;
+        int n = (int) (dur * RATE);
+        float[] o = new float[n];
+        float ph = 0, lp = 0, f0 = 82 + r.nextFloat() * 14;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE, w = r.nextFloat() * 2 - 1;
+            float f = f0 * (1.25f - 0.4f * t / dur) * (1 + 0.05f * (float) Math.sin(TAU * 23 * t));
+            ph += TAU * f / RATE;
+            lp += (w - lp) * 0.2f;
+            float env = Math.min(1, t / 0.12f) * Math.min(1, (dur - t) / 0.5f);
+            float voice = (float) Math.tanh(((float) Math.sin(ph) + 0.7f * (float) Math.sin(ph * 2.01f) + 0.5f * (float) Math.sin(ph * 3.03f)) * 2.2f);
+            o[i] = (voice * 0.6f * (0.7f + 0.3f * (float) Math.sin(TAU * 31 * t)) + lp * 1.6f) * env;
+        }
+        return o;
+    }
+
     /** ((20.0) A flare going up: a pop, a rising hiss, and it sputters. */
     private static float[] flare(Random r) {
         float dur = 1.3f;

@@ -712,6 +712,8 @@ final class Menu {
                 {"Still walking", String.valueOf(world.zombieCount())},
                 {"Hordes from outside", String.valueOf(world.director.hordes + world.director.sieges + world.director.stragglers)},
                 {"Mines set off", String.valueOf(world.minesBlown)},
+                {"Alphas killed", world.alphasKilled + " of " + world.alphas},
+                {"Died in the wire", String.valueOf(world.defences.wireKills)},
         };
         boolean wide = maxW > 520 * dp;
         float colW = wide ? (maxW - 12 * dp) / 2 : maxW;
@@ -908,6 +910,28 @@ final class Menu {
         c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
                 + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
         y += 28 * dp;
+        // ((21.0) The commander's perks: earned by stars, three at a time.)
+        int have = records == null ? 0 : records.totalStars();
+        int nextAt = Perks.next(have);
+        text.setTextSize(12.5f * dp);
+        text.setColor(0xFFC8CCD2);
+        c.drawText("PERKS  " + Perks.count(have) + " / " + Perks.STARS.length + (nextAt > 0 ? "      next at " + nextAt + " stars" : ""), x0, y + 12 * dp, text);
+        y += 22 * dp;
+        for (int k = 0; k < Perks.STARS.length; k++) {
+            boolean got = have >= Perks.STARS[k];
+            // (Those earned, and the next one to earn: the rest stay a surprise.)
+            if (!got && Perks.STARS[k] != nextAt) continue;
+            fill.setColor(got ? 0xFF1E2A1C : 0xFF1C1F24);
+            c.drawRoundRect(new RectF(x0, y, x0 + maxW, y + 40 * dp), 8 * dp, 8 * dp, fill);
+            text.setTextSize(13 * dp);
+            text.setColor(got ? 0xFF9BE07A : 0xFF8A8F98);
+            c.drawText((got ? "\u2713 " : Perks.STARS[k] + "\u2605  ") + Perks.NAMES[k], x0 + 10 * dp, y + 16 * dp, text);
+            plain.setTextSize(11.5f * dp);
+            plain.setColor(got ? 0xFFC8CCD2 : MUTED);
+            c.drawText(Perks.INFO[k], x0 + 10 * dp, y + 32 * dp, plain);
+            y += 46 * dp;
+        }
+        y += 8 * dp;
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
             Campaign.Mission m = Campaign.MISSIONS[i];
             boolean open = records == null || records.unlocked(i);

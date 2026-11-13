@@ -1502,6 +1502,8 @@ final class World {
         if (type == Entity.COP || type == Entity.SOLDIER) e.hp *= ARMED_HP;
         // ((20.0) The dead are tougher on the harder settings.)
         if (Entity.isZombieType(type)) e.hp *= Director.Z_HP[difficulty];
+        // ((21.0) A commander's body armour perk.)
+        else if ((type == Entity.COP || type == Entity.SOLDIER) && Perks.has(this, Perks.ARMOUR)) e.hp *= 1.15f;
         e.maxHp = e.hp;
         e.ammo = e.magSize;
         // ((11.4) Not every patrol officer carries the same: some have the shotgun from the car, some the patrol carbine.)
@@ -2988,9 +2990,317 @@ final class World {
      * it, less those lost, and more for a harder game.
      */
     int score() {
-        float s = zombiesKilled * 10 + (warResult == 1 ? 1500 + humans * 2 : 0) - civiliansLost * 4 - (copsLost + soldiersLost) * 6;
+        float s = zombiesKilled * 10 + alphasKilled * 150 + (warResult == 1 ? 1500 + humans * 2 : 0) - civiliansLost * 4 - (copsLost + soldiersLost) * 6;
         if (mission() != null && missionResult == 1) s += 1000 * missionStars;
         return Math.max(0, Math.round(s * Director.SCORE[difficulty]));
+    }
+
+    // ---- ((21.0) Defences, alphas, the barrage and the mop-up ----
+
+    final Defences defences = new Defences();
+    /** The stars a commander had going into this mission: what perks they have (Perks). */
+    int perkStars;
+    /** How big a horde has to be to have an alpha at its head; how many of the dead left counts as mopping up. */
+    static final int ALPHA_HORDE = 12, MOP_UP = 12;
+    int alphas, alphasKilled, barrages;
+    /** ((21.0) A mission's site to hold: how long it's been in the hands of the dead (Campaign.G_DEFEND). */
+    float siteT;
+    /** The last of the dead, once there are few enough to hunt: x, y pairs (for the screen's pointers). */
+    float[] lastDead = new float[0];
+    boolean mopping;
+    private float mopCd;
+    private final ArrayList<Entity> sweepers = new ArrayList<Entity>();
+
+    /** A coil of razor wire on the tile at (x, y); null if it can't go there. */
+    float[] layWire(float x, float y) {
+        float[] c = defences.layWire(this, x, y);
+        if (c != null && Perks.has(this, Perks.SAPPERS)) c[2] *= 1.5f;
+        return c;
+    }
+
+    void wireGone(float x, float y) {
+        for (int k = 0; k < 6; k++) particle(x, y, rnd.nextFloat() * 40 - 20, rnd.nextFloat() * 40 - 20, 0.5f, 1f, 0xFFB8BCC2, P_DEBRIS);
+    }
+
+    /** A machine-gun nest at (x, y): its crew, or an empty list if there's no room. */
+    ArrayList<Entity> mgNest(float x, float y) {
+        ArrayList<Entity> crew = defences.buildNest(this, x, y);
+        if (!crew.isEmpty())
+            dispatch.say(Dispatch.WHO_MILITARY, crew.get(0), "Gun's up at " + city.placeName(x, y) + ". We hold here.", x, y);
+        return crew;
+    }
+
+    /** A mortar barrage: eight shells walked across the spot over a few seconds. */
+    void barrage(float x, float y) {
+        barrages++;
+        for (int k = 0; k < 8; k++) {
+            double a = rnd.nextFloat() * Math.PI * 2;
+            float r = (float) Math.sqrt(rnd.nextFloat()) * 62;
+            blastLater(x + (float) Math.cos(a) * r, y + (float) Math.sin(a) * r, 46, 210, 2.2f + k * 0.45f + rnd.nextFloat() * 0.2f);
+        }
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Fire mission on " + city.placeName(x, y) + ". Rounds on the way - keep clear!", x, y);
+    }
+
+    /** An airborne squad dropped on the spot: six soldiers, a machine gunner among them, who hold it. */
+    ArrayList<Entity> airborne(float x, float y) {
+        ArrayList<Entity> squad = new ArrayList<Entity>();
+        float[] spot = city.findWalkable(x, y);
+        if (spot == null) return squad;
+        for (int k = 0; k < 6; k++) {
+            double a = k * Math.PI / 3;
+            Entity e = spawnSoldier(k == 0 ? Entity.ROLE_GUNNER : Entity.ROLE_RIFLE, spot[0] + (float) Math.cos(a) * 9, spot[1] + (float) Math.sin(a) * 9);
+            if (e == null) continue;
+            squad.add(e);
+            for (int p = 0; p < 5; p++) particle(e.x, e.y, rnd.nextFloat() * 30 - 15, rnd.nextFloat() * 30 - 15, 0.7f, 1.4f, 0xFFD8D2C0, P_DEBRIS);
+        }
+        if (squad.isEmpty()) return squad;
+        dispatch.order(squad, spot[0], spot[1]);
+        emit(Sfx.ROTOR, spot[0], spot[1]);
+        dispatch.say(Dispatch.WHO_MILITARY, squad.get(0), "Airborne on the ground at " + city.placeName(spot[0], spot[1]) + ". " + squad.size() + " of us, holding.", spot[0], spot[1]);
+        return squad;
+    }
+
+    private float wireCd;
+    private final java.util.HashSet<Dispatch.SafeZone> wireSaid = new java.util.HashSet<Dispatch.SafeZone>();
+    static final int ZONE_WIRE = 10;
+
+    /**
+     * Once a second (acting every ten). In an outbreak the army's engineers wire the streets leading into a safe zone
+     * they're at: a coil at a time, up to ten a zone, on the roads and pavements just outside its wall.
+     */
+    private void engineersWire() {
+        if (!outbreak || dispatch.zones.isEmpty() || (wireCd -= 1) > 0) return;
+        wireCd = 10;
+        for (int zi = 0; zi < dispatch.zones.size(); zi++) {
+            Dispatch.SafeZone z = dispatch.zones.get(zi);
+            if (z.removed) continue;
+            int have = 0;
+            for (int i = 0, n = defences.wires.size(); i < n; i++) {
+                float[] c = defences.wires.get(i);
+                if (hypot(c[0] - z.x, c[1] - z.y) < z.r + 70) have++;
+            }
+            if (have >= ZONE_WIRE) continue;
+            Entity eng = null;
+            for (int i = 0, n = gatherArmed(z.x, z.y, z.r + 120); i < n; i++)
+                if (gathered[i].type == Entity.SOLDIER && gathered[i].role == Entity.ROLE_ENGINEER && !gathered[i].dead) {
+                    eng = gathered[i];
+                    break;
+                }
+            if (eng == null) continue;
+            for (int tries = 0; tries < 16; tries++) {
+                double a = rnd.nextFloat() * Math.PI * 2;
+                float wx = z.x + (float) Math.cos(a) * (z.r + 26), wy = z.y + (float) Math.sin(a) * (z.r + 26);
+                int t = city.tileIndex(wx, wy);
+                if (t < 0 || (city.tiles[t] != City.ROAD && city.tiles[t] != City.SIDEWALK)) continue;
+                if (layWire(wx, wy) == null) continue;
+                if (wireSaid.add(z))
+                    dispatch.say(Dispatch.WHO_MILITARY, eng, "Engineers: wiring the streets into " + z.place + ".", z.x, z.y);
+                break;
+            }
+        }
+    }
+
+    /** Every two and a half minutes of an outbreak: where things stand, in a line on the radio. */
+    private void sitrep() {
+        if (!outbreak || outbreakTime < 150 || ((int) outbreakTime) % 150 != 0) return;
+        int hordes = 0, biggest = 0, alphaN = 0;
+        Entity big = null;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || !e.isZombie()) continue;
+            if (e.alpha) alphaN++;
+            if (e.leadsHorde && e.hordeSize >= 8) {
+                hordes++;
+                if (e.hordeSize > biggest) {
+                    biggest = e.hordeSize;
+                    big = e;
+                }
+            }
+        }
+        String text = "Situation: " + zombieCount() + " of the dead"
+                + (hordes > 0 ? ", " + count(hordes, "horde", "hordes") + " (the biggest about " + biggest / 5 * 5 + " at " + city.placeName(big.x, big.y) + ")" : "")
+                + (alphaN > 0 ? ", " + count(alphaN, "alpha", "alphas") : "") + ". " + (counts[Entity.COP] + counts[Entity.SOLDIER])
+                + " police and soldiers standing, " + humans + " people alive.";
+        dispatch.say(Dispatch.WHO_INFO, null, text, big != null ? big.x : city.worldW() / 2, big != null ? big.y : city.worldH() / 2);
+    }
+
+    /** ((21.0) Hordes just come in from outside: {the one at its head, seconds left to point it out, how many}. */
+    final ArrayList<Object[]> incoming = new ArrayList<Object[]>();
+    private float unstickCd;
+    int unstuck, flushed;
+
+    /**
+     * Once a second (acting every five). One of the dead standing inside something solid - knocked into a wall by a
+     * blast, turned where they fell - for four looks running is wedged there, where nothing can see or reach it: out
+     * to the nearest open ground. (Not anyone climbing or vaulting, who's only passing through.)
+     */
+    private void unstick() {
+        if ((unstickCd -= 1) > 0) return;
+        unstickCd = 5;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || !e.isZombie() || e.ride != null || e.vaultT > 0) {
+                e.inSolid = 0;
+                continue;
+            }
+            int ti = city.tileIndex(e.x, e.y);
+            // (Solid there, that is: not the floor of a building they've walked into.)
+            if (ti < 0 || !city.solid[ti] || !city.solidAt(e.x, e.y)) {
+                e.inSolid = 0;
+                continue;
+            }
+            if (++e.inSolid < 4) continue;
+            e.inSolid = 0;
+            float[] out = city.findWalkable(e.x, e.y);
+            if (out == null) continue;
+            e.x = out[0];
+            e.y = out[1];
+            unstuck++;
+        }
+    }
+
+    private void makeAlpha(Entity z) {
+        z.alpha = true;
+        z.maxHp *= 2.5f;
+        z.hp = z.maxHp;
+        z.mass *= 1.5f;
+        alphas++;
+    }
+
+    /** The alpha's dead: its horde comes apart - stunned for a moment, then every one for itself for a while. */
+    private void alphaDown(Entity a) {
+        int n = 0;
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity o = entities.get(i);
+            if (o.hordeLeader != a || o.dead) continue;
+            o.hordeLeader = null;
+            o.stun = Math.max(o.stun, 1.5f + rnd.nextFloat() * 2);
+            o.scatterT = 25 + rnd.nextFloat() * 10;
+            o.noiseTimer = 0;
+            o.memory = 0;
+            pickRoam(o);
+            n++;
+        }
+        alphasKilled++;
+        emit(Sfx.ROAR, a.x, a.y);
+        if (n >= 4) {
+            dispatch.say(Dispatch.WHO_INFO, null, "The alpha leading the horde at " + city.placeName(a.x, a.y) + " is down. " + n + " of them scatter.", a.x, a.y);
+            timeline("An alpha is killed: its horde of " + n + " scatters", a.x, a.y);
+        }
+    }
+
+    /**
+     * Once a second. With only a handful of the dead left in an outbreak, they're hunted: spotters call out where each
+     * one is every few seconds - so nobody has to stumble on the last of them - and a unit is sent after any with
+     * nobody near.
+     */
+    private void mopUp() {
+        int z = zombieCount();
+        if (!outbreak || z == 0 || z > MOP_UP || outbreakTime < 120) {
+            mopping = false;
+            if (lastDead.length > 0) lastDead = new float[0];
+            return;
+        }
+        if (!mopping) {
+            mopping = true;
+            mopCd = 0;
+            dispatch.say(Dispatch.WHO_INFO, null, "Only " + z + " of the dead left. Spotters are calling out where they are.", city.worldW() / 2, city.worldH() / 2);
+        }
+        float[] at = new float[z * 2];
+        int n = 0;
+        boolean call = (mopCd -= 1) <= 0;
+        if (call) mopCd = 6;
+        for (int i = 0, m = entities.size(); i < m && n < z; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.hp <= 0 || !e.isZombie()) continue;
+            at[n * 2] = e.x;
+            at[n * 2 + 1] = e.y;
+            n++;
+            e.spottedUntil = Math.max(e.spottedUntil, time + 3);
+            e.hidden = false;
+            // (One wedged inside a wall - knocked there by a blast, or turned there - where nobody can see or reach it:
+            // out into the open.)
+            if (city.solidAt(e.x, e.y) && e.ride == null && e.vaultT <= 0) {
+                float[] out = city.findWalkable(e.x, e.y);
+                if (out != null) {
+                    e.x = out[0];
+                    e.y = out[1];
+                    at[n * 2 - 2] = e.x;
+                    at[n * 2 - 1] = e.y;
+                }
+            }
+            // (One that hasn't stirred from inside a building for forty seconds of this - shut in a back room, or just
+            // standing there - is driven out through its door.)
+            if (hypot(e.x - e.mopX, e.y - e.mopY) > 12) {
+                e.mopX = e.x;
+                e.mopY = e.y;
+                e.mopT = 0;
+            } else if (++e.mopT >= 40) {
+                e.mopT = 0;
+                City.Building in = city.insideOf(e.x, e.y);
+                if (in != null && in.doorX > 0) {
+                    float cx = (in.x0 + in.x1) / 2, cy = (in.y0 + in.y1) / 2;
+                    float dx = in.doorX - cx, dy = in.doorY - cy, dl = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+                    float[] out = null;
+                    for (float step = 0; step <= 40 && out == null; step += 10) {
+                        float ox = in.doorX + dx / dl * step, oy = in.doorY + dy / dl * step;
+                        if (city.insideOf(ox, oy) == null && !city.solidAt(ox, oy)) out = city.findWalkable(ox, oy);
+                    }
+                    if (out != null) {
+                        e.x = out[0];
+                        e.y = out[1];
+                        e.path = null;
+                        flushed++;
+                    }
+                }
+            }
+            if (!call) continue;
+            Entity hunter = nearestArmed(e.x, e.y, 260);
+            if (hunter == null) {
+                dispatch.sighting(e.x, e.y, null);
+                continue;
+            }
+            // It hears them and comes for them: out of a building by its door, round a corner into their sights.
+            if (e.noiseTimer <= 0) {
+                e.noiseX = hunter.x;
+                e.noiseY = hunter.y;
+                e.noiseTimer = 8;
+            }
+            // And with no shot at it from where they are - it's indoors, or round the back - one of them who isn't
+            // under orders to stay put goes in after it. (The end of an outbreak used to be a wait outside a building.)
+            if (!city.los(hunter.x, hunter.y, e.x, e.y)) {
+                Entity goer = null;
+                float gd = Float.MAX_VALUE;
+                for (int k = 0, m2 = gatherArmed(e.x, e.y, 320); k < m2; k++) {
+                    Entity o = gathered[k];
+                    if (o.dead || o == controlled || o.ride != null || (o.type != Entity.COP && o.type != Entity.SOLDIER)) continue;
+                    if (o.task == Dispatch.T_HOLD || o.task == Dispatch.T_MOVE || o.task == Dispatch.T_SQUAD || o.ammo + o.reserve <= 0) continue;
+                    float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
+                    if (d < gd) {
+                        gd = d;
+                        goer = o;
+                    }
+                }
+                if (goer != null) {
+                    sweepers.clear();
+                    sweepers.add(goer);
+                    dispatch.order(sweepers, e.x, e.y);
+                    goer.sweepT = 40;
+                }
+            }
+        }
+        // (Those sent in go back to their duties once it's done, or after a while.)
+        for (int i = 0, m = entities.size(); i < m; i++) {
+            Entity o = entities.get(i);
+            if (o.sweepT <= 0) continue;
+            o.sweepT -= 1;
+            if (o.sweepT <= 0 && o.task == Dispatch.T_MOVE && !o.dead) {
+                sweepers.clear();
+                sweepers.add(o);
+                dispatch.dismiss(sweepers);
+            }
+        }
+        lastDead = n * 2 == at.length ? at : Arrays.copyOf(at, n * 2);
     }
 
     /** The police's drones: {x, y, where it's watching x, y, seconds left, seconds to its next report}. */
@@ -3408,6 +3718,7 @@ final class World {
         z.memory -= dt;
         z.searchTimer -= dt;
         z.moanCd -= dt;
+        if (z.scatterT > 0) z.scatterT -= dt;
         if (rnd.nextFloat() < dt * 0.03f) emit(z.type == Entity.BRUTE ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
         // Senses: they see a long way in front, but only hear or smell what is close behind them. Once they
         // have spotted someone they keep track of them.
@@ -3443,6 +3754,14 @@ final class World {
             // The moan: other zombies nearby hear it and come to join the hunt.
             if (z.moanCd <= 0) {
                 z.moanCd = 4 + rnd.nextFloat() * 2;
+                // ((21.0) An alpha roars, and its whole horde surges for what it's seen.)
+                if (z.alpha && z.leadsHorde && z.surgeCd <= 0 && surging.size() < 8 && !surging.contains(z)) {
+                    z.surgeCd = 14;
+                    z.noiseX = t.x;
+                    z.noiseY = t.y;
+                    surging.add(z);
+                    emit(Sfx.ROAR, z.x, z.y);
+                }
                 herd(z, t.x, t.y);
             }
             z.feedTimer = 0;
@@ -3676,6 +3995,10 @@ final class World {
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
             if (d < 25) z.noiseTimer = 0;
             else {
+                // ((21.0) From inside a building, or to a noise inside one: by the rooms and the door. One of the dead
+                // indoors that heard something outside used to walk at the wall between them and stay there - which is
+                // where the last zombie of many an outbreak was.)
+                if (WALK_IN && indoorMove(z, z.noiseX, z.noiseY, z.surge > 0 ? z.runSpeed * 0.85f : z.speed * 1.2f)) return;
                 // (Round the buildings in the way, not into their walls: the noise is often a fight indoors. (10.39)
                 // All the dead drawn by one noise share the one route there.)
                 zombieLure(z, z.noiseX, z.noiseY, z.surge > 0 ? z.runSpeed * 0.85f : z.speed * 1.2f);
@@ -3772,6 +4095,8 @@ final class World {
                 if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > (o.roamX + 70) * (o.roamX + 70)) behind++;
             }
             z.hordeSize = size;
+            // ((21.0) A horde this big has an alpha at its head.)
+            if (size >= ALPHA_HORDE && !z.alpha) makeAlpha(z);
             // (10.39) Too many strung out behind: it slows to let them catch up.
             z.hordeWait = behind * 3 > size;
             biggestHorde = Math.max(biggestHorde, size);
@@ -3792,6 +4117,8 @@ final class World {
             return;
         }
         if (z.hordeLeader != null) return;
+        // ((21.0) Scattered when their alpha fell: on their own for a while.)
+        if (z.scatterT > 0) return;
         Entity lead = nearestHordeLeader(z, 170);
         if (lead != null) join(z, lead);
         else if (countZombiesNear(z.x, z.y, 70) >= 5) {
@@ -6090,10 +6417,41 @@ final class World {
             // Chasing someone in here, or after someone who's in here: that's their business (thinkZombie, thinkHostile).
             if (e.isUndead() && e.memory > 0) return false;
             if (e.isArmed() && e.aiming) return false;
+            // ((21.0) Armed, with one of the dead in their sights from where they stand: they fight. Before, only someone
+            // already aiming got that far - and nobody indoors ever started to, so police and soldiers inside a building
+            // never fired a shot, and walked out past whatever was in there with them.)
+            if (e.isArmed() && e != controlled) {
+                if ((e.indoorLook -= dt) <= 0) {
+                    e.indoorLook = 0.25f;
+                    e.indoorSees = (e.ammo > 0 || e.reserve > 0 || e.reload > 0) && pickTarget(e, 150) != null;
+                }
+                if (e.indoorSees) return false;
+                // Sent to a spot in here: to it through the rooms, and they stay.
+                if ((e.task == Dispatch.T_MOVE || e.task == Dispatch.T_HOLD) && city.insideOf(e.postX, e.postY) == in) {
+                    if (hypot(e.postX - e.x, e.postY - e.y) > 8) indoorMove(e, e.postX, e.postY, e.speed * 1.3f);
+                    else steer(e, 0, 0, 0);
+                    return true;
+                }
+            }
             // Nothing to do in here: out.
             e.aiming = false;
             indoorMove(e, in.doorX, in.doorY, e.fleeTimer > 0 || e.isUndead() ? e.runSpeed * 0.8f : e.speed);
             return true;
+        }
+        // ((21.0) Police or soldiers ordered to a spot inside a building: to its door and in, shooting what they see on
+        // the way. (An order into a building used to end at its wall.))
+        if (e.isArmed() && e.task == Dispatch.T_MOVE && e != controlled && e.ride == null && (e.type == Entity.COP || e.type == Entity.SOLDIER)) {
+            City.Building to = city.insideOf(e.postX, e.postY);
+            if (to != null && city.enterable(to)) {
+                if ((e.indoorLook -= dt) <= 0) {
+                    e.indoorLook = 0.25f;
+                    e.indoorSees = (e.ammo > 0 || e.reserve > 0 || e.reload > 0) && pickTarget(e, 150) != null;
+                }
+                if (!e.indoorSees && !e.aiming) {
+                    indoorMove(e, e.postX, e.postY, e.speed * 1.3f);
+                    return true;
+                }
+            }
         }
         if (e.stayIn != null && e.type == Entity.CIVILIAN) {
             // On the way in: given up if it's taking too long, or the dead are close (unless that's why they're going in).
@@ -7024,6 +7382,8 @@ final class World {
         city.tiles[i] = City.FENCE;
         city.solid[i] = true;
         city.solidChanged(i);
+        // ((21.0) A commander's sappers build them tougher.)
+        if (Perks.has(this, Perks.SAPPERS)) b[2] *= 1.5f;
         barriers.add(b);
         fieldTimer = 0;
         return b;
@@ -7103,6 +7463,11 @@ final class World {
                 z.roamY = y;
             } else join(z, lead);
         }
+        // ((21.0) Pointed out on the screen for its first half minute.)
+        if (lead != null && out.size() >= 5) {
+            if (incoming.size() >= 4) incoming.remove(0);
+            incoming.add(new Object[]{lead, 30f, out.size()});
+        }
         if (announce && !out.isEmpty())
             dispatch.say(Dispatch.WHO_INFO, null, (out.size() >= 25 ? "A huge horde of " : "A horde of ") + out.size() + " is coming into town from "
                     + city.placeName(edge[0], edge[1]) + "!", edge[0], edge[1]);
@@ -7180,6 +7545,7 @@ final class World {
 
     void clearBarricades() {
         while (!barriers.isEmpty()) removeBarricade(barriers.get(barriers.size() - 1));
+        defences.clear();
     }
 
     // ------------------------------------------------------------------ outbreaks, evolution and recovery
@@ -7396,6 +7762,16 @@ final class World {
         if (WALK_IN) countInside();
         if (city.cfg.mission >= 0) Campaign.tick(this);
         director.tick(this);
+        mopUp();
+        engineersWire();
+        sitrep();
+        unstick();
+        for (int i = incoming.size() - 1; i >= 0; i--) {
+            Object[] h = incoming.get(i);
+            float left = (Float) h[1] - 1;
+            h[1] = left;
+            if (left <= 0 || ((Entity) h[0]).dead) incoming.remove(i);
+        }
         fieldHospital();
         militias();
         if (outbreak) updateWar();
@@ -12461,9 +12837,16 @@ final class World {
                     // Don't pop a bloater right next to people.
                     if (o.type == Entity.BLOATER && peopleNear(o.x, o.y, 38)) continue;
                     if (o.biteCd > 0) score -= 60;
+                    // ((21.0) The alpha first, for anyone with a scope; the rest of them know to go for it too.)
+                    if (o.alpha) score -= e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e.weapon == Entity.W_DMR ? 200 : 45;
                     if (o.type == Entity.RUNNER) score -= 25;
                     else if (o.type == Entity.SCREAMER) score -= 35;
                     else if (o.type == Entity.CRAWLER) score += 20;
+                    // ((21.0) Fire discipline: one that others are already shooting at counts as further off, so a line
+                    // of guns works along the front of a crowd instead of all killing the same one twice over. Not the
+                    // big ones, which take all the fire they can get.)
+                    // (Only out past sixty or so: one that's nearly on them gets every gun there is.)
+                    if (score > 65 && o.aimT > time && !o.alpha && o.type != Entity.BRUTE) score += Math.min(3, o.aimN) * 12;
                     // (10.27) A clear shot: not one with a friend standing in the way, when there's another to take.
                     if (score < best && city.los(e.x, e.y, o.x, o.y) && !friendInLine(e, o, (float) Math.sqrt(d2) + 0.001f)) {
                         best = score;
@@ -12471,6 +12854,11 @@ final class World {
                     }
                 }
             }
+        if (res != null) {
+            if (res.aimT <= time) res.aimN = 0;
+            res.aimT = time + 0.5f;
+            res.aimN++;
+        }
         // ((14.2) A raider who's been shooting people: the police, soldiers and other armed survivors shoot back, once
         // there's none of the dead closer.)
         if (raidersActive > 0 && !e.raider && (e.isArmed() || e.hasGun))
@@ -12758,7 +13146,7 @@ final class World {
         // Soldiers near their commander fight better.
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
-        accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e)));
+        accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e)) * (e.isArmed() && Perks.has(this, Perks.AIM) ? 1.08f : 1));
         if (e.ammo <= 0 && e.reserve > 0) {
             e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f * (dc != null ? dc[3] : 1);
             emit(Sfx.RELOAD, e.x, e.y);
@@ -13980,6 +14368,8 @@ final class World {
         // ((14.5) The long dead have rotted: slower on their feet.)
         // ((20.0) And quicker or slower by the difficulty.)
         if (e.isUndead() && e.want > 0) e.want *= (1 - rot(e)) * zPace;
+        // ((21.0) Tangled in razor wire.)
+        if (defences.any() && e.isUndead() && e.want > 0) e.want *= defences.snag(this, e, dt);
         // ((15.0) A horse is quickest on grass, trails and open ground.)
         if (e.role == Entity.ROLE_MOUNTED && e.type == Entity.COP && e.want > 0) {
             int t = city.tileIndex(e.x, e.y);
@@ -14323,6 +14713,7 @@ final class World {
     }
 
     private void onDeath(Entity e) {
+        if (e.alpha) alphaDown(e);
         if (e.type == Entity.COP) copsLost++;
         if (e.type == Entity.SOLDIER) soldiersLost++;
         if (e.kills > 0 && !e.isZombie()) {

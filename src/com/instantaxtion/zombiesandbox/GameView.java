@@ -35,9 +35,9 @@ final class GameView extends View implements Menu.Host {
             return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
     }
-    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone"};
+    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
-            "City alarm", "Infect", "Flare", "Mines"};
+            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne"};
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
@@ -94,12 +94,16 @@ final class GameView extends View implements Menu.Host {
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
-            "Flies from the station to watch the spot: marks the enemy there (better aim, no hiding in cover) and calls in what it sees"};
+            "Flies from the station to watch the spot: marks the enemy there (better aim, no hiding in cover) and calls in what it sees",
+            "Drag to lay coils: the dead tangle in it, slowed to a third and torn at, until it wears out",
+            "Two machine gunners behind sandbags with a crate of ammunition: they hold the spot"};
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten",
             "Burns for 45 seconds: the dead for a long way round are drawn to it",
-            "Six mines round the spot: only the dead set them off"};
+            "Six mines round the spot: only the dead set them off",
+            "Eight mortar shells walked across the spot, a couple of seconds after the call",
+            "Six soldiers with a machine gun dropped on the spot, to hold it"};
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5, BTN_TOP = 6;
     private static final int TOP_BUTTONS = 7;
     private static final int[] SPEEDS = {1, 2, 4, 8};
@@ -760,7 +764,7 @@ final class GameView extends View implements Menu.Host {
                 w.gore = gore;
                 w.heavy = heavy;
                 w.populate(cfg);
-                if (cfg.mission >= 0) Campaign.begin(w, records.veterans());
+                if (cfg.mission >= 0) Campaign.begin(w, records.veterans(), records.totalStars());
                 built = w;
             }
         });
@@ -7209,6 +7213,16 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(alpha(0xFF7CFF3A, 0.35f + 0.25f * (float) Math.sin(world.time * 5)));
             c.drawCircle(r * 0.08f, 0, r * 0.58f, fill);
         }
+        if (e.alpha) {
+            // ((21.0) The alpha: a dark red ring, and spikes of it, round the one the horde follows.)
+            stroke.setStrokeWidth(r * 0.22f);
+            stroke.setColor(alpha(0xFFB01818, 0.75f + 0.2f * (float) Math.sin(world.time * 4)));
+            c.drawCircle(0, 0, r * 1.45f, stroke);
+            for (int k = 0; k < 6; k++) {
+                float a2 = k * 1.0472f + world.time * 0.6f, ca = (float) Math.cos(a2), sa = (float) Math.sin(a2);
+                c.drawLine(ca * r * 1.45f, sa * r * 1.45f, ca * r * 1.95f, sa * r * 1.95f, stroke);
+            }
+        }
         if (e.hurt > 0) {
             fill.setColor(alpha(0xFFFFFFFF, e.hurt * 0.7f));
             c.drawCircle(0, 0, r * 1.05f, fill);
@@ -7497,7 +7511,9 @@ final class GameView extends View implements Menu.Host {
         if (statsCollapsed) {
             int at = (int) world.afterTime;
             String phase = world.aftermath == World.AFTER_RECOVERY ? "   Recovery " + World.clock(at)
-                    : world.aftermath == World.AFTER_FALLEN ? "   City fallen" : "";
+                    : world.aftermath == World.AFTER_FALLEN ? "   City fallen"
+                    // ((21.0) How hard the dead are pressing, as the director sees it; or that it's down to the last of them.)
+                    : world.mopping ? "   Mopping up" : world.outbreak && world.director.phase != Director.CALM ? "   " + Director.PHASES[world.director.phase] : "";
             int secs0 = (int) world.time;
             String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   Zombies " + world.zombieCount()
                     + phase + "   " + World.clock(secs0);
@@ -7678,6 +7694,8 @@ final class GameView extends View implements Menu.Host {
         float infoY = barTop - 24 * dp;
         drawConvoys(c);
         drawPins(c);
+        drawLastDead(c);
+        drawIncoming(c);
         text.setTextSize(13 * dp);
         if (tool == TOOL_ORDER && follow == null) {
             Entity lead = selection.isEmpty() ? null : selection.get(0);
@@ -8161,6 +8179,81 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** Stars over pinned people on screen, and arrows at the edge pointing to those off it. */
+    /**
+     * ((21.0) The last of the dead, once it's down to a handful: a green ring round each on the screen, and for those
+     * off it an arrow at the edge pointing the way, so the end of an outbreak isn't a search.
+     */
+    private void drawLastDead(Canvas c) {
+        float[] at = world.lastDead;
+        if (at.length == 0) return;
+        int w = getWidth();
+        float top = topRects[0].bottom + (portrait ? 150 : 115) * dp, bottom = barTop - 60 * dp;
+        if (bottom - top < 70 * dp) return;
+        float cx = w / 2f, cy = (top + bottom) / 2;
+        for (int i = 0; i + 1 < at.length; i += 2) {
+            float sx = screenX(at[i]), sy = screenY(at[i + 1]);
+            if (sx > 0 && sx < w && sy > top && sy < bottom) {
+                stroke.setStrokeWidth(1.6f * dp);
+                stroke.setColor(0xD07CC24E);
+                c.drawCircle(sx, sy, (13 + 2 * (float) Math.sin(world.time * 5)) * dp, stroke);
+                continue;
+            }
+            float dx = sx - cx, dy = sy - cy;
+            float k = Math.min(Math.abs((w / 2f - 16 * dp) / (dx == 0 ? 0.001f : dx)), Math.abs(((bottom - top) / 2 - 16 * dp) / (dy == 0 ? 0.001f : dy)));
+            float ix = cx + dx * k, iy = cy + dy * k, a = (float) Math.atan2(dy, dx);
+            c.save();
+            c.translate(ix, iy);
+            c.rotate((float) Math.toDegrees(a));
+            lastPath.reset();
+            lastPath.moveTo(9 * dp, 0);
+            lastPath.lineTo(-6 * dp, -7 * dp);
+            lastPath.lineTo(-2 * dp, 0);
+            lastPath.lineTo(-6 * dp, 7 * dp);
+            lastPath.close();
+            fill.setColor(0xE07CC24E);
+            c.drawPath(lastPath, fill);
+            c.restore();
+        }
+    }
+
+    private final Path lastPath = new Path();
+
+    /** ((21.0) A horde just come in from outside: a red arrow at the edge of the screen towards it, and how many. */
+    private void drawIncoming(Canvas c) {
+        if (world.incoming.isEmpty()) return;
+        int w = getWidth();
+        float top = topRects[0].bottom + (portrait ? 150 : 115) * dp, bottom = barTop - 60 * dp;
+        if (bottom - top < 70 * dp) return;
+        float cx = w / 2f, cy = (top + bottom) / 2;
+        for (int i = 0; i < world.incoming.size(); i++) {
+            Object[] h = world.incoming.get(i);
+            Entity lead = (Entity) h[0];
+            float sx = screenX(lead.x), sy = screenY(lead.y);
+            if (sx > 0 && sx < w && sy > top && sy < bottom) continue;
+            float dx = sx - cx, dy = sy - cy;
+            float k = Math.min(Math.abs((w / 2f - 22 * dp) / (dx == 0 ? 0.001f : dx)), Math.abs(((bottom - top) / 2 - 22 * dp) / (dy == 0 ? 0.001f : dy)));
+            float ix = cx + dx * k, iy = cy + dy * k, a = (float) Math.atan2(dy, dx);
+            float pulse = 0.75f + 0.25f * (float) Math.sin(world.time * 6);
+            c.save();
+            c.translate(ix, iy);
+            c.rotate((float) Math.toDegrees(a));
+            lastPath.reset();
+            lastPath.moveTo(13 * dp, 0);
+            lastPath.lineTo(-8 * dp, -10 * dp);
+            lastPath.lineTo(-3 * dp, 0);
+            lastPath.lineTo(-8 * dp, 10 * dp);
+            lastPath.close();
+            fill.setColor(alpha(0xFFE0453A, pulse));
+            c.drawPath(lastPath, fill);
+            c.restore();
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setTextSize(11 * dp);
+            text.setColor(0xFFFFD0C8);
+            float lx = Math.max(34 * dp, Math.min(w - 34 * dp, ix - (float) Math.cos(a) * 30 * dp)), ly = iy - (float) Math.sin(a) * 26 * dp + 4 * dp;
+            c.drawText("HORDE " + h[2], lx, ly, text);
+        }
+    }
+
     private void drawPins(Canvas c) {
         pinCount = 0;
         int w = getWidth();
@@ -8718,12 +8811,12 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** ((18.0) What each choice of a tool costs in a mission, or null. */
-    private static int[] costs(int t) {
+    private int[] costs(int t) {
         switch (t) {
             case TOOL_COP: return Campaign.COP_COST;
             case TOOL_MIL: return Campaign.MIL_COST;
-            case TOOL_PLACE: return Campaign.PLACE_COST;
-            case TOOL_EVENT: return Campaign.EVENT_COST;
+            case TOOL_PLACE: return Campaign.placeCost(world);
+            case TOOL_EVENT: return Campaign.eventCost(world);
             default: return null;
         }
     }
@@ -9530,14 +9623,14 @@ final class GameView extends View implements Menu.Host {
             boxing = dragged;
         } else if (commander()) {
             // ((18.0) Nothing brushed on in a mission: one tap, one purchase - but a barricade line can be dragged out.)
-            if (tool == TOOL_PLACE && placeVariant == 3 && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
+            if (tool == TOOL_PLACE && (placeVariant == 3 || placeVariant == 9) && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
                 commandAt(wx, wy);
                 lastSpawnX = wx;
                 lastSpawnY = wy;
             }
         } else if (tool == TOOL_PLACE) {
             // Drag to build a line of barricades.
-            if (placeVariant == 3 && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
+            if ((placeVariant == 3 || placeVariant == 9) && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
                 place(wx, wy);
                 lastSpawnX = wx;
                 lastSpawnY = wy;
@@ -9915,6 +10008,10 @@ final class GameView extends View implements Menu.Host {
                 case 8:
                     if (world.layMines(wx, wy) > 0) made = Boolean.TRUE;
                     break;
+                case 9: world.barrage(wx, wy); made = Boolean.TRUE; break;
+                case 10:
+                    if (!world.airborne(wx, wy).isEmpty()) made = Boolean.TRUE;
+                    break;
             }
         } else {
             // (Vehicles come out of the station or the base; the rest go down where tapped.)
@@ -9933,6 +10030,12 @@ final class GameView extends View implements Menu.Host {
                 case 6: made = world.fleet.placeBearCat(at[0], at[1]); break;
                 case 7: made = world.fleet.startReconAt(at[0], at[1]); break;
                 case 8: made = world.launchDrone(wx, wy); break;
+                case 9:
+                    if (world.layWire(wx, wy) != null) made = Boolean.TRUE;
+                    break;
+                case 10:
+                    if (!world.mgNest(wx, wy).isEmpty()) made = Boolean.TRUE;
+                    break;
             }
         }
         if (made == null) {
@@ -9941,7 +10044,7 @@ final class GameView extends View implements Menu.Host {
         }
         Campaign.spend(world, cost[v]);
         if (!(made instanceof Boolean)) lastAction.add(made);
-        if (cost[v] > 0 && (tool != TOOL_PLACE || v != 3 || world.messageTime <= 0)) world.say(names[v] + "  (-$" + cost[v] + ")");
+        if (cost[v] > 0 && (tool != TOOL_PLACE || (v != 3 && v != 9) || world.messageTime <= 0)) world.say(names[v] + "  (-$" + cost[v] + ")");
     }
 
     private void spawnBrush(float wx, float wy) {
@@ -9981,6 +10084,10 @@ final class GameView extends View implements Menu.Host {
             case 6: made = world.fleet.placeBearCat(wx, wy); break;
             case 7: made = world.fleet.startReconAt(wx, wy); break;
             case 8: made = world.launchDrone(wx, wy); break;
+            case 9: world.layWire(wx, wy); break;
+            case 10:
+                if (world.mgNest(wx, wy).isEmpty()) world.say("No room for a nest there");
+                break;
             default: made = world.placeMedkit(wx, wy); break;
         }
         if (made != null) lastAction.add(made);
@@ -10001,6 +10108,8 @@ final class GameView extends View implements Menu.Host {
             case 8:
                 if (world.layMines(wx, wy) == 0) world.say("No room for mines there");
                 break;
+            case 9: world.barrage(wx, wy); break;
+            case 10: lastAction.addAll(world.airborne(wx, wy)); break;
             default: {
                 Entity bitten = world.infectAt(wx, wy);
                 world.say(bitten == null ? "Tap closer to someone" : "Bitten: " + Names.person(bitten.nameSeed));

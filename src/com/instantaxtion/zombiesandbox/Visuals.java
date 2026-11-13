@@ -362,6 +362,24 @@ final class Visuals {
             c.drawLine(k[0], k[1], k[2], k[3], stroke);
         }
         stroke.setStrokeCap(Paint.Cap.BUTT);
+        // ((21.0) Razor wire: coils across the tile between two posts, thinner as it wears.)
+        if (lastWorld != null && lastWorld.defences.any()) {
+            java.util.List<float[]> wires = lastWorld.defences.wires;
+            float h = City.T / 2f;
+            for (int i = 0, n = wires.size(); i < n; i++) {
+                float[] k = wires.get(i);
+                if (k[0] < vx0 - h || k[0] > vx1 + h || k[1] < vy0 - h || k[1] > vy1 + h) continue;
+                float left = Math.max(0.3f, k[2] / Defences.WIRE_HP);
+                stroke.setStrokeWidth(0.5f + 0.4f * left);
+                stroke.setColor(alpha(0xFFC4C8CE, 0.55f + 0.4f * left));
+                for (int q = 0; q < 4; q++) c.drawCircle(k[0] - h + (q + 0.5f) * h / 2, k[1], h * 0.34f, stroke);
+                stroke.setColor(alpha(0xFF8A8E94, 0.9f));
+                c.drawLine(k[0] - h, k[1], k[0] + h, k[1], stroke);
+                fill.setColor(0xFF4A4E54);
+                c.drawRect(k[0] - h, k[1] - 1.2f, k[0] - h + 1.2f, k[1] + 1.2f, fill);
+                c.drawRect(k[0] + h - 1.2f, k[1] - 1.2f, k[0] + h, k[1] + 1.2f, fill);
+            }
+        }
         stroke.setStrokeWidth(0.9f);
         for (int i = 0, n = ripples.size(); i < n; i++) {
             float[] r = ripples.get(i);

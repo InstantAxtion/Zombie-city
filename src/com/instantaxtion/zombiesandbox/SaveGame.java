@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 65;
+    private static final int VERSION = 66;
 
     private SaveGame() {
     }
@@ -439,6 +439,16 @@ final class SaveGame {
             for (float[] f : w.flares) for (int k = 0; k < 3; k++) out.writeFloat(f[k]);
             out.writeInt(w.mines.size());
             for (float[] m : w.mines) for (int k = 0; k < 3; k++) out.writeFloat(m[k]);
+            // (Version 66, 21.0: razor wire, alphas, the commander's perks, and a defended site's count.)
+            out.writeInt(w.defences.wires.size());
+            for (float[] c : w.defences.wires) for (int k = 0; k < 3; k++) out.writeFloat(c[k]);
+            out.writeInt(w.defences.wireKills);
+            out.writeInt(w.defences.nests);
+            out.writeInt(w.alphas);
+            out.writeInt(w.alphasKilled);
+            out.writeInt(w.barrages);
+            out.writeInt(w.perkStars);
+            out.writeFloat(w.siteT);
         } finally {
             moved = null;
             homeIndex = null;
@@ -524,7 +534,7 @@ final class SaveGame {
         // Version 56 (15.6): locked up in the island prison.
         out.writeBoolean(e.inmate);
         // Version 57 (17.0): a gang member's or enemy soldier's kit.
-        out.writeByte(0); // (The other modes' kit, gone in 19.6.)
+        out.writeByte(e.alpha ? 1 : 0); // (The other modes' kit until 19.6; from version 66 (21.0), whether it's an alpha.)
         // Version 58 (17.2): under arrest.
         out.writeByte(0);
         // Version 59 (17.5): down and bleeding.
@@ -1023,6 +1033,17 @@ final class SaveGame {
                     int mn = in.readInt();
                     for (int k = 0; k < mn; k++) w.mines.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat()});
                 }
+                if (version >= 66) {
+                    int wn = in.readInt();
+                    for (int k = 0; k < wn; k++) w.defences.restore(w, in.readFloat(), in.readFloat(), in.readFloat());
+                    w.defences.wireKills = in.readInt();
+                    w.defences.nests = in.readInt();
+                    w.alphas = in.readInt();
+                    w.alphasKilled = in.readInt();
+                    w.barrages = in.readInt();
+                    w.perkStars = in.readInt();
+                    w.siteT = in.readFloat();
+                }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
@@ -1104,7 +1125,10 @@ final class SaveGame {
         else if (e.isZombie()) e.risen = w.time;
         if (version >= 55) e.saved = in.readInt();
         if (version >= 56) e.inmate = in.readBoolean();
-        if (version >= 57) in.readByte();
+        if (version >= 57) {
+            int k = in.readByte();
+            if (version >= 66) e.alpha = k == 1;
+        }
         if (version >= 58) in.readByte();
         if (version >= 59) in.readFloat();
         if (version >= 64) in.readInt();

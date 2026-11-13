@@ -5232,7 +5232,7 @@ public final class GameTests {
                 names.setAccessible(true);
                 info.setAccessible(true);
                 String[] en = (String[]) names.get(null), ei = (String[]) info.get(null);
-                check(en.length == 9 && ei.length == en.length && Campaign.EVENT_COST.length == en.length && "Flare".equals(en[7]) && "Mines".equals(en[8]),
+                check(en.length >= 9 && ei.length == en.length && Campaign.EVENT_COST.length == en.length && "Flare".equals(en[7]) && "Mines".equals(en[8]),
                         "flares and mines among the events");
                 check(Campaign.EVENT_COST[7] > 0 && Campaign.EVENT_COST[8] > 0, "a commander pays for them");
             }
@@ -5323,9 +5323,9 @@ public final class GameTests {
                 check(oc.copy().difficulty == 3, "kept when the city's played again");
             }
         });
-        test("20.0: the campaign's eight missions and their objectives", new Check() {
+        test("20.0: the campaign's missions and their objectives", new Check() {
             public void run() throws Exception {
-                check(Campaign.MISSIONS.length == 8, "eight missions");
+                check(Campaign.MISSIONS.length >= 8, "the missions");
                 for (int i = 0; i < Campaign.MISSIONS.length; i++) {
                     Campaign.Mission m = Campaign.MISSIONS[i];
                     CityConfig mc = Campaign.config(i);
@@ -5380,6 +5380,503 @@ public final class GameTests {
                     draw(v, size);
                 }
                 check(v.drawErrors == 0, "the campaign and setup screens draw (" + v.drawErrors + ")");
+            }
+        });
+        test("21.0: razor wire tangles and kills the dead and wears out; machine-gun nests; the mortar barrage; saves", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 81;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                Entity cop = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { cop = e; break; }
+                check(cop != null, "a cop on the street");
+                float sx = cop.x, sy = cop.y;
+                // (Nobody about to get in the way.)
+                for (Entity e : w.entities) if (!e.isZombie() && World.hypot(e.x - sx, e.y - sy) < 500) { e.removed = true; e.dead = true; }
+                for (Fleet.Vehicle fv : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) if (World.hypot(fv.x - sx, fv.y - sy) < 500) w.fleet.discard(fv);
+                w.update(1 / 30f);
+                // Wire: one coil to a tile.
+                float[] coil = w.layWire(sx, sy);
+                check(coil != null && w.defences.wires.size() == 1 && w.defences.wireAt(w, sx, sy) && coil[2] == Defences.WIRE_HP, "a coil laid");
+                check(w.layWire(sx, sy) == null, "not two on a tile");
+                // One of the dead in it: slowed to a third, torn at, and the coil wears.
+                Entity z = w.spawn(Entity.ZOMBIE, coil[0], coil[1]);
+                z.x = coil[0];
+                z.y = coil[1];
+                float hp = z.hp;
+                float pace = w.defences.snag(w, z, 0.5f);
+                check(pace == Defences.WIRE_SLOW && Math.abs(hp - z.hp - Defences.WIRE_HURT * 0.5f) < 0.01f && coil[2] < Defences.WIRE_HP, "tangled: slowed and hurt (" + pace + ")");
+                z.x = coil[0] + City.T * 3;
+                check(w.defences.snag(w, z, 0.5f) == 1, "and not off the wire");
+                // Walking through it kills them in the end.
+                z.x = coil[0];
+                for (int f = 0; f < 30 * 20 && !z.dead; f++) {
+                    z.x = coil[0];
+                    z.y = coil[1];
+                    z.noiseX = coil[0] + 400;
+                    z.noiseY = coil[1];
+                    z.noiseTimer = 10;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(z.dead && w.defences.wireKills == 1, "one of the dead dies in the wire (" + z.hp + ")");
+                // And it wears out.
+                Entity brute = w.spawn(Entity.BRUTE, coil[0], coil[1]);
+                for (int k = 0; k < 400 && !w.defences.wires.isEmpty(); k++) {
+                    brute.x = coil[0];
+                    brute.y = coil[1];
+                    brute.hp = brute.maxHp;
+                    w.defences.snag(w, brute, 0.1f);
+                }
+                check(w.defences.wires.isEmpty() && !w.defences.wireAt(w, sx, sy), "worn through");
+                brute.hp = 0;
+                // A machine-gun nest: two gunners who hold, sandbags, ammunition.
+                int walls = w.barriers.size(), crates = w.pickups.size();
+                java.util.ArrayList<Entity> crew = w.mgNest(sx, sy);
+                check(crew.size() == 2 && crew.get(0).role == Entity.ROLE_GUNNER && crew.get(0).task == Dispatch.T_HOLD, "a crew of two gunners holding");
+                check(w.barriers.size() >= walls + 3 && w.pickups.size() == crates + 1 && w.defences.nests == 1, "sandbags and a crate (" + (w.barriers.size() - walls) + " bags)");
+                float px = crew.get(0).postX, py = crew.get(0).postY;
+                for (int f = 0; f < 30 * 6; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(!crew.get(0).dead && World.hypot(crew.get(0).x - px, crew.get(0).y - py) < 20, "they stay at the gun");
+                // The barrage.
+                float bx = sx + 260, by = sy;
+                float[] open = w.city.findWalkable(bx, by);
+                if (open != null) { bx = open[0]; by = open[1]; }
+                java.util.ArrayList<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 8; k++) {
+                    Entity p = w.spawn(Entity.ZOMBIE, bx + (k % 3) * 6 - 6, by + (k / 3) * 6 - 6);
+                    if (p != null) pack.add(p);
+                }
+                float[][] at = new float[pack.size()][];
+                for (int k = 0; k < pack.size(); k++) at[k] = new float[]{pack.get(k).x, pack.get(k).y};
+                w.barrage(bx, by);
+                for (int f = 0; f < 30 * 8; f++) {
+                    for (int k = 0; k < pack.size(); k++) if (!pack.get(k).dead) { pack.get(k).x = at[k][0]; pack.get(k).y = at[k][1]; }
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                int down = 0;
+                for (Entity p : pack) if (p.dead || p.hp < p.maxHp) down++;
+                check(w.barrages == 1 && down >= pack.size() / 2, "a barrage lands on them (" + down + " of " + pack.size() + " hit)");
+                // An airborne squad dropped in, holding the spot.
+                java.util.ArrayList<Entity> drop = w.airborne(sx, sy);
+                int gunners = 0;
+                for (Entity e : drop) if (e.role == Entity.ROLE_GUNNER) gunners++;
+                check(drop.size() >= 5 && gunners == 1 && drop.get(1).task == Dispatch.T_MOVE || drop.get(1).task == Dispatch.T_HOLD, "an airborne squad lands (" + drop.size() + ")");
+                // Engineers wire the streets into a safe zone, a coil at a time.
+                w.dispatch.orderZone(sx, sy);
+                check(!w.dispatch.zones.isEmpty(), "a safe zone");
+                Dispatch.SafeZone zone = w.dispatch.zones.get(0);
+                Entity eng = w.spawnSoldier(Entity.ROLE_ENGINEER, zone.x, zone.y);
+                java.lang.reflect.Method ew = World.class.getDeclaredMethod("engineersWire");
+                ew.setAccessible(true);
+                java.lang.reflect.Field wcd = World.class.getDeclaredField("wireCd");
+                wcd.setAccessible(true);
+                int wiresBefore = w.defences.wires.size();
+                w.outbreak = true;
+                w.update(1 / 30f);
+                for (int k = 0; k < 40; k++) {
+                    eng.x = zone.x;
+                    eng.y = zone.y;
+                    w.outbreak = true;
+                    wcd.setFloat(w, 0);
+                    ew.invoke(w);
+                }
+                int zoneWire = w.defences.wires.size() - wiresBefore;
+                check(zoneWire > 0 && zoneWire <= World.ZONE_WIRE, "engineers wire the zone's approaches, up to ten coils (" + zoneWire + ")");
+                // The situation, on the radio.
+                java.lang.reflect.Method sit = World.class.getDeclaredMethod("sitrep");
+                sit.setAccessible(true);
+                int said = w.dispatch.messageCount;
+                w.outbreakTime = 300;
+                sit.invoke(w);
+                check(w.dispatch.messageCount > said, "a situation report");
+                // Kept in a save; cleared with the barricades.
+                w.layWire(sx + City.T * 4, sy);
+                w.layWire(sx + City.T * 5, sy);
+                int coils = w.defences.wires.size();
+                check(coils >= 1, "more wire down");
+                w.defences.wires.get(0)[2] = 123;
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.defences.wires.size() >= coils - 2 && l.defences.wires.size() <= coils && l.defences.wires.get(0)[2] == 123 && l.defences.wireKills == w.defences.wireKills && l.defences.nests == 1
+                        && l.barrages == 1 && l.defences.wireAt(l, w.defences.wires.get(0)[0], w.defences.wires.get(0)[1]), "wire and the counts are kept in a save (" + l.defences.wires.size() + " of " + coils + " coils, first "
+                        + (l.defences.wires.isEmpty() ? -1 : l.defences.wires.get(0)[2]) + ", kills " + l.defences.wireKills + "/" + w.defences.wireKills + ", nests " + l.defences.nests + ", barrages " + l.barrages + ")");
+                w.clearBarricades();
+                check(w.defences.wires.isEmpty() && w.barriers.isEmpty(), "cleared with the barricades");
+                // Drawn.
+                w.layWire(sx, sy);
+                Visuals fx = new Visuals();
+                android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+                fx.events(w, sx - 300, sy - 300, sx + 300, sy + 300);
+                fx.drawGround(cv, sx - 300, sy - 300, sx + 300, sy + 300);
+                // The tools: named, described and priced.
+                for (String[] pair : new String[][]{{"PLACE_NAMES", "PLACE_INFO"}, {"EVENT_NAMES", "EVENT_INFO"}}) {
+                    java.lang.reflect.Field names = GameView.class.getDeclaredField(pair[0]), info = GameView.class.getDeclaredField(pair[1]);
+                    names.setAccessible(true);
+                    info.setAccessible(true);
+                    String[] n = (String[]) names.get(null), i = (String[]) info.get(null);
+                    int[] cost = pair[0].startsWith("PLACE") ? Campaign.PLACE_COST : Campaign.EVENT_COST;
+                    check(n.length == i.length && n.length == cost.length, pair[0] + ": every tool named, described and priced (" + n.length + ", " + i.length + ", " + cost.length + ")");
+                }
+                check(Campaign.PLACE_COST[9] > 0 && Campaign.PLACE_COST[10] > 0 && Campaign.EVENT_COST[9] > 0, "a commander pays for wire, nests and barrages");
+            }
+        });
+        test("21.0: an alpha leads a big horde and it scatters when the alpha falls; marksmen go for it; the last of the dead are found", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 82;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                Entity cop = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { cop = e; break; }
+                float sx = cop.x, sy = cop.y;
+                // (Nobody about to get in the way.)
+                for (Entity e : w.entities) if (!e.isZombie() && World.hypot(e.x - sx, e.y - sy) < 500) { e.removed = true; e.dead = true; }
+                for (Fleet.Vehicle fv : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) if (World.hypot(fv.x - sx, fv.y - sy) < 500) w.fleet.discard(fv);
+                w.update(1 / 30f);
+                // A horde of thirteen: its leader becomes an alpha.
+                java.util.ArrayList<Entity> horde = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 13; k++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, sx + (k % 4) * 7, sy + (k / 4) * 7);
+                    if (z != null) horde.add(z);
+                }
+                check(horde.size() >= World.ALPHA_HORDE, "a horde's worth");
+                Entity lead = horde.get(0);
+                lead.leadsHorde = true;
+                for (int k = 1; k < horde.size(); k++) horde.get(k).hordeLeader = lead;
+                float before = lead.maxHp;
+                java.lang.reflect.Method th = World.class.getDeclaredMethod("thinkHorde", Entity.class);
+                th.setAccessible(true);
+                th.invoke(w, lead);
+                check(lead.alpha && lead.maxHp > before * 2 && lead.hp == lead.maxHp && w.alphas == 1, "the leader of a big horde is an alpha, far tougher (" + before + " -> " + lead.maxHp + ")");
+                th.invoke(w, lead);
+                check(w.alphas == 1, "once");
+                check(!horde.get(1).alpha, "the rest aren't");
+                // Marksmen go for the alpha before nearer ones.
+                Entity sniper = w.spawnSoldier(Entity.ROLE_SNIPER, sx - 60, sy);
+                sniper.ammo = sniper.reserve = 0;
+                Entity near = horde.get(1);
+                java.lang.reflect.Method pick = World.class.getDeclaredMethod("pickTarget", Entity.class, float.class);
+                pick.setAccessible(true);
+                w.update(1 / 30f);
+                w.evCount = 0;
+                sniper.fear = 1;
+                Entity chosen = (Entity) pick.invoke(w, sniper, 400f);
+                boolean seesAlpha = w.city.los(sniper.x, sniper.y, lead.x, lead.y);
+                check(!seesAlpha || chosen == lead, "a sniper picks the alpha out of the horde (" + (chosen == null ? "nobody" : "one at " + (int) World.hypot(chosen.x - sniper.x, chosen.y - sniper.y))
+                        + ", alpha at " + (int) World.hypot(lead.x - sniper.x, lead.y - sniper.y) + " dead " + lead.dead + " hidden " + lead.hidden + ")");
+                // Fire discipline: with no alpha to go for, a second gun takes a different one of the crowd.
+                lead.alpha = false;
+                Entity s2 = w.spawnSoldier(Entity.ROLE_RIFLE, sniper.x, sniper.y + 4), s3 = w.spawnSoldier(Entity.ROLE_RIFLE, sniper.x, sniper.y - 4);
+                s2.ammo = s2.reserve = s3.ammo = s3.reserve = 0;
+                s2.fear = s3.fear = 1;
+                w.time += 2;
+                Entity first = (Entity) pick.invoke(w, s2, 400f), second = (Entity) pick.invoke(w, s3, 400f);
+                check(first == null || second == null || first != second, "two guns side by side pick different ones of a crowd");
+                lead.alpha = true;
+                // Kept in a save.
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                int la = 0;
+                for (Entity e : l.entities) if (e.alpha) la++;
+                check(la == 1 && l.alphas == 1, "the alpha's kept in a save");
+                // The alpha falls: the horde scatters.
+                for (int k = 1; k < horde.size(); k++) horde.get(k).hordeLeader = lead;
+                lead.hp = 0;
+                w.update(1 / 30f);
+                w.evCount = 0;
+                int scattered = 0;
+                for (int k = 1; k < horde.size(); k++) if (horde.get(k).hordeLeader == null && horde.get(k).scatterT > 0) scattered++;
+                check(lead.dead && w.alphasKilled == 1 && scattered >= horde.size() - 3, "the alpha's dead and its horde scatters (" + scattered + ")");
+                boolean said = false;
+                for (World.Moment m : w.timeline) said |= m.text.startsWith("An alpha is killed");
+                check(said, "and it's on the timeline");
+                Entity loose = horde.get(2);
+                th.invoke(w, loose);
+                check(loose.hordeLeader == null && !loose.leadsHorde, "the scattered don't form up again at once");
+                int sc = w.score();
+                w.alphasKilled++;
+                check(w.score() >= sc, "alphas score");
+                // The mop-up: down to a handful, each one's whereabouts is known.
+                java.lang.reflect.Method mop = World.class.getDeclaredMethod("mopUp");
+                mop.setAccessible(true);
+                w.outbreak = true;
+                w.outbreakTime = 300;
+                w.recount();
+                check(w.zombieCount() > 0 && w.zombieCount() <= World.MOP_UP, "a handful left (" + w.zombieCount() + ")");
+                mop.invoke(w);
+                check(w.mopping && w.lastDead.length == w.zombieCount() * 2, "the last of them are found (" + w.lastDead.length / 2 + ")");
+                boolean marked = true;
+                for (Entity e : w.entities) if (e.isZombie() && !e.dead && e.hp > 0) marked &= e.spottedUntil > w.time;
+                check(marked, "and marked for the units");
+                for (Entity e : w.entities) if (e.isZombie()) e.hp = 0;
+                w.update(1 / 30f);
+                w.recount();
+                mop.invoke(w);
+                check(!w.mopping && w.lastDead.length == 0, "nothing to point at once they're gone");
+                // One wedged inside a wall is got out, in the mop-up at once and anywhere else within twenty seconds.
+                City.Building wall = null;
+                for (City.Building b : w.city.buildings) {
+                    int ti = w.city.tileIndex((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+                    if (!b.collapsed && ti >= 0 && w.city.solid[ti] && !w.city.enterable(b) && w.city.solidAt((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2)) { wall = b; break; }
+                }
+                check(wall != null, "a solid building");
+                Entity stuck = w.spawn(Entity.ZOMBIE, sx, sy);
+                stuck.x = (wall.x0 + wall.x1) / 2;
+                stuck.y = (wall.y0 + wall.y1) / 2;
+                java.lang.reflect.Method un = World.class.getDeclaredMethod("unstick");
+                un.setAccessible(true);
+                java.lang.reflect.Field ucd = World.class.getDeclaredField("unstickCd");
+                ucd.setAccessible(true);
+                for (int k = 0; k < 4; k++) {
+                    check(k == 0 || w.unstuck == 0, "not at the first look");
+                    ucd.setFloat(w, 0);
+                    un.invoke(w);
+                }
+                int st = w.city.tileIndex(stuck.x, stuck.y);
+                check(w.unstuck == 1 && !w.city.solidAt(stuck.x, stuck.y), "one of the dead stuck in a wall is put out in the open");
+                stuck.x = (wall.x0 + wall.x1) / 2;
+                stuck.y = (wall.y0 + wall.y1) / 2;
+                w.outbreak = true;
+                w.outbreakTime = 300;
+                w.recount();
+                mop.invoke(w);
+                check(!w.city.solidAt(stuck.x, stuck.y), "and at once in the mop-up");
+                // A horde from outside is pointed out.
+                check(w.incoming.isEmpty(), "nothing coming");
+                java.util.ArrayList<Entity> in = w.hordeFrom(sx, sy, 9, false);
+                check(in.size() >= 5 && w.incoming.size() == 1 && (Integer) w.incoming.get(0)[2] == in.size(), "a horde coming in is pointed out");
+                for (Entity e : w.entities) if (e.isZombie()) e.hp = 0;
+                w.update(1 / 30f);
+                // Not while there are plenty of them.
+                for (int k = 0; k < World.MOP_UP + 4; k++) w.spawn(Entity.ZOMBIE, sx + k * 5, sy + 20);
+                w.outbreak = true;
+                w.recount();
+                mop.invoke(w);
+                check(!w.mopping, "no mop-up with plenty left");
+            }
+        });
+        test("21.0: commander perks from stars; the twelve missions; holding the station and keeping people alive", new Check() {
+            public void run() throws Exception {
+                check(Perks.count(0) == 0 && Perks.count(9) == 3 && Perks.next(9) == 12 && Perks.next(24) == -1 && Perks.NAMES.length == Perks.STARS.length
+                        && Perks.INFO.length == Perks.STARS.length, "perks by stars");
+                check(Campaign.MISSIONS.length == 12, "twelve missions");
+                for (Campaign.Mission m : Campaign.MISSIONS) check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
+                CityConfig c = Campaign.config(8);
+                World w = new World(c);
+                w.setMaxPopulation(1800);
+                w.populate(c);
+                Campaign.Mission m = Campaign.MISSIONS[8];
+                w.setMaxPopulation(2400);
+                // No perks without stars; all of them with enough.
+                Campaign.begin(w, "", 0);
+                check(w.perkStars == 0 && !Perks.has(w, Perks.ARMOUR) && Campaign.budget(w) == m.budget && Campaign.placeCost(w) == Campaign.PLACE_COST
+                        && Campaign.eventCost(w) == Campaign.EVENT_COST, "no stars, no perks");
+                Entity any = null;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { any = e; break; }
+                Entity plain = w.spawnCop(0, any.x + 6, any.y);
+                Campaign.begin(w, "", 24);
+                check(Perks.has(w, Perks.OLD_HANDS) && Campaign.budget(w) == m.budget * 6 / 5, "Logistics: a fifth more to start with");
+                Entity tough = w.spawnCop(0, any.x - 6, any.y);
+                check(plain != null && tough != null && Math.abs(tough.maxHp - plain.maxHp * 1.15f) < 0.5f, "Body armour (" + plain.maxHp + " -> " + tough.maxHp + ")");
+                check(Campaign.placeCost(w)[9] == (Campaign.PLACE_COST[9] + 1) / 2 && Campaign.placeCost(w)[1] == Campaign.PLACE_COST[1]
+                        && Campaign.eventCost(w)[7] == Campaign.EVENT_COST[7] / 2 && Campaign.eventCost(w)[4] == Campaign.EVENT_COST[4] * 2 / 3
+                        && Campaign.eventCost(w)[9] == Campaign.EVENT_COST[9] * 2 / 3, "Quartermaster and Fire support take money off");
+                float[] bar = w.placeBarricade(tough.x + City.T * 3, tough.y);
+                check(bar == null || bar[2] > 300, "Sappers build tougher");
+                // Never in the sandbox.
+                w.city.cfg.mission = -1;
+                check(!Perks.has(w, Perks.ARMOUR), "perks are for missions only");
+                w.city.cfg.mission = 8;
+                // Holding the station: lost once the dead have had it, with nobody armed there, for twenty seconds.
+                City.Facility f = Campaign.site(w);
+                check(f != null && Campaign.goalText(w).startsWith("Hold ") && m.goal == Campaign.G_DEFEND, "a station to hold");
+                Campaign.begin(w, "", 0);
+                Campaign.tick(w);
+                check(w.missionResult == 0 && w.siteT == 0, "holding");
+                // (Everyone of the city's gone from there: off the streets, out of the cars, out of the buildings.)
+                for (Entity e : w.entities) {
+                    if (e.type == Entity.COP || e.type == Entity.SOLDIER || World.hypot(e.x - f.x, e.y - f.y) < 600 && !e.isZombie()) { e.removed = true; e.dead = true; }
+                    e.hasGun = false;
+                }
+                for (Fleet.Vehicle v : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) w.fleet.discard(v);
+                for (City.Building b : w.city.buildings) b.occupants.clear();
+                w.update(1 / 30f);
+                float[] gate = w.city.findWalkable(f.x, f.y);
+                java.util.ArrayList<Entity> at = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 9; k++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, gate[0] + (k % 3) * 6, gate[1] + (k / 3) * 6);
+                    if (z != null) at.add(z);
+                }
+                float[][] pos = new float[at.size()][];
+                for (int k = 0; k < at.size(); k++) pos[k] = new float[]{at.get(k).x, at.get(k).y};
+                check(at.size() >= 6, "the dead at the gate");
+                for (int f2 = 0; f2 < 30 * 26 && w.missionResult == 0; f2++) {
+                    for (int k = 0; k < at.size(); k++) { at.get(k).x = pos[k][0]; at.get(k).y = pos[k][1]; at.get(k).hp = at.get(k).maxHp; }
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.missionResult == 2 && w.missionWhy != null && w.missionWhy.endsWith("has fallen."), "the station falls (" + w.missionResult + ", " + w.missionWhy + ", " + w.siteT + ", dead there " + w.countZombiesNear(f.x, f.y, Campaign.reach(f))
+                        + ", armed " + w.armedNear(f.x, f.y, Campaign.reach(f) + 30) + ")");
+                // Keeping people alive.
+                Campaign.Mission pm = Campaign.MISSIONS[9];
+                w.city.cfg.mission = 9;
+                w.missionResult = 0;
+                w.missionStart = w.time - 30;
+                w.warResult = 0;
+                check(pm.goal == Campaign.G_PROTECT && Campaign.goalText(w).startsWith("Keep " + pm.goalN), "people to keep alive");
+                w.humans = pm.goalN + 50;
+                Campaign.tick(w);
+                check(w.missionResult == 0 && Campaign.progress(w).startsWith((pm.goalN + 50) + " alive"), "enough alive");
+                w.missionStart = w.time - pm.limit - 1;
+                Campaign.tick(w);
+                check(w.missionResult == 1, "and still at the end: won");
+                w.missionResult = 0;
+                w.missionStart = w.time - 30;
+                w.humans = pm.goalN - 1;
+                Campaign.tick(w);
+                check(w.missionResult == 2 && w.missionWhy.startsWith("Too many lost"), "too many lost");
+                // Saved with its perks.
+                w.perkStars = 12;
+                File file = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                check(l.perkStars == 12, "the perks are kept in a save");
+                // The campaign screen, with perks earned and one to come.
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2000};
+                v.layout(size[0], size[1]);
+                Menu menu = (Menu) field(v, "menu");
+                Records rec = (Records) field(v, "records");
+                for (int i = 0; i < 4; i++) rec.missionWon(i, 3, "");
+                check(rec.totalStars() == 12 && Perks.count(rec.totalStars()) == 4, "twelve stars, four perks");
+                for (int i = 0; i < 3; i++) draw(v, size);
+                menu.open(Menu.CAMPAIGN);
+                java.lang.reflect.Field sc = Menu.class.getDeclaredField("scroll");
+                sc.setAccessible(true);
+                for (int i = 0; i < 6; i++) {
+                    sc.setFloat(menu, i * 500);
+                    draw(v, size);
+                }
+                check(v.drawErrors == 0, "the campaign screen draws with its perks (" + v.drawErrors + ")");
+                // In a game: the last of the dead pointed out, an alpha drawn, wire on the ground.
+                CityConfig gc = new CityConfig();
+                gc.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                gc.v[CityConfig.OPT_ZOMBIES] = 2;
+                gc.seed = 83;
+                v.startGame(gc);
+                v.awaitLoad();
+                for (int i = 0; i < 3; i++) draw(v, size);
+                menu.screen = Menu.NONE;
+                World gw = (World) field(v, "world");
+                Entity gz = null;
+                for (Entity e : gw.entities) if (e.isZombie()) { gz = e; break; }
+                gz.alpha = true;
+                gw.layWire(gz.x + 10, gz.y);
+                gw.outbreak = true;
+                gw.outbreakTime = 300;
+                java.lang.reflect.Method mop = World.class.getDeclaredMethod("mopUp");
+                mop.setAccessible(true);
+                mop.invoke(gw);
+                check(gw.lastDead.length > 0, "the last of them known");
+                for (int i = 0; i < 4; i++) draw(v, size);
+                v.jumpTo(gz.x, gz.y);
+                for (int i = 0; i < 4; i++) draw(v, size);
+                check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+            }
+        });
+        test("21.0: police and soldiers fight inside buildings, and can be ordered into one", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 91;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // A building people walk into, and two spots in it in sight of each other.
+                City.Building room = null;
+                float[] p = null, q = null;
+                for (City.Building b : w.city.buildings) {
+                    if (!w.city.enterable(b)) continue;
+                    p = null;
+                    for (float y = b.y0 + 6; y < b.y1 - 6 && q == null; y += 4)
+                        for (float x = b.x0 + 6; x < b.x1 - 6 && q == null; x += 4) {
+                            if (w.city.insideOf(x, y) != b || w.city.circleBlocked(x, y, 4)) continue;
+                            if (p == null) { p = new float[]{x, y}; continue; }
+                            double d = Math.hypot(x - p[0], y - p[1]);
+                            if (d > 22 && d < 60 && w.city.los(p[0], p[1], x, y)) q = new float[]{x, y};
+                        }
+                    if (q != null) { room = b; break; }
+                }
+                check(room != null, "a room to fight in");
+                for (int who = 0; who < 2; who++) {
+                    Entity gun = who == 0 ? w.spawnCop(0, p[0], p[1]) : w.spawnSoldier(Entity.ROLE_RIFLE, p[0], p[1]);
+                    gun.x = p[0];
+                    gun.y = p[1];
+                    Entity z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                    z.hp = z.maxHp = 5000;
+                    int shots = w.shotsFired;
+                    boolean aimed = false;
+                    for (int f = 0; f < 150; f++) {
+                        z.x = q[0];
+                        z.y = q[1];
+                        gun.x = p[0];
+                        gun.y = p[1];
+                        gun.hp = gun.maxHp;
+                        w.update(1 / 30f);
+                        w.evCount = 0;
+                        aimed |= gun.aiming;
+                    }
+                    check(aimed && w.shotsFired - shots >= 4 && z.hp < z.maxHp, (who == 0 ? "a police officer" : "a soldier") + " indoors opens fire on one of the dead in the room ("
+                            + (w.shotsFired - shots) + " shots)");
+                    z.hp = 0;
+                    gun.removed = true;
+                    gun.dead = true;
+                    w.update(1 / 30f);
+                }
+                // With nothing to shoot, they still leave a building they've no business in.
+                Entity idle = w.spawnCop(0, p[0], p[1]);
+                idle.x = p[0];
+                idle.y = p[1];
+                for (int f = 0; f < 30 * 30 && w.city.insideOf(idle.x, idle.y) != null; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.city.insideOf(idle.x, idle.y) == null, "an officer with nothing to do indoors walks out");
+                // Ordered to a spot inside: in by the door, and they stay.
+                java.util.ArrayList<Entity> sent = new java.util.ArrayList<Entity>();
+                sent.add(idle);
+                w.dispatch.order(sent, q[0], q[1]);
+                boolean in = false;
+                for (int f = 0; f < 30 * 60 && !in; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    in = w.city.insideOf(idle.x, idle.y) == room && World.hypot(idle.x - idle.postX, idle.y - idle.postY) < 12;
+                }
+                check(in, "ordered to a spot inside a building, they go in to it (" + (int) World.hypot(idle.x - idle.postX, idle.y - idle.postY) + " away)");
+                for (int f = 0; f < 30 * 6; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.city.insideOf(idle.x, idle.y) == room, "and stay there");
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
