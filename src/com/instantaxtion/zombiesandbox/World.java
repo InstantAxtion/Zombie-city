@@ -12987,13 +12987,26 @@ final class World {
         // ((18.4) Outbreak + looters: they're out within the first minute, up to three times as many gangs, and they
         // arm themselves from what they've already looted.)
         boolean looters = mode() == CityConfig.MODE_LOOTERS;
-        if (!outbreak || outbreakTime < (looters ? 45 : 360) || gangsFormed >= MAX_GANGS * (looters ? 4 : 1) || rnd.nextFloat() > (looters ? 0.05f : 0.012f)) return;
-        if (looters)
-            for (int k = 0; k < 12; k++) {
+        if (!outbreak || outbreakTime < (looters ? 20 : 360) || gangsFormed >= MAX_GANGS * (looters ? 4 : 1) || rnd.nextFloat() > (looters ? 0.05f : 0.012f)) return;
+        if (looters) {
+            // (A leader and those round them pick up guns together.)
+            Entity lead = null;
+            for (int k = 0; k < 60 && lead == null; k++) {
                 Entity e = entities.get(rnd.nextInt(entities.size()));
-                if (!e.dead && e.type == Entity.CIVILIAN && !e.hasGun && !e.infected && e.task == Dispatch.T_NONE && e.building == null && e != controlled && !e.inmate)
-                    armCivilian(e, 24 + rnd.nextInt(3) * 12);
+                if (!e.dead && e.type == Entity.CIVILIAN && !e.infected && e.task == Dispatch.T_NONE && e.building == null && e != controlled && !e.inmate
+                        && e.zone == null && !e.militia && e.holdout == null) lead = e;
             }
+            if (lead != null) {
+                if (!lead.hasGun) armCivilian(lead, 36);
+                int armed = 0;
+                for (int i = 0, n = gatherLiving(lead.x, lead.y, 200); i < n && armed < 4; i++) {
+                    Entity o = gathered[i];
+                    if (o == lead || o.dead || o.type != Entity.CIVILIAN || o.infected || o.task != Dispatch.T_NONE || o.building != null || o.inmate) continue;
+                    if (!o.hasGun) armCivilian(o, 24 + rnd.nextInt(3) * 12);
+                    armed++;
+                }
+            }
+        }
         Entity boss = null;
         for (int tries = 0; tries < 300 && boss == null; tries++) {
             Entity e = entities.get(rnd.nextInt(entities.size()));

@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "18.5";
-    static final int VERSION_CODE = 185;
+    static final String VERSION = "18.6";
+    static final int VERSION_CODE = 186;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "18.6  -  Looters form reliably; a leaner test suite",
+                    "Outbreak + looters: a looting gang now forms round a leader who picks up a gun along with those beside them, so gangs appear within the first minute every time. (Before, guns went to people scattered all over the city, and a gang sometimes never came together.) They can form from 20 seconds into the outbreak.",
+                    "Behind the scenes: tests for long-removed features (deleted maps and countries, the old hospital, gun stores) and a timing check that depended on the machine were taken out, and the slowest test made quicker.",
+            },
             {
                     "18.5  -  Saves keep what's under way; a campaign balance pass",
                     "A saved game now keeps what was under way: each heist and how far it had got (a standoff and its talks, the money taken), the hostages and who's holding them, bombs still ticking, disasters still going (a tornado on its path, a flood rising or draining, a fire spreading), and the police drones you'd sent. Before, they were lost on loading, and the crews made off. A getaway car still isn't kept: a crew that was driving carries on on foot.",
