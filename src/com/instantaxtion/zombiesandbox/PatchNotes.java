@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "23.0";
-    static final int VERSION_CODE = 230;
+    static final String VERSION = "24.0";
+    static final int VERSION_CODE = 240;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "24.0  -  The Overhaul",
+                    "Traffic: patrol cars no longer gridlock for good; jammed vehicles find another way, and none park in the road short of their base.",
+                    "Combat: machine-gun nests hold behind their sandbags and hit much harder; no shooting through walls; one reload rule for everyone; ammo is only shared between matching guns.",
+                    "The bitten keep turning while riding in a vehicle.",
+                    "Civilians: families find their way round buildings to their leader and are checked and counted at safe zone gates; crowds spread over zones with room; nobody is shut out of every zone for good.",
+                    "Safe zones only go up once the city is alerted; police aren't sent across the whole map for a lone zombie.",
+                    "Helicopters no longer hover for ever over a pad with one zombie by it.",
+                    "Smoother: frame spikes during an outbreak roughly halved; over 1,300 lines of old code removed.",
+            },
             {
                     "23.0  -  Veterans",
                     "Police, soldiers and armed survivors earn experience from kills, lives saved and time under fire: seven levels, each with a perk (steady aim, quick hands, tough, fleet-footed, field medic, nerves of steel).",
