@@ -235,7 +235,7 @@ final class CityConfig implements OptionSet {
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
      * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9). Saved games rebuild with what they had.
      */
-    int civic = 35;
+    int civic = 36;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -512,6 +512,31 @@ final class CityConfig implements OptionSet {
     /** How many of a city's residents (everyone its homes can house) are in the game. */
     int civilians(int residents) {
         return Math.round(residents * RESIDENT_SHARE[v[OPT_CIVILIANS]]);
+    }
+
+    /** ((22.4) Map version 36: how many live in a sandbox city of each size, at "Most", on a city of middling density. */
+    private static final int[] POP_TILES = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
+    private static final int[] POP_TARGET = {2500, 5000, 8000, 12000, 16000, 20000, 25000, 28000, 30000};
+
+    boolean popLadder() { return civic >= 36 && mission < 0; }
+
+    /**
+     * The people at the start: from the size of the map on version 36 (a smooth step up from size to size, thinner
+     * in the country presets, the People option a share of it), from the homes there are before that and in missions.
+     */
+    int civilians(int residents, int tiles) {
+        if (!popLadder()) return civilians(residents);
+        int target = POP_TARGET[POP_TARGET.length - 1];
+        if (tiles <= POP_TILES[0]) target = POP_TARGET[0];
+        else
+            for (int k = 1; k < POP_TILES.length; k++)
+                if (tiles <= POP_TILES[k]) {
+                    float f = (tiles - POP_TILES[k - 1]) / (float) (POP_TILES[k] - POP_TILES[k - 1]);
+                    target = Math.round(POP_TARGET[k - 1] + f * (POP_TARGET[k] - POP_TARGET[k - 1]));
+                    break;
+                }
+        float dens = density() == 0 ? 0.5f : 1f;
+        return Math.round(target * dens * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT]);
     }
     /**
      * Police on duty when the game starts: about one officer for every sixteen residents (far more than a real city

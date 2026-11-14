@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.4";
-    static final int VERSION_CODE = 224;
+    static final String VERSION = "22.5";
+    static final int VERSION_CODE = 225;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.5  -  Population",
+                    "Each city size now has a set population, rising smoothly: 2,500 on Tiny up to 30,000 on Large (Default 25,000).",
+                    "The People option is a share of that; country presets have half. Missions and saved games are unchanged.",
+            },
             {
                     "22.4  -  Landmarks",
                     "50 one-of-a-kind landmarks, buildings and parks, each with its own detailed look.",

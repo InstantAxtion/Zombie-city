@@ -325,9 +325,22 @@ final class World {
         for (int i = 0, n = entities.size(); i < n; i++) if (entities.get(i).incident != null) entities.get(i).orderField = null;
     }
 
+    /** ((22.4) The civilians at the start: on map version 36 the size's head count less the police and soldiers. */
+    static int civiliansFor(CityConfig cfg, City city, int[] force) {
+        int n = cfg.civilians(city.totalResidents, city.w);
+        return cfg.popLadder() ? Math.max(n / 2, n - force[0] - force[1]) : n;
+    }
+
+    /** Auto's cap: room for everyone who lives there twice over (the dead), and ((22.4) on map version 36, for its people. */
+    static int autoCap(City city) {
+        int cap = Math.max(2500, city.totalResidents * 2 + 1000);
+        if (city.cfg.popLadder()) cap = Math.max(cap, city.cfg.civilians(city.totalResidents, city.w) * 2 + 1000);
+        return cap;
+    }
+
     /** Sets the population cap; 0 means Auto, sized to the city: everyone who lives there, and room for the dead. */
     void setMaxPopulation(int cap) {
-        maxEntities = cap > 0 ? cap : Math.max(2500, city.totalResidents * 2 + 1000);
+        maxEntities = cap > 0 ? cap : autoCap(city);
     }
     boolean gore = true;
     /** ((18.4) The Destruction setting: heavy. */
@@ -741,8 +754,8 @@ final class World {
      */
     static int[] forecast(CityConfig cfg, City city, int maxPopulation) {
         int[] f = forces(cfg, city);
-        int cap = maxPopulation > 0 ? maxPopulation : Math.max(2500, city.totalResidents * 2 + 1000);
-        int people = Math.min(cfg.civilians(city.totalResidents), Math.max(cap / 2, cap * 4 / 5 - f[0] - f[1]));
+        int cap = maxPopulation > 0 ? maxPopulation : autoCap(city);
+        int people = Math.min(civiliansFor(cfg, city, f), Math.max(cap / 2, cap * 4 / 5 - f[0] - f[1]));
         if (cfg.wilds()) people += city.fireTowers.size();
         int stations = 0, satBases = 0;
         City.Facility base = city.mainBase();
@@ -787,8 +800,9 @@ final class World {
         // ((12.3) Room left for the police and soldiers, and for the dead: with the bigger forces of 12.2 a city
         // could start at its limit, and then no zombie could be put down or get up.)
         int[] force0 = forces(cfg, city);
-        int people = Math.min(cfg.civilians(city.totalResidents), Math.max(maxEntities / 2, maxEntities * 4 / 5 - force0[0] - force0[1]));
+        int people = Math.min(civiliansFor(cfg, city, force0), Math.max(maxEntities / 2, maxEntities * 4 / 5 - force0[0] - force0[1]));
         // ((17.0) In a gang war or an invasion, room kept for the other side as well: they don't come from the people.)
+        popLadderNow = cfg.popLadder();
         residents(people);
         // A few strays.
         spawnRandom(Entity.DOG, people / 60);
@@ -1109,6 +1123,8 @@ final class World {
      * Everyone lives somewhere. People are taken household by household from the city's homes: some are at
      * home, some out on errands, and some households out together (with the dog).
      */
+    private boolean popLadderNow;
+
     private void residents(int people) {
         ArrayList<City.Building> homes = new ArrayList<City.Building>();
         for (City.Building b : city.buildings) if (b.residents > 0) homes.add(b);
@@ -1116,7 +1132,9 @@ final class World {
         int left = people;
         // Take a share of every household rather than whole households, so the whole city is lived in.
         float share = city.totalResidents > 0 ? Math.min(1f, people / (float) city.totalResidents) : 0;
-        for (int pass = 0; pass < 3 && left > 0; pass++) {
+        // ((22.4) On map version 36 the people don't depend on the homes: everyone is found one, a few more to each.)
+        int passes = popLadderNow ? 60 : 3;
+        for (int pass = 0; pass < passes && left > 0; pass++) {
             for (int h = 0; h < homes.size() && left > 0; h++) {
                 City.Building b = homes.get(h);
                 int n = pass == 0 ? Math.min(left, (int) (b.residents * share + rnd.nextFloat())) : Math.min(left, 1);
