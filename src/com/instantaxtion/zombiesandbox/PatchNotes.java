@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.6";
-    static final int VERSION_CODE = 226;
+    static final String VERSION = "22.7";
+    static final int VERSION_CODE = 227;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.7  -  Full names",
+                    "Tapping someone shows all of their card: a long title puts their unit on the next line, and long lines wrap instead of being cut off with \"...\".",
+                    "The same for vehicles and buildings.",
+            },
             {
                     "22.6  -  More of everything",
                     "New zombie: the Bruiser - between a runner and a brute: quicker than a zombie, tougher, a heavy bite and a short lunge.",

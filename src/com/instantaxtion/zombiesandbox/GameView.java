@@ -7587,6 +7587,21 @@ final class GameView extends View implements Menu.Host {
         return fitText(s, width);
     }
 
+    /** ((22.6) A line broken into lines that fit the width (in the current text size), at spaces where it can. */
+    private java.util.List<String> wrapLine(String s, float width) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        while (text.measureText(s) > width && s.length() > 1) {
+            int cut = s.length();
+            while (cut > 1 && text.measureText(s.substring(0, cut)) > width) cut--;
+            int sp = s.lastIndexOf(' ', cut);
+            if (sp > cut / 3) cut = sp;
+            out.add(s.substring(0, cut).trim());
+            s = s.substring(cut).trim();
+        }
+        if (s.length() > 0) out.add(s);
+        return out;
+    }
+
     private String fitText(String s, float width) {
         if (text.measureText(s) <= width) return s;
         while (s.length() > 4 && text.measureText(s + "...") > width) s = s.substring(0, s.length() - 1);
@@ -8065,6 +8080,22 @@ final class GameView extends View implements Menu.Host {
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(14 * dp);
         float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
+        // ((22.6) Nothing cut short with "...": a title too long beside the buttons puts what they're doing (after the
+        // dash) on the line below, and long lines go on to the next.)
+        {
+            float bw0 = cw < 380 * dp ? 76 * dp : 110 * dp, room0 = cw - 14 * dp - bw0 - 30 * dp - 28 * dp;
+            int dash = title.indexOf("  -  ");
+            if (text.measureText(title) * 11.5f / 14 > room0 && dash > 0) {
+                lines.add(0, title.substring(dash + 5));
+                title = title.substring(0, dash);
+            }
+            text.setTextSize(12.5f * dp);
+            java.util.List<String> wrapped = new java.util.ArrayList<String>();
+            for (String ln : lines) wrapped.addAll(wrapLine(ln, cw - 24 * dp));
+            lines.clear();
+            lines.addAll(wrapped);
+            text.setTextSize(14 * dp);
+        }
         // ((12.0) The first line clear of the star and Control buttons: below them, where it's too long to go beside.)
         boolean narrowCard = cw < 380 * dp;
         float besideRoom = cw - 14 * dp - (narrowCard ? 76 * dp : 110 * dp) - 30 * dp - 28 * dp;
@@ -8158,6 +8189,16 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(12.5f * dp);
         lines = wrapAll(lines, cw - 24 * dp);
         text.setTextSize(14 * dp);
+        // ((22.6) Long lines go on to the next instead of being cut short.)
+        {
+            float ts0 = text.getTextSize();
+            text.setTextSize(12.5f * dp);
+            java.util.List<String> wrapped22 = new java.util.ArrayList<String>();
+            for (String ln : lines) wrapped22.addAll(wrapLine(ln, cw - 24 * dp));
+            lines.clear();
+            lines.addAll(wrapped22);
+            text.setTextSize(ts0);
+        }
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
@@ -10021,6 +10062,16 @@ final class GameView extends View implements Menu.Host {
         text.setTextSize(12.5f * dp);
         lines = wrapAll(lines, cw - 24 * dp);
         text.setTextSize(14 * dp);
+        // ((22.6) Long lines go on to the next instead of being cut short.)
+        {
+            float ts0 = text.getTextSize();
+            text.setTextSize(12.5f * dp);
+            java.util.List<String> wrapped22 = new java.util.ArrayList<String>();
+            for (String ln : lines) wrapped22.addAll(wrapLine(ln, cw - 24 * dp));
+            lines.clear();
+            lines.addAll(wrapped22);
+            text.setTextSize(ts0);
+        }
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
@@ -10146,6 +10197,16 @@ final class GameView extends View implements Menu.Host {
         }
         lines = wrapped;
         text.setTextSize(14 * dp);
+        // ((22.6) Long lines go on to the next instead of being cut short.)
+        {
+            float ts0 = text.getTextSize();
+            text.setTextSize(12.5f * dp);
+            java.util.List<String> wrapped22 = new java.util.ArrayList<String>();
+            for (String ln : lines) wrapped22.addAll(wrapLine(ln, cw - 24 * dp));
+            lines.clear();
+            lines.addAll(wrapped22);
+            text.setTextSize(ts0);
+        }
         float ch = 30 * dp + lines.size() * lh + 8 * dp;
         float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
         oval.set(left, top, left + cw, top + ch);
