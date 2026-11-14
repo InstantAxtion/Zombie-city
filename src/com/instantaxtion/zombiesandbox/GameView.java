@@ -2620,7 +2620,6 @@ final class GameView extends View implements Menu.Host {
     // ---- The ambience ----
 
     private float ambT;
-    private final int[] ambSample = new int[4];
 
     /** In the menus: just the city's hum behind them, the rest faded. */
     private void ambienceQuiet() {
@@ -3512,16 +3511,15 @@ final class GameView extends View implements Menu.Host {
             if (life <= 0) continue;
             float f = life / World.TRACER_LIFE, p = 1 - f;
             float x0 = world.tx0[i], y0 = world.ty0[i], x1 = world.tx1[i], y1 = world.ty1[i];
-            // ((19.5) The aliens' shots green; every tracer's glow a little wider on the higher effects settings.)
-            boolean green = world.tgreen[i];
+            // ((19.5) Every tracer's glow a little wider on the higher effects settings.)
             stroke.setStrokeWidth(vfx.quality >= 2 ? 2.4f : 1.6f);
-            stroke.setColor(alpha(green ? 0xFF60FF90 : 0xFFFFC860, 0.22f * f));
+            stroke.setColor(alpha(0xFFFFC860, 0.22f * f));
             c.drawLine(x0, y0, x1, y1, stroke);
             float hx = x0 + (x1 - x0) * Math.min(1, p * 1.4f), hy = y0 + (y1 - y0) * Math.min(1, p * 1.4f);
             float tl = Math.max(0, Math.min(1, p * 1.4f) - 0.35f);
             float sx = x0 + (x1 - x0) * tl, sy = y0 + (y1 - y0) * tl;
             stroke.setStrokeWidth(1.2f);
-            stroke.setColor(alpha(green ? 0xFFD8FFE0 : 0xFFFFF0B0, Math.min(1, f * 1.6f)));
+            stroke.setColor(alpha(0xFFFFF0B0, Math.min(1, f * 1.6f)));
             c.drawLine(sx, sy, hx, hy, stroke);
         }
 
@@ -4343,16 +4341,6 @@ final class GameView extends View implements Menu.Host {
                         }
                     }
                     box(c, wide ? x0 + 3 : x1 - 6, wide ? y1 - 6 : y0 + 3, wide ? x1 - 3 : x1 - 3, wide ? y1 - 3 : y1 - 3, 0xFF6A4A30);
-                } else if (k == City.SHOP && b.shopType == 1) {
-                    // Gun store: display cases and racks of rifles on the walls.
-                    for (float t = 4; t < (wide ? w : h) - 4; t += 5) {
-                        float u = (wide ? x0 : y0) + t;
-                        if (b.stock > 0 || irand() < 0.2f) {
-                            if (wide) box(c, u, y0 + 2, u + 1, y0 + 9, 0xFF2A2A2A);
-                            else box(c, x0 + 2, u, x0 + 9, u + 1, 0xFF2A2A2A);
-                        }
-                    }
-                    box(c, x0 + w * 0.2f, y0 + h * 0.55f, x0 + w * 0.8f, y0 + h * 0.55f + 4, 0xFF9CC3D9);
                 } else {
                     // Shelves round the walls, a counter and till by the door.
                     int shelf = k == City.PHARMACY ? 0xFFF2F2F2 : dark;
@@ -7017,13 +7005,6 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(0xFFE04A3A);
             c.drawCircle(cx, cy - 1, 1.8f, fill);
         }
-        if (e.hidden && scale < 5f) {
-            // A crawler lying low: just a dark shape in the grass, if you look closely.
-            fill.setColor(0x40263018);
-            oval.set(e.x - e.radius * 1.3f, e.y - e.radius * 0.7f, e.x + e.radius * 1.3f, e.y + e.radius * 0.7f);
-            c.drawOval(oval, fill);
-            return;
-        }
         if (e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG) {
             drawDog(c, e, healthBar);
             return;
@@ -7033,7 +7014,7 @@ final class GameView extends View implements Menu.Host {
         float r = e.radius;
         // ((11.5) Small on screen - a dozen pixels across - just the body, the head and any gun drawn (see below), and
         // no separate shadow: the dark outline does that job at this size.)
-        boolean small = scale < 1.8f && !healthBar && e != world.controlled && e.type != Entity.CRAWLER;
+        boolean small = scale < 1.8f && !healthBar && e != world.controlled;
         // One light source for everything: shadows fall down and to the right.
         if (small) {
             // (None.)
@@ -7059,16 +7040,11 @@ final class GameView extends View implements Menu.Host {
             if (bite > 0 && e.isUndead()) c.translate(r * 0.5f * bite, 0);
             float kick = 1 - Math.min(1, (now - e.shotAt) / 0.12f);
             if (kick > 0 && !e.isUndead()) c.translate(-r * 0.2f * kick, 0);
-            if (spd > 4 && e.type != Entity.CRAWLER) {
+            if (spd > 4) {
                 // Walking: a bob in the stride; the dead lurch from side to side.
                 float bob = (float) Math.sin(e.phase * 2);
                 if (e.isUndead() && e.type != Entity.RUNNER) c.rotate((float) Math.sin(e.phase * 0.5f + (e.nameSeed & 7)) * 9);
                 c.scale(1 + 0.05f * bob, 1 - 0.03f * bob);
-            }
-            if (e.type == Entity.BLOATER) {
-                // Swelling and sagging with each breath.
-                float pu = 1 + 0.07f * (float) Math.sin(now * 3 + (e.nameSeed & 15));
-                c.scale(pu, pu);
             }
             if (e.isUndead() && e.fresh > 44) {
                 // Just got up: still unfolding.
@@ -7102,7 +7078,7 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(e.head);
             c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
         } else {
-            if (e.type != Entity.CRAWLER && scale > 1.9f) {
+            if (scale > 1.9f) {
                 // Legs stepping out in front and behind as they walk.
                 float step = (float) Math.sin(e.phase) * r * 0.55f;
                 fill.setColor(e.isUndead() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
@@ -7112,16 +7088,7 @@ final class GameView extends View implements Menu.Host {
                 c.drawOval(oval, fill);
             }
 
-            if (e.type == Entity.CRAWLER) {
-                // Dragging itself along on its arms: long low body, no legs.
-                float sw = (float) Math.sin(e.phase * 1.5f) * r * 0.4f;
-                stroke.setColor(e.skin);
-                stroke.setStrokeWidth(r * 0.42f);
-                c.drawLine(r * 0.3f, -r * 0.6f, r * 1.7f + sw, -r * 0.9f, stroke);
-                c.drawLine(r * 0.3f, r * 0.6f, r * 1.7f - sw, r * 0.9f, stroke);
-                fill.setColor(0x906E0A0A);
-                c.drawCircle(-r * 1.3f, 0, r * 0.5f, fill);
-            } else if (e.isUndead()) {
+            if (e.isUndead()) {
                 float sw = (float) Math.sin(e.phase) * r * 0.2f;
                 stroke.setColor(e.skin);
                 if (e.type == Entity.RUNNER && spd > 30) {
@@ -7242,8 +7209,7 @@ final class GameView extends View implements Menu.Host {
                 c.drawArc(oval, -70, 120 * t, false, stroke);
             }
 
-            if (e.type == Entity.CRAWLER) oval.set(-r * 1.2f, -r * 0.7f, r * 0.62f, r * 0.7f);
-            else oval.set(-r * 0.62f, -r, r * 0.62f, r);
+            oval.set(-r * 0.62f, -r, r * 0.62f, r);
             if (scale > 1.2f) {
                 // ((11.0) A dark outline, so everyone stands out from the ground at any zoom.)
                 fill.setColor(0x8C000000);
@@ -7306,14 +7272,6 @@ final class GameView extends View implements Menu.Host {
                     fill.setColor(0xCCE8E8E8);
                     c.drawRect(r * 1.05f, -r * 0.5f, r * 1.2f, r * 0.5f, fill);
                 }
-            } else if (e.type == Entity.BLOATER) {
-                // Swollen, covered in boils.
-                fill.setColor(0xFF9CAA5A);
-                c.drawCircle(-r * 0.1f, 0, r * 0.95f, fill);
-                fill.setColor(0xFFB8C86A);
-                c.drawCircle(-r * 0.4f, -r * 0.4f, r * 0.22f, fill);
-                c.drawCircle(r * 0.1f, r * 0.45f, r * 0.18f, fill);
-                c.drawCircle(-r * 0.5f, r * 0.3f, r * 0.15f, fill);
             } else if (e.type == Entity.BRUISER) {
                 // ((22.6) Broad shoulders in a torn shirt, a dark stain down the back.)
                 fill.setColor(City.darken(e.body, 0.8f));
@@ -7428,7 +7386,7 @@ final class GameView extends View implements Menu.Host {
                 c.drawLine(e.x + ux * r * 1.4f + ox, e.y + uy * r * 1.4f + oy, e.x + ux * r * (2.6f + (k & 1)) + ox, e.y + uy * r * (2.6f + (k & 1)) + oy, stroke);
             }
         }
-        if (realistic && e.type != Entity.CRAWLER && scale > 3f) {
+        if (realistic && scale > 3f) {
             // Light from the top left: a soft highlight on the shoulders and head, shade on the far side.
             fill.setColor(0x26FFFFFF);
             c.drawCircle(e.x - r * 0.28f, e.y - r * 0.3f, r * 0.42f, fill);
@@ -8682,7 +8640,7 @@ final class GameView extends View implements Menu.Host {
                         world.ctrlAction(ctxActions[k]);
                         return true;
                     }
-                if (world.controlledIn == null && World.hypot(x - attackX, y - attackY) < attackR * 1.3f) {
+                if (World.hypot(x - attackX, y - attackY) < attackR * 1.3f) {
                     attackId = id;
                     world.ctrlAttack = true;
                 } else if (action == MotionEvent.ACTION_DOWN && hitUi(x, y)) {
@@ -8754,15 +8712,13 @@ final class GameView extends View implements Menu.Host {
                 : e.isUndead() ? "Bite" : e.canShoot() && e.ammo + e.reserve > 0 ? (e.reload > 0 ? "Reload" : "Shoot")
                 : e.melee > 0 ? "Swing" : "Shove";
         text.setTextAlign(Paint.Align.CENTER);
-        if (world.controlledIn == null) {
-            fill.setColor(world.ctrlAttack ? 0xF0D9534F : 0xB0D9534F);
-            c.drawCircle(attackX, attackY, attackR, fill);
-            stroke.setColor(0xA0FFFFFF);
-            c.drawCircle(attackX, attackY, attackR, stroke);
-            text.setTextSize(14 * dp);
-            text.setColor(0xFFFFFFFF);
-            c.drawText(verb, attackX, attackY + 5 * dp, text);
-        }
+        fill.setColor(world.ctrlAttack ? 0xF0D9534F : 0xB0D9534F);
+        c.drawCircle(attackX, attackY, attackR, fill);
+        stroke.setColor(0xA0FFFFFF);
+        c.drawCircle(attackX, attackY, attackR, stroke);
+        text.setTextSize(14 * dp);
+        text.setColor(0xFFFFFFFF);
+        c.drawText(verb, attackX, attackY + 5 * dp, text);
         // What else you can do here, stacked above the attack button.
         ctxCount = world.ctrlOptions(ctxActions);
         float cbw = 118 * dp, cbh = 38 * dp, cby = attackY - attackR - 12 * dp - cbh;
@@ -8787,8 +8743,7 @@ final class GameView extends View implements Menu.Host {
         // Who you are, and the way out.
         String who = e.isUndead() ? Entity.NAMES[e.type] : e.type == Entity.DOG ? Names.dog(e.nameSeed) : Names.person(e.nameSeed);
         String gun = e.canShoot() ? "   " + e.gunName() + " " + e.ammo + " + " + e.reserve : "";
-        String place = car != null ? "   Driving (" + Math.max(0, (int) (100 * car.hp / car.maxHp)) + "%)"
-                : world.controlledIn != null ? "   Inside: barricade " + (int) world.controlledIn.barricade + "%, food " + world.controlledIn.food : "";
+        String place = car != null ? "   Driving (" + Math.max(0, (int) (100 * car.hp / car.maxHp)) + "%)" : "";
         int group = world.followers(e);
         String info = who + "   Health " + Math.max(0, (int) e.hp) + "/" + (int) e.maxHp + gun
                 + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "") + place + (group > 0 ? "   Group " + group : "")
@@ -8994,7 +8949,6 @@ final class GameView extends View implements Menu.Host {
             // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)
             if (e.stun > 0) return "Knocked back, dazed";
             if (e.charge > 0) return "Lunging at someone";
-            if (e.hidden) return "Lying low in cover, waiting";
             if (e.feedTimer > 0) return "Feeding";
             if (e.doorAt != null && e.doorTime > 0) return "Clawing at the door of " + (e.doorAt.name != null ? e.doorAt.name : "a building");
             if (e.memory > 0) return "Chasing someone it saw";
@@ -10076,7 +10030,7 @@ final class GameView extends View implements Menu.Host {
             Entity e = world.entities.get(i);
             // ((12.0) Only someone you can see: not one of the dead shut in a building out of sight, or someone
             // who's just died and is about to be taken off the map.)
-            if (e.dead || e.hidden) continue;
+            if (e.dead) continue;
             float ddx = e.x - wx, ddy = e.y - wy, d2 = ddx * ddx + ddy * ddy;
             if (d2 < best) {
                 best = d2;
@@ -10171,7 +10125,7 @@ final class GameView extends View implements Menu.Host {
     /** The building card: what it is, where, who is inside, what's left in it, and what it does for the city. */
     private void drawBuildingInspect(Canvas c, City.Building b) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String kind = b.typeName() != null ? b.typeName() : b.kind == City.SHOP ? (b.shopType == 1 ? "Gun store" : b.shopType == 2 ? "Diner" : "Shop")
+        String kind = b.typeName() != null ? b.typeName() : b.kind == City.SHOP ? (b.shopType == 2 ? "Diner" : "Shop")
                 : KIND_NAMES[Math.min(KIND_NAMES.length - 1, b.kind)];
         City.District d = world.city.districtOf((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
         // ((12.0) Not "City Hall - City hall": the kind only when the name doesn't already say it.)
@@ -10205,8 +10159,8 @@ final class GameView extends View implements Menu.Host {
         else lines.add(b.capacity > 0 ? "Empty (room for " + b.capacity + " to hide)" : "Nobody can shelter here");
         if (!b.collapsed) {
             String supplies = "Food: " + b.food + (b.food == 0 && !b.occupants.isEmpty() ? " (they're starving)" : "");
-            if (b.kind == City.MARKET || (b.kind == City.SHOP && b.shopType == 1) || World.useOf(b) == Variants.U_ROUNDS)
-                supplies += "   Ammo: " + b.stock + (b.shopType == 1 ? " rounds (arms anyone who comes in)" : " rounds");
+            if (b.kind == City.MARKET || World.useOf(b) == Variants.U_ROUNDS)
+                supplies += "   Ammo: " + b.stock + " rounds";
             if (b.kind == City.PHARMACY) supplies += "   Medicine: " + b.stock;
             lines.add(supplies);
             if (b.smashed || b.looted) lines.add((b.smashed ? "Windows smashed" : "") + (b.smashed && b.looted ? ", " : "")

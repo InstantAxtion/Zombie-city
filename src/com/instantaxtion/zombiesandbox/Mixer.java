@@ -84,10 +84,6 @@ final class Mixer {
         loops[loop] = l;
     }
 
-    boolean loopReady(int loop) {
-        return loops[loop] != null;
-    }
-
     /** How loud an ambience bed should be (0 off), where (-1 left to 1 right), and how muffled (0 to 1). */
     void setLoop(int loop, float gain, float pan, float muffle) {
         Loop l = loops[loop];

@@ -122,9 +122,7 @@ final class City {
         transient int inside;
         final int roof, wall, seed, kind;
         /** Civilians can hide inside homes, offices and warehouses: the door, room and barricade. */
-        float doorX, doorY, barricade = 100, calmTimer, releaseTimer;
-        /** (12.4) Until the next one inside comes out, during an outbreak (World.emptyBuilding). */
-        float exitCd;
+        float doorX, doorY, barricade = 100, calmTimer;
         int capacity;
         /** How many people live here: families in houses, flats in apartment blocks, a flat over some shops. */
         int residents;
@@ -138,7 +136,7 @@ final class City {
         int stock;
         /** Food for anyone sheltering here (and for foragers). */
         int food;
-        /** Shops: 0 a general store, 1 a gun store, 2 a diner. */
+        /** Shops: 0 a general store, 2 a diner (1 was a gun store). */
         int shopType;
         /** What kind of building it is beyond its basic kind (see {@link Variants}), or -1. */
         int variant = -1;
@@ -174,8 +172,7 @@ final class City {
         /** ((11.5) Variants.U_ use, worked out when first wanted; -1 not yet.) */
         int use = -1;
         boolean doorBroken;
-        /** How long survivors inside have gone without food, and whether that's been reported. */
-        float hunger;
+        /** Whether survivors inside running out of food has been reported (kept in saves). */
         boolean outOfFood;
         /** Path to the door (made when someone first needs it). */
         int[] field;
@@ -472,13 +469,6 @@ final class City {
         }
     }
 
-    /** The district at a world position. */
-    /** Which district a world position is in (an index into districts), or -1. */
-    /** (17.2) The district a tile is in, or -1. */
-    int districtOfTile(int i) {
-        return districtAt == null || i < 0 || i >= w * h ? -1 : districtAt.get(i);
-    }
-
     int districtIndex(float x, float y) {
         if (districtAt == null) return -1;
         return districtAt.get(tileIndex(x, y));
@@ -763,10 +753,7 @@ final class City {
             Random nr = new Random(l[5]);
             if (k == CHURCH) { String[] ch = cfg.variety() ? country.churches37 : country.churches; b.name = ch[nr.nextInt(ch.length)]; }
             else if (k == SCHOOL) { String[] sc = cfg.variety() ? country.schools37 : country.schools; b.name = sc[nr.nextInt(sc.length)]; }
-            else if (k == TRAIN_STATION) {
-                b.name = "Central Station";
-                stationBuilding = b;
-            }
+            else if (k == TRAIN_STATION) b.name = "Central Station";
             else if (k == MALL) b.name = name + " Mall";
             else if (k == ARMORY) {
                 b.name = Country.guard()[0];
@@ -798,16 +785,6 @@ final class City {
                 // store is an ordinary shop - only the shop changes, so saved cities still rebuild street for street.)
                 int roll = nr.nextInt(12);
                 b.shopType = roll == 0 ? 0 : roll < 3 && b.variant < 0 ? 2 : 0;
-                if (b.shopType == 1) {
-                    b.variant = -1;
-                    // (It looks like a gun store, not whatever kind of shop the lot was going to be.)
-                    if (cfg.nature() && l.length > 9) l[9] = -1;
-                }
-                if (b.shopType == 1) {
-                    b.name = country.gunStores[nr.nextInt(country.gunStores.length)];
-                    // (Enough to arm ten people.)
-                    b.stock = cfg.nature() ? 360 : 240;
-                }
             }
             // Food in the cupboards and on the shelves.
             b.food = k == MARKET ? 400 : k == MALL ? 300 : k == WAREHOUSE ? 150 : k == SHOP ? (b.shopType == 2 ? 120 : 40)
@@ -1393,7 +1370,6 @@ final class City {
      */
     int waterKind, seaY = -1;
     boolean[] bridge;
-    private boolean lakeMade;
 
     // ------------------------------------------------------------------ the lie of the land (see Terrain)
 
@@ -2574,7 +2550,6 @@ final class City {
     /** Level crossings as {x0, x1} (tile columns), and the middle of the station platform (or -1). */
     final List<int[]> crossings = new ArrayList<int[]>();
     float stationX = -1, stationY;
-    Building stationBuilding;
     String stationName;
 
     /** Where the industrial district is: an angle around the centre (maps with warehouses on the edge). */
@@ -4773,7 +4748,6 @@ final class City {
      * shoreline, a little wooded island on a big lake, a jetty and rowing boats.
      */
     private void lake(int x0, int y0, int x1, int y1) {
-        lakeMade = true;
         lakes.add(new int[]{x0, y0, x1, y1});
         fill(x0, y0, x1 - x0, y1 - y0, SIDEWALK);
         fill(x0 + 1, y0 + 1, x1 - x0 - 2, y1 - y0 - 2, GRASS);
@@ -5675,25 +5649,6 @@ final class City {
         return n;
     }
 
-    /** (17.2) The tile of an ordinary car parked on a lot within radius of (x, y), or -1. */
-    int parkedCarNear(float x, float y, float radius) {
-        int tx0 = Math.max(0, (int) ((x - radius) / T)), tx1 = Math.min(w - 1, (int) ((x + radius) / T));
-        int ty0 = Math.max(0, (int) ((y - radius) / T)), ty1 = Math.min(h - 1, (int) ((y + radius) / T));
-        int best = -1;
-        float bd = radius * radius;
-        for (int ty = ty0; ty <= ty1; ty++)
-            for (int tx = tx0; tx <= tx1; tx++) {
-                int i = ty * w + tx;
-                if (tiles[i] != CAR || carKind.get(i) > 1) continue;
-                float dx = (tx + 0.5f) * T - x, dy = (ty + 0.5f) * T - y, d = dx * dx + dy * dy;
-                if (d < bd) {
-                    bd = d;
-                    best = i;
-                }
-            }
-        return best;
-    }
-
     /**
      * ((22.0) A parked car caught by a blast burns out where it stands (kind 7, a blackened shell). True if there was one
      * there to burn.
@@ -5701,20 +5656,6 @@ final class City {
     boolean burnParkedCar(int i) {
         if (i < 0 || i >= tiles.length || tiles[i] != CAR || carKind.get(i) > 1) return false;
         carKind.set(i, (byte) 7);
-        int x = i % w, y = i / w;
-        redrawArea(x * T - T, y * T - T, x * T + 2 * T, y * T + 2 * T);
-        return true;
-    }
-
-    /** (17.2) A parked car is driven off its lot (stolen): its space is left empty on the lot and on the map picture. */
-    boolean takeParkedCar(int i) {
-        if (i < 0 || i >= tiles.length || tiles[i] != CAR || carKind.get(i) > 1) return false;
-        tiles[i] = LOT;
-        carKind.set(i, (byte) 0);
-        solid[i] = false;
-        opaque[i] = false;
-        clearChanged(i);
-        stepsChanged(i);
         int x = i % w, y = i / w;
         redrawArea(x * T - T, y * T - T, x * T + 2 * T, y * T + 2 * T);
         return true;
@@ -8174,13 +8115,6 @@ final class City {
         return true;
     }
 
-    /** How many neighbourhoods of each kind the town has (NB_CLOSES ... NB_WORKS). */
-    int[] neighbourhoodKinds() {
-        int[] n = new int[8];
-        for (int[] b : blocks) if (b.length > 5 && b[4] == 3) n[b[5]]++;
-        return n;
-    }
-
     private boolean sameNearby(int x, int y, int type) {
         for (int[] b : blocks)
             if (b.length > 5 && b[4] == 3 && (b[5] == type || (type == NB_GATED && b[5] == NB_CLOSES) || (type == NB_CLOSES && b[5] == NB_GATED))
@@ -9708,11 +9642,9 @@ final class City {
      * finest grain - specks under a pixel across, millions of them on a big map, which made a new city slow to
      * paint and couldn't be seen. Close-ups are drawn finer and keep them.)
      */
-    private float renderRes = 1;
     private boolean fine = true;
 
     private void setRes(float res) {
-        renderRes = res;
         fine = res >= 1f;
     }
 
@@ -12797,19 +12729,6 @@ final class City {
         float bw = x1 - x0, bh = y1 - y0;
         int bi = buildingAt.get(b[1] * w + b[0]);
         Building own = bi >= 0 && bi < buildings.size() ? buildings.get(bi) : null;
-        if (own != null && own.kind == SHOP && own.shopType == 1 && cfg.nature()) {
-            // A gun store: a dark roof, an orange stripe along the front and GUNS in big letters.
-            p.setColor(0xFF2A2C30);
-            c.drawRect(x0, y0, x1, y1, p);
-            p.setColor(0xFF3E4148);
-            c.drawRect(x0 + 1.5f, y0 + 1.5f, x1 - 1.5f, y1 - 1.5f, p);
-            p.setColor(0xFFE07A2A);
-            c.drawRect(x0 + 1.5f, y1 - 4, x1 - 1.5f, y1 - 1.5f, p);
-            String sign = country.gunSign();
-            float ts = Math.min(9f, bw / (sign.length() * 0.75f));
-            sign(sign, (x0 + x1) / 2, (y0 + y1) / 2, ts, 0xFFF2E2B8);
-            return;
-        }
         if (own != null && own.kind == JAIL && own.name != null && own.name.equals("Airport Terminal")) {
             // ((15.10) The terminal: a long pale roof, a glass front along the apron side, and its name.)
             p.setColor(0xFFC8CCD0);
@@ -14050,14 +13969,13 @@ final class City {
     void computeFields(List<Entity> entities, boolean doZombies, boolean doHumans) {
         // Only near distances matter (how far the nearest zombie or person is, within smelling range), so
         // the searches stop spreading after a while instead of covering a whole massive map.
-        // (10.31) Only the dead and raiders go by the scent of the living: with neither about (a calm city of tens
+        // (10.31) Only the dead go by the scent of the living: with none about (a calm city of tens
         // of thousands) that search is skipped.
-        boolean hunters = false, raiders = false;
+        boolean hunters = false;
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
             if (e.dead) continue;
             if (e.isZombie()) hunters = true;
-            if (e.type == Entity.RAIDER) raiders = true;
         }
         // ((10.34) Not so far out in a crowded city: that search covered most of a Gigantic map.)
         zombieLimit = entities.size() > 12000 ? 48 : 70;
@@ -14065,8 +13983,8 @@ final class City {
         if (!doHumans) return;
         // (And with only the dead to smell them, only the living within reach of one count: the rest of the city
         // can't be smelled from anywhere a zombie is.)
-        nearZombiesOnly = !raiders;
-        if (hunters || raiders) bfs(humanDist, entities, false, (int) (World.SCENT * 1.7f) + 4);
+        nearZombiesOnly = true;
+        if (hunters) bfs(humanDist, entities, false, (int) (World.SCENT * 1.7f) + 4);
         nearZombiesOnly = false;
     }
 
@@ -14870,11 +14788,6 @@ final class City {
         }
     }
 
-    // A* over the walking costs, for one person's trip: no map-sized route to build and keep.
-    private int[] astarG, astarFrom, astarStamp;
-    private long[] astarHeap = new long[4096];
-    private int astarRun;
-
     /**
      * A walking route from (sx, sy) to (tx, ty) as tile indices (start excluded), keeping to pavements and
      * crossings like walkFieldFromPoints, or null if there's none within maxExpand tiles searched.
@@ -14915,7 +14828,7 @@ final class City {
     /**
      * (10.36) A walking route from (sx, sy) to (tx, ty): the tiles to head for in turn (the corners of a
      * straightened route, the last one the destination), or null if there's no way there. By the hierarchical
-     * router, however far it is (maxExpand only matters to the old search, kept as oldFindPath).
+     * router, however far it is (maxExpand mattered only to the old search, since removed).
      */
     int[] findPath(float sx, float sy, float tx, float ty, int maxExpand) {
         if (walkCost == null) computeWalkCost();
@@ -14932,91 +14845,6 @@ final class City {
             nav = new Nav(this);
         }
         nav.warm(n);
-    }
-
-    int[] oldFindPath(float sx, float sy, float tx, float ty, int maxExpand) {
-        if (walkCost == null) computeWalkCost();
-        if (astarG == null) {
-            astarG = new int[w * h];
-            astarFrom = new int[w * h];
-            astarStamp = new int[w * h];
-        }
-        int run = ++astarRun;
-        int s = tileIndex(sx, sy), g = tileIndex(tx, ty);
-        if (s == g) return new int[]{g};
-        int gx = g % w, gy = g / w;
-        int size = 0;
-        astarStamp[s] = run;
-        astarG[s] = 0;
-        astarFrom[s] = -1;
-        astarHeap[size++] = ((long) heur(s % w, s / w, gx, gy) << 32) | s;
-        int expanded = 0;
-        while (size > 0) {
-            long top = astarHeap[0];
-            astarHeap[0] = astarHeap[--size];
-            siftDown(size);
-            int t = (int) (top & 0xFFFFFFFFL), f = (int) (top >>> 32);
-            int tx0 = t % w, ty0 = t / w;
-            if (f - heur(tx0, ty0, gx, gy) > astarG[t]) continue;
-            if (t == g) {
-                int n = 0;
-                for (int c = t; c != s; c = astarFrom[c]) n++;
-                int[] path = new int[n];
-                for (int c = t, k = n - 1; c != s; c = astarFrom[c]) path[k--] = c;
-                return path;
-            }
-            if (++expanded > maxExpand) return null;
-            for (int q = 0; q < 8; q++) {
-                int dx = q < 4 ? (q == 0 ? 1 : q == 1 ? -1 : 0) : (q == 4 || q == 6 ? 1 : -1);
-                int dy = q < 4 ? (q == 2 ? 1 : q == 3 ? -1 : 0) : (q < 6 ? 1 : -1);
-                int nx = tx0 + dx, ny = ty0 + dy;
-                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                int nb = ny * w + nx;
-                if (solid[nb] && nb != g) continue;
-                // No cutting corners past a wall.
-                if (dx != 0 && dy != 0 && (solid[ty0 * w + nx] || solid[ny * w + tx0])) continue;
-                int ng = astarG[t] + walkCost[nb] * (dx != 0 && dy != 0 ? 14 : 10);
-                if (astarStamp[nb] == run && ng >= astarG[nb]) continue;
-                astarStamp[nb] = run;
-                astarG[nb] = ng;
-                astarFrom[nb] = t;
-                if (size == astarHeap.length) astarHeap = Arrays.copyOf(astarHeap, size * 2);
-                astarHeap[size] = ((long) (ng + heur(nx, ny, gx, gy)) << 32) | nb;
-                siftUp(size++);
-            }
-        }
-        return null;
-    }
-
-    private static int heur(int x, int y, int gx, int gy) {
-        int dx = Math.abs(x - gx), dy = Math.abs(y - gy);
-        return 10 * Math.max(dx, dy) + 4 * Math.min(dx, dy);
-    }
-
-    private void siftUp(int i) {
-        long v = astarHeap[i];
-        while (i > 0) {
-            int p = (i - 1) >> 1;
-            if (astarHeap[p] <= v) break;
-            astarHeap[i] = astarHeap[p];
-            i = p;
-        }
-        astarHeap[i] = v;
-    }
-
-    private void siftDown(int size) {
-        if (size == 0) return;
-        long v = astarHeap[0];
-        int i = 0;
-        while (true) {
-            int c = 2 * i + 1;
-            if (c >= size) break;
-            if (c + 1 < size && astarHeap[c + 1] < astarHeap[c]) c++;
-            if (astarHeap[c] >= v) break;
-            astarHeap[i] = astarHeap[c];
-            i = c;
-        }
-        astarHeap[i] = v;
     }
 
     /** More places the living can be smelled from: the walls of safe zones with people inside (set by Dispatch). */
@@ -15053,18 +14881,6 @@ final class City {
                 queue[tail++] = t;
             }
         }
-        // People hiding indoors can still be smelled: their building's door counts as a source.
-        if (!zombies)
-            for (int i = 0, n = buildings.size(); i < n; i++) {
-                Building b = buildings.get(i);
-                if (b.occupants.isEmpty()) continue;
-                int t = tileIndex(b.doorX, b.doorY);
-                if (nearZombiesOnly && zombieDist[t] >= FAR) continue;
-                if (dist[t] != 0) {
-                    dist[t] = 0;
-                    queue[tail++] = t;
-                }
-            }
         int end = spread(dist, tail, limit);
         if (tch == null || tch.length < end) tch = new int[end + end / 2 + 64];
         System.arraycopy(queue, 0, tch, 0, end);

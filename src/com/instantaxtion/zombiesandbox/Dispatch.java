@@ -35,9 +35,8 @@ final class Dispatch {
         String place;
         int reported, lastLogged, cops, soldiers, zombiesNear, officersDown;
         boolean militaryRequested, onScene, resolved, airRequested, swatRequested, riotRequested, policeAirRequested;
-        /** Officers on scene radioed for more (10.20): how many they want there, and who asked. */
+        /** Officers on scene radioed for more (10.20): how many they want there. */
         int backupNeed;
-        String backupBy;
         /** Seconds before the SWAT van tries again, when it couldn't find a way there. */
         float swatWait;
         /** (11.0) A BearCat sent. */
@@ -221,8 +220,7 @@ final class Dispatch {
     private float tick, zoneFieldTimer, policeZoneCd = 10, militaryZoneCd = 6, militaryCd, policeCd;
     private boolean zonesDirty = true;
 
-    private static final int[] POLICE_RESERVE = {0, 2, 3, 5}, SQUAD_RESERVE = {0, 2, 4, 6}, AIR_SORTIES = {0, 1, 2, 3},
-            TANKS = {0, 1, 2, 3};
+    private static final int[] TANKS = {0, 1, 2, 3};
 
     /**
      * Reinforcements on their way in from outside the city (10.17): where they came onto the map, where
@@ -805,7 +803,7 @@ final class Dispatch {
         float[] sx = new float[gw * gh], sy = new float[gw * gh];
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity z = w.entities.get(i);
-            if (z.dead || !z.isZombie() || z.hidden) continue;
+            if (z.dead || !z.isZombie()) continue;
             int c = Math.min(gh - 1, (int) (z.y / cell)) * gw + Math.min(gw - 1, (int) (z.x / cell));
             count[c]++;
             sx[c] += z.x;
@@ -1155,7 +1153,7 @@ final class Dispatch {
             // than everyone going on to where they were.
             if (inc.zombiesNear == 0 && inc.cordonPost < 0) {
                 Entity z = w.nearestZombie(inc.x, inc.y, 320);
-                Incident other = z == null || z.hidden ? null : callAt(z.x, z.y, inc);
+                Incident other = z == null ? null : callAt(z.x, z.y, inc);
                 if (other != null) {
                     // (Already a call where they've gone: this one closes and those on it go on to that one, or
                     // ((10.56) when it has all it needs) another near that's short, or back to patrol.)
@@ -1171,7 +1169,7 @@ final class Dispatch {
                     for (int k = 0; k < moving.size(); k++) if (moving.get(k).incident == inc) release(moving.get(k));
                     continue;
                 }
-                if (z != null && !z.hidden) {
+                if (z != null) {
                     float nx = Math.max(City.T, Math.min(city.worldW() - City.T, z.x)), ny = Math.max(City.T, Math.min(city.worldH() - City.T, z.y));
                     float mx = nx - inc.x, my = ny - inc.y;
                     inc.x = nx;
@@ -2152,7 +2150,6 @@ final class Dispatch {
         int want = Math.min(12, 2 + hostiles / 2);
         if (want <= inc.backupNeed) return;
         inc.backupNeed = want;
-        inc.backupBy = name(e);
         boolean army = e.type == Entity.SOLDIER;
         // ((14.2) Always on the radio: a second call from another fight was taken for the same news and left off.)
         say(army ? WHO_MILITARY : WHO_POLICE, e, (army ? "Contact at " : "Shots fired at ") + inc.place + ", " + World.count(hostiles, "hostile", "hostiles")
@@ -2531,7 +2528,7 @@ final class Dispatch {
             int inside = 0;
             for (int k = 0, n = w.entities.size(); k < n && near > 0; k++) {
                 Entity o = w.entities.get(k);
-                if (o.dead || !o.isZombie() || o.hidden) continue;
+                if (o.dead || !o.isZombie()) continue;
                 if (z.inside(o.x, o.y)) inside++;
             }
             boolean falling = inside > 0 && z.breaches > 0;

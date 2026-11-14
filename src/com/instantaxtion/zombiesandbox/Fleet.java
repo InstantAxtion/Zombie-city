@@ -2244,11 +2244,6 @@ final class Fleet {
         return n;
     }
 
-    boolean hasPatient(Entity e) {
-        for (int i = 0; i < vehicles.size(); i++) if (vehicles.get(i).patient == e) return true;
-        return false;
-    }
-
     /** A car dropped into traffic by the player. */
     Vehicle placeCar(float x, float y) {
         float[] p = city.nearestDrivable(x, y);
@@ -2722,12 +2717,6 @@ final class Fleet {
     int trafficTarget;
     /** Less background traffic on a struggling phone. */
     float trafficScale = 1;
-
-    /** How many cars are about: as many to a street as on a small map, so it grows with the map's area. */
-    static int trafficFor(City city) {
-        int base = new int[]{0, 12, 24}[city.cfg.traffic()];
-        return Math.min(base * 10, (int) (base * (long) city.w * city.h / (96 * 128)));
-    }
     private float trafficTimer, trainTimer = 20, hwyTimer = 5;
 
     /** A train is on the line near this car's crossing: wait. */
@@ -5462,25 +5451,6 @@ final class Fleet {
         return false;
     }
 
-    /** A survivor jumps into an abandoned car and drives off. */
-    void takeCar(Vehicle v, Entity driver) {
-        v.parked = false;
-        v.pulling = false;
-        v.state = CRUISE;
-        v.riders.add(driver);
-        v.timer = 0;
-        if (!newDestination(v)) {
-            v.riders.remove(driver);
-            w.release(driver, v.x, v.y);
-            v.parked = true;
-            v.state = ABANDONED;
-            return;
-        }
-        v.rescue = false;
-        boarded(v, driver);
-        v.riders.remove(v.riders.size() - 1);
-    }
-
     /** Called by World when someone climbs in. */
     void boarded(Vehicle v, Entity e) {
         v.riders.add(e);
@@ -5521,7 +5491,7 @@ final class Fleet {
         boolean lone = v.crew.isEmpty() && v.driver != null && (v.type == CRUISER || policeTruck(v)) && v.state == DRIVE;
         if ((v.crew.isEmpty() && !lone) || v.player != null || (v.type != CRUISER && v.type != TRUCK)) return null;
         Entity z = w.nearestZombie(v.x, v.y, 105);
-        if (z == null || z.hidden || !city.los(v.x, v.y, z.x, z.y)) return null;
+        if (z == null || !city.los(v.x, v.y, z.x, z.y)) return null;
         Dispatch.Incident inc = v.incident;
         if (inc != null && World.hypot(z.x - inc.x, z.y - inc.y) < 240) return null;
         Entity who = lone ? v.driver : v.crew.get(0);

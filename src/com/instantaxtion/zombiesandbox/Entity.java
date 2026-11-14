@@ -165,8 +165,6 @@ final class Entity {
     /** ((21.2) The fight as last read (World.sense): the dead near, from how many sides, the nearest, the way out. */
     transient int tN, tSides, escK = -1, breakCount;
     transient float tNear = 999, escX, escY, senseAt, breakT;
-    /** How bad the best way out is: the dead along it (a hundred more if it's walled off). */
-    transient float escCost;
     /** ((21.3) A horde leader's last tally (World.hordeTally): followers, those strung out behind, and when. */
     transient int tallyN, tallyBehind, tallyFrame = -1;
     transient int leadStart;
@@ -335,13 +333,12 @@ final class Entity {
     boolean homeChecked;
     /** The last hard knock (blast, car, charge), so the body flies the right way if it kills them. Fades fast. */
     float knockX, knockY;
-    /** Brutes: a charge in progress (seconds left), its direction and cooldown. Crawlers: lying in wait. */
+    /** Brutes: a charge in progress (seconds left), its direction and cooldown. */
     float chargeCd, chargeX, chargeY;
-    boolean hidden;
     /** Armed residents holding a building together. */
     boolean militia;
-    /** When they last bit, fired, swung or shoved, screamed and spat (world time): for the animations. */
-    float biteAt = -9, shotAt = -9, swingAt = -9, screamAt = -9, spitAt = -9;
+    /** When they last bit, fired, or swung or shoved (world time): for the animations. */
+    float biteAt = -9, shotAt = -9, swingAt = -9;
     /** A survivor group this person belongs to; a supply run they're on, and what they're bringing back. */
     World.Holdout holdout;
     City.Building scavenge;
@@ -411,7 +408,7 @@ final class Entity {
     /** (10.37) What the brain has them doing (World.G_*), until it thinks again, and the building it had in mind. */
     int goal;
     transient float goalCd, goalTime;
-    transient City.Building hideCandidate, storeCandidate;
+    transient City.Building hideCandidate;
     transient World.Pickup pickCandidate;
     /** Heard the safe zones on the news and means to go. */
     boolean heardZone;

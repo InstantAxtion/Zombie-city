@@ -19,9 +19,6 @@ final class OffHeap {
     private OffHeap() {
     }
 
-    /** Where the tables in use came from, for the record: 0 shared memory, 1 a mapped file, 2 the heap. */
-    static volatile int lastKind = -1;
-
     static ByteBuffer alloc(int bytes, Object[] owner) {
         int n = Math.max(8, bytes);
         // Android's shared memory, looked up by name: the game is built against an older Android than has it.
@@ -30,7 +27,6 @@ final class OffHeap {
             Object m = c.getMethod("create", String.class, int.class).invoke(null, "zombiecity", n);
             ByteBuffer b = (ByteBuffer) c.getMethod("mapReadWrite").invoke(m);
             owner[0] = m;
-            lastKind = 0;
             return b.order(ByteOrder.nativeOrder());
         } catch (Throwable ignored) {
             // (Not there: the next way.)
@@ -41,7 +37,6 @@ final class OffHeap {
             try {
                 raf.setLength(n);
                 ByteBuffer b = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, n);
-                lastKind = 1;
                 return b.order(ByteOrder.nativeOrder());
             } finally {
                 raf.close();
@@ -51,7 +46,6 @@ final class OffHeap {
         } catch (Throwable ignored) {
             // (No scratch space: the last way.)
         }
-        lastKind = 2;
         return ByteBuffer.allocateDirect(n).order(ByteOrder.nativeOrder());
     }
 

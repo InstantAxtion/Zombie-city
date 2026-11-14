@@ -72,7 +72,7 @@ final class Country {
     final String[] streets, mainWords, localWords;
     final String ringRoad;
     final String[] townStart, townEnd, districtWords, hamletEnds;
-    final String[] churches, schools, markets, pharmacies, gunStores, bases;
+    final String[] churches, schools, markets, pharmacies, bases;
     final String hospital, fireStation;
     String policeStation;
     final String[] first, last, dogs;
@@ -99,11 +99,6 @@ final class Country {
         String type = types[rnd.nextInt(types.length)];
         if (type.isEmpty()) return base;
         return base + " " + type;
-    }
-
-    /** The sign over a gun store's door. */
-    String gunSign() {
-        return "GUNS";
     }
 
     // ------------------------------------------------------------------ out in the country
@@ -210,7 +205,6 @@ final class Country {
                 "Jefferson High", "Oakwood Academy", "Hamilton Elementary"};
         markets = new String[]{"FreshMart", "ValueFoods", "Corner Grocer", "SuperSaver", "GreenBasket", "MegaMart"};
         pharmacies = new String[]{"CityCare Pharmacy", "Main Street Drugs", "HealthPlus", "Corner Pharmacy"};
-        gunStores = new String[]{"Liberty Guns", "Ace Firearms", "Frontier Outfitters", "Hunter's Supply", "Patriot Arms"};
         bases = new String[]{"Fort Mercer", "Camp Redstone", "Fort Kessler", "Camp Hollow", "Fort Whitmore",
                 "Camp Ironwood"};
         hospital = "City Hospital";

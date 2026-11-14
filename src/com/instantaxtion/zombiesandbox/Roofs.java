@@ -137,38 +137,6 @@ final class Roofs {
 
 
 
-    private static void frenchHouse(Canvas c, Paint p, float x0, float y0, float x1, float y1, int roof, Random r) {
-        boolean along = (x1 - x0) >= (y1 - y0);
-        boolean tiles = roof == 0xFFB0623E || roof == 0xFF9E5A3C;
-        p.setColor(City.darken(roof, 0.7f));
-        c.drawRect(x0, y0, x1, y1, p);
-        float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-        p.setColor(City.lighten(roof, 0.14f));
-        if (along) c.drawRect(x0 + 1, y0 + 1, x1 - 1, my, p);
-        else c.drawRect(x0 + 1, y0 + 1, mx, y1 - 1, p);
-        p.setColor(roof);
-        if (along) c.drawRect(x0 + 1, my, x1 - 1, y1 - 1, p);
-        else c.drawRect(mx, y0 + 1, x1 - 1, y1 - 1, p);
-        courses(c, p, x0 + 1, y0 + 1, x1 - 1, y1 - 1, City.darken(roof, tiles ? 0.8f : 0.85f), tiles ? 1.5f : 1.1f, !along);
-        p.setColor(City.darken(roof, 0.55f));
-        if (along) c.drawRect(x0 + 1, my - 0.6f, x1 - 1, my + 0.6f, p);
-        else c.drawRect(mx - 0.6f, y0 + 1, mx + 0.6f, y1 - 1, p);
-        // Chimneys on both gable ends, with their terracotta pots.
-        for (int k = 0; k < 2; k++) {
-            float cx = along ? (k == 0 ? x0 + 3 : x1 - 6) : mx - 1.5f, cy = along ? my - 1.5f : (k == 0 ? y0 + 3 : y1 - 6);
-            p.setColor(0xFFD8CCB0);
-            c.drawRect(cx, cy, cx + 3, cy + 3, p);
-            p.setColor(0xFFB0623E);
-            c.drawCircle(cx + 1.5f, cy + 1.5f, 0.9f, p);
-        }
-        if (r.nextInt(3) == 0) {
-            // A skylight.
-            p.setColor(0xFF6E8CA0);
-            float sx = along ? x0 + (x1 - x0) * 0.6f : mx + 2, sy = along ? my + 2 : y0 + (y1 - y0) * 0.6f;
-            c.drawRect(sx, sy, sx + 3, sy + 3.5f, p);
-        }
-    }
-
 
     // ------------------------------------------------------------------ blocks and offices
 
@@ -182,48 +150,6 @@ final class Roofs {
     // ------------------------------------------------------------------ places of worship
 
 
-
-    /** A Gothic church: a slate cross-shaped roof with a spire over the west front. */
-    private static void cathedral(Canvas c, Paint p, float x0, float y0, float x1, float y1) {
-        boolean along = (x1 - x0) >= (y1 - y0);
-        float bw = x1 - x0, bh = y1 - y0;
-        p.setColor(0xFFC8BCA0);
-        c.drawRect(x0, y0, x1, y1, p);
-        int slate = 0xFF4E5560;
-        float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-        // Nave and transept.
-        float nw = along ? bh * 0.55f : bw * 0.55f;
-        float nx0 = along ? x0 + 1 : mx - nw / 2, nx1 = along ? x1 - 1 : mx + nw / 2;
-        float ny0 = along ? my - nw / 2 : y0 + 1, ny1 = along ? my + nw / 2 : y1 - 1;
-        p.setColor(City.lighten(slate, 0.12f));
-        if (along) c.drawRect(nx0, ny0, nx1, my, p);
-        else c.drawRect(nx0, ny0, mx, ny1, p);
-        p.setColor(slate);
-        if (along) c.drawRect(nx0, my, nx1, ny1, p);
-        else c.drawRect(mx, ny0, nx1, ny1, p);
-        float tc = along ? x0 + bw * 0.62f : y0 + bh * 0.62f, tw = along ? bw * 0.12f : bh * 0.12f;
-        p.setColor(City.lighten(slate, 0.06f));
-        if (along) c.drawRect(tc - tw, y0 + 1, tc + tw, y1 - 1, p);
-        else c.drawRect(x0 + 1, tc - tw, x1 - 1, tc + tw, p);
-        p.setColor(0xFF2E333A);
-        p.setStrokeWidth(0.9f);
-        if (along) {
-            c.drawLine(nx0, my, nx1, my, p);
-            c.drawLine(tc, y0 + 1, tc, y1 - 1, p);
-        } else {
-            c.drawLine(mx, ny0, mx, ny1, p);
-            c.drawLine(x0 + 1, tc, x1 - 1, tc, p);
-        }
-        // The spire: a pyramid seen from above.
-        float sx = along ? x0 + Math.min(bw * 0.12f, 9) : mx, sy = along ? my : y0 + Math.min(bh * 0.12f, 9);
-        float s = Math.min(Math.min(bw, bh) * 0.22f, 8);
-        quad(c, p, 0xFF5E6672, sx - s, sy - s, sx + s, sy - s, sx, sy, sx, sy);
-        quad(c, p, 0xFF3A4048, sx - s, sy + s, sx + s, sy + s, sx, sy, sx, sy);
-        quad(c, p, 0xFF4E5560, sx - s, sy - s, sx - s, sy + s, sx, sy, sx, sy);
-        quad(c, p, 0xFF2E333A, sx + s, sy - s, sx + s, sy + s, sx, sy, sx, sy);
-        p.setColor(0xFFD8B040);
-        c.drawCircle(sx, sy, 0.9f, p);
-    }
 
 
     // ------------------------------------------------------------------ building variants

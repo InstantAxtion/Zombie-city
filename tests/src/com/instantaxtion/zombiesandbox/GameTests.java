@@ -260,9 +260,9 @@ public final class GameTests {
                 check(w.dispatch.swatTeams >= 1, "a SWAT team at the precinct");
                 // A horde turns up near people: the SWAT team is sent.
                 Entity near = null;
-                for (Entity e : w.entities) if (e.type == Entity.CIVILIAN && !e.hidden && !e.dead && city.cityHall != null
+                for (Entity e : w.entities) if (e.type == Entity.CIVILIAN && !e.dead && city.cityHall != null
                         && Math.hypot(e.x - city.cityHall.doorX, e.y - city.cityHall.doorY) < 600) near = e;
-                if (near == null) for (Entity e : w.entities) if (e.type == Entity.CIVILIAN && !e.hidden && !e.dead) near = e;
+                if (near == null) for (Entity e : w.entities) if (e.type == Entity.CIVILIAN && !e.dead) near = e;
                 int teams = w.dispatch.swatTeams;
                 // (The 911 call depends on who sees them first: a big enough horde, and long enough, that it always comes.)
                 for (int k = 0; k < 20; k++) w.spawn(Entity.ZOMBIE, near.x + 40 + (k % 7) * 3, near.y + (k / 7) * 4);
@@ -700,7 +700,7 @@ public final class GameTests {
                 int tried = 0, reacted = 0, armedTried = 0, fought = 0;
                 for (Entity e : new java.util.ArrayList<Entity>(w.entities)) {
                     if (tried >= 6 && armedTried >= 4) break;
-                    if (e.type != Entity.CIVILIAN || e.dead || e.hidden || e.ride != null || e.leader != null || e.task != Dispatch.T_NONE
+                    if (e.type != Entity.CIVILIAN || e.dead || e.ride != null || e.leader != null || e.task != Dispatch.T_NONE
                             || e.militia || e.scavenge != null || e.job == Entity.J_LOOKOUT || e.inmate
                             || w.city.insideOf(e.x, e.y) != null) continue;
                     boolean arm = World.bravery(e) > 0.75f && armedTried < 4;
@@ -726,7 +726,7 @@ public final class GameTests {
                     boolean ran = false, shot = false;
                     for (int f = 0; f < 30 && !e.dead; f++) {
                         w.update(1 / 30f);
-                        if (e.goal == World.G_FLEE || e.goal == World.G_HIDE || e.goal == World.G_ZONE || e.hidden) ran = true;
+                        if (e.goal == World.G_FLEE || e.goal == World.G_HIDE || e.goal == World.G_ZONE) ran = true;
                         if (e.goal == World.G_FIGHT) shot = true;
                     }
                     if (arm) {
@@ -757,7 +757,7 @@ public final class GameTests {
                     w.update(1 / 30f);
                     w.evCount = 0;
                     for (Entity e : w.entities) {
-                        if (e.type != Entity.CIVILIAN || e.dead || e.hidden) continue;
+                        if (e.type != Entity.CIVILIAN || e.dead) continue;
                         int[] g = seen.get(e);
                         if (g == null) seen.put(e, g = new int[]{e.goal, 0});
                         else if (g[0] != e.goal) {
@@ -1962,7 +1962,7 @@ public final class GameTests {
                         w.update(1 / 30f);
                         w.evCount = 0;
                         for (Dispatch.Incident inc : w.dispatch.incidents)
-                            if (inc.backupNeed > 0 && inc.backupBy != null && Math.hypot(inc.x - cop.x, inc.y - cop.y) < 250) called = true;
+                            if (inc.backupNeed > 0 && Math.hypot(inc.x - cop.x, inc.y - cop.y) < 250) called = true;
                     }
                     check(called, (round == 0 ? "a lone officer against four" : "an officer out of rounds") + " calls for backup");
                     cop.dead = cop.removed = true;
@@ -2584,18 +2584,6 @@ public final class GameTests {
                         && World.doctrine(traffic)[0] < World.doctrine(patrol)[0], "aim: SWAT and FBI better, traffic worse");
                 check(World.doctrine(swat)[5] > World.doctrine(patrol)[5] && World.doctrine(traffic)[5] < World.doctrine(patrol)[5], "nerve: SWAT more, traffic less");
                 check(World.doctrine(new Entity()) == null, "only police have a police training");
-                // Nobody barricades: a building with people sheltering in it keeps the door it has.
-                City.Building home = null;
-                for (City.Building b : w.city.buildings) if (b.capacity > 4 && !b.collapsed && b.doorX > 0) { home = b; break; }
-                check(home != null, "a building to shelter in");
-                home.barricade = 40;
-                for (int k = 0; k < 4; k++) {
-                    Entity p = w.spawn(Entity.CIVILIAN, home.doorX, home.doorY);
-                    p.dead = p.removed = true;
-                    home.occupants.add(p);
-                }
-                for (int f = 0; f < 30 * 10; f++) w.update(1 / 30f);
-                check(home.barricade <= 40.01f, "the door isn't shored up (" + home.barricade + ")");
             }
         });
         test("17.1: walk-in buildings - walls with doorways, sight through doors only, in and out on foot, visits, the dead follow", new Check() {
@@ -3635,7 +3623,7 @@ public final class GameTests {
                 Entity chosen = (Entity) pick.invoke(w, sniper, 400f);
                 boolean seesAlpha = w.city.los(sniper.x, sniper.y, lead.x, lead.y);
                 check(!seesAlpha || chosen == lead, "a sniper picks the alpha out of the horde (" + (chosen == null ? "nobody" : "one at " + (int) World.hypot(chosen.x - sniper.x, chosen.y - sniper.y))
-                        + ", alpha at " + (int) World.hypot(lead.x - sniper.x, lead.y - sniper.y) + " dead " + lead.dead + " hidden " + lead.hidden + ")");
+                        + ", alpha at " + (int) World.hypot(lead.x - sniper.x, lead.y - sniper.y) + " dead " + lead.dead + ")");
                 // Fire discipline: with no alpha to go for, a second gun takes a different one of the crowd.
                 lead.alpha = false;
                 Entity s2 = w.spawnSoldier(Entity.ROLE_RIFLE, sniper.x, sniper.y + 4), s3 = w.spawnSoldier(Entity.ROLE_RIFLE, sniper.x, sniper.y - 4);
@@ -3773,7 +3761,6 @@ public final class GameTests {
                     e.hasGun = false;
                 }
                 for (Fleet.Vehicle v : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) w.fleet.discard(v);
-                for (City.Building b : w.city.buildings) b.occupants.clear();
                 w.update(1 / 30f);
                 float[] gate = w.city.findWalkable(f.x, f.y);
                 java.util.ArrayList<Entity> at = new java.util.ArrayList<Entity>();
@@ -4221,18 +4208,16 @@ public final class GameTests {
                 for (Entity m : mega) { m.dead = true; m.removed = true; }
                 w.update(1 / 30f);
                 w.evCount = 0;
-                // K9: the dog flushes out one of the dead lying low, and finds a bite.
+                // K9: the dog finds a bite.
                 Entity handler = w.spawnCop(Entity.ROLE_K9, p[0], p[1]);
                 Entity dog = null;
                 for (Entity e : w.entities) if (e.type == Entity.DOG && e.leader == handler) dog = e;
                 check(dog != null, "a K9 handler comes with a police dog");
-                Entity hidden = w.spawn(Entity.ZOMBIE, p[0] + 30, p[1]);
-                hidden.hidden = true;
+                w.spawn(Entity.ZOMBIE, p[0] + 30, p[1]);
                 Entity bitten = w.spawn(Entity.CIVILIAN, p[0] - 20, p[1]);
                 bitten.infected = true;
                 w.recount();
                 for (int f = 0; f < 30 * 3; f++) { w.update(1 / 30f); w.evCount = 0; }
-                check(!hidden.hidden || hidden.dead, "the dog flushes out the dead lying low");
                 check(bitten.sniffed, "and finds the bite");
                 // A motorcycle officer, out on patrol.
                 Entity rider = w.spawnCop(-4, p[0], p[1]);
@@ -4527,7 +4512,7 @@ public final class GameTests {
                 for (int f = 0; f < 30 * 4 && !moved; f++) {
                     w.update(1 / 30f);
                     w.evCount = 0;
-                    moved = calm.x != x0 || calm.y != y0 || calm.dead || calm.hidden;
+                    moved = calm.x != x0 || calm.y != y0 || calm.dead;
                 }
                 check(moved, "the first of the dead and they're going about their day again");
                 // The map picture: tiles, no one big picture kept.
