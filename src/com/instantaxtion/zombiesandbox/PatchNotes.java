@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.8";
-    static final int VERSION_CODE = 228;
+    static final String VERSION = "23.0";
+    static final int VERSION_CODE = 230;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "23.0  -  Veterans",
+                    "Police, soldiers and armed survivors earn experience from kills, lives saved and time under fire: seven levels, each with a perk (steady aim, quick hands, tough, fleet-footed, field medic, nerves of steel).",
+                    "Armed survivors and idle police and soldiers gather frightened people into small bands; the dead closing in as a pack of three or more frenzy.",
+                    "Evacuation convoys: up to three buses with a police escort when a crowd is waiting.",
+                    "A cargo plane drops supplies over the busiest safe zone during an outbreak.",
+                    "The stats panel's graph shows kills too, with a key, the top units and the fallen heroes.",
+                    "New map: Desert City.",
+            },
             {
                     "22.8  -  Neighbourhoods",
                     "Districts have their own character: Chinatown, Little Italy, the Arts District, the Financial and Theatre Districts, the Historic Quarter, Docklands, Tech Park and more.",
