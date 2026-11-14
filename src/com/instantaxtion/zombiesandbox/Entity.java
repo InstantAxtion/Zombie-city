@@ -3,7 +3,7 @@ package com.instantaxtion.zombiesandbox;
 /** Someone in the city: a civilian, a cop, a soldier, a medic, a dog or one of the zombie kinds. */
 final class Entity {
     static final int CIVILIAN = 0, COP = 1, SOLDIER = 2, MEDIC = 3, DOG = 4, RAIDER = 5, ZOMBIE = 6, RUNNER = 7,
-            BRUTE = 8, CRAWLER = 9, SCREAMER = 10, ZOMBIE_DOG = 11, SPITTER = 12, BLOATER = 13,
+            BRUTE = 8, CRAWLER = 9, SCREAMER = 10, ZOMBIE_DOG = 11, /** ((22.6) In the old spitter's place. */ BRUISER = 12, BLOATER = 13,
             /** (Firefighters went in 10.49: any in an old save load as civilians.) */
             FIREFIGHTER = 14,
             /** (The other game modes' gang members and enemy soldiers went in 19.6: any in an old save load as zombies.) */
@@ -16,14 +16,14 @@ final class Entity {
      */
     static int current(int t) {
         switch (t) {
-            case CRAWLER: case BLOATER: case SPITTER: case SCREAMER: return ZOMBIE;
+            case CRAWLER: case BLOATER: case SCREAMER: return ZOMBIE;
             case FIREFIGHTER: case MEDIC: case RAIDER: return CIVILIAN;
             case GANGSTER: case INVADER: return ZOMBIE;
             default: return t;
         }
     }
     static final String[] NAMES = {"Civilian", "Cop", "Soldier", "Medic", "Dog", "Raider", "Zombie", "Runner", "Brute",
-            "Crawler", "Screamer", "Zombie dog", "Spitter", "Bloater", "Firefighter", "Gang member", "Enemy soldier"};
+            "Crawler", "Screamer", "Zombie dog", "Bruiser", "Bloater", "Firefighter", "Gang member", "Enemy soldier"};
 
     /** Soldiers' jobs: rifleman, the commander, snipers and machine gunners. */
     static final int ROLE_RIFLE = 0, ROLE_COMMANDER = 1, ROLE_SNIPER = 2, ROLE_GUNNER = 3;

@@ -6096,7 +6096,11 @@ final class City {
         List<Landmarks.Def> defs = Landmarks.all();
         Landmarks.Def pick = null;
         int least = Integer.MAX_VALUE, n = 0;
+        // ((22.6) Cities made before (map versions 35 and 36) chose from the first fifty: they still do, so they
+        // rebuild the same.)
+        int designs = cfg.variety() ? defs.size() : Math.min(defs.size(), 50);
         for (Landmarks.Def d : defs) {
+            if (d.id >= designs) break;
             if ((d.districts & dbit) == 0 || s < d.minS || l < d.minL) continue;
             int cnt = lmCount[d.id];
             if (cnt > 0) {

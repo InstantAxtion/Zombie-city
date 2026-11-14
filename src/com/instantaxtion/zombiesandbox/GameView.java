@@ -62,7 +62,7 @@ final class GameView extends View implements Menu.Host {
             "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
-    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
+    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
             Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
@@ -108,7 +108,8 @@ final class GameView extends View implements Menu.Host {
         return TOOL_NAMES[t];
     }
 
-    private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile", "Big and tough, shoves people aside"};
+    private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile",
+            "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
@@ -7088,6 +7089,14 @@ final class GameView extends View implements Menu.Host {
                     stroke.setStrokeWidth(r * 0.36f);
                     c.drawLine(-r * 0.1f, -r * 0.72f, -r * 1.25f - sw, -r * 1.0f, stroke);
                     c.drawLine(-r * 0.1f, r * 0.72f, -r * 1.25f + sw, r * 1.0f, stroke);
+                } else if (e.type == Entity.BRUISER) {
+                    // ((22.6) Thick arms reaching forward, bloodied hands.)
+                    stroke.setStrokeWidth(r * 0.5f);
+                    c.drawLine(r * 0.1f, -r * 0.78f, r * 1.3f + sw, -r * 0.62f, stroke);
+                    c.drawLine(r * 0.1f, r * 0.78f, r * 1.3f - sw, r * 0.62f, stroke);
+                    fill.setColor(0xFF7A2A22);
+                    c.drawCircle(r * 1.32f + sw, -r * 0.62f, r * 0.24f, fill);
+                    c.drawCircle(r * 1.32f - sw, r * 0.62f, r * 0.24f, fill);
                 } else if (e.type == Entity.BRUTE) {
                     // Huge arms ending in fists.
                     stroke.setStrokeWidth(r * 0.62f);
@@ -7265,6 +7274,13 @@ final class GameView extends View implements Menu.Host {
                 c.drawCircle(-r * 0.4f, -r * 0.4f, r * 0.22f, fill);
                 c.drawCircle(r * 0.1f, r * 0.45f, r * 0.18f, fill);
                 c.drawCircle(-r * 0.5f, r * 0.3f, r * 0.15f, fill);
+            } else if (e.type == Entity.BRUISER) {
+                // ((22.6) Broad shoulders in a torn shirt, a dark stain down the back.)
+                fill.setColor(City.darken(e.body, 0.8f));
+                oval.set(-r * 0.5f, -r * 1.05f, r * 0.35f, r * 1.05f);
+                c.drawOval(oval, fill);
+                fill.setColor(0x9A6A1A14);
+                c.drawCircle(-r * 0.25f, r * 0.2f, r * 0.38f, fill);
             } else if (e.type == Entity.BRUTE) {
                 // A hunched hump of shoulders, wider than the rest of it.
                 fill.setColor(0xFF3A2E3C);
@@ -9153,7 +9169,7 @@ final class GameView extends View implements Menu.Host {
      * commander, a scope for the sniper), the dead's green skin and red eyes, a runner's speed lines, a brute's bulk.
      */
     private void drawPersonBadge(Canvas c, int type, Entity e, float cx, float cy, float size) {
-        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE;
+        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE || type == Entity.BRUISER;
         int disc = zombie ? 0xFF2E4A22 : type == Entity.COP ? 0xFF1E3366 : type == Entity.SOLDIER ? 0xFF3A4328 : 0xFF5A4022;
         float r = size * 1.18f;
         fill.setColor(disc);
@@ -9163,13 +9179,21 @@ final class GameView extends View implements Menu.Host {
         c.drawCircle(cx, cy, r, stroke);
         c.save();
         c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.95f);
-        float bulk = type == Entity.BRUTE ? 1.35f : 1f;
+        float bulk = type == Entity.BRUTE ? 1.35f : type == Entity.BRUISER ? 1.17f : 1f;
         // Shoulders.
         int shirt = type == Entity.COP ? e.body : type == Entity.SOLDIER ? e.body : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
         fill.setColor(shirt);
         oval.set(cx - r * 0.78f * bulk, cy + r * 0.28f, cx + r * 0.78f * bulk, cy + r * 1.5f);
         c.drawOval(oval, fill);
-        if (zombie) {
+        if (type == Entity.BRUISER) {
+            // ((22.6) A bruiser: a dark red shirt torn open, blood down the front.)
+            fill.setColor(0xFF6A3A34);
+            oval.set(cx - r * 0.7f * bulk, cy + r * 0.32f, cx + r * 0.7f * bulk, cy + r * 1.45f);
+            c.drawOval(oval, fill);
+            fill.setColor(0xFF8E1A12);
+            c.drawCircle(cx - r * 0.2f, cy + r * 0.7f, r * 0.18f, fill);
+            c.drawCircle(cx + r * 0.3f, cy + r * 0.85f, r * 0.13f, fill);
+        } else if (zombie) {
             // Torn shirt.
             fill.setColor(0xFF6E0A0A);
             c.drawCircle(cx + r * 0.25f, cy + r * 0.62f, r * 0.12f, fill);
@@ -9181,7 +9205,7 @@ final class GameView extends View implements Menu.Host {
         // Head.
         int skin = zombie ? (type == Entity.BRUTE ? 0xFF6F8D55 : 0xFF8FA173) : 0xFFE0AC69;
         fill.setColor(skin);
-        float hr = r * 0.36f * (type == Entity.BRUTE ? 1.15f : 1f), hy = cy - r * 0.12f;
+        float hr = r * 0.36f * (type == Entity.BRUTE ? 1.15f : type == Entity.BRUISER ? 1.07f : 1f), hy = cy - r * 0.12f;
         c.drawCircle(cx, hy, hr, fill);
         // Eyes.
         fill.setColor(zombie ? 0xFFFF3B2F : 0xFF1A1A1A);
@@ -10331,7 +10355,7 @@ final class GameView extends View implements Menu.Host {
             int n = side == 2 ? 6 : 20;
             for (int i = 0; i < n; i++) {
                 double a = i * 2.4, r = 6 + Math.sqrt(i) * 7;
-                int type = side == 2 ? Entity.CIVILIAN : i == 0 ? Entity.BRUTE : i % 4 == 1 ? Entity.RUNNER : Entity.ZOMBIE;
+                int type = side == 2 ? Entity.CIVILIAN : i == 0 ? Entity.BRUTE : i % 7 == 3 ? Entity.BRUISER : i % 4 == 1 ? Entity.RUNNER : Entity.ZOMBIE;
                 Entity e = world.spawn(type, wx + (float) (Math.cos(a) * r), wy + (float) (Math.sin(a) * r));
                 if (e != null) g.add(e);
             }

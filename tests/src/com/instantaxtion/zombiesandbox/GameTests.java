@@ -1586,6 +1586,7 @@ public final class GameTests {
                 c.seed = 77;
                 c.normalize();
                 c.seed = 77;
+                c.civic = 36; // (22.6: laid out for the map before the new colours and names)
                 World w = new World(c);
                 w.populate(c);
                 Fleet.Vehicle dozer = null;
@@ -1614,7 +1615,7 @@ public final class GameTests {
                 check(wrecks.size() == 2, "two wrecks on the road");
                 // Nothing happens on a calm day; once the dead are about, the bulldozer goes out.
                 for (int f = 0; f < 30 * 10; f++) w.update(1 / 30f);
-                check(dozer.parked && !wrecks.get(0).removedFromFleet, "left be on a calm day");
+                check(dozer.parked && !wrecks.get(0).removedFromFleet, "left be on a calm day (parked " + dozer.parked + ", wreck gone " + wrecks.get(0).removedFromFleet + ", zombies " + w.zombies + ")");
                 boolean cleared = false;
                 for (int f = 0; f < 30 * 240 && !cleared; f++) {
                     w.alert = Math.max(w.alert, 1);
@@ -4374,7 +4375,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() >= 50, "the designs (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 150, "150 designs (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();

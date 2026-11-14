@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 67;
+    private static final int VERSION = 68;
 
     private SaveGame() {
     }
@@ -466,6 +466,8 @@ final class SaveGame {
     /** Version 1 saves came before dogs, which took entity type 4. */
     private static int type(int t, int version) {
         t = version < 2 && t >= Entity.DOG ? t + 1 : t;
+        // ((22.6) Type 12 was the spitter, long gone (they came back as zombies); it's the bruiser from version 68.)
+        if (version < 68 && t == Entity.BRUISER) t = Entity.ZOMBIE;
         // (Kinds no longer in the game load as what they'd be now: see Entity.current.)
         return Entity.current(t);
     }

@@ -641,7 +641,8 @@ final class World {
                 case Entity.BRUTE: zs += 4; break;
                 case Entity.CRAWLER: zs += 0.6f; break;
                 case Entity.SCREAMER: zs += 1.5f; break;
-                case Entity.SPITTER: case Entity.BLOATER: zs += 2; break;
+                case Entity.BRUISER: zs += 2.2f; break;
+                case Entity.BLOATER: zs += 2; break;
             }
             if (e.infected) zs += 0.8f;
         }
@@ -1347,7 +1348,7 @@ final class World {
 
     int zombieCount() {
         return counts[Entity.ZOMBIE] + counts[Entity.RUNNER] + counts[Entity.BRUTE] + counts[Entity.CRAWLER]
-                + counts[Entity.SCREAMER] + counts[Entity.ZOMBIE_DOG] + counts[Entity.SPITTER] + counts[Entity.BLOATER];
+                + counts[Entity.SCREAMER] + counts[Entity.ZOMBIE_DOG] + counts[Entity.BRUISER] + counts[Entity.BLOATER];
     }
 
     int humanCount() {
@@ -1504,6 +1505,16 @@ final class World {
                 e.runSpeed = (24 + rnd.nextFloat() * 5) * RUNNER_PACE;
                 e.skin = 0xFF9DAA70;
                 break;
+            case Entity.BRUISER:
+                // ((22.6) Between a runner and a brute: quicker than the shambling dead, tougher, a heavy bite and a
+                // short lunge.)
+                e.hp = 115;
+                e.radius = 4.7f;
+                e.speed = (12 + rnd.nextFloat() * 4) * 1.25f;
+                e.runSpeed = (24 + rnd.nextFloat() * 5) * 1.25f;
+                e.skin = 0xFF829858;
+                e.mass = 1.9f;
+                break;
             default:
                 // (Toned down in 10.50: tough, not a tank.)
                 e.hp = 170;
@@ -1516,9 +1527,9 @@ final class World {
         }
         if (e.isUndead()) {
             int base = originBody != 0 ? originBody
-                    : type == Entity.BRUTE ? 0xFF4D3F4F : type == Entity.ZOMBIE_DOG ? DOGS[rnd.nextInt(DOGS.length)]
+                    : type == Entity.BRUTE ? 0xFF4D3F4F : type == Entity.BRUISER ? 0xFF6A3A34 : type == Entity.ZOMBIE_DOG ? DOGS[rnd.nextInt(DOGS.length)]
                     : shirts()[rnd.nextInt(shirts().length)];
-            e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE ? 0.2f : 0.45f);
+            e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE || type == Entity.BRUISER ? 0.2f : 0.45f);
             // ((12.4) This strain's own look.)
             int tint = strainTint();
             if (tint != 0 && type != Entity.ZOMBIE_DOG) e.skin = mix(e.skin, tint, 0.45f);
@@ -4128,6 +4139,18 @@ final class World {
         if (t != null) {
             z.hidden = false;
             // A brute lowers its head and charges.
+            // ((22.6) A bruiser lunges: shorter and more often.)
+            if (z.type == Entity.BRUISER && z.chargeCd <= 0) {
+                float cdx = t.x - z.x, cdy = t.y - z.y, cd = (float) Math.sqrt(cdx * cdx + cdy * cdy) + 0.001f;
+                if (cd > 22 && cd < 65 && city.los(z.x, z.y, t.x, t.y)) {
+                    z.charge = 0.7f;
+                    z.chargeCd = 7 + rnd.nextFloat() * 4;
+                    z.chargeX = cdx / cd;
+                    z.chargeY = cdy / cd;
+                    emit(Sfx.GROAN, z.x, z.y);
+                    return;
+                }
+            }
             if (z.type == Entity.BRUTE && z.chargeCd <= 0) {
                 float cdx = t.x - z.x, cdy = t.y - z.y, cd = (float) Math.sqrt(cdx * cdx + cdy * cdy) + 0.001f;
                 if (cd > 35 && cd < 100 && city.los(z.x, z.y, t.x, t.y)) {
@@ -4336,7 +4359,7 @@ final class World {
                 float wx = Math.max(target.x0, Math.min(target.x1, z.x)) - z.x, wy = Math.max(target.y0, Math.min(target.y1, z.y)) - z.y;
                 steer(z, 0, 0, 0);
                 z.angle = turn(z.angle, (float) Math.atan2(wy, wx), dt * 4);
-                target.barricade -= (z.type == Entity.BRUTE ? 2.4f : 0.8f) * dt * doorWeakness(target);
+                target.barricade -= (z.type == Entity.BRUTE ? 2.4f : z.type == Entity.BRUISER ? 1.4f : 0.8f) * dt * doorWeakness(target);
                 target.calmTimer = 0;
                 if (rnd.nextFloat() < dt * 0.6f) emit(Sfx.THUD, z.x, z.y);
                 z.stuckTime = 0;
@@ -4555,7 +4578,9 @@ final class World {
     /** A brute's charge: straight ahead, bowling people over, until it hits something. */
     private void charging(Entity z, float dt) {
         z.charge -= dt;
-        steer(z, z.chargeX, z.chargeY, z.runSpeed * 2f);
+        // ((22.6) A bruiser's lunge is lighter than a brute's charge.)
+        boolean lunge = z.type == Entity.BRUISER;
+        steer(z, z.chargeX, z.chargeY, z.runSpeed * (lunge ? 1.6f : 2f));
         z.angle = (float) Math.atan2(z.chargeY, z.chargeX);
         int cx0 = Math.max(0, (int) ((z.x - 14) / CELL)), cx1 = Math.min(gw - 1, (int) ((z.x + 14) / CELL));
         int cy0 = Math.max(0, (int) ((z.y - 14) / CELL)), cy1 = Math.min(gh - 1, (int) ((z.y + 14) / CELL));
@@ -4567,13 +4592,14 @@ final class World {
                     if (o.dead || o.stun > 0) continue;
                     float r = z.radius + o.radius + 2;
                     if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > r * r) continue;
-                    o.stun = 0.9f;
-                    o.hp -= 12;
+                    o.stun = lunge ? 0.5f : 0.9f;
+                    o.hp -= lunge ? 7 : 12;
                     o.hurt = 1;
                     o.killedByZombie = true;
-                    o.knockX = z.chargeX * 80 / o.mass;
-                    o.knockY = z.chargeY * 80 / o.mass;
-                    tryMove(o, z.chargeX * 9 / o.mass, z.chargeY * 9 / o.mass);
+                    float kb = lunge ? 45 : 80;
+                    o.knockX = z.chargeX * kb / o.mass;
+                    o.knockY = z.chargeY * kb / o.mass;
+                    tryMove(o, z.chargeX * (lunge ? 5 : 9) / o.mass, z.chargeY * (lunge ? 5 : 9) / o.mass);
                     emit(Sfx.THUD, o.x, o.y);
                 }
             }
@@ -4581,12 +4607,12 @@ final class World {
             // Slammed into something: barricades and cars take a beating; the brute is dazed for a moment.
             z.blocked = false;
             z.charge = 0;
-            z.stun = 0.6f;
-            if (!barriers.isEmpty()) for (int k = 0; k < 6; k++) bashBarrier(z, 0.5f);
+            z.stun = lunge ? 0.4f : 0.6f;
+            if (!barriers.isEmpty()) for (int k = 0; k < (lunge ? 2 : 6); k++) bashBarrier(z, 0.5f);
             Fleet.Vehicle car = carFor(z, 20);
-            if (car != null) fleet.damage(car, 40, false);
-            shake = Math.max(shake, 0.3f);
-            emit(Sfx.CRASH, z.x, z.y);
+            if (car != null) fleet.damage(car, lunge ? 12 : 40, false);
+            if (!lunge) shake = Math.max(shake, 0.3f);
+            emit(lunge ? Sfx.THUD : Sfx.CRASH, z.x, z.y);
         }
     }
 
@@ -5065,7 +5091,7 @@ final class World {
                 return;
             }
         }
-        float dmg = z.type == Entity.BRUTE ? 20 : z.type == Entity.RUNNER ? 8 : z.type == Entity.CRAWLER ? 10
+        float dmg = z.type == Entity.BRUTE ? 20 : z.type == Entity.BRUISER ? 14 : z.type == Entity.RUNNER ? 8 : z.type == Entity.CRAWLER ? 10
                 : z.type == Entity.ZOMBIE_DOG ? 7 : 17;
         z.biteCd = z.type == Entity.RUNNER || z.type == Entity.ZOMBIE_DOG ? 0.55f : 0.9f;
         z.biteAt = time;
@@ -5085,6 +5111,7 @@ final class World {
             t.infectTimer = turnTime(8 + rnd.nextFloat() * 10);
         }
         if (z.type == Entity.BRUTE) tryMove(t, nx * 4, ny * 4);
+        else if (z.type == Entity.BRUISER) tryMove(t, nx * 2, ny * 2);
     }
 
     /** Shoves a zombie back and stuns it; armed units also hit it with their weapon. */
@@ -5098,6 +5125,7 @@ final class World {
         if (e != controlled) {
             float chance = strong ? 0.72f : 0.5f;
             if (z.type == Entity.BRUTE) chance -= 0.35f;
+            else if (z.type == Entity.BRUISER) chance -= 0.18f;
             if (z.stun > 0) chance += 0.15f;
             chance -= 0.08f * Math.max(0, countZombiesNear(e.x, e.y, 22) - 1);
             if (e.hp < e.maxHp * 0.4f) chance -= 0.1f;
@@ -5110,7 +5138,7 @@ final class World {
         }
         float push = (strong ? 11 : 7) / z.mass;
         tryMove(z, ddx / d * push, ddy / d * push);
-        z.stun = z.type == Entity.BRUTE ? 0.3f : strong ? 0.9f : 0.6f;
+        z.stun = z.type == Entity.BRUTE ? 0.3f : z.type == Entity.BRUISER ? 0.5f : strong ? 0.9f : 0.6f;
         if (strong) {
             z.hp -= 8;
             z.hurt = 1;
@@ -8012,7 +8040,8 @@ final class World {
         float spread = 50 * (float) Math.max(1, Math.sqrt(n / 35.0));
         for (int i = 0; i < n; i++) {
             float roll = rnd.nextFloat();
-            int type = roll < 0.12f ? Entity.RUNNER : roll < 0.14f ? Entity.BRUTE : roll < 0.2f ? Entity.ZOMBIE_DOG : Entity.ZOMBIE;
+            int type = roll < 0.12f ? Entity.RUNNER : roll < 0.14f ? Entity.BRUTE : roll < 0.2f ? Entity.ZOMBIE_DOG
+                    : roll < 0.25f ? Entity.BRUISER : Entity.ZOMBIE;
             Entity z = spawn(type, edge[0] + rnd.nextFloat() * spread - spread / 2, edge[1] + rnd.nextFloat() * spread - spread / 2);
             if (z == null) continue;
             out.add(z);
@@ -13893,7 +13922,7 @@ final class World {
         if (rnd.nextFloat() < hit) {
             boolean wasUp = t.hp > 0;
             // Only a hit to the head really stops a zombie; body shots just wear it down.
-            boolean headshot = t.isUndead() && rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : 1)
+            boolean headshot = t.isUndead() && rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : t.type == Entity.BRUISER ? 0.7f : 1)
                     * (t.spottedUntil > time && e.isArmed() ? SPOTTED_AIM : 1);
             if (headshot) {
                 t.hp = 0;
@@ -15513,6 +15542,10 @@ final class World {
         if (trait[TR_BRUTES]) brute *= 4;
         // (No more bloaters since 10.28, nor screamers and spitters since 10.50.)
         if (roll < brute) return Entity.BRUTE;
+        roll -= brute;
+        // ((22.6) And now and then a bruiser, likelier from the big and the trained.)
+        float bruiser = (was == Entity.SOLDIER || was == Entity.COP ? 0.03f : 0.015f) * (trait[TR_BRUTES] ? 2 : 1);
+        if (roll < bruiser) return Entity.BRUISER;
         return Entity.ZOMBIE;
     }
 
@@ -18700,7 +18733,7 @@ final class World {
                 return true;
             }
         }
-        dispatch.damageWall(zone, seg, (z.type == Entity.BRUTE ? 12 : z.type == Entity.CRAWLER ? 1.5f : 4) * dt);
+        dispatch.damageWall(zone, seg, (z.type == Entity.BRUTE ? 12 : z.type == Entity.BRUISER ? 7 : z.type == Entity.CRAWLER ? 1.5f : 4) * dt);
         if (rnd.nextFloat() < dt * 0.8f) emit(Sfx.THUD, z.x, z.y);
         return true;
     }
