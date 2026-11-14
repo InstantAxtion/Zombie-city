@@ -14285,6 +14285,9 @@ final class City {
                     }
                     if (strict && (sc & 64) == 0) continue;
                     int c = sc & 63, n = k == 0 ? t + 1 : k == 1 ? t - 1 : k == 2 ? t + w : t - w;
+                    // ((24.0) For everyday traffic a dirt track is a way through, not a short cut: patrols that took
+                    // narrow tracks both ways jammed them solid with a hundred cars.)
+                    if (strict && tiles[n] == DIRT) c += DIRT_EXTRA;
                     if (gt + c >= dist[n]) continue;
                     if (dist[n] == FAR) dfTouch(n);
                     dist[n] = gt + c;
@@ -14334,7 +14337,7 @@ final class City {
                     byte rd = roadDir[n];
                     if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
                 }
-                if (c >= 0 && tiles[n] == DIRT) c += DIRT_EXTRA;
+                if (c >= 0 && strict && tiles[n] == DIRT) c += DIRT_EXTRA;
                 if (c < 0 || gt + c >= dist[n]) continue;
                 if (dist[n] == FAR) dfTouch(n);
                 dist[n] = gt + c;
@@ -14389,9 +14392,6 @@ final class City {
             if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
         }
         if (c < 0) return -1;
-        // ((24.0) A dirt track is a way through, not a short cut: patrols that took narrow tracks both ways jammed them
-        // solid with a hundred cars.)
-        if (tiles[n] == DIRT) c += DIRT_EXTRA;
         return c | (base <= 4 ? 64 : 0);
     }
 

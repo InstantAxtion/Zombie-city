@@ -3252,11 +3252,14 @@ public final class GameTests {
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
+                // (Hurt by it - and then out of the way, so it doesn't wander onto the next one.)
+                boolean hurt = zm.dead || zm.hp < zm.maxHp;
+                zm.hp = 0;
                 for (int f = 0; f < 20; f++) {
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
-                check(w.minesBlown == 1 && w.mines.size() == laid - 1 && (zm.dead || zm.hp < zm.maxHp), "one of the dead does (" + w.minesBlown + " blown, "
+                check(w.minesBlown == 1 && w.mines.size() == laid - 1 && hurt, "one of the dead does (" + w.minesBlown + " blown, "
                         + w.mines.size() + " of " + laid + " left)");
                 // Saved and loaded.
                 w.flare(fx, fy);
@@ -4009,19 +4012,19 @@ public final class GameTests {
                 for (Entity s6 : squad) { s6.removed = true; s6.dead = true; }
                 w.update(1 / 30f);
                 // A lull with the gun getting low: reload now.
-                cop.ammo = 3;
+                cop.ammo = 2;
                 cop.reload = 0;
                 cop.x = p[0];
                 cop.y = p[1];
                 Entity far = w.spawn(Entity.ZOMBIE, p[0] + 130, p[1]);
                 far.noiseTimer = 0;
-                for (int f = 0; f < 10 && cop.reload <= 0 && cop.ammo == 3; f++) {
+                for (int f = 0; f < 10 && cop.reload <= 0 && cop.ammo == 2; f++) {
                     far.x = p[0] + 130;
                     far.y = p[1];
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
-                check(cop.reload > 0 || cop.ammo > 3, "a gun nearly empty is reloaded in a lull, not with the dead on them");
+                check(cop.reload > 0 || cop.ammo > 2, "a gun nearly empty is reloaded in a lull, not with the dead on them");
                 far.hp = 0;
                 w.update(1 / 30f);
                 // Under orders to move, still shooting what's close on the way. (With the city knowing what this is: before,
