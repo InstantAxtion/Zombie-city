@@ -1102,10 +1102,10 @@ final class GameView extends View implements Menu.Host {
         float lh = 17 * dp;
         if (portrait) {
             float top = 10 * dp + th + 8 * dp;
-            statsRect.set(10 * dp, top, 10 * dp + Math.min(260 * dp, w - 20 * dp), top + lh * 8 + 12 * dp + GRAPH_H * dp);
+            statsRect.set(10 * dp, top, 10 * dp + Math.min(260 * dp, w - 20 * dp), top + lh * 13 + 12 * dp + GRAPH_H * dp);
             feedRect.set(10 * dp, statsRect.bottom + 8 * dp, w - 10 * dp, statsRect.bottom + 8 * dp + 4 * 24 * dp);
         } else {
-            statsRect.set(10 * dp, 10 * dp, 200 * dp, 10 * dp + lh * 11 + 12 * dp + GRAPH_H * dp);
+            statsRect.set(10 * dp, 10 * dp, 200 * dp, 10 * dp + lh * 16 + 12 * dp + GRAPH_H * dp);
             feedRect.set(topRects[0].left, topRects[0].bottom + 8 * dp, w - 10 * dp, topRects[0].bottom + 8 * dp + 4 * 24 * dp);
         }
         if (oldw == 0) {
@@ -1201,14 +1201,25 @@ final class GameView extends View implements Menu.Host {
             return;
         }
         int max = 10;
-        for (int i = 0; i < n; i++) max = Math.max(max, Math.max(world.histHumans[i], world.histZombies[i]));
-        int[][] series = {world.histHumans, world.histZombies, world.histArmed};
-        int[] colors = {0xFF6FA8FF, 0xFF7CC24E, 0xFFE8C547};
-        float pw = x1 - x0 - 4 * dp, ph = y1 - y0 - 6 * dp, bx = x0 + 2 * dp, by = y1 - 3 * dp;
+        for (int i = 0; i < n; i++) max = Math.max(max, Math.max(Math.max(world.histHumans[i], world.histZombies[i]), world.histKills[i]));
+        int[][] series = {world.histHumans, world.histZombies, world.histArmed, world.histKills};
+        int[] colors = {0xFF6FA8FF, 0xFF7CC24E, 0xFFE8C547, 0xFFE0504A};
+        // ((23.0) What each line is.)
+        String[] keys = {"People", "Zombies", "Armed", "Kills"};
+        text.setTextSize(9.5f * dp);
+        float kx = x0 + 4 * dp;
+        for (int k = 0; k < 4; k++) {
+            fill.setColor(colors[k]);
+            c.drawRect(kx, y0 + 4 * dp, kx + 6 * dp, y0 + 10 * dp, fill);
+            text.setColor(0xFFB8BDC4);
+            c.drawText(keys[k], kx + 8 * dp, y0 + 10 * dp, text);
+            kx += 10 * dp + text.measureText(keys[k]) + 6 * dp;
+        }
+        float pw = x1 - x0 - 4 * dp, ph = y1 - y0 - 18 * dp, bx = x0 + 2 * dp, by = y1 - 3 * dp;
         // (No more than one segment a couple of pixels: a long game has hundreds of samples.)
         int step = Math.max(1, (int) Math.ceil(n / (pw / (2 * dp))));
         stroke.setStrokeWidth(1.6f * dp);
-        for (int sIdx = 0; sIdx < 3; sIdx++) {
+        for (int sIdx = 0; sIdx < 4; sIdx++) {
             stroke.setColor(colors[sIdx]);
             int[] h = series[sIdx];
             // ((12.0) On a square-root scale, as on the Stats screen: the dead and the armed were a flat line along the
@@ -3522,6 +3533,30 @@ final class GameView extends View implements Menu.Host {
             Fleet.Vehicle v = world.fleet.vehicles.get(i);
             if (v.type == Fleet.HELI) drawHeli(c, v);
             else if (v.type == Fleet.JET) drawJet(c, v);
+        }
+        // ((23.0) The cargo plane, high over everything: a grey transport, its shadow far below.)
+        if (world.cargoPlane != null) {
+            float[] cp = world.cargoPlane;
+            float u = 14f, off = 70, ang = (float) Math.toDegrees(Math.atan2(cp[3], cp[2]));
+            c.save();
+            c.translate(cp[0] + off, cp[1] + off * 1.3f);
+            c.rotate(ang);
+            fill.setColor(0x26000000);
+            c.drawRect(-4.5f * u, -0.6f * u, 4.5f * u, 0.6f * u, fill);
+            c.drawRect(-1.6f * u, -4.6f * u, -0.6f * u, 4.6f * u, fill);
+            c.restore();
+            c.save();
+            c.translate(cp[0], cp[1]);
+            c.rotate(ang);
+            fill.setColor(0xFF6A7060);
+            c.drawRect(-1.4f * u, -5 * u, -0.4f * u, 5 * u, fill);
+            c.drawRect(-4.6f * u, -1.8f * u, -3.8f * u, 1.8f * u, fill);
+            fill.setColor(0xFF7A806E);
+            c.drawRect(-4.6f * u, -0.8f * u, 4 * u, 0.8f * u, fill);
+            c.drawCircle(4 * u, 0, 0.8f * u, fill);
+            fill.setColor(0xFF4A5040);
+            for (float ey : new float[]{-3.6f, -2.0f, 2.0f, 3.6f}) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, fill);
+            c.restore();
         }
         for (int i = 0, n = world.birds.size(); i < n; i++) {
             World.Bird b = world.birds.get(i);
@@ -7757,7 +7792,32 @@ final class GameView extends View implements Menu.Host {
             int secs = (int) world.time;
             c.drawText("Time " + World.clock(secs), pad + 12 * dp, y, text);
             // ((10.59) The war so far: the living, the dead and those with guns, over the whole game.)
-            drawLiveGraph(c, statsRect.left + 12 * dp, y + 8 * dp, statsRect.right - 12 * dp, statsRect.bottom - 8 * dp);
+            float gBottom = statsRect.bottom - 8 * dp - lh * 5;
+            drawLiveGraph(c, statsRect.left + 12 * dp, y + 8 * dp, statsRect.right - 12 * dp, gBottom);
+            // ((23.0) The best of them so far, and those who fell.)
+            y = gBottom + lh;
+            text.setColor(0xFFE6E6E6);
+            text.setTextSize(11.5f * dp);
+            c.drawText("Top units", pad + 12 * dp, y, text);
+            text.setColor(0xFFA0A4AA);
+            Entity[] top3 = world.topUnits();
+            for (int k = 0; k < 3; k++) {
+                y += lh;
+                Entity tu = top3[k];
+                String ln = tu == null ? "-" : (k + 1) + ". " + Names.person(tu.nameSeed) + "  L" + (tu.level + 1) + "  " + tu.kills + " kills"
+                        + (tu.saved > 0 ? ", " + tu.saved + " saved" : "");
+                c.drawText(shrinkToFit(ln, lineRoom), pad + 12 * dp, y, text);
+                text.setTextSize(11.5f * dp);
+            }
+            y += lh;
+            int bestK = 0, bestSeed = 0;
+            for (int[] fh : world.fallenHeroes) if (fh[3] > bestK) {
+                bestK = fh[3];
+                bestSeed = fh[0];
+            }
+            c.drawText(shrinkToFit("Fallen heroes " + world.fallenHeroes.size() + (bestK > 0 ? "   bravest: " + Names.person(bestSeed) + ", " + bestK + " kills" : ""), lineRoom),
+                    pad + 12 * dp, y, text);
+            text.setTextSize(11.5f * dp);
         }
 
         // The minimap and war meter go first so the radio feed can stack round them, then the feed so
@@ -8060,6 +8120,12 @@ final class GameView extends View implements Menu.Host {
                 + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "")
                 + "   Aim +" + Math.round((World.aimBonus(e) + 0.05f * World.rank(e)) * 100) + "%" + (e.kills > 0 ? "   Kills " + e.kills : ""));
         // ((10.59) Their rank, with a star for each.)
+        // ((23.0) Their level, experience and perks.)
+        if (!e.isUndead() && e.type != Entity.DOG && (e.xp >= 1 || e.type == Entity.COP || e.type == Entity.SOLDIER)) {
+            String perkStr = World.perkList(e);
+            lines.add("Level " + (e.level + 1) + "   XP " + (int) e.xp + (e.level + 1 < World.LEVEL_XP.length ? "/" + World.LEVEL_XP[e.level + 1] : "")
+                    + (perkStr.isEmpty() ? "" : "   " + perkStr));
+        }
         int rk = World.rank(e);
         if (rk > 0 && !e.isUndead()) lines.add(World.RANK_NAMES[rk] + " " + "\u2605\u2605\u2605\u2605".substring(0, rk)
                 + (rk < World.RANK_KILLS.length - 1 ? "   next at " + World.RANK_KILLS[rk + 1] + " kills" : ""));

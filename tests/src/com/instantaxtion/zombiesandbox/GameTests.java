@@ -4373,6 +4373,61 @@ public final class GameTests {
                 check(rw.missionResult == 1, "cleared and held: the mission is won");
             }
         });
+        test("23.0: experience levels and perks, kept in a save; survivor bands; the cargo plane drops its crates", new Check() {
+            @Override
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 2301;
+                World w = new World(c);
+                w.populate(c);
+                float[] p = w.city.findWalkable(w.city.worldW() / 2, w.city.worldH() / 2);
+                Entity s = w.spawnSoldier(Entity.ROLE_RIFLE, p[0], p[1]);
+                float hp0 = s.maxHp;
+                w.gainXp(s, 300);
+                check(s.level == 4 && Integer.bitCount(s.perks) == 4, "300 experience: level 5, four perks (" + (s.level + 1) + ", " + World.perkList(s) + ")");
+                check(!World.perk(s, World.P_TOUGH) || s.maxHp > hp0 * 1.15f, "tough means more health");
+                java.io.File file = java.io.File.createTempFile("zcx", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                boolean kept = false;
+                for (Entity e : l.entities) if (e.nameSeed == s.nameSeed && e.type == Entity.SOLDIER) kept = e.level == s.level && e.perks == s.perks && Math.abs(e.xp - s.xp) < 0.01f;
+                check(kept, "level, perks and experience kept in a save");
+                // A civilian with a gun gathers frightened people near the dead.
+                Entity lead = w.spawn(Entity.CIVILIAN, p[0] + 20, p[1]);
+                w.armCivilian(lead, 12);
+                java.util.List<Entity> scared = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 4; k++) {
+                    Entity e = w.spawn(Entity.CIVILIAN, p[0] + 26 + k * 4, p[1] + 6);
+                    if (e != null) scared.add(e);
+                }
+                w.spawn(Entity.ZOMBIE, p[0] + 60, p[1] + 60);
+                w.outbreak = true;
+                for (int f = 0; f < 3; f++) w.update(1 / 30f);
+                for (Entity e : scared) {
+                    e.fleeTimer = 5;
+                    e.task = Dispatch.T_NONE;
+                    e.leader = null;
+                }
+                lead.lodZ = 5;
+                java.lang.reflect.Method bands = World.class.getDeclaredMethod("bands");
+                bands.setAccessible(true);
+                bands.invoke(w);
+                int joined = 0;
+                for (Entity e : scared) if (e.leader == lead) joined++;
+                check(joined >= 2, "frightened people fall in behind someone with a gun (" + joined + ")");
+                // The cargo plane over a zone drops its three crates.
+                java.lang.reflect.Field tf = World.class.getDeclaredField("cargoTarget");
+                tf.setAccessible(true);
+                tf.set(w, new float[]{p[0], p[1]});
+                w.cargoPlane = new float[]{p[0] - 800, p[1], 1, 0, 3, 0};
+                int before = w.pickups.size();
+                for (int f = 0; f < 30 * 6 && w.cargoPlane != null; f++) w.update(1 / 30f);
+                check(w.pickups.size() >= before + 3, "the cargo plane drops its crates (" + (w.pickups.size() - before) + ")");
+            }
+        });
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {

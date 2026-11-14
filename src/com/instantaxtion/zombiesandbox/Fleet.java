@@ -5908,6 +5908,27 @@ final class Fleet {
             vehicles.add(v);
             st.bus = v;
             st.busCd = 6;
+            // ((23.0) A big crowd waiting: a convoy - a second and third bus behind the first, and a police car with them
+            // to hold the stop while they load.)
+            int waiting = w.waitingFor(k, st.x, st.y, false);
+            int extra = waiting > 80 ? 2 : waiting > 40 ? 1 : 0;
+            float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
+            for (int j = 1; j <= extra; j++) {
+                Vehicle b = make(CAR);
+                b.model = M_BUS;
+                b.color = city.country.busColor;
+                b.x = in[0] - ca * 34 * j;
+                b.y = in[1] - sa * 34 * j;
+                b.state = CRUISE;
+                b.evacStop = k;
+                b.busPhase = 0;
+                b.angle = v.angle;
+                if (route(b, st.bx, st.by)) vehicles.add(b);
+            }
+            if (extra > 0) {
+                send(Entity.COP, 2, in[0] - ca * 34 * (extra + 1), in[1] - sa * 34 * (extra + 1), st.bx, st.by, null, null, st.place);
+                w.dispatch.say(Dispatch.WHO_POLICE, null, "Evacuation convoy of " + (extra + 1) + " buses on its way to " + st.place + ", police escort with it.", st.bx, st.by);
+            }
         }
     }
 

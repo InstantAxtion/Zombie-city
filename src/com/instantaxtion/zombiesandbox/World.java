@@ -114,6 +114,8 @@ final class World {
     // History for the stats screen: humans and zombies sampled every statStep seconds.
     static final int HISTORY = 240;
     final int[] histHumans = new int[HISTORY], histZombies = new int[HISTORY], histArmed = new int[HISTORY];
+    /** ((23.0) The dead put down so far, alongside (not kept in saves: it starts again from a load). */
+    final int[] histKills = new int[HISTORY];
     /** People who killed zombies and have died since: {name seed, type, role, kills}. */
     final ArrayList<int[]> fallenHeroes = new ArrayList<int[]>();
     int histCount;
@@ -2334,6 +2336,7 @@ final class World {
         updateEffects(dt);
         if (!boats.isEmpty()) moveBoats(dt);
         if (city.ferry != null) moveFerry(dt);
+        if (cargoPlane != null) moveCargoPlane(dt);
         lifeTimer -= dt;
         if (lifeTimer <= 0) {
             lifeTimer = 1;
@@ -2366,6 +2369,7 @@ final class World {
                 histHumans[i] = (histHumans[i * 2] + histHumans[i * 2 + 1]) / 2;
                 histZombies[i] = (histZombies[i * 2] + histZombies[i * 2 + 1]) / 2;
                 histArmed[i] = (histArmed[i * 2] + histArmed[i * 2 + 1]) / 2;
+                histKills[i] = histKills[i * 2 + 1];
             }
             histCount = HISTORY / 2;
             statStep *= 2;
@@ -2373,6 +2377,7 @@ final class World {
         histHumans[histCount] = humans;
         histZombies[histCount] = zombies;
         histArmed[histCount] = counts[Entity.COP] + counts[Entity.SOLDIER];
+        histKills[histCount] = zombiesKilled;
         histCount++;
     }
 
@@ -2891,7 +2896,7 @@ final class World {
             e.blocked = false;
         }
         if (e.reload > 0) {
-            e.reload -= dt;
+            e.reload -= dt * (perk(e, P_QUICK) ? 1.35f : 1);
             if (e.reload <= 0) {
                 int take = Math.min(e.magSize - e.ammo, e.reserve);
                 e.ammo += take;
@@ -3977,14 +3982,165 @@ final class World {
                     float reach = z.radius + o.radius + 14; // (in reach of it, or just shoved off by it)
                     if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > reach * reach) continue;
                     e.saved++;
+                    gainXp(e, 20);
                     return;
                 }
             }
     }
 
+    // ------------------------------------------------------------------ ((23.0) experience, levels and perks
+
+    /** The experience each level starts at: level 1 at nothing, level 7 at 700. */
+    static final int[] LEVEL_XP = {0, 30, 80, 160, 280, 450, 700};
+    static final int P_STEADY = 1, P_QUICK = 2, P_TOUGH = 4, P_FLEET = 8, P_MEDIC = 16, P_NERVE = 32;
+    static final String[] PERK_NAMES = {"Steady aim", "Quick hands", "Tough", "Fleet-footed", "Field medic", "Nerves of steel"};
+    /** The order each kind of unit takes its perks in, from level 2. */
+    private static final int[] PERKS_SOLDIER = {P_STEADY, P_TOUGH, P_QUICK, P_NERVE, P_FLEET, P_MEDIC};
+    private static final int[] PERKS_COP = {P_STEADY, P_QUICK, P_NERVE, P_TOUGH, P_MEDIC, P_FLEET};
+    private static final int[] PERKS_CIVILIAN = {P_FLEET, P_NERVE, P_TOUGH, P_STEADY, P_QUICK, P_MEDIC};
+    private static final int[] PERKS_MEDIC = {P_MEDIC, P_TOUGH, P_NERVE, P_FLEET, P_STEADY, P_QUICK};
+
+    static boolean perk(Entity e, int p) {
+        return (e.perks & p) != 0;
+    }
+
+    /** Experience earned: a level at each threshold, each bringing the next perk for their kind. */
+    void gainXp(Entity e, float amount) {
+        if (e == null || e.dead || e.isUndead() || e.type == Entity.DOG) return;
+        e.xp += amount;
+        while (e.level + 1 < LEVEL_XP.length && e.xp >= LEVEL_XP[e.level + 1]) {
+            e.level++;
+            int[] order = e.role == Entity.ROLE_CORPSMAN || e.type == Entity.MEDIC ? PERKS_MEDIC : e.type == Entity.SOLDIER ? PERKS_SOLDIER
+                    : e.type == Entity.COP ? PERKS_COP : PERKS_CIVILIAN;
+            // (Not all alike: each starts a little way along their kind's list.)
+            int start = (e.nameSeed & 0x7FFFFFFF) % 2;
+            int p = order[(e.level - 1 + start) % order.length];
+            if (perk(e, p)) continue;
+            e.perks |= p;
+            if (p == P_TOUGH) {
+                e.maxHp *= 1.2f;
+                e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2f);
+            } else if (p == P_FLEET) {
+                e.speed *= 1.1f;
+                e.runSpeed *= 1.1f;
+            }
+            if (e.level >= 2 && (e.type == Entity.COP || e.type == Entity.SOLDIER || e.canShoot()))
+                highlight(Names.person(e.nameSeed) + " reached level " + (e.level + 1) + ": " + perkName(p), e.x, e.y);
+        }
+    }
+
+    static String perkName(int p) {
+        for (int k = 0; k < PERK_NAMES.length; k++) if (p == 1 << k) return PERK_NAMES[k];
+        return "";
+    }
+
+    /** Their perks by name, or "" if none yet. */
+    static String perkList(Entity e) {
+        StringBuilder sb = new StringBuilder();
+        for (int k = 0; k < PERK_NAMES.length; k++)
+            if ((e.perks & (1 << k)) != 0) sb.append(sb.length() > 0 ? ", " : "").append(PERK_NAMES[k]);
+        return sb.toString();
+    }
+
+    /**
+     * ((23.0) Once a second, with the dead about: survivor bands and escorts. Someone with a gun - a civilian who
+     * has one, or a police officer or soldier with nothing more pressing - gathers up to four frightened people
+     * nearby, who stick with them.
+     */
+    private void bands() {
+        if (!outbreak) return;
+        for (int i = 0, n = entities.size(); i < n; i++) entities.get(i).bandN = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity f = entities.get(i);
+            if (f.leader == null || f.dead) continue;
+            // (An officer sent somewhere else lets their people go rather than take them along.)
+            Entity l = f.leader;
+            if ((l.type == Entity.COP || l.type == Entity.SOLDIER) && f.type == Entity.CIVILIAN
+                    && (l.dead || l.rig != null || (l.task != Dispatch.T_NONE && l.task != Dispatch.T_PATROL))) {
+                f.leader = null;
+                continue;
+            }
+            l.bandN++;
+        }
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity l = entities.get(i);
+            if (l.dead || l.removed || l == controlled || l.lodZ > 25 || l.bandN >= 4) continue;
+            boolean civ = l.type == Entity.CIVILIAN && l.canShoot() && l.leader == null;
+            boolean officer = (l.type == Entity.COP || l.type == Entity.SOLDIER) && (l.task == Dispatch.T_NONE || l.task == Dispatch.T_PATROL)
+                    && !l.aiming && l.rig == null;
+            if (!civ && !officer) continue;
+            int cx0 = Math.max(0, (int) ((l.x - 70) / CELL)), cx1 = Math.min(gw - 1, (int) ((l.x + 70) / CELL));
+            int cy0 = Math.max(0, (int) ((l.y - 70) / CELL)), cy1 = Math.min(gh - 1, (int) ((l.y + 70) / CELL));
+            for (int cy = cy0; cy <= cy1 && l.bandN < 4; cy++)
+                for (int cx = cx0; cx <= cx1 && l.bandN < 4; cx++) {
+                    int c = cy * gw + cx;
+                    for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end && l.bandN < 4; k++) {
+                        Entity o = sorted[k];
+                        if (o == l || o.dead || o.removed || o.type != Entity.CIVILIAN || o.leader != null || o.canShoot() || o.infected
+                                || o == controlled || o.bandN > 0 || o.task != Dispatch.T_NONE || o.fleeTimer <= 0) continue;
+                        if ((o.x - l.x) * (o.x - l.x) + (o.y - l.y) * (o.y - l.y) > 70 * 70) continue;
+                        o.leader = l;
+                        l.bandN++;
+                        bandsFormed++;
+                    }
+                }
+        }
+    }
+
+    /** ((23.0) The three living with the most experience (looked at every couple of seconds). */
+    private final Entity[] topUnits = new Entity[3];
+    private float topAt = -10;
+
+    Entity[] topUnits() {
+        if (time - topAt > 2 || time < topAt) {
+            topAt = time;
+            java.util.Arrays.fill(topUnits, null);
+            for (int i = 0, n = entities.size(); i < n; i++) {
+                Entity e = entities.get(i);
+                if (e.dead || e.isUndead() || e.xp < 1) continue;
+                for (int k = 0; k < 3; k++) {
+                    if (topUnits[k] == null || e.xp > topUnits[k].xp) {
+                        for (int j = 2; j > k; j--) topUnits[j] = topUnits[j - 1];
+                        topUnits[k] = e;
+                        break;
+                    }
+                }
+            }
+        }
+        return topUnits;
+    }
+
+    /** ((23.0) People taken under someone's wing (survivor bands and escorts), this game. */
+    int bandsFormed;
+
+    /** Once a second: time under fire counts, and field medics tend to those round them. */
+    private void veterans() {
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.removed || e.isUndead() || e.type == Entity.DOG) continue;
+            boolean fighter = e.type == Entity.COP || e.type == Entity.SOLDIER || e.canShoot();
+            if (fighter && e.lodZ < 12) gainXp(e, 0.5f);
+            if (perk(e, P_MEDIC)) {
+                int cx0 = Math.max(0, (int) ((e.x - 32) / CELL)), cx1 = Math.min(gw - 1, (int) ((e.x + 32) / CELL));
+                int cy0 = Math.max(0, (int) ((e.y - 32) / CELL)), cy1 = Math.min(gh - 1, (int) ((e.y + 32) / CELL));
+                for (int cy = cy0; cy <= cy1; cy++)
+                    for (int cx = cx0; cx <= cx1; cx++) {
+                        int c = cy * gw + cx;
+                        for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                            Entity o = sorted[k];
+                            if (o == e || o.dead || o.hp >= o.maxHp || o.type == Entity.DOG) continue;
+                            if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > 32 * 32) continue;
+                            o.hp = Math.min(o.maxHp, o.hp + 2);
+                        }
+                    }
+            }
+        }
+    }
+
     private void killMade(Entity e) {
         int before = rank(e);
         e.kills++;
+        if (!e.isZombie()) gainXp(e, 10);
         if (!e.isZombie()) killsBy[e.type == Entity.COP ? 0 : e.type == Entity.SOLDIER ? 1 : 2]++;
         int after = rank(e);
         if (after > before && !e.isZombie()) {
@@ -4097,7 +4253,8 @@ final class World {
     private static float chaseSpeed(Entity z, float d) {
         // ((12.7) Runners chase the same way, only faster: half as fast again at every step.)
         boolean shambler = z.type == Entity.ZOMBIE || z.type == Entity.RUNNER;
-        return d < (shambler ? 50 : 110) ? z.runSpeed : z.speed * (shambler ? 1.1f : 1.3f);
+        // ((23.0) Three or more closing on the same one: a frenzy, a little quicker.)
+        return (d < (shambler ? 50 : 110) ? z.runSpeed : z.speed * (shambler ? 1.1f : 1.3f)) * (z.frenzy ? 1.12f : 1);
     }
 
     /** How much quicker the freshly turned are for a while: ((12.6) a shambler only a little). */
@@ -4138,6 +4295,7 @@ final class World {
         }
         if (t != null) {
             z.hidden = false;
+            if (rnd.nextFloat() < 0.2f) z.frenzy = countZombiesNear(t.x, t.y, 35) >= 3;
             // A brute lowers its head and charges.
             // ((22.6) A bruiser lunges: shorter and more often.)
             if (z.type == Entity.BRUISER && z.chargeCd <= 0) {
@@ -8335,8 +8493,54 @@ final class World {
     }
 
     /** Once a second: the infection evolves, and after it's over the city slowly recovers. */
+    // ------------------------------------------------------------------ ((23.0) the cargo plane
+
+    /** The cargo plane overhead: {x, y, heading x, heading y, crates left, seconds to the next}, or null. */
+    float[] cargoPlane;
+    private float[] cargoTarget;
+    private float cargoCd = 150;
+
+    /** Once a second: in an outbreak with people sheltering, every few minutes a plane drops supplies over the busiest zone. */
+    private void cargoFlights() {
+        if (cargoPlane != null || !outbreak || zombies == 0 || dispatch.zones.isEmpty() || city.cfg.mission >= 0) return;
+        if ((cargoCd -= 1) > 0) return;
+        Dispatch.SafeZone best = null;
+        for (Dispatch.SafeZone z : dispatch.zones) if (best == null || z.sheltered > best.sheltered) best = z;
+        if (best == null || best.sheltered < 5) {
+            cargoCd = 30;
+            return;
+        }
+        cargoCd = 200 + rnd.nextFloat() * 90;
+        double a = rnd.nextDouble() * Math.PI * 2;
+        float dx = (float) Math.cos(a), dy = (float) Math.sin(a), far = city.worldW() + city.worldH();
+        cargoPlane = new float[]{best.x - dx * far * 0.5f, best.y - dy * far * 0.5f, dx, dy, 3, 0};
+        cargoTarget = new float[]{best.x, best.y};
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Air Force: Cargo plane inbound, dropping supplies over " + city.placeName(best.x, best.y) + ".", best.x, best.y);
+    }
+
+    /** The plane flies on; over its zone, it drops its crates under their parachutes. */
+    private void moveCargoPlane(float dt) {
+        float[] p = cargoPlane;
+        p[0] += p[2] * 260 * dt;
+        p[1] += p[3] * 260 * dt;
+        p[5] -= dt;
+        float along = (p[0] - cargoTarget[0]) * p[2] + (p[1] - cargoTarget[1]) * p[3];
+        if (p[4] > 0 && along > -90 && p[5] <= 0) {
+            float ox = (rnd.nextFloat() - 0.5f) * 50, oy = (rnd.nextFloat() - 0.5f) * 50;
+            if (p[4] == 3) supplyDrop(p[0] + ox, p[1] + oy);
+            else placeCrate(p[0] + ox, p[1] + oy, 3.5f);
+            p[4]--;
+            p[5] = 0.6f;
+        }
+        float m = 600;
+        if (along > 0 && (p[0] < -m || p[1] < -m || p[0] > city.worldW() + m || p[1] > city.worldH() + m)) cargoPlane = null;
+    }
+
     private void cityLife() {
         keyBuildings();
+        veterans();
+        bands();
+        cargoFlights();
         if (city.prison != null) {
             prisonLife();
         }
@@ -10901,7 +11105,10 @@ final class World {
         if (e.treatT >= MEDIC_TIME) {
             p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.5f);
             // ((15.1) Someone else patched up counts as a life saved.)
-            if (p != e) e.saved++;
+            if (p != e) {
+                e.saved++;
+                gainXp(e, 20);
+            }
             dispatch.chatter(Dispatch.WHO_MILITARY, e, p == e ? "Patching myself up." : "Medic here. " + Dispatch.name(p) + ", you're good to go.", e.x, e.y);
             e.patient = null;
             e.treatT = 0;
@@ -12274,7 +12481,7 @@ final class World {
                     // ((16.9) Each kind of police officer's nerve: see doctrine.)
                     float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : doctrine(e) != null ? doctrine(e)[5] : 4;
                     // ((10.59) A veteran stands longer.)
-                    nerve += rank(e) * 0.75f;
+                    nerve += rank(e) * 0.75f + (perk(e, P_NERVE) ? 2 : 0);
                     if (odds >= nerve - (e.goal == A_FALLBACK ? 1.5f : 0))
                         armedScore[A_FALLBACK] = 0.6f + 0.05f * (odds - nerve) + (stock < 0.4f ? 0.15f : 0) + 0.15f * (caution(e) - 0.5f)
                                 + (e.kills > 10 ? -0.05f : 0);
@@ -13887,7 +14094,7 @@ final class World {
         // Soldiers near their commander fight better.
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
-        accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e)) * (e.isArmed() && Perks.has(this, Perks.AIM) ? 1.08f : 1));
+        accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e) + (perk(e, P_STEADY) ? 0.08f : 0)) * (e.isArmed() && Perks.has(this, Perks.AIM) ? 1.08f : 1));
         if (e.ammo <= 0 && e.reserve > 0) {
             e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f * (dc != null ? dc[3] : 1);
             emit(Sfx.RELOAD, e.x, e.y);

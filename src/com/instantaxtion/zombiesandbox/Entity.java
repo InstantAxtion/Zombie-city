@@ -240,6 +240,12 @@ final class Entity {
     // (nameSeed, at the top: picks this person's name, see Names.)
     /** Zombies shot or run down by this person. */
     int kills;
+    /** ((23.0) Experience: from kills, lives saved and time under fire; levels (0 = level 1) and the perks they brought. */
+    float xp;
+    int level, perks;
+    /** ((23.0) How many follow them (counted once a second), and whether one of the dead is in a pack frenzy. */
+    transient int bandN;
+    transient boolean frenzy;
     /** ((15.1) Lives saved: one of the dead put down right on someone, or a wounded officer or soldier patched up.) */
     int saved;
     /** Newly turned zombies are quicker for a while. */

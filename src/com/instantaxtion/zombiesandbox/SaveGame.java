@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 68;
+    private static final int VERSION = 69;
 
     private SaveGame() {
     }
@@ -545,6 +545,10 @@ final class SaveGame {
         out.writeFloat(0);
         // ((18.5) A hostage's captors; gone in 19.6.)
         out.writeInt(-1);
+        // Version 69 (23.0): experience, level and perks.
+        out.writeFloat(e.xp);
+        out.writeByte(e.level);
+        out.writeByte(e.perks);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -1143,6 +1147,11 @@ final class SaveGame {
         if (version >= 58) in.readByte();
         if (version >= 59) in.readFloat();
         if (version >= 64) in.readInt();
+        if (version >= 69) {
+            e.xp = in.readFloat();
+            e.level = in.readByte();
+            e.perks = in.readByte();
+        }
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
     }
