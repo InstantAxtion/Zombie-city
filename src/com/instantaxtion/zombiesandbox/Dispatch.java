@@ -69,6 +69,8 @@ final class Dispatch {
         boolean military, removed, full, fullAnnounced;
         String place;
         int guards, sheltered, wantGuards, capacity;
+        /** ((24.0) How many are on their way to it (counted each second). */
+        transient int heading;
         /** Ammunition the zone has on hand for its guards, and whether a supply truck is on its way. */
         int ammo = 300;
         boolean supplyComing;
@@ -1562,7 +1564,7 @@ final class Dispatch {
     static final int CALL_REACH = 300;
 
     /** (10.54) How far those at a call that's over go on to the next one together (further, they stand down). */
-    private static final float MOVE_ON = 2600;
+    private static final float MOVE_ON = 1200;
 
     /** Picks up to n of the nearest free units of a type. */
     private ArrayList<Entity> nearestFree(int type, float x, float y, int n, float maxDist) {
@@ -1588,7 +1590,11 @@ final class Dispatch {
     }
 
     private int assign(Incident inc, int type, int n) {
-        ArrayList<Entity> units = nearestFree(type, inc.x, inc.y, n, Float.MAX_VALUE);
+        // ((24.0) A small call - one or two of the dead, nobody down - goes to whoever is within reach, not to a unit
+        // on the far side of the map: those trips tied units up for minutes over a single zombie. Left a while with
+        // nobody near, it goes to anyone.)
+        float reach = inc.zombiesNear <= 2 && inc.officersDown == 0 && inc.age < 30 ? 1500 : Float.MAX_VALUE;
+        ArrayList<Entity> units = nearestFree(type, inc.x, inc.y, n, reach);
         if (units.isEmpty()) return 0;
         // (10.41) Officers at a station a long way off go in one of its cars, two to a car, not on foot.
         if (type == Entity.COP) {
@@ -2602,6 +2608,8 @@ final class Dispatch {
         int zombies = w.zombieCount();
         // New zones only while there are live 911 incidents to shelter people from.
         if (incidents.isEmpty()) return;
+        // ((24.0) Not before the city has been told: walls went up round a school full of children while nobody knew.)
+        if (w.alert < 1) return;
         if (policeZoneCd <= 0 && countZones(false) == 0 && zombies >= 4 && freeCops >= 3) {
             policeZoneCd = 45;
             establish(false, null);

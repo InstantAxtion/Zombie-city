@@ -10272,10 +10272,17 @@ final class GameView extends View implements Menu.Host {
         {
             float ts0 = text.getTextSize();
             text.setTextSize(12.5f * dp);
-            java.util.List<String> wrapped22 = new java.util.ArrayList<String>();
-            for (String ln : lines) wrapped22.addAll(wrapLine(ln, cw - 24 * dp));
-            lines.clear();
-            lines.addAll(wrapped22);
+            // ((24.0) Each line's colour goes with it: a line split again here shifted the colours, or ran past the
+            // end of them and the card didn't draw at all.)
+            java.util.ArrayList<String> wrapped22 = new java.util.ArrayList<String>();
+            java.util.ArrayList<Boolean> warn22 = new java.util.ArrayList<Boolean>();
+            for (int i = 0; i < lines.size(); i++)
+                for (String part : wrapLine(lines.get(i), cw - 24 * dp)) {
+                    wrapped22.add(part);
+                    warn22.add(warn.get(i));
+                }
+            lines = wrapped22;
+            warn = warn22;
             text.setTextSize(ts0);
         }
         float ch = 30 * dp + lines.size() * lh + 8 * dp;

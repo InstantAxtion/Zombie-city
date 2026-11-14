@@ -75,6 +75,14 @@ final class Entity {
 
     float cooldown, reload, biteCd, grenadeCd, meleeCd;
     float wanderAngle, wanderTimer, infectTimer;
+    /** ((24.0) When they were last taken off the map alive (into a vehicle, aboard a bus): the infection goes on meanwhile. */
+    transient float goneAt = -1;
+    /** ((24.0) The one of the dead they last picked to shoot. */
+    transient Entity aimPick;
+    /** ((24.0) Turned away from a full zone: not to try again until then. */
+    transient float refusedUntil;
+    /** ((24.0) The safe zone they're making for. */
+    transient Dispatch.SafeZone seekZone;
     /** (11.1) Police and soldiers with nothing on: where their beat or duty takes them next, and how long they wait there. */
     float dutyX, dutyY, dutyWait, dutyFor;
     /** (11.2) The way along the street an officer on the beat is walking. */

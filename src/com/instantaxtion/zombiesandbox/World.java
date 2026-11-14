@@ -2853,6 +2853,8 @@ final class World {
                 e.runSpeed /= freshRun(e);
             }
         }
+        // ((24.0) Reloading goes on whatever else is happening: it stopped while they were dazed or stepping round a corner.)
+        reloadTick(e, dt);
         if (e.stun > 0) {
             e.stun -= dt;
             steer(e, 0, 0, 0);
@@ -2894,14 +2896,6 @@ final class World {
             }
             e.unstick = 0.6f + rnd.nextFloat() * 0.6f;
             e.blocked = false;
-        }
-        if (e.reload > 0) {
-            e.reload -= dt * (perk(e, P_QUICK) ? 1.35f : 1);
-            if (e.reload <= 0) {
-                int take = Math.min(e.magSize - e.ammo, e.reserve);
-                e.ammo += take;
-                e.reserve -= take;
-            }
         }
         if (e.leader != null && (e.leader.dead && !e.leader.removed)) e.leader = null;
         // ((12.0) Still down as crew of a car or truck that's gone - parked up and taken out again, wrecked and towed,
@@ -3224,11 +3218,11 @@ final class World {
         sense(e);
         // A lull, with a gun getting low: reload now, not with the dead on top of them.
         if (e.reload <= 0 && e.reserve > 0 && e.ammo > 0 && e.ammo <= Math.max(2, e.magSize * 0.4f) && e.tNear > 85) {
-            e.reload = e.type == Entity.SOLDIER ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+            e.reload = reloadTime(e);
             emit(Sfx.RELOAD, e.x, e.y);
         }
         // (Behind sandbags or a safe zone's wall, and guards on a gate: they hold.)
-        if (e.task == Dispatch.T_GUARD || (e.task == Dispatch.T_HOLD && defences.nests > 0 && wallsRound(e))) return false;
+        if (e.task == Dispatch.T_GUARD || dugIn(e)) return false;
         boolean surrounded = e.tN >= 6 && e.tSides >= 5 && e.tNear < 75;
         boolean overrun = e.tN >= 14 && e.tNear < 55;
         if (surrounded || overrun) e.breakT = 2.2f;
@@ -3269,10 +3263,42 @@ final class World {
     }
 
     /** Sandbags or a wall right round someone: they're dug in. */
-    private boolean wallsRound(Entity e) {
+    /**
+     * ((24.0) How long a reload takes, the one rule everywhere: a machine gun's belt 4 s, a rifle 2.2, a pistol or
+     * shotgun 1.6 (quicker for the police units trained for it). It was set four ways in four places.)
+     */
+    float reloadTime(Entity e) {
+        if (e.type == Entity.SOLDIER) return e.role == Entity.ROLE_GUNNER ? 4f : 2.2f;
+        float[] dc = doctrine(e);
+        return 1.6f * (dc != null ? dc[3] : 1);
+    }
+
+    /** ((24.0) The reload counting down (faster with the Quick perk), and the magazine filled from the spare rounds at the end. */
+    private void reloadTick(Entity e, float dt) {
+        if (e.reload <= 0) return;
+        e.reload -= dt * (perk(e, P_QUICK) ? 1.35f : 1);
+        if (e.reload <= 0) {
+            int take = Math.max(0, Math.min(e.magSize - e.ammo, e.reserve));
+            e.ammo += take;
+            e.reserve -= take;
+        }
+    }
+
+    private boolean wallsRound(float x, float y) {
         int walls = 0;
-        for (int q = 0; q < DIRS; q += 2) if (city.circleBlocked(e.x + DIR_X[q] * 17, e.y + DIR_Y[q] * 17, 3)) walls++;
+        for (int q = 0; q < DIRS; q += 2) if (city.circleBlocked(x + DIR_X[q] * 17, y + DIR_Y[q] * 17, 3)) walls++;
         return walls >= 4;
+    }
+
+    /**
+     * ((24.0) Holding a post that's dug in - sandbags round it - and on it. Judged by the post, not where they stand:
+     * a gunner who'd stepped a little way out of the horseshoe no longer counted as behind it, broke and ran through
+     * the horde, and both of a nest's crew died that way.)
+     */
+    private boolean dugIn(Entity e) {
+        if (e.task != Dispatch.T_HOLD || defences.nests <= 0) return false;
+        if (Math.abs(e.x - e.postX) > 24 || Math.abs(e.y - e.postY) > 24) return false;
+        return wallsRound(e.postX, e.postY);
     }
 
     /** The dead round (x, y), from the grid, into gathered. */
@@ -5315,14 +5341,6 @@ final class World {
 
     /** The player's hands: walk or run with the stick; the attack button shoots, bites or shoves. */
     private void thinkControlled(Entity e, float dt) {
-        if (e.reload > 0) {
-            e.reload -= dt;
-            if (e.reload <= 0) {
-                int take = Math.min(e.magSize - e.ammo, e.reserve);
-                e.ammo += take;
-                e.reserve -= take;
-            }
-        }
         e.task = Dispatch.T_NONE;
         e.building = null;
         e.errand = null;
@@ -6049,7 +6067,7 @@ final class World {
         // Plans that can't happen any more are let go.
         boolean room = dispatch.hasRoom();
         // (One still going up counts: they queue at its gate for the wall to be finished.)
-        if (e.task == Dispatch.T_SEEK && ((!room && !zoneGoingUp()) || e.refused)) e.task = Dispatch.T_NONE;
+        if (e.task == Dispatch.T_SEEK && ((!room && !zoneGoingUp()) || e.refused || e.refusedUntil > time)) e.task = Dispatch.T_NONE;
         if (e.task == Dispatch.T_SHELTER && dispatch.zones.isEmpty()) e.task = Dispatch.T_NONE;
         // With the power out, nobody hears the broadcasts about safe zones any more.
         if (!e.heardZone && broadcasting() && readiness != 2 && rnd.nextFloat() < dt * 0.03f) e.heardZone = true;
@@ -6211,7 +6229,7 @@ final class World {
         if (e.task == Dispatch.T_SHELTER && e.zone != null) goalScore[G_SHELTER] = threat != null && threatDist < 28 ? 0.2f : 0.95f;
         // ((12.0) Including one still going up, for those already on their way: they queue at its gate (see
         // seekZoneStep). They used to keep the plan but stand about where they were until it opened.)
-        if ((room || (e.task == Dispatch.T_SEEK && zoneGoingUp())) && !e.refused) {
+        if ((room || (e.task == Dispatch.T_SEEK && zoneGoingUp())) && !e.refused && e.refusedUntil <= time) {
             // (Once on the way, the way to the zone is the way out: kept to unless the dead are right there.)
             if (e.task == Dispatch.T_SEEK) goalScore[G_ZONE] = 0.8f;
             else if (idle && (e.fleeTimer > 0 || (broadcasting() && readiness != 2 && e.heardZone))) goalScore[G_ZONE] = 0.42f + 0.2f * careful;
@@ -6337,7 +6355,7 @@ final class World {
     /** Somewhere to hide: home first if it's close, has room and is shut up, else the nearest with room. */
     private City.Building hidingPlace(Entity e) {
         City.Building home = homeOf(e);
-        if (home != null && home.occupants.size() < home.capacity && home.barricade >= 40 && !home.collapsed && (!WALK_IN || city.enterable(home))
+        if (home != null && home.inside < room(home) * 3 / 2 && home.barricade >= 40 && !home.collapsed && (!WALK_IN || city.enterable(home))
                 && (home.doorX - e.x) * (home.doorX - e.x) + (home.doorY - e.y) * (home.doorY - e.y) < 220 * 220
                 && countZombiesNear(home.doorX, home.doorY, 35) == 0) return home;
         return shelterNear(e);
@@ -6548,6 +6566,37 @@ final class World {
         standAt(e, x + ca * r, y + sa * r, speed);
     }
 
+    /**
+     * ((24.0) Those with them come in with them - checked at the gate the same, and counted against the room. They
+     * used to walk in behind, uncounted and unchecked: zones over their room, bites that never went past a checkpoint.)
+     */
+    private void admitFamily(Entity e, Dispatch.SafeZone z) {
+        for (int i = 0, n = gatherLiving(e.x, e.y, 90); i < n; i++) {
+            Entity o = gathered[i];
+            if (o.dead || o.leader != e || o.type != Entity.CIVILIAN || o.task == Dispatch.T_SHELTER) continue;
+            if (checkpoint(o, z)) {
+                o.leader = null;
+                continue;
+            }
+            if (z.sheltered < z.capacity) dispatch.admitInside(o, z);
+            else {
+                o.leader = null;
+                o.task = Dispatch.T_NONE;
+            }
+        }
+    }
+
+    /** ((24.0) How many are making for each zone, so the next to set out can pick one with places left for them. */
+    private void countHeading() {
+        if (dispatch.zones.isEmpty()) return;
+        for (int i = 0; i < dispatch.zones.size(); i++) dispatch.zones.get(i).heading = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.task != Dispatch.T_SEEK || e.seekZone == null || e.seekZone.removed) continue;
+            e.seekZone.heading++;
+        }
+    }
+
     /** On the way to a safe zone, queueing at its gate, and in. */
     private boolean seekZoneStep(Entity e, float threatDist) {
         if (e.task != Dispatch.T_SEEK || threatDist <= 28) return false;
@@ -6560,18 +6609,21 @@ final class World {
                 // ((12.0) While there's room. A wall put up round homes had their people coming out of their front
                 // doors into it and taking a place each, two hundred and more in a zone with room for thirty; with
                 // it full, they're inside the wall all the same, and stop looking for a place.)
-                if (q.sheltered < q.capacity) dispatch.admitInside(e, q);
-                else {
+                if (q.sheltered < q.capacity) {
+                    dispatch.admitInside(e, q);
+                    admitFamily(e, q);
+                } else {
+                    // ((24.0) For a while, not for good: it was never cleared, and they were shut out of every zone.)
                     e.task = Dispatch.T_NONE;
-                    e.refused = true;
+                    e.refusedUntil = time + 60;
                 }
                 return true;
             }
         }
         float speed = e.fleeTimer > 0 ? e.runSpeed : e.speed * 1.7f;
         // The nearest zone taking people (still going up, perhaps).
-        Dispatch.SafeZone z = null;
-        float bd = Float.MAX_VALUE;
+        Dispatch.SafeZone z = null, raw = null;
+        float bd = Float.MAX_VALUE, rawD = Float.MAX_VALUE;
         for (int i = 0; i < dispatch.zones.size(); i++) {
             Dispatch.SafeZone q = dispatch.zones.get(i);
             if (q.removed || q.full || q.gateOut.length == 0) continue;
@@ -6580,11 +6632,21 @@ final class World {
             // hasn't been started after most of a minute isn't waited for while another has room: the crowd at its
             // gate stood there for good with an open zone across town half empty.)
             if (!q.open) d *= q.built <= 0 && q.age > 45 ? 25 : 2.5f;
+            // ((24.0) One with more already on their way than it has places is passed over for one further off with room
+            // - everyone made for the one zone, twice as many as it could take, while another stood half empty.)
+            if (d < rawD) {
+                rawD = d;
+                raw = q;
+            }
+            if (q != e.seekZone && q.heading > q.capacity - q.sheltered + 8) d *= 6;
             if (d < bd) {
                 bd = d;
                 z = q;
             }
         }
+        e.seekZone = z;
+        // (The way to the gates leads to the nearest: making for another, they go by their own route.)
+        boolean ownWay = z != raw;
         if (z == null) {
             e.task = Dispatch.T_NONE;
             getToSafety(e, homeOf(e));
@@ -6592,7 +6654,10 @@ final class World {
         }
         // In through the gate: they're in.
         if (z.open && z.inside(e.x, e.y)) {
-            if (dispatch.admit(e, z)) return true;
+            if (dispatch.admit(e, z)) {
+                admitFamily(e, z);
+                return true;
+            }
             e.task = Dispatch.T_NONE;
             return true;
         }
@@ -6606,7 +6671,7 @@ final class World {
         // building in the way, for good.)
         boolean atGate = od < 34 || (z.gateOpen[g] && od < 70 && World.hypot(in[0] - e.x, in[1] - e.y) < od);
         if (!atGate) {
-            if (!z.open || !followField(e, dispatch.zoneField, speed)) walkToSpot(e, out[0], out[1], speed);
+            if (!z.open || ownWay || !followField(e, dispatch.zoneField, speed)) walkToSpot(e, out[0], out[1], speed);
             return true;
         }
         if (!z.open) {
@@ -6702,7 +6767,7 @@ final class World {
             e.building = home;
             return false;
         }
-        if (dispatch.hasRoom() && !e.refused && broadcasting()) {
+        if (dispatch.hasRoom() && !e.refused && e.refusedUntil <= time && broadcasting()) {
             e.task = Dispatch.T_SEEK;
             return false;
         }
@@ -6894,7 +6959,7 @@ final class World {
             if (WALK_IN && !(apocalypse() && e.type == Entity.CIVILIAN) && city.enterable(b) && b.inside < room(b)) {
                 beginStay(e, b, stay, false);
                 if (e.followerFrame == hashFrame)
-                    for (int i = 0, n = gatherLiving(b.doorX, b.doorY, 60); i < n; i++) {
+                    for (int i = 0, n = gatherLiving(b.doorX, b.doorY, 120); i < n; i++) {
                         Entity o = gathered[i];
                         if (o.dead || o.leader != e || o.type != Entity.CIVILIAN) continue;
                         beginStay(o, b, stay, false);
@@ -7893,7 +7958,11 @@ final class World {
         // against a wall or a crowd wanted to go one way while standing still, and whoever was with them shuffled
         // back and forth round them for minutes. Close enough and not moving: stand with them.)
         float lsp = (float) Math.sqrt(lead.vx * lead.vx + lead.vy * lead.vy);
-        if (d > 18) steer(e, ddx / d, ddy / d, d > 50 ? e.runSpeed : Math.max(e.speed * 1.3f, Math.min(lead.want, lsp + d)));
+        // ((24.0) A wall between them (they've gone indoors, or round a corner): the way round, by the doors - not
+        // straight at the wall. A third of families stood pressed against a building their leader had gone into.)
+        if (d > 30 && (e.blocked || !city.los(e.x, e.y, lead.x, lead.y)))
+            walkToSpot(e, lead.x, lead.y, d > 50 ? e.runSpeed : Math.max(e.speed * 1.3f, lead.want));
+        else if (d > 18) steer(e, ddx / d, ddy / d, d > 50 ? e.runSpeed : Math.max(e.speed * 1.3f, Math.min(lead.want, lsp + d)));
         else if (lsp > 3) steer(e, lead.vx / lsp, lead.vy / lsp, lsp * (d > 10 ? 1.1f : 1f));
         else {
             steer(e, 0, 0, 0);
@@ -8541,6 +8610,7 @@ final class World {
         veterans();
         bands();
         cargoFlights();
+        countHeading();
         if (city.prison != null) {
             prisonLife();
         }
@@ -11335,6 +11405,8 @@ final class World {
                 // ((13.3) Half of what they have beyond a third of a load, two magazines at least where they have them.)
                 int spare = Math.max(e.magSize * 2, (l.ammo + l.reserve - fullReserve(l) / 3) / 2);
                 spare = Math.min(spare, l.reserve);
+                // ((24.0) No more than they can carry.)
+                spare = Math.max(0, Math.min(spare, Math.max(e.magSize, fullReserve(e) - e.reserve)));
                 l.reserve -= spare;
                 e.reserve += spare;
                 e.reload = 2;
@@ -11545,7 +11617,11 @@ final class World {
                 // ((11.5) Nobody is rooted to a gate or a checkpoint: with the dead coming at them they step back
                 // (a fair way, not across town), shooting, and take the post again once it's clear.)
                 float pd = (float) World.hypot(e.x - e.postX, e.y - e.postY);
-                if ((d < keep * 0.8f || swarmed || (e.reload > 0 && d < 45)) && pd < 120)
+                // ((24.0) Dug in behind sandbags, they stay behind them and fight from there.)
+                if (dugIn(e)) {
+                    if (pd > 3) standAt(e, e.postX, e.postY, 0.5f);
+                    else steer(e, 0, 0, 0);
+                } else if ((d < keep * 0.8f || swarmed || (e.reload > 0 && d < 45)) && pd < 120)
                     flee(e, awayX(e, ddx, d), awayY(e, ddy, d), backOff(e, swarmed));
                 else if (d > keep * 1.4f && !swarmed) standAt(e, e.postX, e.postY, 0.5f);
                 else steer(e, 0, 0, 0);
@@ -11585,7 +11661,7 @@ final class World {
         }
         e.aiming = false;
         if (e.reload <= 0 && e.ammo < e.magSize / 2 && e.reserve > 0) {
-            e.reload = soldier ? 2.2f : 1.6f;
+            e.reload = reloadTime(e);
             emit(Sfx.RELOAD, e.x, e.y);
         }
         if (stationary) {
@@ -13714,7 +13790,7 @@ final class World {
         e.angle = turn(e.angle, (float) Math.atan2(t.y - e.y, t.x - e.x), dt * 14);
         if (e.ammo <= 0) {
             if (e.reload <= 0 && e.reserve > 0) {
-                e.reload = e.type == Entity.SOLDIER ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f;
+                e.reload = reloadTime(e);
                 emit(Sfx.RELOAD, e.x, e.y);
             } else if (e.reload <= 0 && e.reserve <= 0 && rnd.nextFloat() < dt * 1.5f) {
                 // ((13.4) Nothing left: the click of a trigger on an empty gun.)
@@ -13725,6 +13801,9 @@ final class World {
         // ((12.8) Only once the gun is on it: a moment to bring it round, not a shot off to the side.)
         float off = Math.abs(angleDiff(e.angle, (float) Math.atan2(t.y - e.y, t.x - e.x)));
         if (off > 0.45f) return true;
+        // ((24.0) No shots through walls: a target picked without a look (the walk back to resupply, the break for the
+        // gap) behind a building was shot dead all the same.)
+        if (e.reload <= 0 && e.cooldown <= 0 && d > 18 && !city.los(e.x, e.y, t.x, t.y)) return false;
         // ((12.8) As many shots as the gun fires in the time that's gone by, with what's left over carried to the
         // next: before, the time after each shot started again from nothing every step, so a quick-firing gun lost a
         // quarter of its rate at 30 frames a second, and at the faster game speeds most of it.)
@@ -13782,7 +13861,7 @@ final class World {
                     // of guns works along the front of a crowd instead of all killing the same one twice over. Not the
                     // big ones, which take all the fire they can get.)
                     // (Only out past sixty or so: one that's nearly on them gets every gun there is.)
-                    if (score > 65 && o.aimT > time && !o.alpha && o.type != Entity.BRUTE) score += Math.min(3, o.aimN) * 12;
+                    if (score > 65 && o.aimT > time && !o.alpha && o.type != Entity.BRUTE) score += Math.min(3, o.aimN - (o == e.aimPick ? 1 : 0)) * 12;
                     // (10.27) A clear shot: not one with a friend standing in the way, when there's another to take.
                     if (score < best && city.los(e.x, e.y, o.x, o.y)) {
                         if (!friendInLine(e, o, (float) Math.sqrt(d2) + 0.001f)) {
@@ -13802,9 +13881,12 @@ final class World {
         if (res == null && blocked != null) res = blocked;
         if (res != null) {
             if (res.aimT <= time) res.aimN = 0;
+            // ((24.0) Their own aim on it doesn't count against it: a soldier kept switching between two of the dead,
+            // each looking further off for being aimed at.)
+            if (res != e.aimPick || res.aimN == 0) res.aimN++;
             res.aimT = time + 0.5f;
-            res.aimN++;
         }
+        e.aimPick = res;
         // ((14.2) A raider who's been shooting people: the police, soldiers and other armed survivors shoot back, once
         // there's none of the dead closer.)
         if (raidersActive > 0 && !e.raider && (e.isArmed() || e.hasGun))
@@ -13842,7 +13924,7 @@ final class World {
         if (e.weapon == Entity.W_SHOTGUN && d < 45) return 0.3f * TRAINED_HEADSHOT * ranked;
         if (e.type == Entity.COP) base = e.role == Entity.ROLE_SWAT ? 0.42f : 0.3f;
         else if (e.type == Entity.SOLDIER)
-            base = e.role == Entity.ROLE_GUNNER ? 0.1f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
+            base = e.role == Entity.ROLE_GUNNER ? 0.2f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
         else return HEADSHOT * ranked;
         float f = Math.max(0.35f, 1.25f - d / range) * ranked;
         // ((16.9) Police: their training (see doctrine).)
@@ -14020,7 +14102,8 @@ final class World {
             // stream.)
             e.burst++;
             e.cooldown = e.burst % 6 == 0 ? 0.35f : 0.075f;
-            dmg = 10;
+            // ((24.0) A heavier round than a rifle's: at 10 a nest fired 160 rounds in ten seconds and dropped nothing.)
+            dmg = 22;
             accuracy = 0.55f;
         } else if (soldier && e.role == Entity.ROLE_COMMANDER) {
             e.cooldown = 0.35f;
@@ -14096,7 +14179,7 @@ final class World {
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
         accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e) + (perk(e, P_STEADY) ? 0.08f : 0)) * (e.isArmed() && Perks.has(this, Perks.AIM) ? 1.08f : 1));
         if (e.ammo <= 0 && e.reserve > 0) {
-            e.reload = soldier ? (e.role == Entity.ROLE_GUNNER ? 4f : 2.2f) : 1.6f * (dc != null ? dc[3] : 1);
+            e.reload = reloadTime(e);
             emit(Sfx.RELOAD, e.x, e.y);
         }
         // (10.45) How far the shot carries depends on the gun: a pistol's crack, a shotgun's boom, a rifle's
@@ -15667,6 +15750,7 @@ final class World {
                 lodWake[last] = 0;
             }
             if (!e.removed) onDeath(e);
+            else e.goneAt = time;
         }
     }
 
@@ -15915,6 +15999,9 @@ final class World {
         o.dead = false;
         o.removed = false;
         o.ride = null;
+        // ((24.0) The bite didn't wait while they rode: a bitten officer driven across town turned only on getting out.)
+        if (o.infected && o.goneAt >= 0) o.infectTimer -= Math.max(0, time - o.goneAt);
+        o.goneAt = -1;
         // ((14.7) Your squad, out with you, carries on following you.)
         o.task = o.commandedBy != null && o.commandedBy == controlled ? Dispatch.T_SQUAD : Dispatch.T_NONE;
         o.taskTimer = 3;
@@ -19009,6 +19096,8 @@ final class World {
                     Entity o = sorted[k];
                     if (o == e || o.dead || o.removed || !o.isArmed() || o.scout || o.task == Dispatch.T_BORROW) continue;
                     if (!canLend(o)) continue;
+                    // ((24.0) Rounds that fit their gun: a shotgun's officer took a rifleman's magazines.)
+                    if (o.gunKind() != e.gunKind()) continue;
                     float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
                     if (d < bd) {
                         bd = d;

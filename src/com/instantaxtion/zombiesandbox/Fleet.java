@@ -69,6 +69,8 @@ final class Fleet {
         boolean removedFromFleet;
         /** Seconds stopped; pulling out round something stopped in the lane (seconds left); queued behind traffic. */
         float stillT, passing;
+        /** ((24.0) How long a helicopter has held over its landing spot for the dead round it. */
+        float holdT;
         /** How far it has turned without getting any nearer (a car going round in circles), and how long it
          *  then drives carefully, slowly and straight at the middle of each tile of its route. */
         float spin, careful;
@@ -434,9 +436,12 @@ final class Fleet {
                         : "Supply truck: Delivering" + (where != null ? " to " + where : "");
                 // ((12.0) A wreck is a wreck, whatever it was doing: it went on saying "Responding" or "On patrol".)
                 if (v.broken) return who + ": Wrecked";
+                // ((24.0) An APC or troop truck standing by its squad at a fight isn't parked at base.)
+                if (v.type == TRUCK && v.state == SCENE) return who + ": Fire support" + (where != null ? " at " + where : "");
                 if (v.standby) return who + ": Parked at " + (v.depot != null ? v.depot.name : "base") + ", ready";
                 // ((12.0) Left where it stopped, or parked, or off to restock: it said "Returning" or "Responding".)
                 if (v.state == ABANDONED) return who + ": Left where it stopped, nobody aboard";
+                if (v.recon) return who + ": Recon sweep" + (where != null ? " near " + where : "");
                 if (v.ammoRun != null && v.state == DRIVE) return who + ": Off to " + v.ammoRun.name + " to restock ammo";
                 if (v.parked && v.crew.isEmpty() && v.driver == null) return who + ": Parked";
                 if (v.state == PICKUP) return who + ": Picking up its " + (v.passengerType == Entity.SOLDIER ? "squad" : "officers");
@@ -996,6 +1001,38 @@ final class Fleet {
 
     boolean inView(float x, float y) {
         return x > w.viewX0 - 60 && x < w.viewX1 + 60 && y > w.viewY0 - 60 && y < w.viewY1 + 60;
+    }
+
+    /**
+     * ((24.0) Waiting in a queue isn't being stuck - unless the queue hasn't moved in 40 seconds: then it's a knot, and
+     * the car looks for another way. One still knotted after 90 seconds where nobody's watching is lifted out onto
+     * the nearest open road (a hundred patrol cars had jammed a dirt track for good, each waiting on the next).)
+     */
+    private boolean gridlocked(Vehicle v) {
+        if (v.player != null || v.stillT < 40) return false;
+        if (v.stillT > 90 && !inView(v.x, v.y)) {
+            for (int tries = 0; tries < 6; tries++) {
+                float a = w.rnd.nextFloat() * 6.2832f, r = 120 + tries * 60;
+                float[] d = city.nearestDrivable(v.x + (float) Math.cos(a) * r, v.y + (float) Math.sin(a) * r);
+                if (d == null || inView(d[0], d[1]) || vehicleNear(d[0], d[1], 14, v)) continue;
+                v.x = d[0];
+                v.y = d[1];
+                v.speed = 0;
+                v.stillT = 0;
+                v.stuckTimer = 0;
+                v.destCd = 0;
+                break;
+            }
+        }
+        return true;
+    }
+
+    private boolean vehicleNear(float x, float y, float r, Vehicle self) {
+        for (int i = 0; i < vehicles.size(); i++) {
+            Vehicle o = vehicles.get(i);
+            if (o != self && !airborne(o) && Math.abs(o.x - x) < r && Math.abs(o.y - y) < r) return true;
+        }
+        return false;
     }
 
     private boolean newDestination(Vehicle v) {
@@ -4369,6 +4406,21 @@ final class Fleet {
                 return true;
             }
             if (v.state == RETURN && v.parkHome) {
+                // ((24.0) A jam on the way home isn't home: it parked up for good in the middle of the road, hundreds
+                // of feet short. Plan the way again; only a long way off and getting nowhere does it give up and stay.)
+                if (v.depot != null && World.hypot(v.x - v.depot.x, v.y - v.depot.y) > v.depot.r + City.T * 3) {
+                    if (v.jamTries < 6 && v.rerouteCd <= 0 && route(v, v.depot.gateX, v.depot.gateY)) {
+                        v.jamTries++;
+                        v.rerouteCd = 4;
+                        v.stuckTimer = 0;
+                        return false;
+                    }
+                    if (v.rerouteCd > 0 && v.jamTries < 6) {
+                        v.stuckTimer = 0;
+                        return false;
+                    }
+                }
+                v.jamTries = 0;
                 // Home: anyone aboard gets out (off duty), and it parks up ready for the next call.
                 if (!v.crew.isEmpty()) crewOut(v, true);
                 parkUp(v);
@@ -4512,6 +4564,7 @@ final class Fleet {
         v.state = RETURN;
         v.speed = 0;
         v.stuckTimer = 0;
+        v.jamTries = 0;
         return true;
     }
 
@@ -5179,7 +5232,7 @@ final class Fleet {
             boolean queue = carAhead(v);
             float throttle = queue && v.stuckTimer < 3 ? 0.15f : 1f;
             // Waiting at a red light, a stop sign or behind a queue isn't being stuck.
-            if (v.held || queue) v.stuckTimer = Math.min(v.stuckTimer, 1);
+            if ((v.held || queue) && !gridlocked(v)) v.stuckTimer = Math.min(v.stuckTimer, 1);
             // (On the highway: highway speeds.)
             // (10.49) A slip road on or off the highway at nearly highway speed, not a town crawl.
             float cruise = city.onHighway(v.x, v.y) ? 115 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 100 : v.fleeing ? 90 : 70;
@@ -7173,7 +7226,7 @@ final class Fleet {
         if (!person) v.timer = 0;
         v.stuckTimer += dt;
         boolean queue = carAhead(v);
-        if (v.held || queue) v.stuckTimer = Math.min(v.stuckTimer, 1);
+        if ((v.held || queue) && !gridlocked(v)) v.stuckTimer = Math.min(v.stuckTimer, 1);
         if (!driveStep(v, dt, Math.min(limit, person ? 15 : city.onHighway(v.x, v.y) ? 105 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 95 : 60), queue ? 0.15f : 1f) || v.stuckTimer > 10) {
             v.stuckTimer = 0;
             newDestination(v);
@@ -7494,7 +7547,12 @@ final class Fleet {
             float d = (float) World.hypot(gx - v.x, gy - v.y);
             // ((10.60) The dead round the pad, or the hospital doors: it holds overhead until they're dealt with,
             // rather than setting down and letting everyone out among them.)
-            if (d < 6 && v.speed < 12 && w.countZombiesNear(gx, gy, 70) > 0) {
+            // ((24.0) Not for ever, though: with no more than a straggler or two about after a minute and a quarter it sets
+            // down all the same. One idle zombie by the pad held a rescue flight and its passengers overhead for good.)
+            if (d < 6 && v.speed < 12) v.holdT += dt;
+            else v.holdT = 0;
+            int round = d < 6 && v.speed < 12 ? w.countZombiesNear(gx, gy, 70) : 0;
+            if (round > 0 && (v.holdT < 75 || round > 2)) {
                 if (v.holdSaidCd <= 0) {
                     v.holdSaidCd = 30;
                     w.dispatch.say(v.kind == K_POLICE_HELI || v.kind == K_RESCUE_HELI ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, null,
@@ -7520,7 +7578,7 @@ final class Fleet {
             face = v.angle;
             v.alt -= dt * 0.2f;
             // ((10.60) And back up if they come for it as it settles.)
-            if (v.alt > 0.05f && w.countZombiesNear(gx, gy, 50) > 0) {
+            if (v.alt > 0.05f && w.countZombiesNear(gx, gy, 50) > (v.holdT >= 75 ? 2 : 0)) {
                 v.state = FLY_OUT;
                 v.alt += dt * 0.4f;
             } else if (v.alt <= 0) {
