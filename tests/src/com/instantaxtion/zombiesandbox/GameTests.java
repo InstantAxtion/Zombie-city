@@ -2022,6 +2022,7 @@ public final class GameTests {
                 c.seed = 77;
                 c.normalize();
                 c.seed = 77;
+                c.civic = 36; // (22.6: laid out for the map before the new colours and names)
                 World w = new World(c);
                 w.populate(c);
                 java.util.Random r = new java.util.Random(2);
@@ -4303,7 +4304,8 @@ public final class GameTests {
                     if (city.bridge == null || !city.bridge[t0] || city.tiles[t0] != City.ROAD) continue;
                     roadBridges++;
                     int o0 = city.riverAcross ? (b0 - 1) * city.w + a : a * city.w + b0 - 1, o1 = city.riverAcross ? (b1 + 1) * city.w + a : a * city.w + b1 + 1;
-                    if (city.tiles[o0] == City.ROAD && city.tiles[o1] == City.ROAD) aligned++;
+                    // (A car parked at the end of one is still the street.)
+                    if ((city.tiles[o0] == City.ROAD || city.tiles[o0] == City.CAR) && (city.tiles[o1] == City.ROAD || city.tiles[o1] == City.CAR)) aligned++;
                 }
                 check(roadBridges > 0 && aligned == roadBridges, "bridges line up with the streets (" + aligned + " of " + roadBridges + " tiles)");
                 // The far bank can be walked to.

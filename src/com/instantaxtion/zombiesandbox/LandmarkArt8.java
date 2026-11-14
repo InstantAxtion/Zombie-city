@@ -390,6 +390,9 @@ final class LandmarkArt8 {
                 }
                 // The island platform, joined to the terminal by a walkway.
                 float ua = te + 6, ub = L - 30, iw = 7;
+                int ni = Math.max(1, (int) (S / 120));
+                for (int isl = 0; isl < ni; isl++) {
+                vc = S * (isl + 0.5f) / ni;
                 f.rect(0xFFD2CCC0, ua, vc - iw, ub, vc + iw);
                 f.roundRect(0xFFD2CCC0, ub - 8, vc - iw, ub + 6, vc + iw, 6);
                 f.frame(0xFFE8E0A0, 0.8f, ua, vc - iw, ub, vc + iw);
@@ -432,6 +435,7 @@ final class LandmarkArt8 {
                 f.rect(0x40000000, ub + 1, vc - 4 + 1.5f, ub + 9, vc + 4 + 1.5f);
                 f.rect(0xFF7A8E9A, ub, vc - 4, ub + 8, vc + 4);
                 f.rect(0xFF9AB0BE, ub + 1, vc - 3, ub + 7, vc + 3);
+                }
                 for (float v = 8; v < S - 6; v += 6) f.circle(0xFFE0C040, L - 3, v, 0.9f);
             }
 
@@ -774,11 +778,23 @@ final class LandmarkArt8 {
                 for (float u = 6; u < L; u += 9) f.bush(u, bvc + ((int) (u / 9) % 2 == 0 ? -4 : 4), 2.6f);
                 // Trees, benches and bike racks on the open plaza.
                 float pv0 = bvc + 30, pv1 = S - 6;
-                if (pv1 - pv0 > 12) {
-                    for (float u = 12; u < L - 50; u += 26) {
-                        f.rect(0xFF9A9284, u - 5, (pv0 + pv1) / 2 - 5, u + 5, (pv0 + pv1) / 2 + 5);
-                        f.tree(u, (pv0 + pv1) / 2, 6, 0xFF4E8A44);
-                        f.bench(u + 12, (pv0 + pv1) / 2, false);
+                int prow = Math.max(1, (int) ((pv1 - pv0) / 48));
+                if (pv1 - pv0 > 12) for (int pr = 0; pr < prow; pr++) {
+                    float tv = pv0 + (pv1 - pv0) * (pr + 0.5f) / prow;
+                    for (float u = 12 + (pr % 2) * 13; u < L - 50; u += 26) {
+                        f.rect(0xFF9A9284, u - 5, tv - 5, u + 5, tv + 5);
+                        f.tree(u, tv, 6, 0xFF4E8A44);
+                        f.bench(u + 12, tv, false);
+                    }
+                }
+                if (pv1 - pv0 > 110) {
+                    float fu = L - 30, fv = (pv0 + pv1) / 2;
+                    f.circle(0xFFB8B0A0, fu, fv, 16);
+                    f.circle(0xFF3E7AA0, fu, fv, 14);
+                    f.circle(0xFF6AAAD0, fu, fv, 7);
+                    for (int k = 0; k < 8; k++) {
+                        double a = k * Math.PI / 4;
+                        f.circle(0xC0FFFFFF, fu + (float) Math.cos(a) * 10, fv + (float) Math.sin(a) * 10, 0.9f);
                     }
                 }
                 for (float u = 8; u < L - 8; u += 26) {
@@ -1034,8 +1050,10 @@ final class LandmarkArt8 {
                 float gap = (L - n * b) / (n + 1);
                 int[] cols = {0xFFE8E6DE, 0xFFE8E6DE, 0xFF9AAE8E, 0xFFE8E6DE};
                 float pv = H + 6;
-                for (int k = 0; k < n; k++) {
-                    float u0 = gap + k * (b + gap), v0 = 4 + (H - 2 - b) / 2, u1 = u0 + b, v1 = v0 + b;
+                int rows = H > 2 * b + 30 ? 2 : 1;
+                for (int k = 0; k < n * rows; k++) {
+                    int ro = k / n;
+                    float u0 = gap + (k % n) * (b + gap), v0 = 4 + (H - 2 - b * rows - 14 * (rows - 1)) / 2 + ro * (b + 14), u1 = u0 + b, v1 = v0 + b;
                     f.rect(0xFFB0A890, u0, v0, u1, v1);
                     f.specks(r, 16, 0x20000000, 0x20FFFFFF, u0 + 2, v0 + 2, u1 - 2, v1 - 2, 1.2f);
                     f.rect(0x30000000, u0 + 2.5f, v0 + 2.5f, u1, v0 + 4);
@@ -1043,8 +1061,9 @@ final class LandmarkArt8 {
                     f.line(0xFF8E887A, 0.5f, u0 - 1.2f, v1 + 1.2f, u1 + 1.2f, v1 + 1.2f);
                     float cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, rad = b / 2 - 7;
                     // The pipe from the tank out to the manifold.
-                    f.line(0xFF5A5E62, 2.2f, cu + rad * 0.3f, cv, cu + rad * 0.3f, pv);
-                    f.line(0xFFD8B030, 1.4f, cu + rad * 0.3f, cv, cu + rad * 0.3f, pv);
+                    float pu = cu + rad * 0.3f + ro * 6;
+                    f.line(0xFF5A5E62, 2.2f, pu, cv, pu, pv);
+                    f.line(ro == 0 ? 0xFFD8B030 : 0xFFB8402E, 1.4f, pu, cv, pu, pv);
                     tank(f, cu, cv, rad, cols[k % 4], k % 3 == 1);
                     f.rect(0xFF6A6E72, u0 + 4, v1 - 1.5f, u0 + 9, v1 + 1.5f);
                 }
@@ -1504,8 +1523,7 @@ final class LandmarkArt8 {
             @Override
             int[][] lp(int L, int S) {
                 int cs = Math.min(5, Math.max(4, S / 3));
-                int lv = Math.max(3, S - cs - 6);
-                lv = Math.min(lv, 5);
+                int lv = Math.max(3, Math.min(S - cs - 6, Math.max(5, S / 2 - 1)));
                 return new int[][]{B(1, 1, L - cs - 3, lv, 2), B(L - cs - 1, 1, cs, cs, 3)};
             }
 
@@ -1539,8 +1557,8 @@ final class LandmarkArt8 {
                 }
                 // Pallets of bottles waiting for the lorry, shrink-wrapped.
                 float pu0 = Math.max(su + 16, L * 0.6f);
-                for (float u = pu0; u + 10 < L - 4 && u < pu0 + 3 * 13; u += 13)
-                    for (float v = yv + 2; v + 10 < S - 4 && v < yv + 2 + 3 * 13; v += 13) {
+                for (float u = pu0; u + 10 < L - 4 && u < pu0 + 4 * 13; u += 13)
+                    for (float v = yv + 2; v + 10 < S - 4 && v < yv + 2 + 4 * 13; v += 13) {
                         f.rect(0x40000000, u + 1.2f, v + 1.5f, u + 11.2f, v + 11.5f);
                         f.rect(0xFFA88A5A, u, v, u + 10, v + 10);
                         for (float a = u + 1.2f; a < u + 9.5f; a += 2.1f)
@@ -2673,7 +2691,8 @@ final class LandmarkArt8 {
                 // Ponds, veg beds and a polytunnel in the middle strip.
                 float pu = L * 0.18f;
                 if (m1 - m0 > 20) {
-                    pond(f.c, f.p, f.x(pu - 14, mv + 2), f.y(pu - 14, mv + 2), f.x(pu + 12, m1 - 2), f.y(pu + 12, m1 - 2));
+                    float pm = Math.min(m1 - 2, mv + 40);
+                    pond(f.c, f.p, f.x(pu - 14, mv + 2), f.y(pu - 14, mv + 2), f.x(pu + 12, pm), f.y(pu + 12, pm));
                     f.oval(0xFF5A9A48, pu + 6, mv + 4, pu + 10, mv + 7);
                     for (int k = 0; k < 5; k++) f.line(0xFF5A7A3A, 0.6f, pu - 12 + k * 1.5f, mv + 4, pu - 13 + k * 1.5f, mv);
                 }
@@ -2682,12 +2701,17 @@ final class LandmarkArt8 {
                     float u = bu + k * 13;
                     if (u + 10 > L * 0.7f) break;
                     vegBed(f, r, u, m0 + 2, u + 10, Math.min(m0 + 2 + 20, mv - 3));
+                    if (mv - m0 > 56) vegBed(f, r, u, m0 + 26, u + 10, m0 + 46);
                 }
+                if (m1 - mv > 76)
+                    for (float v = mv + 52; v < m1 - 8; v += 20)
+                        for (float u = 14 + ((int) (v / 20) % 2) * 10; u < L - 12; u += 22) f.tree(u, v, 4.2f, 0xFF6A9A3E);
                 if (m1 - mv > 14) {
                     float tu = L * 0.5f;
-                    f.rect(0x40000000, tu + 1.5f, mv + 4 + 2, tu + 28 + 1.5f, m1 - 2 + 2);
-                    vault(f, 0xFFE8ECE8, tu, mv + 4, tu + 28, m1 - 2);
-                    for (float u = tu + 4; u < tu + 28; u += 4) f.line(0x30000000, 0.5f, u, mv + 4, u, m1 - 2);
+                    float tm = Math.min(m1 - 2, mv + 34);
+                    f.rect(0x40000000, tu + 1.5f, mv + 4 + 2, tu + 28 + 1.5f, tm + 2);
+                    vault(f, 0xFFE8ECE8, tu, mv + 4, tu + 28, tm);
+                    for (float u = tu + 4; u < tu + 28; u += 4) f.line(0x30000000, 0.5f, u, mv + 4, u, tm);
                 }
                 // Compost bins and hens.
                 float cu = L * 0.78f;
@@ -2956,14 +2980,28 @@ final class LandmarkArt8 {
                 for (int i = 0; i < n; i++) a[i] = B(1 + i * sp, 1, sp - 1, 2, 1);
                 int hl = Math.max(4, Math.min(6, L / 3));
                 a[n] = B(1, S - 4, hl, 3, 1);
-                return a;
+                if (S < 17) return a;
+                java.util.ArrayList<int[]> l = new java.util.ArrayList<int[]>(java.util.Arrays.asList(a));
+                for (int u = hl + 3; u + sp - 1 <= L - 1; u += sp) l.add(B(u, S - 3, sp - 1, 2, 1));
+                return l.toArray(new int[l.size()][]);
             }
 
             @Override
             void g(City city, F f, int[][] q, Random r) {
                 float L = f.L, S = f.S, T = TT;
-                int n = q.length - 1;
+                int n = 0;
+                while (n < q.length - 1 && q[n][3] != 3) n++;
+                boolean deep = q.length > n + 1;
                 f.rect(0xFF7AA45A, 0, 0, L, S);
+                if (deep) {
+                    float bv = q[n + 1][1] * T - 5;
+                    f.rect(0xFFD8D0BC, (q[n][0] + q[n][2]) * T, bv - 2.5f, L, bv + 2.5f);
+                    for (int i = n + 1; i < q.length; i++) {
+                        float u = (q[i][0] + q[i][2] / 2f) * T;
+                        f.rect(0xFFD8D0BC, u - 2, bv, u + 2, q[i][1] * T);
+                        f.bush(q[i][0] * T + 4, bv + 4, 2);
+                    }
+                }
                 float he = (q[n][0] + q[n][2]) * T, hv = q[n][1] * T;
                 // A paved walk in front of the bungalows, front paths, flower borders.
                 float wv = 3 * T + 6;
@@ -2979,7 +3017,7 @@ final class LandmarkArt8 {
                         }
                 }
                 // The bowling green: a perfect square of striped turf in its ditch and bank.
-                float gu0 = he + 12, gu1 = L - 6, gv0 = wv + 10, gv1 = S - 6;
+                float gu0 = he + 12, gu1 = L - 6, gv0 = wv + 10, gv1 = deep ? q[n + 1][1] * T - 14 : S - 6;
                 float side = Math.min(gu1 - gu0, gv1 - gv0);
                 float gcu = (gu0 + gu1) / 2, gcv = (gv0 + gv1) / 2;
                 float a0 = gcu - side / 2, a1 = gcu + side / 2, b0 = gcv - side / 2, b1 = gcv + side / 2;
