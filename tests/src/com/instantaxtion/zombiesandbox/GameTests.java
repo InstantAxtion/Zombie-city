@@ -1795,6 +1795,7 @@ public final class GameTests {
         test("14.2: raider gangs strip the shops and shoot survivors there, and the police shoot back", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 37; // (22.8: laid out for the map before the neighbourhoods)
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 52;

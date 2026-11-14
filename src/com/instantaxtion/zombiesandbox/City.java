@@ -31,7 +31,7 @@ final class City {
             D_FLOWERS = 13, D_CROPS = 14, D_ROUNDABOUT = 15, D_FLOODLIGHT = 16, D_FOUNTAIN = 17, D_FLAGS = 18,
             D_YARD = 19, D_MAST = 20, D_SALT = 21, D_PILES = 22, D_UMBRELLA = 23, D_LIFEGUARD = 24, D_BOAT = 25,
             D_SHIP = 26, D_CRANE = 27, D_CONTAINERS = 28, D_TENT = 29, D_CAMPFIRE = 30, D_PICNIC = 31, D_FALLS = 32,
-            D_SIGN = 33, D_LOOKOUT = 34, D_FIRETOWER = 35, D_LANDMARK = 36;
+            D_SIGN = 33, D_LOOKOUT = 34, D_FIRETOWER = 35, D_LANDMARK = 36, D_STRINGS = 37;
     static final int FACILITY_POLICE = 0, FACILITY_BASE = 1, FACILITY_HOSPITAL = 2, FACILITY_FIRE = 3;
 
     /** A police station or military base: where reinforcements come from and a preferred safe zone. */
@@ -79,6 +79,19 @@ final class City {
     private static final int[] WALLS = {
             0xFF9A8F80, 0xFFA8746A, 0xFF8C959E, 0xFFB5A58A, 0xFF7E8A7A, 0xFF9B7E6B, 0xFFA0A4A8, 0xFF6F7B88
     };
+    /** ((22.8) Map version 38: offices, glass and warehouses in many more colours. */
+    private static final int[] ROOFS38 = {0xFF6B6F78, 0xFF7A6A5C, 0xFF5C6670, 0xFF8A7F70, 0xFF6E5D5A, 0xFF59646B, 0xFF7C7C74,
+            0xFF4F5A66, 0xFF866E5E, 0xFF6A7468, 0xFF3E4650, 0xFF5E4A3E, 0xFF4A5A4A, 0xFF7A5A4A, 0xFF5A5A66, 0xFF8A8478,
+            0xFF3A3E44, 0xFF6E7A82};
+    private static final int[] WALLS38 = {0xFF9A8F80, 0xFFA8746A, 0xFF8C959E, 0xFFB5A58A, 0xFF7E8A7A, 0xFF9B7E6B, 0xFFA0A4A8,
+            0xFF6F7B88, 0xFFC8B8A0, 0xFFB86A50, 0xFFD8C8A8, 0xFF8898A8, 0xFFA8B0A0, 0xFFC0A890, 0xFF7A6A8A, 0xFFB8A070,
+            0xFF5E6E7A, 0xFFD0C0B0, 0xFF9A5A48, 0xFFE0D8C8};
+    private static final int[] GLASS_WALLS38 = {0xFF6F8898, 0xFF7C94A4, 0xFF5E7686, 0xFF8898A4, 0xFF6A7E8C, 0xFF4E6A84,
+            0xFF8AA6BE, 0xFF3E5A74, 0xFF7A9A8A, 0xFF5A7A6A, 0xFF9AB4C8, 0xFF6A6A84, 0xFFA8B8C0};
+    private static final int[] WAREHOUSE_ROOFS38 = {0xFF8A9096, 0xFF7C848A, 0xFF9AA0A4, 0xFF6F777D, 0xFF7D8A80, 0xFF8E5A44,
+            0xFF4E6A5E, 0xFF5A6E7E, 0xFFA0A8B0, 0xFF6E5A4A, 0xFF3E5A74, 0xFF7A3A2A};
+    private static final int[] WAREHOUSE_WALLS38 = {0xFF8A8F94, 0xFF9C8F7F, 0xFF7F8A8F, 0xFF8F8575, 0xFFB86A50, 0xFF7E9A88,
+            0xFF8FA8C0, 0xFFC8B89A, 0xFF9A6A50, 0xFFA8A098};
     private static final int[] WAREHOUSE_ROOFS = {0xFF8A9096, 0xFF7C848A, 0xFF9AA0A4, 0xFF6F777D, 0xFF7D8A80};
     private static final int[] WAREHOUSE_WALLS = {0xFF8A8F94, 0xFF9C8F7F, 0xFF7F8A8F, 0xFF8F8575};
     private static final int[] CAR_COLORS = {
@@ -250,6 +263,8 @@ final class City {
         int tiles;
         /** ((16.3) Hardly any dry land of its own (one out at sea, off the islands): no name drawn for it. */
         boolean unnamed;
+        /** ((22.8) Its character (colours, paving, landmarks), or null. */
+        Neighbourhoods.Theme theme;
 
         /** Big enough, and dry enough, to have its name on the map. */
         boolean labelled() {
@@ -465,6 +480,14 @@ final class City {
     }
 
     /** The kind of district at a tile. */
+    /** ((22.8) The neighbourhood theme at a tile, or null. */
+    Neighbourhoods.Theme themeAt(int tx, int ty) {
+        if (districtAt == null || !cfg.neighbourhoods()) return null;
+        tx = Math.max(0, Math.min(w - 1, tx));
+        ty = Math.max(0, Math.min(h - 1, ty));
+        return districts.get(districtAt.get(ty * w + tx)).theme;
+    }
+
     private int districtType(int tx, int ty) {
         if (districtAt == null) return DT_MIDTOWN;
         tx = Math.max(0, Math.min(w - 1, tx));
@@ -2768,6 +2791,7 @@ final class City {
         townX1 = bx1;
         townY1 = by1;
         makeDistricts();
+        if (cfg.neighbourhoods()) Neighbourhoods.assign(this, cfg.seed);
         if (m > 0) fill(0, 0, w, h, GRASS);
         // A ring road around the edge of town (a village just has its lanes).
         boolean village = cfg.density() == 0 && cfg.style() == CityConfig.STYLE_HOUSES;
@@ -3192,6 +3216,7 @@ final class City {
             if (landmark(ix, iy, iw, ih)) continue;
             block(ix, iy, iw, ih);
         }
+        if (cfg.neighbourhoods()) placeStrings();
 
         if (railY0 >= 0)
             for (int x = 0; x < w; x++) {
@@ -6046,6 +6071,12 @@ final class City {
             wall = 0xFFC4A882;
         } else if (kind == SHOP) {
             int[] sr = cfg.variety() ? country.shopRoofs37 : country.shopRoofs, sw = cfg.variety() ? country.shopWalls37 : country.shopWalls;
+            // ((22.8) The neighbourhood's own shopfronts.)
+            Neighbourhoods.Theme th = themeAt(x + lw / 2, y + lh / 2);
+            if (th != null) {
+                sr = th.shopRoofs;
+                sw = th.shopWalls;
+            }
             roof = sr[rnd.nextInt(sr.length)];
             wall = sw[rnd.nextInt(sw.length)];
         } else if (kind == TOWER) {
@@ -6098,8 +6129,27 @@ final class City {
         int least = Integer.MAX_VALUE, n = 0;
         // ((22.6) Cities made before (map versions 35 and 36) chose from the first fifty: they still do, so they
         // rebuild the same.)
-        int designs = cfg.variety() ? defs.size() : Math.min(defs.size(), 50);
+        int designs = cfg.neighbourhoods() ? defs.size() : cfg.variety() ? Math.min(defs.size(), 150) : Math.min(defs.size(), 50);
+        // ((22.8) The neighbourhood's own kinds first, more often than not.)
+        Neighbourhoods.Theme th = themeAt(x + bw / 2, y + bh / 2);
+        boolean wantFav = th != null && lmRnd.nextFloat() < 0.6f;
+        if (wantFav) {
+            Landmarks.Def fav = null;
+            int favLeast = Integer.MAX_VALUE, fn = 0;
+            for (Landmarks.Def d : defs) {
+                if (d.id >= designs || !th.favours(d.name) || s < d.minS || l < d.minL) continue;
+                int cnt = lmCount[d.id];
+                if (cnt > 0) continue;
+                if (cnt < favLeast) {
+                    favLeast = cnt;
+                    fn = 0;
+                }
+                if (cnt == favLeast && lmRnd.nextInt(++fn) == 0) fav = d;
+            }
+            if (fav != null) pick = fav;
+        }
         for (Landmarks.Def d : defs) {
+            if (pick != null && wantFav) break;
             if (d.id >= designs) break;
             if ((d.districts & dbit) == 0 || s < d.minS || l < d.minL) continue;
             int cnt = lmCount[d.id];
@@ -6135,6 +6185,35 @@ final class City {
         lmAt.add(new float[]{x, y, pick.id});
         lmLeft--;
         return true;
+    }
+
+    /**
+     * ((22.8) Strings over the streets of the neighbourhoods that have them: red lanterns in Chinatown, warm bulbs in
+     * Little Italy and the theatres, coloured flags in the Arts District. Every few tiles along a street, side to side.
+     */
+    private void placeStrings() {
+        Random r = new Random(cfg.seed * 977L + 38);
+        for (Street st : streets) {
+            int len = st.vertical ? st.y1 - st.y0 : st.x1 - st.x0;
+            if (len < 6 || st.width > 6) continue;
+            for (int k = 2; k < len - 2; k += 3 + r.nextInt(2)) {
+                int ax = st.vertical ? st.x0 + st.width / 2 : st.x0 + k, ay = st.vertical ? st.y0 + k : st.y0 + st.width / 2;
+                if (ax < 0 || ay < 0 || ax >= w || ay >= h || tiles[ay * w + ax] != ROAD || roadDir[ay * w + ax] == 3) continue;
+                Neighbourhoods.Theme th = themeAt(ax, ay);
+                if (th == null || th.strings == 0) continue;
+                float x0, y0, x1, y1;
+                if (st.vertical) {
+                    x0 = st.x0 * T - 6;
+                    x1 = st.x1 * T + 6;
+                    y0 = y1 = (st.y0 + k) * T + T / 2f;
+                } else {
+                    y0 = st.y0 * T - 6;
+                    y1 = st.y1 * T + 6;
+                    x0 = x1 = (st.x0 + k) * T + T / 2f;
+                }
+                decor.add(new float[]{D_STRINGS, x0, y0, x1, y1, th.strings, r.nextInt(1000)});
+            }
+        }
     }
 
     /** Fills the inside of one city block according to the map settings. */
@@ -6450,8 +6529,9 @@ final class City {
             wall = hw[rnd.nextInt(hw.length)];
         } else if (kind == WAREHOUSE) {
             floors = 1 + rnd.nextInt(2) + (height >= 2 ? 1 : 0);
-            roof = WAREHOUSE_ROOFS[rnd.nextInt(WAREHOUSE_ROOFS.length)];
-            wall = WAREHOUSE_WALLS[rnd.nextInt(WAREHOUSE_WALLS.length)];
+            int[] wr = cfg.neighbourhoods() ? WAREHOUSE_ROOFS38 : WAREHOUSE_ROOFS, ww = cfg.neighbourhoods() ? WAREHOUSE_WALLS38 : WAREHOUSE_WALLS;
+            roof = wr[rnd.nextInt(wr.length)];
+            wall = ww[rnd.nextInt(ww.length)];
         } else if (kind == APARTMENT) {
             floors = 3 + rnd.nextInt(4) + height * 2 + (cfg.towers() ? 6 : 0);
             roof = darken(ROOFS[rnd.nextInt(ROOFS.length)], 0.9f);
@@ -6483,14 +6563,14 @@ final class City {
             else if (min <= 3) floors = Math.min(floors, 8);
             else if (min <= 4) floors = Math.min(floors, 14);
             floors = Math.min(floors, 22);
-            int[] roofs = country.officeRoofs != null ? country.officeRoofs : ROOFS;
-            int[] walls = country.officeWalls != null ? country.officeWalls : WALLS;
+            int[] roofs = country.officeRoofs != null ? country.officeRoofs : cfg.neighbourhoods() ? ROOFS38 : ROOFS;
+            int[] walls = country.officeWalls != null ? country.officeWalls : cfg.neighbourhoods() ? WALLS38 : WALLS;
             roof = roofs[rnd.nextInt(roofs.length)];
             wall = walls[rnd.nextInt(walls.length)];
             if (curDistrict == DT_DOWNTOWN) {
                 // Downtown towers climb higher and many are clad in glass.
                 floors = Math.min(24, floors + 2 + rnd.nextInt(3));
-                if (rnd.nextFloat() < 0.55f) wall = GLASS_WALLS[rnd.nextInt(GLASS_WALLS.length)];
+                if (rnd.nextFloat() < 0.55f) wall = cfg.neighbourhoods() ? GLASS_WALLS38[rnd.nextInt(GLASS_WALLS38.length)] : GLASS_WALLS[rnd.nextInt(GLASS_WALLS.length)];
             } else if (curDistrict == DT_OLDTOWN || curDistrict == DT_CAMPUS) {
                 // Old brick and stone, a few storeys high.
                 floors = 2 + rnd.nextInt(3);
@@ -6505,6 +6585,20 @@ final class City {
             floors = Math.min(floors, 5);
             wall = oldWall();
             roof = oldRoof();
+        }
+        // ((22.8) The neighbourhood's own colours.)
+        Neighbourhoods.Theme th = themeAt(x + lw / 2, y + lh / 2);
+        if (th != null) {
+            if (kind == HOUSE || kind == APARTMENT) {
+                roof = Neighbourhoods.pick(th.roofs, rnd);
+                wall = Neighbourhoods.pick(th.walls, rnd);
+                if (kind == APARTMENT) roof = darken(roof, 0.9f);
+            } else if (kind == OFFICE) {
+                wall = Neighbourhoods.pick(th.officeWalls, rnd);
+                roof = Neighbourhoods.pick(th.roofs, rnd);
+            } else if (kind == WAREHOUSE) {
+                wall = Neighbourhoods.pick(th.officeWalls, rnd);
+            }
         }
         addVariantLot(x, y, lw, lh, roof, kind, floors, wall);
     }
@@ -9556,6 +9650,8 @@ final class City {
         // (The ground tiles are drawn with square edges, so no seams show between them when the map is drawn
         // smaller than full size.)
         p.setAntiAlias(false);
+        // ((22.8) Neighbourhoods paved in their own colour.)
+        boolean paved = cfg.neighbourhoods() && districtAt != null && Neighbourhoods.any(districts);
         for (int y = Y0; y < Y1; y++) {
             // ((22.0) A run of tiles the same colour along a row goes down as one rectangle, not one each: the same
             // picture, from a tenth of the drawing.)
@@ -9578,6 +9674,10 @@ final class City {
                     case ROCK: col = 0xFF7E796E; break;
                     case TRAIL: col = country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
                     default: col = real ? 0xFF38393C : 0xFF3A3D43; break;
+                }
+                if (paved && (t == SIDEWALK || t == BUILDING || t == PLAZA)) {
+                    Neighbourhoods.Theme th = districts.get(districtAt.get(y * w + x)).theme;
+                    if (th != null && th.paving != 0) col = t == PLAZA ? mix(th.paving, col, 0.5f) : th.paving;
                 }
                 if (t == TREE && isPlazaTree(x, y)) col = 0xFFB3A487;
                 // (10.40) Lanes and drives are drawn smoothly over the ground afterwards (drawLanes).
@@ -10848,6 +10948,51 @@ final class City {
         float dw = x1 - x0, dh = y1 - y0;
         boolean wide = dw >= dh;
         p.setStyle(Paint.Style.FILL);
+        if (kind == D_STRINGS) {
+            // ((22.8) A wire across the street, sagging a little, hung with lanterns, bulbs or flags.)
+            float ax = d[1], ay = d[2], bx = d[3], by = d[4], len = (float) Math.hypot(bx - ax, by - ay);
+            float nx = -(by - ay) / len, ny = (bx - ax) / len, sag = len * 0.06f;
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(1f);
+            p.setColor(0xC0202020);
+            Path wire = new Path();
+            wire.moveTo(ax, ay);
+            wire.quadTo((ax + bx) / 2 + nx * sag, (ay + by) / 2 + ny * sag, bx, by);
+            c.drawPath(wire, p);
+            p.setStyle(Paint.Style.FILL);
+            int n = Math.max(3, (int) (len / (variant == 1 ? 11 : 9)));
+            for (int k = 1; k < n; k++) {
+                float t = k / (float) n, s2 = 4 * t * (1 - t);
+                float px = ax + (bx - ax) * t + nx * sag * s2, py = ay + (by - ay) * t + ny * sag * s2;
+                if (variant == 1) {
+                    p.setColor(0x50000000);
+                    c.drawCircle(px + 1.4f, py + 2f, 3.6f, p);
+                    p.setColor(0xFFC8281E);
+                    c.drawCircle(px, py, 3.5f, p);
+                    p.setColor(0xFFE8B030);
+                    c.drawRect(px - 1.2f, py - 4.2f, px + 1.2f, py - 3f, p);
+                    c.drawRect(px - 1.2f, py + 3f, px + 1.2f, py + 4.2f, p);
+                    p.setColor(0xFFF06A50);
+                    c.drawCircle(px - 1.1f, py - 1.1f, 1.2f, p);
+                } else if (variant == 2) {
+                    p.setColor(0x60F8E8A0);
+                    c.drawCircle(px, py, 3f, p);
+                    p.setColor(0xFFFFF0B8);
+                    c.drawCircle(px, py, 1.5f, p);
+                } else {
+                    int[] fl = {0xFFE04A3A, 0xFFE8C040, 0xFF3AA0D0, 0xFF60B050, 0xFFB060C0, 0xFFF08A30};
+                    p.setColor(fl[(k + (int) d[6]) % fl.length]);
+                    Path f = new Path();
+                    float dx = (bx - ax) / len, dy = (by - ay) / len;
+                    f.moveTo(px - dx * 2.8f, py - dy * 2.8f);
+                    f.lineTo(px + dx * 2.8f, py + dy * 2.8f);
+                    f.lineTo(px + nx * 5f, py + ny * 5f);
+                    f.close();
+                    c.drawPath(f, p);
+                }
+            }
+            return;
+        }
         if (kind == D_LANDMARK) {
             Landmarks.Def ld = Landmarks.get(variant);
             if (ld != null) {

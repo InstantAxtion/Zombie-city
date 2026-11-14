@@ -73,6 +73,10 @@ final class Landmarks {
             LandmarkArt6.register(l);
             LandmarkArt7.register(l);
             LandmarkArt8.register(l);
+            LandmarkArt9.register(l);
+            LandmarkArt10.register(l);
+            LandmarkArt11.register(l);
+            LandmarkArt12.register(l);
             for (int i = 0; i < l.size(); i++) l.get(i).id = i;
             all = l;
         }

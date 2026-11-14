@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.7";
-    static final int VERSION_CODE = 227;
+    static final String VERSION = "22.8";
+    static final int VERSION_CODE = 228;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.8  -  Neighbourhoods",
+                    "Districts have their own character: Chinatown, Little Italy, the Arts District, the Financial and Theatre Districts, the Historic Quarter, Docklands, Tech Park and more.",
+                    "Each has its own building colours, paving and favourite landmarks; some have lanterns, lights or flags strung over their streets.",
+                    "100 more one-of-a-kind buildings: 250 in all.",
+                    "Offices, warehouses and glass towers come in many more colours.",
+            },
             {
                     "22.7  -  Full names",
                     "Tapping someone shows all of their card: a long title puts their unit on the next line, and long lines wrap instead of being cut off with \"...\".",
