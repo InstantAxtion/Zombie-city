@@ -2290,6 +2290,7 @@ public final class GameTests {
         test("15.0: mounted police - quicker, seeing further, riding the parks; traffic police hold junctions for lights and sirens", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 34; // (22.4: laid out for the map before the landmarks)
                 c.v[CityConfig.OPT_PRESET] = 0;
                 c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
@@ -3578,6 +3579,7 @@ public final class GameTests {
         test("21.0: an alpha leads a big horde and it scatters when the alpha falls; marksmen go for it; the last of the dead are found", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 34; // (22.4: laid out for the map before the landmarks)
                 c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 82;
@@ -4365,6 +4367,67 @@ public final class GameTests {
                     Campaign.tick(rw);
                 }
                 check(rw.missionResult == 1, "cleared and held: the mission is won");
+            }
+        });
+        test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
+            @Override
+            public void run() throws Exception {
+                check(Landmarks.all().size() == 50, "fifty designs (" + Landmarks.all().size() + ")");
+                // Every design paints, small and large, wide and tall, with its buildings inside the block.
+                android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Paint p = new android.graphics.Paint();
+                CityConfig tc = new CityConfig();
+                tc.v[CityConfig.OPT_SIZE] = 0;
+                City small = new City(tc, 0.1f);
+                for (Landmarks.Def d : Landmarks.all()) {
+                    for (int[] sz : new int[][]{{d.minS, d.minL}, {d.minL, d.minS}, {24, 18}}) {
+                        android.graphics.Canvas cv = new android.graphics.Canvas(bm);
+                        int bw = sz[0], bh = sz[1];
+                        d.ground(small, cv, p, 0, 0, bw * City.T, bh * City.T, new java.util.Random(1));
+                        int[][] plan = d.plan(bw, bh, new java.util.Random(2));
+                        for (int k = 0; k < plan.length; k++) {
+                            int[] q = plan[k];
+                            check(q[0] >= 0 && q[1] >= 0 && q[0] + q[2] <= bw && q[1] + q[3] <= bh && q[2] > 0 && q[3] > 0, d.name + " inside its " + bw + "x" + bh + " block");
+                            d.roof(small, cv, p, k, q[0] * City.T, q[1] * City.T, (q[0] + q[2]) * City.T, (q[1] + q[3]) * City.T, new java.util.Random(3));
+                        }
+                    }
+                }
+                // A Standard city: ten or more, all different, and fewer whole blocks of car park.
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = 3;
+                c.seed = 5;
+                City city = new City(c, 0.1f);
+                java.lang.reflect.Field df = City.class.getDeclaredField("decor");
+                df.setAccessible(true);
+                java.util.Set<Integer> kinds = new java.util.HashSet<Integer>();
+                int n = 0;
+                for (Object o : (java.util.List<?>) df.get(city)) {
+                    float[] d = (float[]) o;
+                    if ((int) d[0] == City.D_LANDMARK) {
+                        n++;
+                        kinds.add((int) d[5]);
+                    }
+                }
+                check(n >= 10 && kinds.size() == n, "landmarks in a Standard city, none twice (" + n + ", " + kinds.size() + " kinds)");
+                // River City: no street runs into the water but onto a bridge.
+                CityConfig rc = new CityConfig();
+                rc.set(CityConfig.OPT_PRESET, CityConfig.RIVER_CITY);
+                rc.set(CityConfig.OPT_SIZE, 3);
+                rc.seed = 11;
+                City rv = new City(rc, 0.1f);
+                int stubs = 0;
+                for (int y = 1; y < rv.h - 1; y++)
+                    for (int x = 1; x < rv.w - 1; x++) {
+                        int t = y * rv.w + x;
+                        if (rv.tiles[t] != City.ROAD || (rv.bridge != null && rv.bridge[t])) continue;
+                        // A road tile with water ahead along its way and road behind: a street ending in the river.
+                        boolean ns = rv.tiles[t - rv.w] == City.ROAD || rv.tiles[t + rv.w] == City.ROAD;
+                        boolean we = rv.tiles[t - 1] == City.ROAD || rv.tiles[t + 1] == City.ROAD;
+                        if (ns && !we && (rv.tiles[t - rv.w] == City.WATER || rv.tiles[t + rv.w] == City.WATER)) stubs++;
+                        if (we && !ns && (rv.tiles[t - 1] == City.WATER || rv.tiles[t + 1] == City.WATER)) stubs++;
+                    }
+                check(stubs == 0, "no street runs into the river (" + stubs + " tiles)");
+                check(rv.riverC != null && rv.bankAt(rv.riverC.length / 2, true) < rv.bankAt(rv.riverC.length / 2, false), "the banks' true line is known");
             }
         });
         test("22.1: in peace, those off screen wait; the first of the dead wakes everyone; the map is drawn in tiles; collision short cut agrees", new Check() {

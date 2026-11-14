@@ -3146,8 +3146,8 @@ final class City {
         if (cfg.landmarks()) {
             int open = 0;
             for (int k = 0; k < blocks.size(); k++) if (!used[k] && blocks.get(k).length <= 4) open++;
-            int want = Math.min(open, Math.max(6, Math.round(open * 0.07f)));
-            lmChance = open == 0 ? 0 : Math.min(1f, want / (float) open);
+            int want = Math.min(Math.round(open * 0.5f), Math.max(10, Math.round(open * 0.15f)));
+            lmOpen = open;
             lmLeft = want;
         }
         for (int k = 0; k < blocks.size(); k++) {
@@ -5318,9 +5318,9 @@ final class City {
                         break;
                     }
                     int[] run = latRun(ns, k, st, LA);
-                    for (int q = run[0]; q <= run[1]; q++) if (bridgeAt(ns, k, q)) toBridge = true;
                     int rw = run[1] - run[0] + 1;
                     if (rw > prevW + 2) break;
+                    for (int q = run[0]; q <= run[1]; q++) if (bridgeAt(ns, k, q)) toBridge = true;
                     rows.add(new int[]{k, run[0], run[1]});
                     maxW = Math.max(maxW, rw);
                     if (wetN > 0 && rw < prevW) intoWater = true;
@@ -6070,10 +6070,9 @@ final class City {
         addVariantLot(x, y, lw, lh, roof, kind, floors, wall);
     }
 
-    // ((22.4) One-of-a-kind landmarks: about one block in fourteen (at least six), each design once before any
+    // ((22.4) One-of-a-kind landmarks: about one block in seven (at least ten), each design once before any
     // comes round again, and then only well away from where it already is.)
-    private float lmChance;
-    private int lmLeft;
+    private int lmLeft, lmOpen;
     private Random lmRnd;
     private int[] lmCount;
     private final List<float[]> lmAt = new ArrayList<float[]>();
@@ -6084,7 +6083,11 @@ final class City {
             lmRnd = new Random(cfg.seed * 7919L + 35);
             lmCount = new int[Landmarks.all().size()];
         }
-        if (lmRnd.nextFloat() >= lmChance) return false;
+        // (The chance keeps up with how many are still to place in the blocks left, so blocks too small for any
+        // don't leave the city short.)
+        float chance = lmLeft / (float) Math.max(1, lmOpen);
+        lmOpen--;
+        if (lmRnd.nextFloat() >= chance) return false;
         int dbit = 1 << Math.max(0, Math.min(6, districtType(x + bw / 2, y + bh / 2)));
         int s = Math.min(bw, bh), l = Math.max(bw, bh);
         List<Landmarks.Def> defs = Landmarks.all();

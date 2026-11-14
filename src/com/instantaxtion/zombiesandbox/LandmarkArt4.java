@@ -312,7 +312,7 @@ final class LandmarkArt4 {
         // 1. A glass office tower on a granite plaza: curtain-wall grid, a stepped crown and a helipad on top.
         Landmarks.Def d = new Landmarks.Def("Glass Skyscraper", T_BUILDING) {
             int[][] lp(int L, int S) {
-                int tw = clampi(Math.round(S * 0.46f), 4, 8);
+                int tw = clampi(Math.round(S * 0.46f), 4, 10);
                 int tl = Math.max(tw, Math.min(L - 6, Math.round(tw * 1.25f)));
                 return new int[][]{{(L - tl) / 2, (S - tw) / 2, tl, tw, 40}};
             }
@@ -734,7 +734,7 @@ final class LandmarkArt4 {
                 if (pv1 - pv0 > 16 && pu1 - pu0 > 16) {
                     a.RR(0xFF3A8478, pu0, pv0, pu1, pv1, 5);
                     a.RR(0xFF4C9C8E, pu0 + 2, pv0 + 2, pu1 - 2, pv1 - 2, 4);
-                    float ph = pv1 - pv0 - 4, cs = Math.min(ph, 3.6f * U);
+                    float ph = pv1 - pv0 - 4, cs = Math.min(ph, 2.7f * U);
                     int cols = Math.max(1, (int) ((pu1 - pu0 - 4) / cs)), rows = Math.max(1, (int) (ph / cs));
                     float cw = (pu1 - pu0 - 4) / cols, chh = ph / rows;
                     int item = 0;
@@ -770,11 +770,11 @@ final class LandmarkArt4 {
                                 case 2: { // the planets in a row
                                     float[] ps = {0.8f, 1.2f, 1.3f, 1f, 2.6f, 2.2f, 1.7f, 1.6f};
                                     int[] pc = {0xFFA09A90, 0xFFE0C080, 0xFF4A80C0, 0xFFC0603A, 0xFFD8B080, 0xFFE0D0A0, 0xFF90D0D8, 0xFF5070C8};
-                                    a.C(0xFFF0C030, cu - s * 1.1f, cv, s * 0.45f);
-                                    float uu = cu - s * 0.55f;
+                                    a.C(0xFFF0C030, cu - s * 0.8f, cv, s * 0.32f);
+                                    float uu = cu - s * 0.35f;
                                     for (int k = 0; k < 8; k++) {
                                         a.C(pc[k], uu, cv + (k % 2 == 0 ? -1 : 1) * s * 0.15f, ps[k] * Math.max(0.6f, s / 10));
-                                        uu += s * 0.24f;
+                                        uu += s * 0.17f;
                                     }
                                     break;
                                 }
@@ -1331,9 +1331,12 @@ final class LandmarkArt4 {
                 // A koi pond and cherry trees in the front corners.
                 float fu1 = pu0 - 10;
                 if (fu1 > 40 && cv - 10 > 30) {
-                    pond(c, p, a.x(8, 6), a.y(8, 6), a.x(Math.min(fu1, 8 + 34), cv - 14), a.y(Math.min(fu1, 8 + 34), cv - 14));
-                    a.C(0xFFE07030, 20, (cv - 8) / 2, 1.2f);
-                    a.C(0xFFF0F0E0, 26, (cv - 8) / 2 + 3, 1.1f);
+                    float pe = Math.min(fu1, 8 + 34);
+                    if (cv - 24 > 18) {
+                        pond(c, p, a.x(8, 7), a.y(8, 7), a.x(pe, cv - 24), a.y(pe, cv - 24));
+                        a.C(0xFFE07030, 8 + (pe - 8) * 0.4f, (cv - 17) / 2, 1.2f);
+                        a.C(0xFFF0F0E0, 8 + (pe - 8) * 0.6f, (cv - 17) / 2 + 3, 1.1f);
+                    }
                 }
                 a.tr(10, a.S - 10, 7, 0xFFE4A0B4);
                 if (fu1 > 50) a.tr(fu1 - 6, a.S - 12, 6.5f, 0xFFE8B0C0);
@@ -1400,8 +1403,20 @@ final class LandmarkArt4 {
                         hk = h0 * (1 - k * 0.17f);
                         float e = hk * 0.17f, t = hk + e, in = hk * 0.84f;
                         // Shadow of the tier on the one below.
-                        rect(c, p, 0x50000000, cx - hk + 1.2f, cy - hk + 1.8f, cx + hk + 1.2f, cy + hk + 1.8f);
-                        int[] fc = {0xFFA23C2C, 0xFF8E3428, 0xFF6E2820, 0xFF5E221C};
+                        if (k > 0) {
+                            float so = hk * 0.12f + 1;
+                            path.reset();
+                            path.moveTo(cx - t + so, cy - t + so * 1.5f);
+                            path.quadTo(cx + so, cy - in + so * 1.5f, cx + t + so, cy - t + so * 1.5f);
+                            path.quadTo(cx + in + so, cy + so * 1.5f, cx + t + so, cy + t + so * 1.5f);
+                            path.quadTo(cx + so, cy + in + so * 1.5f, cx - t + so, cy + t + so * 1.5f);
+                            path.quadTo(cx - in + so, cy + so * 1.5f, cx - t + so, cy - t + so * 1.5f);
+                            p.setStyle(Paint.Style.FILL);
+                            p.setColor(0x80000000);
+                            c.drawPath(path, p);
+                        }
+                        int[] fc = k % 2 == 0 ? new int[]{0xFFA23C2C, 0xFF8E3428, 0xFF6E2820, 0xFF5E221C}
+                                : new int[]{0xFFB8483A, 0xFFA43E30, 0xFF842E24, 0xFF702820};
                         float[][] f = {{-t, -t, 0, -in, t, -t}, {-t, -t, -in, 0, -t, t}, {t, -t, in, 0, t, t}, {-t, t, 0, in, t, t}};
                         int[] order = {0, 1, 2, 3};
                         for (int o : order) {
@@ -1440,6 +1455,8 @@ final class LandmarkArt4 {
                 } else {
                     // The main hall: green glazed tiles, red eaves, gold ridge ornaments.
                     hip(c, p, x0, y0, x1, y1, 0xFF56645A);
+                    for (float in = 4; in < Math.min(x1 - x0, y1 - y0) / 2 - 2; in += 4)
+                        frame(c, p, 0x22000000, 0.5f, x0 + in, y0 + in, x1 - in, y1 - in);
                     frame(c, p, 0xFFA03828, 1.4f, x0 + 0.7f, y0 + 0.7f, x1 - 0.7f, y1 - 0.7f);
                     float ww = x1 - x0, hh = y1 - y0;
                     if (ww >= hh) {
@@ -1698,8 +1715,8 @@ final class LandmarkArt4 {
                 // The concrete apron and the long shadow of the tank and stalk.
                 circle(c, p, 0xFFB4AE9E, cx, cy, tw * 0.62f);
                 circle(c, p, 0xFFC8C2B2, cx, cy, tw * 0.55f);
-                line(c, p, 0x38000000, tw * 0.2f, cx, cy, cx + tw * 0.5f, cy + tw * 0.85f);
-                circle(c, p, 0x38000000, cx + tw * 0.55f, cy + tw * 0.9f, tw * 0.58f);
+                line(c, p, 0x28000000, tw * 0.18f, cx, cy, cx + tw * 0.42f, cy + tw * 0.7f);
+                circle(c, p, 0x28000000, cx + tw * 0.45f, cy + tw * 0.75f, tw * 0.62f);
                 for (int k = 0; k < 4; k++) {
                     double an = Math.PI / 4 + k * Math.PI / 2;
                     bench(c, p, cx + (float) Math.cos(an) * tw * 0.47f, cy + (float) Math.sin(an) * tw * 0.47f, k % 2 == 1);
@@ -1710,7 +1727,7 @@ final class LandmarkArt4 {
 
             @Override
             void roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1, Random r) {
-                float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, w = Math.min(x1 - x0, y1 - y0), rt = w * 0.6f;
+                float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, w = Math.min(x1 - x0, y1 - y0), rt = w * 0.68f;
                 // The fluted tank: wedges shaded by the light from the top-left.
                 int n = 24;
                 for (int k = 0; k < n; k++) {
@@ -1930,18 +1947,19 @@ final class LandmarkArt4 {
                     ra.C(0xFF7A7E82, L * 0.3f, S / 2, 1.5f);
                     return;
                 }
-                float uw = 14, uh = 8;
+                float uh = 8;
                 int rows = Math.max(1, Math.min(3, (int) ((S - 6) / 13)));
                 float gap = (S - rows * uh) / (rows + 1);
-                float step = Math.max(uw + 2.5f, (L - 7) / 10);
+                float step = Math.max(16.5f, (L - 7) / 10), uw = step - 2.5f;
+                int nf = Math.max(2, Math.round(uw / 7));
                 for (int row = 0; row < rows; row++) {
                     float v = gap + row * (uh + gap);
                     for (float u = 4; u + uw < L - 3; u += step) {
                         ra.R(0x48000000, u + 1, v + 1.4f, u + uw + 1, v + uh + 1.4f);
                         ra.R(0xFF84888C, u, v, u + uw, v + uh);
                         ra.R(0xFFA2A6AA, u + 0.6f, v + 0.6f, u + uw - 0.6f, v + uh - 0.6f);
-                        for (int f = 0; f < 2; f++) {
-                            float fu = u + uw * (f == 0 ? 0.27f : 0.73f), fv = v + uh / 2, fr = uh * 0.38f;
+                        for (int f = 0; f < nf; f++) {
+                            float fu = u + uw * (f + 0.5f) / nf, fv = v + uh / 2, fr = uh * 0.38f;
                             ra.C(0xFF2C3034, fu, fv, fr);
                             ra.Ln(0xFF6A7076, 0.6f, fu - fr * 0.8f, fv - fr * 0.3f, fu + fr * 0.8f, fv + fr * 0.3f);
                             ra.Ln(0xFF6A7076, 0.6f, fu - fr * 0.3f, fv + fr * 0.8f, fu + fr * 0.3f, fv - fr * 0.8f);
