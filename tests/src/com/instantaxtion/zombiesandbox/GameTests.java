@@ -408,7 +408,10 @@ public final class GameTests {
                     last = c.tiles();
                 }
                 c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
-                check(c.tiles() == 320, "Medium is a quarter bigger than it was (" + c.tiles() + ")");
+                check(c.tiles() == 256, "Medium is a fifth smaller across than in 22.2 (" + c.tiles() + ")");
+                c.civic = 33;
+                check(c.tiles() == 320, "and a saved Medium map keeps its size (" + c.tiles() + ")");
+                c.civic = 34;
                 c.civic = 2;
                 check(c.tiles() == 256, "a city saved before 10.10 rebuilds at its old size");
                 CityConfig old = new CityConfig();
@@ -1505,6 +1508,7 @@ public final class GameTests {
         test("13.9: soldiers low on rounds at a fight far from the base get an ammo truck, and fill up at it", new Check() {
             public void run() {
                 CityConfig c = new CityConfig();
+                c.civic = 33; // (22.3: laid out for the map before the smaller cities)
                 c.v[CityConfig.OPT_PRESET] = 0;
                 c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
@@ -1641,6 +1645,7 @@ public final class GameTests {
         test("14.0: a mortar team shells a pack of the dead a few streets off, but not with police beside them", new Check() {
             public void run() {
                 CityConfig c = new CityConfig();
+                c.civic = 33; // (22.3: laid out for the map before the smaller cities)
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 31;
@@ -2592,6 +2597,7 @@ public final class GameTests {
         test("17.1: walk-in buildings - walls with doorways, sight through doors only, in and out on foot, visits, the dead follow", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 33; // (22.3: laid out for the map before the smaller cities)
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 41;
                 World w = new World(c);
@@ -3925,6 +3931,7 @@ public final class GameTests {
         test("21.2: smarter fighting - breaking out of a closing ring by the gap, reloading in a lull, shooting on the move, working round a victim", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 33; // (22.3: laid out for the map before the smaller cities)
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.v[CityConfig.OPT_CIVILIANS] = 0;
@@ -4184,6 +4191,7 @@ public final class GameTests {
         test("22.0: the dead follow engines; a mega horde; K9 sniffs; motorcycle scouts; mags shared; engineers dig in; alarms and chains; the shelter van; driving", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 33; // (22.3: laid out for the map before the smaller cities)
                 c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 220;
@@ -4362,6 +4370,7 @@ public final class GameTests {
         test("22.1: in peace, those off screen wait; the first of the dead wakes everyone; the map is drawn in tiles; collision short cut agrees", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
+                c.civic = 33; // (22.3: laid out for the map before the smaller cities)
                 c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 2210;

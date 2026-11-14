@@ -1353,13 +1353,13 @@ final class Fleet {
                 e.task = Dispatch.T_NONE;
                 e.dead = true;
                 e.removed = true;
-                e.rig = v;
+                e.rig = v; note(e);
                 v.crew.add(e);
             }
         } else for (int k = 0; k < 2; k++) {
             Entity e = w.create(Entity.SOLDIER, v.x, v.y);
             w.applyRole(e, Entity.ROLE_RECON);
-            e.rig = v;
+            e.rig = v; note(e);
             v.crew.add(e);
         }
         vehicles.add(v);
@@ -1731,7 +1731,7 @@ final class Fleet {
         if (!newDestination(v)) return null;
         Entity e = w.create(Entity.COP, v.x, v.y);
         w.makeRanger(e);
-        e.rig = v;
+        e.rig = v; note(e);
         v.crew.add(e);
         vehicles.add(v);
         return v;
@@ -2542,7 +2542,7 @@ final class Fleet {
         for (Entity e : v.flight) {
             if (e.dead) continue;
             e.task = Dispatch.T_BOARD;
-            e.rig = v;
+            e.rig = v; note(e);
             n++;
         }
         int type = v.kind == K_POLICE_HELI || v.kind == K_RESCUE_HELI ? Entity.COP : Entity.SOLDIER;
@@ -2561,7 +2561,7 @@ final class Fleet {
             }
             if (best == null) break;
             best.task = Dispatch.T_BOARD;
-            best.rig = v;
+            best.rig = v; note(best);
             n++;
         }
         v.crewWanted = n;
@@ -2603,7 +2603,7 @@ final class Fleet {
             }
             e.dead = true;
             e.removed = true;
-            e.rig = v;
+            e.rig = v; note(e);
             v.crew.add(e);
         }
         v.troops = count;
@@ -4607,7 +4607,7 @@ final class Fleet {
             if (World.hypot(e.x - v.x, e.y - v.y) > 700 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_BOARD)) continue;
             walking++;
             if (e.task != Dispatch.T_BOARD) {
-                e.rig = v;
+                e.rig = v; note(e);
                 e.task = Dispatch.T_BOARD;
             }
         }
@@ -4687,7 +4687,7 @@ final class Fleet {
         v.passengerType = cops ? Entity.COP : Entity.SOLDIER;
         v.angle = (float) Math.atan2(ey - p[1], ex - p[0]);
         for (Entity e : group) {
-            e.rig = v;
+            e.rig = v; note(e);
             e.task = Dispatch.T_BOARD;
         }
         vehicles.add(v);
@@ -5483,7 +5483,7 @@ final class Fleet {
             Entity d = v.driver;
             v.driver = null;
             v.realDriver = false;
-            d.rig = v;
+            d.rig = v; note(d);
             d.dead = true;
             d.removed = true;
             v.crew.add(d);
@@ -5602,7 +5602,7 @@ final class Fleet {
     /** Someone climbs aboard (out of the world until they get out again). */
     void board(Vehicle v, Entity e) {
         e.task = Dispatch.T_NONE;
-        e.rig = v;
+        e.rig = v; note(e);
         e.dead = true;
         e.removed = true;
         e.vx = e.vy = 0;
@@ -5628,6 +5628,7 @@ final class Fleet {
             float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
             if (!w.release(e, v.x + (float) Math.cos(a) * (10 + i * 3), v.y + (float) Math.sin(a) * (10 + i * 3))) continue;
             e.rig = offDuty ? null : v;
+            if (!offDuty) note(e);
             e.taskTimer = 0;
         }
         v.crew.clear();
@@ -5679,7 +5680,7 @@ final class Fleet {
                 w.dispatch.soldierCount = soldiers;
                 if (type == Entity.COP && v.agency > 0) w.makeAgency(d, v.agency);
                 if (v.guardUnit) w.applyRole(d, Entity.ROLE_GUARD);
-                d.rig = v;
+                d.rig = v; note(d);
                 v.driver = d;
             }
         }
@@ -5768,7 +5769,7 @@ final class Fleet {
             v.squad.addAll(group);
             v.passengerType = type;
             for (Entity e : group) {
-                e.rig = v;
+                e.rig = v; note(e);
                 e.task = Dispatch.T_BOARD;
             }
             w.dispatch.chatter(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, first, (v.type == CRUISER ? "Taking this car" : "Taking this truck")
@@ -6048,10 +6049,25 @@ final class Fleet {
     ArrayList<Entity> onFoot(Vehicle v) {
         if (rigFrame != frameNo) {
             rigFrame = frameNo;
-            for (int i = 0, n = w.entities.size(); i < n; i++) {
-                Entity e = w.entities.get(i);
-                if (e.dead || e.rig == null) continue;
+            // ((22.3) From the list of those given a vehicle, not by looking through everyone in the city each step:
+            // that was a thirtieth of each step in an outbreak. The whole city is still looked through once a second
+            // for anyone the list missed.)
+            if (frameNo % 30 == 0)
+                for (int i = 0, n = w.entities.size(); i < n; i++) {
+                    Entity e = w.entities.get(i);
+                    if (!e.dead && e.rig != null) note(e);
+                }
+            for (int i = rigged.size() - 1; i >= 0; i--) {
+                Entity e = rigged.get(i);
                 Vehicle r = e.rig;
+                if (r == null || (e.dead && (!e.removed || !r.crew.contains(e)))) {
+                    e.footGen = 0;
+                    int last = rigged.size() - 1;
+                    rigged.set(i, rigged.get(last));
+                    rigged.remove(last);
+                    continue;
+                }
+                if (e.dead) continue;
                 if (r.footFrame != frameNo) {
                     r.footFrame = frameNo;
                     r.foot.clear();
@@ -6060,6 +6076,15 @@ final class Fleet {
             }
         }
         return v.footFrame == frameNo ? v.foot : NOBODY;
+    }
+
+    /** ((22.3) Everyone given a vehicle to belong to, for onFoot. */
+    private final ArrayList<Entity> rigged = new ArrayList<Entity>();
+
+    void note(Entity e) {
+        if (e.footGen == 1) return;
+        e.footGen = 1;
+        rigged.add(e);
     }
 
     /** People aboard vehicles, by type (they still count). */
@@ -6104,7 +6129,7 @@ final class Fleet {
         if (bike) setKind(v, K_BIKE);
         for (int k = 0; k < (bike ? 1 : 2); k++) {
             Entity e = w.create(Entity.COP, v.x, v.y);
-            e.rig = v;
+            e.rig = v; note(e);
             v.crew.add(e);
         }
         vehicles.add(v);
@@ -6139,7 +6164,7 @@ final class Fleet {
         e.agency = agency;
         Country c = city.country;
         e.body = agency == 1 ? c.hpShirt : c.ruralShirt;
-        e.rig = v;
+        e.rig = v; note(e);
         v.crew.add(e);
         vehicles.add(v);
         return v;
@@ -6242,7 +6267,7 @@ final class Fleet {
             v.number = ++unitCount;
             if (bike) setKind(v, K_BIKE);
             for (Entity e : two) {
-                e.rig = v;
+                e.rig = v; note(e);
                 e.task = Dispatch.T_BOARD;
             }
             vehicles.add(v);
@@ -6275,7 +6300,7 @@ final class Fleet {
         v.incident = inc;
         v.number = ++unitCount;
         for (Entity e : officers) {
-            e.rig = v;
+            e.rig = v; note(e);
             e.task = Dispatch.T_BOARD;
         }
         vehicles.add(v);
@@ -6488,7 +6513,7 @@ final class Fleet {
         v.place = inc.place;
         v.passengerType = Entity.SOLDIER;
         for (Entity e : squad) {
-            e.rig = v;
+            e.rig = v; note(e);
             e.task = Dispatch.T_BOARD;
         }
         vehicles.add(v);
@@ -6544,7 +6569,7 @@ final class Fleet {
         v.place = city.placeName(tx, ty);
         v.passengerType = Entity.SOLDIER;
         for (Entity e : squad) {
-            e.rig = v;
+            e.rig = v; note(e);
             e.task = Dispatch.T_BOARD;
         }
         vehicles.add(v);
@@ -6598,7 +6623,7 @@ final class Fleet {
     private void seatDriver(Vehicle v, Entity d) {
         if (d == null) return;
         d.task = Dispatch.T_NONE;
-        d.rig = v;
+        d.rig = v; note(d);
         d.dead = true;
         d.removed = true;
         d.vx = d.vy = 0;
@@ -6842,7 +6867,7 @@ final class Fleet {
         v.passengerType = type;
         for (Entity e : group) {
             w.dispatch.releaseForResupply(e);
-            e.rig = v;
+            e.rig = v; note(e);
             e.task = Dispatch.T_BOARD;
         }
         return true;
@@ -6941,7 +6966,7 @@ final class Fleet {
         if (!newDestination(v)) return null;
         setKind(v, K_BIKE);
         Entity e = w.create(Entity.COP, v.x, v.y);
-        e.rig = v;
+        e.rig = v; note(e);
         v.crew.add(e);
         vehicles.add(v);
         return e;

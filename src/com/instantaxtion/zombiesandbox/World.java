@@ -2308,7 +2308,8 @@ final class World {
         }
         // ((11.5) The head counts every other step in a crowd of thousands: they're only read off for the panels.)
         // ((13.5) Every fourth step with over eighteen thousand: the numbers on screen don't need it more often.)
-        if (entities.size() < 3000 || (lodFrame & (entities.size() > 18000 ? 3 : 1)) == 0) recount();
+        // ((22.3) Every eighth in peace, with nobody turning: the counts hardly change. A tenth of a quiet step.)
+        if (entities.size() < 3000 || (lodFrame & (peaceful ? 7 : entities.size() > 18000 ? 3 : 1)) == 0) recount();
         statTimer += dt;
         if (statTimer >= statStep) {
             statTimer = 0;
@@ -18298,6 +18299,7 @@ final class World {
                         s.body = 0xFFE06A20;
                     }
                     s.rig = v;
+                    fleet.note(s);
                     s.task = Dispatch.T_RESCUE;
                     s.roping = 2.5f + i * 1.2f;
                     s.member = i;

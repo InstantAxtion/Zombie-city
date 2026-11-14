@@ -235,7 +235,7 @@ final class CityConfig implements OptionSet {
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
      * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9). Saved games rebuild with what they had.
      */
-    int civic = 33;
+    int civic = 34;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -450,10 +450,16 @@ final class CityConfig implements OptionSet {
     }
 
     int tiles() {
-        if (v[OPT_PRESET] == ISLANDS) return nature() ? ISLANDS_TILES : 512;
-        if (v[OPT_PRESET] == ARCHIPELAGO) return ARCHIPELAGO_TILES;
-        return (nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
+        // ((22.3) Map version 34: every city a fifth smaller across (nine tenths, twice), the same number of people in it -
+        // an outbreak quicker to work out, a new city quicker to make and a third less memory for the map.)
+        boolean small = civic >= 34;
+        if (v[OPT_PRESET] == ISLANDS) return nature() ? (small ? 1040 : ISLANDS_TILES) : 512;
+        if (v[OPT_PRESET] == ARCHIPELAGO) return small ? 1040 : ARCHIPELAGO_TILES;
+        return (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
     }
+
+    /** ((22.3) The sizes from map version 34: 81% across of those before (in multiples of eight tiles). */
+    private static final int[] SIZES_V34 = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
 
     /** A massive (or huge) map: the city sits in the middle of open countryside. */
     boolean massive() { return v[OPT_SIZE] >= MASSIVE; }

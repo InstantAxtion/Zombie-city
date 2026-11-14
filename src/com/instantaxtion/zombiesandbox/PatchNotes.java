@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.2";
-    static final int VERSION_CODE = 222;
+    static final String VERSION = "22.3";
+    static final int VERSION_CODE = 223;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.3  -  Tighter cities",
+                    "New cities are a fifth smaller across with the same number of people.",
+                    "Outbreaks run about 6% faster and new games load about 20% quicker.",
+                    "The smallest River City is no longer nearly all park.",
+                    "Saved games and shared city codes keep their old size.",
+            },
             {
                     "22.2  -  A real river",
                     "River City's river now winds and bends, wider in places, and runs across or down the map - different every time.",

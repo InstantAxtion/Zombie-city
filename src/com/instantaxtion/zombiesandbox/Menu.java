@@ -1940,7 +1940,7 @@ final class Menu {
             plain.setTextSize(13 * dp);
             plain.setColor(0xFFB8BDC4);
             String note = "Map size: " + (preset == CityConfig.ARCHIPELAGO ? "Archipelago" : "Islands") + " is always Colossal, "
-                    + CityConfig.ISLANDS_TILES + " tiles across.";
+                    + config.tiles() + " tiles across.";
             for (String line : wrap(note, lw - 4 * dp, plain)) {
                 c.drawText(line, lx + 2 * dp, y + 14 * dp, plain);
                 y += 17 * dp;

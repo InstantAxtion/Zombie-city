@@ -5123,7 +5123,8 @@ final class City {
         float a1 = span * (0.08f + rr.nextFloat() * 0.1f), a2 = span * (0.02f + rr.nextFloat() * 0.05f);
         float f1 = (float) (Math.PI * 2 / (L * (0.55f + rr.nextFloat() * 0.6f))), f2 = f1 * (2.6f + rr.nextFloat() * 2.2f);
         float p1 = rr.nextFloat() * 6.28f, p2 = rr.nextFloat() * 6.28f, p3 = rr.nextFloat() * 6.28f;
-        float w0 = Math.max(8, Math.min(18, span / 18f)), wv = w0 * (0.25f + rr.nextFloat() * 0.2f), f3 = f1 * (1.3f + rr.nextFloat());
+        // ((22.3) Narrower on the smallest maps, now they are smaller: it was taking half the town.)
+        float w0 = Math.max(cfg.civic >= 34 ? 5 : 8, Math.min(18, span / 18f)), wv = w0 * (0.25f + rr.nextFloat() * 0.2f), f3 = f1 * (1.3f + rr.nextFloat());
         boolean[] mask = new boolean[w * h];
         int[] edge0 = new int[L], edge1 = new int[L];
         for (int a = 0; a < L; a++) {
@@ -5196,10 +5197,31 @@ final class City {
             for (int y = bk[1]; y < bk[3] && !wet; y++) for (int x = bk[0]; x < bk[2] && !wet; x++) if (mask[y * w + x]) wet = true;
             if (!wet) continue;
             blocks.remove(k);
+            // ((22.3) On the new, smaller maps, only the part of the block by the water: the rest, on either side, is
+            // still built on. The smallest River City was nearly all park.)
+            int q0 = -1, q1 = -1;
+            if (cfg.civic >= 34) {
+                int lo0 = across ? bk[1] : bk[0], hi0 = across ? bk[3] : bk[2], wl = hi0, wh = lo0 - 1;
+                for (int y = bk[1]; y < bk[3]; y++)
+                    for (int x = bk[0]; x < bk[2]; x++)
+                        if (mask[y * w + x]) {
+                            int b = across ? y : x;
+                            wl = Math.min(wl, b);
+                            wh = Math.max(wh, b);
+                        }
+                q0 = wl - 3;
+                q1 = wh + 3;
+                if (q0 - lo0 >= 6) blocks.add(across ? new int[]{bk[0], bk[1], bk[2], q0} : new int[]{bk[0], bk[1], q0, bk[3]});
+                else q0 = lo0;
+                if (hi0 - q1 - 1 >= 6) blocks.add(across ? new int[]{bk[0], q1 + 1, bk[2], bk[3]} : new int[]{q1 + 1, bk[1], bk[2], bk[3]});
+                else q1 = hi0 - 1;
+            }
             for (int y = bk[1]; y < bk[3]; y++)
                 for (int x = bk[0]; x < bk[2]; x++) {
                     int t = y * w + x;
                     if (mask[t]) continue;
+                    int b = across ? y : x;
+                    if (q0 >= 0 && (b < q0 || b > q1)) continue;
                     tiles[t] = rr.nextFloat() < 0.07f ? TREE : GRASS;
                 }
         }
@@ -14477,10 +14499,31 @@ final class City {
 
     private int spread(int[] dist, int tail, int limit) {
         int head = 0;
+        // ((22.3) Whether a tile is on the edge of the map from a table, not worked out by dividing for each of the
+        // hundreds of thousands it spreads over: a third of the search.)
+        if (rim == null || rim.length != w * h) {
+            rim = new boolean[w * h];
+            for (int x = 0; x < w; x++) rim[x] = rim[(h - 1) * w + x] = true;
+            for (int y = 0; y < h; y++) rim[y * w] = rim[y * w + w - 1] = true;
+        }
+        boolean[] rim = this.rim, solid = this.solid;
+        int w = this.w;
         while (head < tail) {
             int t = queue[head++];
-            int tx = t % w, ty = t / w, nd = dist[t] + 1;
+            int nd = dist[t] + 1;
             if (nd > limit) continue;
+            if (!rim[t]) {
+                int n = t - 1;
+                if (!solid[n] && dist[n] > nd) { dist[n] = nd; queue[tail++] = n; }
+                n = t + 1;
+                if (!solid[n] && dist[n] > nd) { dist[n] = nd; queue[tail++] = n; }
+                n = t - w;
+                if (!solid[n] && dist[n] > nd) { dist[n] = nd; queue[tail++] = n; }
+                n = t + w;
+                if (!solid[n] && dist[n] > nd) { dist[n] = nd; queue[tail++] = n; }
+                continue;
+            }
+            int tx = t % w, ty = t / w;
             if (tx > 0) tail = visit(dist, t - 1, nd, tail);
             if (tx < w - 1) tail = visit(dist, t + 1, nd, tail);
             if (ty > 0) tail = visit(dist, t - w, nd, tail);
@@ -14488,6 +14531,8 @@ final class City {
         }
         return tail;
     }
+
+    private boolean[] rim;
 
     private int visit(int[] dist, int n, int nd, int tail) {
         if (solid[n] || dist[n] <= nd) return tail;
