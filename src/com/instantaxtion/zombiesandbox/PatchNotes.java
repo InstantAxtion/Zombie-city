@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.1";
-    static final int VERSION_CODE = 221;
+    static final String VERSION = "22.2";
+    static final int VERSION_CODE = 222;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.2  -  A real river",
+                    "River City's river now winds and bends, wider in places, and runs across or down the map - different every time.",
+                    "Only a few bridges, each carrying a real street straight across.",
+                    "Every bridge is different: stone, steel, concrete, and a wooden footbridge between the riverside parks.",
+            },
             {
                     "22.1  -  Less lag",
                     "Before an outbreak the city runs about five times lighter: people off screen wait until you look or the dead appear.",

@@ -4276,14 +4276,30 @@ public final class GameTests {
                 c.seed = 2201;
                 World w = new World(c);
                 City city = w.city;
-                check(city.riverY0 > 0, "River City has a river");
-                int x = city.w / 2, wet = 0, bridges = 0;
-                for (int y = city.riverY0; y < city.riverY1; y++) if (city.tiles[y * city.w + x] == City.WATER) wet++;
-                for (int i = 0; i < city.w; i++) if (city.bridge != null && city.bridge[city.riverY0 * city.w + i]) bridges++;
-                check(wet >= 6, "the river runs across the middle of town (" + wet + " tiles of water)");
-                check(bridges >= 6, "with bridges over it (" + bridges + " tiles of bridge)");
-                // The other side of the river is reachable on foot over a bridge.
-                float[] north = city.findWalkable(city.worldW() / 2, (city.riverY0 - 20) * City.T), south = city.findWalkable(city.worldW() / 2, (city.riverY1 + 20) * City.T);
+                check(city.river != null, "River City has a river");
+                int wet = 0;
+                for (int i = 0; i < city.tiles.length; i++) if (city.river[i] && city.tiles[i] == City.WATER) wet++;
+                int L = city.riverAcross ? city.w : city.h, mid = L / 2;
+                int bends = 0;
+                for (int a = 1; a < L; a++) if (city.riverEdge0[a] != city.riverEdge0[a - 1]) bends++;
+                check(wet > L * 6, "the river runs right across (" + wet + " tiles of water)");
+                check(bends > L / 20, "and winds (" + bends + " changes of course)");
+                check(city.riverBridges >= 2 && city.riverBridges <= 5, "a few bridges (" + city.riverBridges + ")");
+                // Each road bridge carries a street straight on: road at both ends, in line.
+                int aligned = 0, roadBridges = 0;
+                for (int a = 0; a < L; a++) {
+                    int b0 = city.riverEdge0[a], b1 = city.riverEdge1[a];
+                    int t0 = city.riverAcross ? b0 * city.w + a : a * city.w + b0, t1 = city.riverAcross ? b1 * city.w + a : a * city.w + b1;
+                    if (city.bridge == null || !city.bridge[t0] || city.tiles[t0] != City.ROAD) continue;
+                    roadBridges++;
+                    int o0 = city.riverAcross ? (b0 - 1) * city.w + a : a * city.w + b0 - 1, o1 = city.riverAcross ? (b1 + 1) * city.w + a : a * city.w + b1 + 1;
+                    if (city.tiles[o0] == City.ROAD && city.tiles[o1] == City.ROAD) aligned++;
+                }
+                check(roadBridges > 0 && aligned == roadBridges, "bridges line up with the streets (" + aligned + " of " + roadBridges + " tiles)");
+                // The far bank can be walked to.
+                int b0 = city.riverEdge0[mid] - 3, b1 = city.riverEdge1[mid] + 3;
+                float[] north = city.riverAcross ? city.findWalkable((mid + 0.5f) * City.T, b0 * City.T) : city.findWalkable(b0 * City.T, (mid + 0.5f) * City.T);
+                float[] south = city.riverAcross ? city.findWalkable((mid + 0.5f) * City.T, b1 * City.T) : city.findWalkable(b1 * City.T, (mid + 0.5f) * City.T);
                 int W = city.w, start = city.tileIndex(north[0], north[1]), goal = city.tileIndex(south[0], south[1]);
                 boolean[] seen = new boolean[W * city.h];
                 int[] q = new int[W * city.h];
@@ -4308,7 +4324,7 @@ public final class GameTests {
                 // Barricades: three kinds, kept in a save.
                 w.populate(c);
                 w.update(1 / 30f);
-                float[] p = city.findWalkable(city.worldW() / 2, (city.riverY0 - 30) * City.T);
+                float[] p = city.randomWalkable(new java.util.Random(3));
                 float[] wood = null, bags = null, wall = null;
                 java.util.Random tr = new java.util.Random(5);
                 for (int k = 0; k < 400 && (wood == null || bags == null || wall == null); k++) {

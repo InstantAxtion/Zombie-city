@@ -5095,37 +5095,141 @@ final class City {
         bigBase = new int[]{lx0, ly0, lx1, ly1};
     }
 
-    /** ((22.0) River City's river: its first and last rows of water. */
-    int riverY0 = -1, riverY1 = -1;
+    /** ((22.0) River City's river: ((22.1) which tiles it covers, and how many bridges cross it. */
+    boolean[] river;
+    int riverBridges;
+    /** Running across the map (else down it), and its banks at each point along it. */
+    boolean riverAcross;
+    int[] riverEdge0, riverEdge1;
+    /** ((22.1) What each river bridge tile is built of (BK_), or null. */
+    byte[] bridgeKind;
+    static final byte BK_STONE = 1, BK_STEEL = 2, BK_CONCRETE = 3, BK_WOOD = 4;
 
     /**
-     * ((22.0) River City: a river right across the map through the middle of town, a road and a promenade along each
-     * bank, the town laid out on either side, and a bridge every few blocks.
+     * ((22.0) River City. ((22.1) The town is laid out first; then a river winds right across the map through it - bends
+     * of its own on every map, narrowing and widening as it goes, running across or down the map. Blocks it cuts
+     * through become riverside park. Only a few streets cross it, each where a straight street ran right across
+     * its course, so a bridge carries the street on, in line, from bank to bank: the great avenues on wide bridges,
+     * an ordinary street on a narrower one, and a footbridge between the parks.)
      */
     private void riverTown(int bx0, int by0, int bx1, int by1, int in) {
-        int th = by1 - by0;
-        int rw = Math.max(9, Math.min(20, th / 14));
-        int ry0 = by0 + (int) (th * 0.45f) + rnd.nextInt(Math.max(1, th / 10)) - th / 20, ry1 = ry0 + rw;
-        riverY0 = ry0;
-        riverY1 = ry1;
-        splitTop(bx0 + in, by0 + in, bx1 - in, ry0 - 4);
-        split(bx0 + in, ry1 + 4, bx1 - in, by1 - in, 0, -1, -1);
-        carve(new Street(bx0, ry0 - 4, bx1, ry0 - 1, false, true));
-        carve(new Street(bx0, ry1 + 1, bx1, ry1 + 4, false, true));
-        fill(bx0, ry0 - 1, bx1 - bx0, 1, SIDEWALK);
-        fill(bx0, ry1, bx1 - bx0, 1, SIDEWALK);
-        fill(0, ry0, w, rw, WATER);
-        for (int y = ry0; y < ry1; y++)
-            for (int x = 0; x < w; x++) {
-                roadDir[y * w + x] = 0;
-                mainRoad[y * w + x] = false;
+        splitTop(bx0 + in, by0 + in, bx1 - in, by1 - in);
+        Random rr = new Random(cfg.seed * 613L + 29);
+        boolean across = rr.nextBoolean();
+        int L = across ? w : h;
+        // Across the river: where the town is, that way.
+        int lo = across ? by0 : bx0, hi = across ? by1 : bx1, span = hi - lo;
+        float base = lo + span * (0.4f + rr.nextFloat() * 0.2f);
+        float a1 = span * (0.08f + rr.nextFloat() * 0.1f), a2 = span * (0.02f + rr.nextFloat() * 0.05f);
+        float f1 = (float) (Math.PI * 2 / (L * (0.55f + rr.nextFloat() * 0.6f))), f2 = f1 * (2.6f + rr.nextFloat() * 2.2f);
+        float p1 = rr.nextFloat() * 6.28f, p2 = rr.nextFloat() * 6.28f, p3 = rr.nextFloat() * 6.28f;
+        float w0 = Math.max(8, Math.min(18, span / 18f)), wv = w0 * (0.25f + rr.nextFloat() * 0.2f), f3 = f1 * (1.3f + rr.nextFloat());
+        boolean[] mask = new boolean[w * h];
+        int[] edge0 = new int[L], edge1 = new int[L];
+        for (int a = 0; a < L; a++) {
+            float c = base + a1 * (float) Math.sin(a * f1 + p1) + a2 * (float) Math.sin(a * f2 + p2);
+            float half = (w0 + wv * (float) Math.sin(a * f3 + p3)) / 2;
+            c = Math.max(lo + in + half + 4, Math.min(hi - in - half - 4, c));
+            edge0[a] = Math.round(c - half);
+            edge1[a] = Math.round(c + half);
+            for (int b = Math.max(0, edge0[a]); b <= Math.min((across ? h : w) - 1, edge1[a]); b++) mask[across ? b * w + a : a * w + b] = true;
+        }
+        river = mask;
+        riverAcross = across;
+        riverEdge0 = edge0;
+        riverEdge1 = edge1;
+        // Where a straight street runs right across the river's course: a run of crossing tiles all road, the same
+        // way, from one bank to the other.
+        java.util.List<int[]> runs = new ArrayList<int[]>();
+        int dirAcross = across ? 1 : 2;
+        int start = -1;
+        for (int a = 0; a <= L; a++) {
+            boolean ok = a < L && a > 2 && a < L - 3;
+            for (int b = edge0[Math.min(a, L - 1)] - 1; ok && b <= edge1[Math.min(a, L - 1)] + 1; b++) {
+                int t = across ? b * w + a : a * w + b;
+                if (b < 0 || b >= (across ? h : w) || tiles[t] != ROAD || roadDir[t] != dirAcross) ok = false;
             }
+            if (ok && start < 0) start = a;
+            if (!ok && start >= 0) {
+                if (a - start >= 2) runs.add(new int[]{start, a - start});
+                start = -1;
+            }
+        }
+        // The widest first (the avenues), then the rest at random; well spread out along the river.
+        java.util.Collections.shuffle(runs, rr);
+        java.util.Collections.sort(runs, new java.util.Comparator<int[]>() {
+            @Override
+            public int compare(int[] x, int[] y) {
+                return (y[1] >= 5 ? 1 : 0) - (x[1] >= 5 ? 1 : 0);
+            }
+        });
+        int want = Math.max(2, Math.min(4, L / 160 + 1)), apart = L / (want + 2);
+        java.util.List<int[]> chosen = new ArrayList<int[]>();
+        for (int[] r : runs) {
+            if (chosen.size() >= want) break;
+            boolean far = true;
+            for (int[] o : chosen) if (Math.abs(o[0] - r[0]) < apart) far = false;
+            if (far) chosen.add(r);
+        }
+        boolean[] keep = new boolean[w * h];
         if (bridge == null) bridge = new boolean[w * h];
-        // Bridges: one every forty to fifty-five tiles, joining the bank roads.
-        for (int x = bx0 + 18 + rnd.nextInt(12); x < bx1 - 18; x += 40 + rnd.nextInt(16)) {
-            for (int y = ry0 - 1; y <= ry1; y++)
-                for (int k = 0; k < 3; k++) if (tiles[y * w + x + k] == WATER) bridge[y * w + x + k] = true;
-            carve(new Street(x, ry0 - 2, x + 3, ry1 + 2, true, true));
+        bridgeKind = new byte[w * h];
+        // (No two alike: stone, steel and concrete in a different order on every map, the avenues on steel or stone.)
+        java.util.List<Byte> kinds = new ArrayList<Byte>(java.util.Arrays.asList(BK_STONE, BK_STEEL, BK_CONCRETE));
+        java.util.Collections.shuffle(kinds, rr);
+        for (int ci = 0; ci < chosen.size(); ci++) {
+            int[] r = chosen.get(ci);
+            byte kind = kinds.get(ci % kinds.size());
+            if (r[1] >= 5 && kind == BK_CONCRETE) kind = kinds.get((ci + 1) % kinds.size());
+            for (int a = r[0]; a < r[0] + r[1]; a++)
+                for (int b = edge0[a]; b <= edge1[a]; b++) {
+                    int t = across ? b * w + a : a * w + b;
+                    keep[t] = true;
+                    bridge[t] = true;
+                    bridgeKind[t] = kind;
+                }
+        }
+        // The blocks it runs through: park down to the water, with trees.
+        for (int k = blocks.size() - 1; k >= 0; k--) {
+            int[] bk = blocks.get(k);
+            boolean wet = false;
+            for (int y = bk[1]; y < bk[3] && !wet; y++) for (int x = bk[0]; x < bk[2] && !wet; x++) if (mask[y * w + x]) wet = true;
+            if (!wet) continue;
+            blocks.remove(k);
+            for (int y = bk[1]; y < bk[3]; y++)
+                for (int x = bk[0]; x < bk[2]; x++) {
+                    int t = y * w + x;
+                    if (mask[t]) continue;
+                    tiles[t] = rr.nextFloat() < 0.07f ? TREE : GRASS;
+                }
+        }
+        // The water, but for the bridges.
+        for (int t = 0; t < w * h; t++) {
+            if (!mask[t] || keep[t]) continue;
+            tiles[t] = WATER;
+            roadDir[t] = 0;
+            mainRoad[t] = false;
+        }
+        riverBridges = chosen.size();
+        // A footbridge between the parks, where there's park on both banks and no bridge near.
+        for (int a = L / 5; a < L * 4 / 5; a += 3) {
+            boolean near = false;
+            for (int[] o : chosen) if (Math.abs(o[0] - a) < apart / 2) near = true;
+            if (near) continue;
+            int b0 = edge0[a] - 1, b1 = edge1[a] + 1, n0 = across ? b0 * w + a : a * w + b0, n1 = across ? b1 * w + a : a * w + b1;
+            int m0 = across ? b0 * w + a + 1 : (a + 1) * w + b0, m1 = across ? b1 * w + a + 1 : (a + 1) * w + b1;
+            if (b0 < 0 || b1 >= (across ? h : w) || tiles[n0] != GRASS || tiles[n1] != GRASS || tiles[m0] != GRASS || tiles[m1] != GRASS) continue;
+            for (int d = 0; d < 2; d++)
+                for (int b = b0; b <= b1; b++) {
+                    int t = across ? b * w + a + d : (a + d) * w + b;
+                    if (tiles[t] == WATER) {
+                        bridge[t] = true;
+                        bridgeKind[t] = BK_WOOD;
+                    }
+                    tiles[t] = SIDEWALK;
+                }
+            riverBridges++;
+            break;
         }
     }
 
@@ -9435,6 +9539,8 @@ final class City {
         drawParkingLines(c, p);
         if (drawnRealistic) drawKerbs(c, p);
         if (waterKind != CityConfig.W_NONE || elev != null) drawWater(c, p, X0, Y0, X1, Y1);
+        // ((22.1) River City's banks rounded off even without the lie of the land.)
+        if (waterKind == CityConfig.W_RIVER && elev == null) roundBanks(c, p, X0, Y0, X1, Y1);
         drawTerrain(c, p, X0, Y0, X1, Y1);
         roundCorners(c, p);
         drawBaseDetails(c, p);
@@ -9898,20 +10004,54 @@ final class City {
                     }
                 } else if (t != WATER && t != BUILDING) {
                     boolean br = bridge != null && bridge[y * w + x];
+                    int bk = br && bridgeKind != null ? bridgeKind[y * w + x] : 0;
+                    if (bk == BK_WOOD) {
+                        // ((22.1) A wooden footbridge: planks across the deck.)
+                        p.setColor(0xFF9A7448);
+                        c.drawRect(fx, fy, fx + T, fy + T, p);
+                        p.setColor(0xFF6E5030);
+                        boolean ns = (x > 0 && bridge[y * w + x - 1]) || (x < w - 1 && bridge[y * w + x + 1]);
+                        for (int k = 1; k < 6; k++) {
+                            if (ns) c.drawRect(fx, fy + k * T / 6f, fx + T, fy + k * T / 6f + 0.6f, p);
+                            else c.drawRect(fx + k * T / 6f, fy, fx + k * T / 6f + 0.6f, fy + T, p);
+                        }
+                    }
                     // Stone edges on quays and embankments; parapets on bridges.
                     for (int[] d : new int[][]{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
                         int nx = x + d[0], ny = y + d[1];
                         if (nx < 0 || ny < 0 || nx >= w || ny >= h || tiles[ny * w + nx] != WATER) continue;
                         if (t == SAND) continue;
                         // (Streams and lakes out in the country have grassy banks, not stone.)
-                        if (waterKind == CityConfig.W_NONE && !br) continue;
-                        float th = br ? 2.2f : 1.6f;
+                        if ((waterKind == CityConfig.W_NONE || waterKind == CityConfig.W_RIVER) && !br) continue;
+                        // ((22.1) Each of River City's bridges its own: heavy stone, steel girders, plain concrete, timber.)
+                        float th = bk == BK_STONE ? 3.4f : bk == BK_STEEL ? 3.6f : bk == BK_WOOD ? 1.4f : br ? 2.2f : 1.6f;
                         p.setColor(0x50000000);
-                        if (d[0] != 0) c.drawRect(d[0] < 0 ? fx - 4 : fx + T, fy, d[0] < 0 ? fx : fx + T + 4, fy + T, p);
-                        else c.drawRect(fx, d[1] < 0 ? fy - 4 : fy + T, fx + T, d[1] < 0 ? fy : fy + T + 4, p);
-                        p.setColor(br ? 0xFFC8C4BA : 0xFFA8A49A);
+                        float sh = bk == BK_STEEL ? 6 : 4;
+                        if (d[0] != 0) c.drawRect(d[0] < 0 ? fx - sh : fx + T, fy, d[0] < 0 ? fx : fx + T + sh, fy + T, p);
+                        else c.drawRect(fx, d[1] < 0 ? fy - sh : fy + T, fx + T, d[1] < 0 ? fy : fy + T + sh, p);
+                        p.setColor(bk == BK_STONE ? 0xFFC9B48E : bk == BK_STEEL ? 0xFF5C7894 : bk == BK_WOOD ? 0xFF5E4428 : br ? 0xFFC8C4BA : 0xFFA8A49A);
                         if (d[0] != 0) c.drawRect(d[0] < 0 ? fx : fx + T - th, fy, d[0] < 0 ? fx + th : fx + T, fy + T, p);
                         else c.drawRect(fx, d[1] < 0 ? fy : fy + T - th, fx + T, d[1] < 0 ? fy + th : fy + T, p);
+                        if (bk == BK_STEEL) {
+                            // The girders' posts, and the cross-bracing between them, out over the water.
+                            p.setColor(0xFF2E3A48);
+                            for (int k = 0; k < 4; k++) {
+                                float o = k * T / 4f;
+                                if (d[0] != 0) c.drawRect(d[0] < 0 ? fx - 5 : fx + T, fy + o, d[0] < 0 ? fx : fx + T + 5, fy + o + 1.6f, p);
+                                else c.drawRect(fx + o, d[1] < 0 ? fy - 5 : fy + T, fx + o + 1.6f, d[1] < 0 ? fy : fy + T + 5, p);
+                            }
+                            // A dark rail along the outer edge of the girder.
+                            if (d[0] != 0) c.drawRect(d[0] < 0 ? fx - 5 : fx + T + 3.6f, fy, d[0] < 0 ? fx - 3.6f : fx + T + 5, fy + T, p);
+                            else c.drawRect(fx, d[1] < 0 ? fy - 5 : fy + T + 3.6f, fx + T, d[1] < 0 ? fy - 3.6f : fy + T + 5, p);
+                        } else if (bk == BK_STONE) {
+                            // Stone blocks along the parapet.
+                            p.setColor(0xFF9E8A68);
+                            for (int k = 1; k < 4; k++) {
+                                float o = k * T / 4f;
+                                if (d[0] != 0) c.drawRect(d[0] < 0 ? fx : fx + T - th, fy + o, d[0] < 0 ? fx + th : fx + T, fy + o + 0.6f, p);
+                                else c.drawRect(fx + o, d[1] < 0 ? fy : fy + T - th, fx + o + 0.6f, d[1] < 0 ? fy + th : fy + T, p);
+                            }
+                        }
                     }
                 }
             }
@@ -11323,7 +11463,7 @@ final class City {
     /** Hill shading, contour lines out in the country, trails and their footbridges. */
     private void drawTerrain(Canvas c, Paint p, int X0, int Y0, int X1, int Y1) {
         if (elev == null) return;
-        if (waterKind == CityConfig.W_NONE) roundBanks(c, p, X0, Y0, X1, Y1);
+        if (waterKind == CityConfig.W_NONE || waterKind == CityConfig.W_RIVER) roundBanks(c, p, X0, Y0, X1, Y1);
         // Stones in the fords, where people wade across.
         if (ford != null)
             for (int y = Math.max(0, Y0); y < Math.min(h, Y1); y++)
