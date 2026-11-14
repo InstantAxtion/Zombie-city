@@ -359,6 +359,11 @@ final class Variants {
         ALL_VARIANTS.add(new V("Public works depot", City.WORKS, ANY, R_SAWTOOTH, 0xFF8A7F70, 0xFFE0702E, g[1][4], I_SHOWROOM, 1, 1, 0));
         ALL_VARIANTS.add(new V("National Guard armory", City.ARMORY, ANY, R_BARREL, 0xFF5E6A48, 0xFF2E4F3A,
                 Country.guard()[3], I_GYM, 2, 2, 0));
+        // ((22.4) The landmarks' buildings: never picked for an ordinary lot (no districts).)
+        for (Landmarks.Def d : Landmarks.all()) {
+            d.var = ALL_VARIANTS.size();
+            ALL_VARIANTS.add(new V(d.name, d.base, 0, R_FLAT, d.roofCol, d.accent, null, d.inside, 1, 1, 0));
+        }
     }
 
     /** The look of a government building, or -1. */

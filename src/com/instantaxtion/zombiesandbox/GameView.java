@@ -5615,7 +5615,8 @@ final class GameView extends View implements Menu.Host {
                         c.drawLine(gx - 2.5f, gy, gx + 2.5f, gy, stroke);
                     }
                 }
-                // Surf where the water meets the land.
+                // Surf where the water meets the land. ((22.4) Along River City's smooth banks, below, not the tiles.)
+                if (city.riverC != null && city.river != null && city.river[i]) continue;
                 byte up = city.tiles[i - city.w], dn = city.tiles[i + city.w], lf = city.tiles[i - 1], rt = city.tiles[i + 1];
                 boolean su = shore(up), sd = shore(dn), sl = shore(lf), sr = shore(rt);
                 if (!su && !sd && !sl && !sr) continue;
@@ -5628,6 +5629,24 @@ final class GameView extends View implements Menu.Host {
                 if (sl) c.drawLine(px + in, py, px + in, py + T, stroke);
                 if (sr) c.drawLine(px + T - in, py, px + T - in, py + T, stroke);
             }
+        if (city.riverC != null) {
+            boolean across = city.riverAcross;
+            int a0 = Math.max(0, across ? tx0 : ty0), a1 = Math.min(city.riverC.length - 1, across ? tx1 : ty1);
+            for (int a = a0; a <= a1; a++)
+                for (int side = 0; side < 2; side++) {
+                    boolean top = side == 0;
+                    int land = top ? city.riverEdge0[a] - 1 : city.riverEdge1[a] + 1;
+                    int lx = across ? a : land, ly = across ? land : a;
+                    if (lx < 0 || ly < 0 || lx >= city.w || ly >= city.h || !shore(city.tiles[ly * city.w + lx]) || city.isBridge(lx, ly)) continue;
+                    float swell = 0.5f + 0.5f * (float) Math.sin(t * 1.4f + a * 0.35f + side * 1.7f);
+                    stroke.setColor(alpha(0xFFF4FAFC, 0.14f + 0.22f * swell));
+                    stroke.setStrokeWidth(1.1f + swell * 0.9f);
+                    float in = (1.6f + swell * 1.8f) * (top ? 1 : -1);
+                    float s0 = city.bankAt(a, top) * T + in, s1 = city.bankAt(a + 1, top) * T + in;
+                    if (across) c.drawLine(a * T, s0, (a + 1) * T, s1, stroke);
+                    else c.drawLine(s0, a * T, s1, (a + 1) * T, stroke);
+                }
+        }
         stroke.setStyle(Paint.Style.STROKE);
     }
 

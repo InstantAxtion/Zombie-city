@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.3";
-    static final int VERSION_CODE = 223;
+    static final String VERSION = "22.4";
+    static final int VERSION_CODE = 224;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.4  -  Landmarks",
+                    "50 one-of-a-kind landmarks, buildings and parks, each with its own detailed look.",
+                    "Every new city gets a mix of them; big cities get them all.",
+                    "Far fewer blocks of car park.",
+                    "River City: streets stop at a junction instead of running into the water, and the banks are smooth curves.",
+            },
             {
                     "22.3  -  Tighter cities",
                     "New cities are a fifth smaller across with the same number of people.",

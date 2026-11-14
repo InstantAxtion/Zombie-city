@@ -31,7 +31,7 @@ final class City {
             D_FLOWERS = 13, D_CROPS = 14, D_ROUNDABOUT = 15, D_FLOODLIGHT = 16, D_FOUNTAIN = 17, D_FLAGS = 18,
             D_YARD = 19, D_MAST = 20, D_SALT = 21, D_PILES = 22, D_UMBRELLA = 23, D_LIFEGUARD = 24, D_BOAT = 25,
             D_SHIP = 26, D_CRANE = 27, D_CONTAINERS = 28, D_TENT = 29, D_CAMPFIRE = 30, D_PICNIC = 31, D_FALLS = 32,
-            D_SIGN = 33, D_LOOKOUT = 34, D_FIRETOWER = 35;
+            D_SIGN = 33, D_LOOKOUT = 34, D_FIRETOWER = 35, D_LANDMARK = 36;
     static final int FACILITY_POLICE = 0, FACILITY_BASE = 1, FACILITY_HOSPITAL = 2, FACILITY_FIRE = 3;
 
     /** A police station or military base: where reinforcements come from and a preferred safe zone. */
@@ -3143,6 +3143,13 @@ final class City {
             }
         }
 
+        if (cfg.landmarks()) {
+            int open = 0;
+            for (int k = 0; k < blocks.size(); k++) if (!used[k] && blocks.get(k).length <= 4) open++;
+            int want = Math.min(open, Math.max(6, Math.round(open * 0.07f)));
+            lmChance = open == 0 ? 0 : Math.min(1f, want / (float) open);
+            lmLeft = want;
+        }
         for (int k = 0; k < blocks.size(); k++) {
             int[] b = blocks.get(k);
             boolean plot = b.length > 4;
@@ -3180,6 +3187,7 @@ final class City {
                 }
                 continue;
             }
+            if (landmark(ix, iy, iw, ih)) continue;
             block(ix, iy, iw, ih);
         }
 
@@ -5101,6 +5109,8 @@ final class City {
     /** Running across the map (else down it), and its banks at each point along it. */
     boolean riverAcross;
     int[] riverEdge0, riverEdge1;
+    /** ((22.4) The river's true middle and half width along its course (tiles), for drawing smooth banks. */
+    float[] riverC, riverHalf;
     /** ((22.1) What each river bridge tile is built of (BK_), or null. */
     byte[] bridgeKind;
     static final byte BK_STONE = 1, BK_STEEL = 2, BK_CONCRETE = 3, BK_WOOD = 4;
@@ -5127,10 +5137,14 @@ final class City {
         float w0 = Math.max(cfg.civic >= 34 ? 5 : 8, Math.min(18, span / 18f)), wv = w0 * (0.25f + rr.nextFloat() * 0.2f), f3 = f1 * (1.3f + rr.nextFloat());
         boolean[] mask = new boolean[w * h];
         int[] edge0 = new int[L], edge1 = new int[L];
+        riverC = new float[L];
+        riverHalf = new float[L];
         for (int a = 0; a < L; a++) {
             float c = base + a1 * (float) Math.sin(a * f1 + p1) + a2 * (float) Math.sin(a * f2 + p2);
             float half = (w0 + wv * (float) Math.sin(a * f3 + p3)) / 2;
             c = Math.max(lo + in + half + 4, Math.min(hi - in - half - 4, c));
+            riverC[a] = c;
+            riverHalf[a] = half;
             edge0[a] = Math.round(c - half);
             edge1[a] = Math.round(c + half);
             for (int b = Math.max(0, edge0[a]); b <= Math.min((across ? h : w) - 1, edge1[a]); b++) mask[across ? b * w + a : a * w + b] = true;
@@ -5233,6 +5247,7 @@ final class City {
             mainRoad[t] = false;
         }
         riverBridges = chosen.size();
+        if (cfg.landmarks()) pruneRiverRoads();
         // A footbridge between the parks, where there's park on both banks and no bridge near.
         for (int a = L / 5; a < L * 4 / 5; a += 3) {
             boolean near = false;
@@ -5253,6 +5268,119 @@ final class City {
             riverBridges++;
             break;
         }
+    }
+
+    /**
+     * ((22.4) Streets the river cut, with no bridge, stop at the last junction before it instead of running into
+     * the water: each such stretch, junction to water, becomes grass, and the pavements left beside nothing with it.
+     */
+    private void pruneRiverRoads() {
+        boolean[] gone = new boolean[w * h];
+        boolean[] seen = new boolean[w * h];
+        for (int t0 = 0; t0 < w * h; t0++) {
+            if (tiles[t0] != ROAD || seen[t0] || (bridge != null && bridge[t0])) continue;
+            int x0 = t0 % w, y0 = t0 / w;
+            if (!wet(x0 - 1, y0) && !wet(x0 + 1, y0) && !wet(x0, y0 - 1) && !wet(x0, y0 + 1)) continue;
+            // Which way the street runs, from its shape: further along than across.
+            int vl = 0, hl = 0;
+            for (int k = 1; k <= 12 && y0 - k >= 0 && tiles[t0 - k * w] == ROAD; k++) vl++;
+            for (int k = 1; k <= 12 && y0 + k < h && tiles[t0 + k * w] == ROAD; k++) vl++;
+            for (int k = 1; k <= 12 && x0 - k >= 0 && tiles[t0 - k] == ROAD; k++) hl++;
+            for (int k = 1; k <= 12 && x0 + k < w && tiles[t0 + k] == ROAD; k++) hl++;
+            int d = vl > hl ? 1 : vl < hl ? 2 : roadDir[t0];
+            if (d != 1 && d != 2) continue;
+            // Along the street (down it for a north-south one), a row of it at a time across its width, both ways
+            // from here until a crossing street (the row much wider), its end, or the water.
+            boolean ns = d == 1;
+            int along0 = ns ? y0 : x0, lat0 = ns ? x0 : y0, AL = ns ? h : w, LA = ns ? w : h;
+            int[] run0 = latRun(ns, along0, lat0, LA);
+            // (Not from where a crossing street runs through: that row is a long way across.)
+            if (run0[1] - run0[0] + 1 > 9) continue;
+            java.util.List<int[]> rows = new ArrayList<int[]>();
+            rows.add(new int[]{along0, run0[0], run0[1]});
+            boolean intoWater = false, tooLong = false, toBridge = false;
+            int maxW = run0[1] - run0[0] + 1;
+            for (int dir = -1; dir <= 1; dir += 2) {
+                int l0 = run0[0], l1 = run0[1], prevW = l1 - l0 + 1;
+                for (int k = along0 + dir; ; k += dir) {
+                    if (k < 0 || k >= AL) break;
+                    if (Math.abs(k - along0) > 90) {
+                        tooLong = true;
+                        break;
+                    }
+                    // The street in this row: the run of road over where it was in the last.
+                    int st = -1;
+                    for (int q = l0; q <= l1 && st < 0; q++) if (roadAt(ns, k, q)) st = q;
+                    int wetN = 0;
+                    for (int q = l0; q <= l1; q++) if (wetAt(ns, k, q)) wetN++;
+                    if (st < 0) {
+                        if (wetN * 2 >= l1 - l0 + 1) intoWater = true;
+                        break;
+                    }
+                    int[] run = latRun(ns, k, st, LA);
+                    for (int q = run[0]; q <= run[1]; q++) if (bridgeAt(ns, k, q)) toBridge = true;
+                    int rw = run[1] - run[0] + 1;
+                    if (rw > prevW + 2) break;
+                    rows.add(new int[]{k, run[0], run[1]});
+                    maxW = Math.max(maxW, rw);
+                    if (wetN > 0 && rw < prevW) intoWater = true;
+                    prevW = Math.max(prevW, rw);
+                    l0 = Math.min(l0, run[0]);
+                    l1 = Math.max(l1, run[1]);
+                }
+            }
+            boolean eaten = false;
+            for (int[] r : rows) if ((r[2] - r[1] + 1) * 10 < maxW * 7) eaten = true;
+            for (int[] r : rows)
+                for (int q = r[1]; q <= r[2]; q++) seen[ns ? r[0] * w + q : q * w + r[0]] = true;
+            // (A street onto a bridge stays, however the bank cuts across it.)
+            if (tooLong || toBridge || !(intoWater || eaten)) continue;
+            for (int[] r : rows)
+                for (int q = r[1]; q <= r[2]; q++) {
+                    int t = ns ? r[0] * w + q : q * w + r[0];
+                    tiles[t] = rnd.nextFloat() < 0.06f ? TREE : GRASS;
+                    roadDir[t] = 0;
+                    mainRoad[t] = false;
+                    gone[t] = true;
+                }
+        }
+        // Pavements by a street that's gone and by no other: grass too.
+        for (int t = 0; t < w * h; t++) {
+            if (tiles[t] != SIDEWALK) continue;
+            int x = t % w, y = t / w;
+            boolean byGone = false, byRoad = false;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++) {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    int q = ny * w + nx;
+                    if (gone[q]) byGone = true;
+                    if (tiles[q] == ROAD) byRoad = true;
+                }
+            if (byGone && !byRoad) tiles[t] = GRASS;
+        }
+    }
+
+    private boolean roadAt(boolean ns, int along, int lat) {
+        int x = ns ? lat : along, y = ns ? along : lat;
+        return x >= 0 && y >= 0 && x < w && y < h && tiles[y * w + x] == ROAD;
+    }
+
+    private boolean bridgeAt(boolean ns, int along, int lat) {
+        int x = ns ? lat : along, y = ns ? along : lat;
+        return bridge != null && x >= 0 && y >= 0 && x < w && y < h && bridge[y * w + x];
+    }
+
+    private boolean wetAt(boolean ns, int along, int lat) {
+        return ns ? wet(lat, along) : wet(along, lat);
+    }
+
+    /** The run of road across the street through (along, lat): its first and last tile across. */
+    private int[] latRun(boolean ns, int along, int lat, int LA) {
+        int l0 = lat, l1 = lat;
+        while (l0 > 0 && roadAt(ns, along, l0 - 1)) l0--;
+        while (l1 < LA - 1 && roadAt(ns, along, l1 + 1)) l1++;
+        return new int[]{l0, l1};
     }
 
     /**
@@ -5942,6 +6070,63 @@ final class City {
         addVariantLot(x, y, lw, lh, roof, kind, floors, wall);
     }
 
+    // ((22.4) One-of-a-kind landmarks: about one block in fourteen (at least six), each design once before any
+    // comes round again, and then only well away from where it already is.)
+    private float lmChance;
+    private int lmLeft;
+    private Random lmRnd;
+    private int[] lmCount;
+    private final List<float[]> lmAt = new ArrayList<float[]>();
+
+    private boolean landmark(int x, int y, int bw, int bh) {
+        if (!cfg.landmarks() || lmLeft <= 0) return false;
+        if (lmRnd == null) {
+            lmRnd = new Random(cfg.seed * 7919L + 35);
+            lmCount = new int[Landmarks.all().size()];
+        }
+        if (lmRnd.nextFloat() >= lmChance) return false;
+        int dbit = 1 << Math.max(0, Math.min(6, districtType(x + bw / 2, y + bh / 2)));
+        int s = Math.min(bw, bh), l = Math.max(bw, bh);
+        List<Landmarks.Def> defs = Landmarks.all();
+        Landmarks.Def pick = null;
+        int least = Integer.MAX_VALUE, n = 0;
+        for (Landmarks.Def d : defs) {
+            if ((d.districts & dbit) == 0 || s < d.minS || l < d.minL) continue;
+            int cnt = lmCount[d.id];
+            if (cnt > 0) {
+                boolean far = true;
+                for (float[] a : lmAt)
+                    if ((int) a[2] == d.id && Math.abs(a[0] - x) + Math.abs(a[1] - y) < 90) far = false;
+                if (!far) continue;
+            }
+            if (cnt < least) {
+                least = cnt;
+                n = 0;
+            }
+            if (cnt == least && lmRnd.nextInt(++n) == 0) pick = d;
+        }
+        if (pick == null) return false;
+        Random r = new Random(lmRnd.nextLong());
+        int[][] plan = pick.plan(bw, bh, r);
+        fill(x, y, bw, bh, pick.ground);
+        int seed = lmRnd.nextInt(1 << 22);
+        decor.add(new float[]{D_LANDMARK, x * T, y * T, (x + bw) * T, (y + bh) * T, pick.id, seed});
+        for (int i = 0; i < plan.length; i++) {
+            int[] q = plan[i];
+            int bx = x + q[0], by = y + q[1], qw = Math.min(q[2], x + bw - bx), qh = Math.min(q[3], y + bh - by);
+            if (qw < 1 || qh < 1 || bx < x || by < y) continue;
+            fill(bx, by, qw, qh, BUILDING);
+            buildingLots.add(new int[]{bx, by, qw, qh, pick.roofCol, seed * 7 + i, pick.base, Math.max(1, q[4]),
+                    darken(pick.roofCol, 0.8f), pick.var, pick.id, i});
+        }
+        if (pick.type == Landmarks.T_PARK || plan.length == 0)
+            openAreas.add(new float[]{(x + bw / 2f) * T, (y + bh / 2f) * T, pick.ground == PLAZA ? 1 : 0});
+        lmCount[pick.id]++;
+        lmAt.add(new float[]{x, y, pick.id});
+        lmLeft--;
+        return true;
+    }
+
     /** Fills the inside of one city block according to the map settings. */
     private void block(int x, int y, int bw, int bh) {
         curDistrict = districtType(x + bw / 2, y + bh / 2);
@@ -5959,6 +6144,8 @@ final class City {
         float plaza = style == CityConfig.STYLE_HOUSES ? 0.03f : 0.07f;
         if (cfg.parks() == 0) plaza *= 0.5f;
         float parking = style == CityConfig.STYLE_WAREHOUSES ? 0.15f : 0.05f;
+        // ((22.4) Far fewer whole blocks of car park.)
+        if (cfg.landmarks()) parking *= 0.35f;
         float open = cfg.density() == 0 ? 0.15f : 0f;
         if (cfg.density() == 2) {
             park *= 0.6f;
@@ -9563,6 +9750,7 @@ final class City {
         if (waterKind != CityConfig.W_NONE || elev != null) drawWater(c, p, X0, Y0, X1, Y1);
         // ((22.1) River City's banks rounded off even without the lie of the land.)
         if (waterKind == CityConfig.W_RIVER && elev == null) roundBanks(c, p, X0, Y0, X1, Y1);
+        if (riverC != null) smoothRiver(c, p, X0, Y0, X1, Y1);
         drawTerrain(c, p, X0, Y0, X1, Y1);
         roundCorners(c, p);
         drawBaseDetails(c, p);
@@ -10648,6 +10836,17 @@ final class City {
         float dw = x1 - x0, dh = y1 - y0;
         boolean wide = dw >= dh;
         p.setStyle(Paint.Style.FILL);
+        if (kind == D_LANDMARK) {
+            Landmarks.Def ld = Landmarks.get(variant);
+            if (ld != null) {
+                int sc = c.save();
+                c.clipRect(x0, y0, x1, y1);
+                ld.ground(this, c, p, x0, y0, x1, y1, new Random(d.length > 6 ? (long) d[6] : 1));
+                c.restoreToCount(sc);
+                p.setStyle(Paint.Style.FILL);
+            }
+            return;
+        }
         switch (kind) {
             case D_COURT: {
                 // The surface round the court, then a court of the right shape in the middle of it.
@@ -11408,6 +11607,93 @@ final class City {
 
     private boolean wet(int x, int y) {
         return x >= 0 && y >= 0 && x < w && y < h && tiles[y * w + x] == WATER;
+    }
+
+    /** The river's bank line at the boundary before step a of its course (tiles across), averaged for smoothness. */
+    float bankAt(int a, boolean top) {
+        int L = riverC.length;
+        int a0 = Math.max(0, Math.min(L - 1, a - 1)), a1 = Math.max(0, Math.min(L - 1, a));
+        float v0 = top ? riverC[a0] - riverHalf[a0] : riverC[a0] + riverHalf[a0] + 1;
+        float v1 = top ? riverC[a1] - riverHalf[a1] : riverC[a1] + riverHalf[a1] + 1;
+        return (v0 + v1) / 2;
+    }
+
+    /**
+     * ((22.4) River City's banks as smooth curves, not steps a tile at a time: along each bank, the water's edge
+     * tiles are painted as the bank, then the water drawn back over them to the true line, with a pale shallow edge
+     * and a dark line of mud along it. Not where a road, pavement or bridge meets the water (those keep their edge).
+     */
+    private void smoothRiver(Canvas c, Paint p, int X0, int Y0, int X1, int Y1) {
+        boolean across = riverAcross;
+        int L = riverC.length, B = across ? h : w;
+        int a0 = Math.max(0, (across ? X0 : Y0) - 1), a1 = Math.min(L, (across ? X1 : Y1) + 1);
+        Path path = new Path();
+        p.setStyle(Paint.Style.FILL);
+        for (int a = a0; a < a1; a++) {
+            for (int side = 0; side < 2; side++) {
+                boolean top = side == 0;
+                int e = top ? riverEdge0[a] : riverEdge1[a];
+                float s0 = bankAt(a, top), s1 = bankAt(a + 1, top);
+                // The tiles at the bank: from the land beside the edge to the far side of the true line.
+                int z0 = Math.max(0, Math.min(e, (int) Math.floor(Math.min(s0, s1))) - 1);
+                int z1 = Math.min(B, Math.max(e + 1, (int) Math.ceil(Math.max(s0, s1))) + 1);
+                int land = top ? e - 1 : e + 1;
+                if (land < 0 || land >= B) continue;
+                boolean ok = true;
+                for (int b = Math.max(0, z0 - 1); b <= Math.min(B - 1, z1) && ok; b++) {
+                    int t = across ? b * w + a : a * w + b;
+                    byte ty = tiles[t];
+                    if ((bridge != null && bridge[t]) || !(ty == WATER || ty == GRASS || ty == TREE || ty == TRAIL || ty == SAND)) ok = false;
+                }
+                if (!ok) continue;
+                int lx = across ? a : land, ly = across ? land : a;
+                int lc = bankColor(lx, ly);
+                if (lc == 0) continue;
+                int wx = across ? a : e, wy = across ? e : a;
+                int wc = waterColor(wx, wy);
+                float u0 = a * T, u1 = (a + 1) * T;
+                int sc = c.save();
+                if (across) c.clipRect(u0, z0 * T, u1, z1 * T);
+                else c.clipRect(z0 * T, u0, z1 * T, u1);
+                // Edge water tiles become bank; then the water back to the true line.
+                for (int b = z0; b < z1; b++) {
+                    int t = across ? b * w + a : a * w + b;
+                    if (tiles[t] != WATER) continue;
+                    p.setColor(lc);
+                    if (across) c.drawRect(u0, b * T, u1, (b + 1) * T, p);
+                    else c.drawRect(b * T, u0, (b + 1) * T, u1, p);
+                }
+                float far = top ? z1 * T + T : z0 * T - T;
+                path.reset();
+                if (across) {
+                    path.moveTo(u0, s0 * T);
+                    path.lineTo(u1, s1 * T);
+                    path.lineTo(u1, far);
+                    path.lineTo(u0, far);
+                } else {
+                    path.moveTo(s0 * T, u0);
+                    path.lineTo(s1 * T, u1);
+                    path.lineTo(far, u1);
+                    path.lineTo(far, u0);
+                }
+                path.close();
+                p.setColor(wc);
+                c.drawPath(path, p);
+                // The shallows, the line of the bank and a little mud.
+                float in = top ? 2.2f : -2.2f;
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(3f);
+                p.setColor(0x4078B0C8);
+                if (across) c.drawLine(u0, s0 * T + in, u1, s1 * T + in, p);
+                else c.drawLine(s0 * T + in, u0, s1 * T + in, u1, p);
+                p.setStrokeWidth(1.4f);
+                p.setColor(0x705A4A30);
+                if (across) c.drawLine(u0, s0 * T, u1, s1 * T, p);
+                else c.drawLine(s0 * T, u0, s1 * T, u1, p);
+                p.setStyle(Paint.Style.FILL);
+                c.restoreToCount(sc);
+            }
+        }
     }
 
     /** Streams and lakes with rounded banks instead of square steps. */
@@ -12211,6 +12497,15 @@ final class City {
     }
 
     private void drawBuilding(Canvas c, Paint p, int[] b) {
+        if (b.length > 11 && b[10] >= 0) {
+            Landmarks.Def ld = Landmarks.get(b[10]);
+            if (ld != null) {
+                p.setStyle(Paint.Style.FILL);
+                ld.roof(this, c, p, b[11], b[0] * T, b[1] * T, (b[0] + b[2]) * T, (b[1] + b[3]) * T, new Random(b[5]));
+                p.setStyle(Paint.Style.FILL);
+                return;
+            }
+        }
         float x0 = b[0] * T, y0 = b[1] * T, x1 = (b[0] + b[2]) * T, y1 = (b[1] + b[3]) * T;
         int roof = b[4], kind = b[6];
         Random r = new Random(b[5]);
