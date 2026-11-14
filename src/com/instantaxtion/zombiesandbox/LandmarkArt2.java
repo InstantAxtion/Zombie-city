@@ -1150,7 +1150,7 @@ final class LandmarkArt2 {
                     kinds[i] = kinds[j];
                     kinds[j] = t;
                 }
-                float s = Math.max(6, Math.min(12, f.S * 0.05f));
+                float s = Math.max(7, Math.min(15, f.S * 0.065f));
                 for (int i = 0; i < spots.length; i++) {
                     float sx = f.x(spots[i][0], spots[i][1]), sy = f.y(spots[i][0], spots[i][1]);
                     if (dist(pa, sx, sy) < s + w || dist(pb, sx, sy) < s + w || dist(pc, sx, sy) < s + w) continue;
@@ -1158,7 +1158,8 @@ final class LandmarkArt2 {
                 }
                 // Clumps of trees on the edges, lamps by the paths.
                 float[][] tr = {{0.03f, 0.04f}, {0.18f, 0.03f}, {0.5f, 0.04f}, {0.78f, 0.05f}, {0.97f, 0.06f}, {0.03f, 0.96f},
-                        {0.22f, 0.97f}, {0.72f, 0.96f}, {0.97f, 0.95f}, {0.04f, 0.4f}, {0.96f, 0.6f}};
+                        {0.22f, 0.97f}, {0.72f, 0.96f}, {0.97f, 0.95f}, {0.04f, 0.4f}, {0.96f, 0.6f}, {0.08f, 0.06f}, {0.34f, 0.05f},
+                        {0.62f, 0.04f}, {0.9f, 0.04f}, {0.45f, 0.97f}, {0.82f, 0.97f}, {0.97f, 0.3f}, {0.03f, 0.7f}};
                 int[] tc = {0xFF3E7A3A, 0xFF4A8640, 0xFF35683A, 0xFF6A8A3A};
                 for (int i = 0; i < tr.length; i++) {
                     float tx = f.x(tr[i][0], tr[i][1]), ty = f.y(tr[i][0], tr[i][1]);
@@ -1503,7 +1504,6 @@ final class LandmarkArt2 {
                 Fr f = new Fr(x0, y0, x1, y1);
                 float L = f.L, S = f.S;
                 rect(c, p, 0xFF6A9C4E, x0, y0, x1, y1);
-                rect(c, p, 0xFFC4B898, x0, y0, x1, y0 + 0);
                 // Worn patches where the dogs run.
                 for (int k = 0; k < 10; k++) {
                     float px = x0 + r.nextFloat() * f.w, py = y0 + r.nextFloat() * f.h;
@@ -1591,9 +1591,12 @@ final class LandmarkArt2 {
                 rect(c, p, 0xFFE05A4A, px - 2.5f, py - 2.5f, px + 2.5f, py + 2.5f);
                 // In the small pen: a shade sail, a little ramp, water bowls and toys.
                 float su = (du + 1) / 2;
-                float sx = f.x(su, 0.3f), sy = f.y(su, 0.3f), sr = Math.min(0.1f * L, 0.18f * S);
+                float sx = f.x(su, 0.3f), sy = f.y(su, 0.3f), sr = Math.min(0.07f * L, 0.12f * S);
                 poly(c, p, 0x30000000, sx - sr + 3, sy - sr * 0.6f + 4, sx + sr + 3, sy - sr * 0.3f + 4, sx + 3, sy + sr + 4);
-                poly(c, p, 0xD8F0EEE6, sx - sr, sy - sr * 0.6f, sx + sr, sy - sr * 0.3f, sx, sy + sr);
+                poly(c, p, 0xE0D8C8A0, sx - sr, sy - sr * 0.6f, sx + sr, sy - sr * 0.3f, sx, sy + sr);
+                circle(c, p, 0xFF5A5E64, sx - sr, sy - sr * 0.6f, 0.8f);
+                circle(c, p, 0xFF5A5E64, sx + sr, sy - sr * 0.3f, 0.8f);
+                circle(c, p, 0xFF5A5E64, sx, sy + sr, 0.8f);
                 poly(c, p, 0x20000000, sx + sr, sy - sr * 0.3f, sx, sy + sr, sx + sr * 0.1f, sy);
                 float rx2 = f.x(su, 0.72f), ry2 = f.y(su, 0.72f);
                 rect(c, p, 0xFF9A7A54, rx2 - 4, ry2 - 2.5f, rx2 + 4, ry2 + 2.5f);
@@ -1608,7 +1611,8 @@ final class LandmarkArt2 {
                 rect(c, p, 0xFF5A5E64, tpx - 0.8f, tpy - 0.8f, tpx + 0.8f, tpy + 0.8f);
                 for (int i = 0; i < 5; i++) circle(c, p, i % 2 == 0 ? 0xFFD8E040 : 0xFFE04A3A, x0 + 10 + r.nextFloat() * (f.w - 20), y0 + 10 + r.nextFloat() * (f.h - 20), 0.7f);
                 // Trees with benches under them, bag bins.
-                float[][] tr = {{0.05f, 0.08f}, {0.42f, 0.06f}, {0.66f, 0.94f}, {0.05f, 0.94f}, {0.95f, 0.1f}, {0.3f, 0.94f}};
+                float[][] tr = {{0.05f, 0.08f}, {0.42f, 0.06f}, {0.66f, 0.94f}, {0.05f, 0.94f}, {0.95f, 0.1f}, {0.3f, 0.94f}, {0.66f, 0.07f},
+                        {0.95f, 0.9f}, {0.04f, 0.6f}, {0.86f, 0.08f}};
                 int[] tc = {0xFF3E7A3A, 0xFF4A8640, 0xFF35683A};
                 for (int i = 0; i < tr.length; i++) {
                     float qx = f.x(tr[i][0], tr[i][1]), qy = f.y(tr[i][0], tr[i][1]);
@@ -1619,10 +1623,10 @@ final class LandmarkArt2 {
                 bench(c, p, f.x(0.86f, 0.94f), f.y(0.86f, 0.94f) - (f.wide ? 4 : 0), f.wide);
                 rect(c, p, 0xFF2E6A3A, f.x(0.36f, 0.94f) - 1.5f, f.y(0.36f, 0.94f) - 1.5f, f.x(0.36f, 0.94f) + 1.5f, f.y(0.36f, 0.94f) + 1.5f);
                 // The dogs.
-                int[] dc = {0xFF8A5A30, 0xFF2A2420, 0xFFE8D8B8, 0xFFB88A50, 0xFF6A6460, 0xFFF0EEE8, 0xFFC09060};
-                for (int i = 0; i < 7; i++) {
-                    float u = i < 5 ? 0.06f + r.nextFloat() * 0.6f : du + 0.05f + r.nextFloat() * 0.2f, v = 0.1f + r.nextFloat() * 0.8f;
-                    dog(c, p, f.x(u, v), f.y(u, v), r.nextFloat() * 360, dc[i], i < 5 ? 4.5f + r.nextFloat() * 1.5f : 3);
+                int[] dc = {0xFF8A5A30, 0xFF2A2420, 0xFFE8D8B8, 0xFFB88A50, 0xFF6A6460, 0xFF4A3A30, 0xFFF0EEE8, 0xFFC09060, 0xFF8A8480};
+                for (int i = 0; i < 9; i++) {
+                    float u = i < 6 ? 0.06f + r.nextFloat() * 0.6f : du + 0.05f + r.nextFloat() * 0.2f, v = 0.1f + r.nextFloat() * 0.8f;
+                    dog(c, p, f.x(u, v), f.y(u, v), r.nextFloat() * 360, dc[i], i < 6 ? 5.5f + r.nextFloat() * 2 : 4);
                 }
             }
         };
@@ -1650,7 +1654,7 @@ final class LandmarkArt2 {
                 rect(c, p, 0xFF66984C, x0, y0, x1, y1);
                 frame(c, p, 0xFFCCC2A8, 5, x0 + 2.5f, y0 + 2.5f, x1 - 2.5f, y1 - 2.5f);
                 // The splash pad.
-                float sx = f.x(0.27f, 0.47f), sy = f.y(0.27f, 0.47f), sr = Math.min(0.22f * L, 0.38f * S);
+                float sx = f.x(0.27f, 0.47f), sy = f.y(0.27f, 0.47f), sr = Math.min(0.21f * L, 0.35f * S);
                 circle(c, p, 0x30000000, sx + 1, sy + 1.5f, sr + 1.5f);
                 circle(c, p, 0xFFB8B4AA, sx, sy, sr + 1.5f);
                 circle(c, p, 0xFFDADAD2, sx, sy, sr);
@@ -1683,8 +1687,8 @@ final class LandmarkArt2 {
                 blob(c, p, 0xFF4E8A5A, f.x(0.82f, 0.45f), f.y(0.82f, 0.45f), f.ex(0.08f * L, 0.12f * S), f.ey(0.08f * L, 0.12f * S), jit(r, 8, 0.2f), 0);
                 blob(c, p, 0xFF3E7AB0, f.x(0.62f, 0.5f), f.y(0.62f, 0.5f), f.ex(0.05f * L, 0.09f * S), f.ey(0.05f * L, 0.09f * S), jit(r, 8, 0.2f), 0);
                 // Climbing frame: three towers with pointed roofs, bridges, slides and a net.
-                float[][] tp = {{0.62f, 0.2f}, {0.76f, 0.2f}, {0.76f, 0.4f}};
-                float ts = Math.max(6, Math.min(9, S * 0.05f));
+                float[][] tp = {{0.62f, 0.2f}, {0.8f, 0.2f}, {0.8f, 0.44f}};
+                float ts = Math.max(8, Math.min(13, S * 0.07f));
                 for (int i = 0; i < 2; i++) {
                     float ax = f.x(tp[i][0], tp[i][1]), ay = f.y(tp[i][0], tp[i][1]), bx = f.x(tp[i + 1][0], tp[i + 1][1]), by = f.y(tp[i + 1][0], tp[i + 1][1]);
                     line(c, p, 0x40000000, 3.5f, ax + 1.5f, ay + 2, bx + 1.5f, by + 2);
@@ -1885,11 +1889,27 @@ final class LandmarkArt2 {
                         float px = tx + (r.nextFloat() - 0.5f) * g * 0.4f, py = ty + (r.nextFloat() - 0.5f) * g * 0.4f;
                         float dx = px - cx, dy = py - fy;
                         if ((dy > -rmax * 0.4f && dx * dx + dy * dy < (rmax + 13) * (rmax + 13)) || inside(sb, 10, px, py)) continue;
+                        if (Math.abs(px - cx) < 14 && py > fy + rmax) continue;
+                        if (py > fy + rmax + 5 && Math.abs(py - (fy + rmax + 5 + y1) / 2) < 18 && Math.abs(px - cx) < 22 && y1 - (fy + rmax) > 70) continue;
                         tree(c, p, px, py, 6 + r.nextFloat() * 3, tc[r.nextInt(tc.length)]);
                     }
                 }
                 // A path in from the bottom edge.
                 rect(c, p, 0xFFD2C6A6, cx - 3, fy + rmax + 5, cx + 3, y1);
+                for (float y = fy + rmax + 16; y < y1 - 8; y += 22) {
+                    bench(c, p, cx - 6, y, false);
+                    lamp(c, p, cx + 5, y + 8);
+                }
+                if (y1 - (fy + rmax) > 70) {
+                    float my = (fy + rmax + 5 + y1) / 2;
+                    circle(c, p, 0xFFD2C6A6, cx, my, 12);
+                    circle(c, p, 0xFF4E8A40, cx, my, 8);
+                    for (int k = 0; k < 12; k++) {
+                        double a = k * Math.PI / 6;
+                        circle(c, p, BRIGHT[k % 3], cx + (float) Math.cos(a) * 5.5f, my + (float) Math.sin(a) * 5.5f, 1.1f);
+                    }
+                    circle(c, p, 0xFFE8C040, cx, my, 2);
+                }
             }
 
             @Override
@@ -1960,13 +1980,23 @@ final class LandmarkArt2 {
                         circle(c, p, 0xFFB8283A, x, q[1] + 3, 0.9f);
                         circle(c, p, 0xFFB8283A, x, q[3] - 3, 0.9f);
                     }
+                    float qx = (q[0] + q[2]) / 2, qy = (q[1] + q[3]) / 2, qr = Math.min(q[2] - q[0], q[3] - q[1]) * 0.16f;
+                    if (qr > 4) {
+                        circle(c, p, 0xFF2A4E2A, qx, qy, qr + 1.2f);
+                        circle(c, p, 0xFF6A5038, qx, qy, qr);
+                        for (int k = 0; k < 10; k++) {
+                            double a = k * Math.PI / 5;
+                            circle(c, p, k % 2 == 0 ? 0xFFC8283A : 0xFFE8E0D0, qx + (float) Math.cos(a) * qr * 0.6f, qy + (float) Math.sin(a) * qr * 0.6f, 1);
+                        }
+                        circle(c, p, 0xFF3E6A38, qx, qy, qr * 0.3f);
+                    }
                 }
                 // Paved cross walks and the round plaza.
                 rect(c, p, 0xFFCFC6B2, cx - pw, y0, cx + pw, y1);
                 rect(c, p, 0xFFCFC6B2, x0, cy - pw, x1, cy + pw);
                 for (float y = y0 + 4; y < y1; y += 4) line(c, p, 0x18000000, 0.4f, cx - pw, y, cx + pw, y);
                 for (float x = x0 + 4; x < x1; x += 4) line(c, p, 0x18000000, 0.4f, x, cy - pw, x, cy + pw);
-                float pr = Math.min(m * 0.28f, Math.max(28, pw * 2.6f));
+                float pr = Math.min(m * 0.45f, Math.max((ob[2] - ob[0]) / 2 + 24, m * 0.28f));
                 circle(c, p, 0xFFB8AE98, cx, cy, pr + 1);
                 circle(c, p, 0xFFD6CDB8, cx, cy, pr);
                 ring(c, p, 0x20000000, 0.6f, cx, cy, pr * 0.8f);
@@ -2224,7 +2254,7 @@ final class LandmarkArt2 {
     private static void golfHole(Canvas c, Paint p, int no, float x0, float y0, float x1, float y1, Random r) {
         float w = x1 - x0, h = y1 - y0;
         boolean hz = w >= h;
-        float lw = Math.max(7, Math.min(13, Math.min(w, h) * 0.38f));
+        float lw = Math.max(8, Math.min(16, Math.min(w, h) * 0.44f));
         // Segments of the lane as rects, from the tee to the cup.
         float[][] seg;
         float tx, ty, cx, cy;
@@ -2266,6 +2296,9 @@ final class LandmarkArt2 {
                 cy = y1 - m;
             }
         }
+        roundRect(c, p, 0xFF7A9A5A, x0, y0, x1, y1, 3);
+        roundRect(c, p, 0xFF6A8A4A, x0 + 1, y0 + 1, x1 - 1, y1 - 1, 3);
+        for (int k = 0; k < 6; k++) circle(c, p, BRIGHT[(no + k) % BRIGHT.length], x0 + 2 + r.nextFloat() * (w - 4), y0 + 2 + r.nextFloat() * (h - 4), 0.7f);
         for (float[] s : seg) rect(c, p, 0x40000000, s[0] + 0.8f, s[1] + 1.2f, s[2] + 0.8f, s[3] + 1.2f);
         for (float[] s : seg) rect(c, p, 0xFF8A5A40, s[0] - 1.2f, s[1] - 1.2f, s[2] + 1.2f, s[3] + 1.2f);
         for (float[] s : seg) rect(c, p, 0xFF3A8A48, s[0], s[1], s[2], s[3]);
