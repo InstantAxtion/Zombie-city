@@ -155,6 +155,8 @@ final class Menu {
     private float downX, downY, lastY;
     /** ((11.5) Scrolling carries on after the finger lifts, slowing to a stop: how fast, and when it last moved.) */
     private float flingV;
+    /** ((24.2) Opened mid-touch: nothing counts until the next finger down. */
+    private boolean awaitDown;
     private long lastMoveAt;
 
     /** ((11.5) The menus' look: a dark night palette with one toxic-green accent.) */
@@ -191,6 +193,12 @@ final class Menu {
         }
         screen = s;
         scroll = 0;
+        // ((24.2) A new screen starts still, and the finger that opened it (still on the button) doesn't drag it: its
+        // moves were measured from an earlier touch, and the list jumped down - the Kills list every time.)
+        flingV = 0;
+        dragging = false;
+        pressed = false;
+        awaitDown = true;
         if (s == NOTES) settings.markNotesRead();
         if (s == TOP) topAt = -99;
         if (s == SETUP && !config.keepCity) {
@@ -2174,6 +2182,7 @@ final class Menu {
         float x = ev.getX(), y = ev.getY();
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                awaitDown = false;
                 pressed = true;
                 downX = x;
                 downY = y;
@@ -2185,6 +2194,7 @@ final class Menu {
                 lastMoveAt = System.nanoTime();
                 break;
             case MotionEvent.ACTION_MOVE:
+                if (awaitDown) break;
                 if (screen == REPLAY && replayBar.contains(downX, downY)) {
                     scrubReplay(x);
                     break;

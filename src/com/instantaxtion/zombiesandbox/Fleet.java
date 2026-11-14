@@ -3300,11 +3300,14 @@ final class Fleet {
      * seconds, so nobody waits for ever). Roundabouts: give way to anything already on it. Returns the
      * fastest the car may go right now.
      */
+    /** ((24.2) junctionRule for a police or army vehicle that isn't on a call: the everyday rules. */
+    private boolean calmRules;
+
     private float junctionRule(Vehicle v, float dt) {
         v.held = false;
         // Lights and sirens (and anyone racing to a rescue) go through on red, but slow down for the junction
         // and wait for anything already crossing it.
-        boolean emergency = (v.type != CAR && !(v.patrol && v.state == PATROL)) || v.riders.size() > 0 && v.rescue;
+        boolean emergency = !calmRules && ((v.type != CAR && !(v.patrol && v.state == PATROL)) || v.riders.size() > 0 && v.rescue);
         if (emergency && v.type != CRUISER && v.type != AMBULANCE && v.type != TRUCK && v.type != CAR)
             return Float.MAX_VALUE;
         int here = city.junctionIdAt(v.x, v.y);
@@ -4333,6 +4336,17 @@ final class Fleet {
         boolean call = emergency(v) && v.state != RETURN;
         float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100)
                 : v.kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
+        // ((24.2) Not on a call (going home, off to restock, empty): the lights and the junctions' rules, like
+        // everyone else - they went straight through red lights and across traffic. Waiting at one isn't being stuck.)
+        if (!call && v.player == null && v.type != TANK && v.kind != K_DOZER && w.alert < 2) {
+            calmRules = true;
+            try {
+                top = Math.min(top, junctionRule(v, dt));
+            } finally {
+                calmRules = false;
+            }
+            if (v.held) v.stuckTimer = Math.min(v.stuckTimer, 1);
+        }
         boolean arrived = !driveStep(v, dt, top, carAhead(v) ? 0.5f : 1f);
         // A patrol that comes on a crowd of the dead stops and lets the gunner work; the crew stay aboard.
         if (v.loop && v.state == DRIVE && hordeAhead(v)) {
@@ -4515,6 +4529,21 @@ final class Fleet {
                 if (f != null) f.ammo += v.cargo;
                 v.cargo = 0;
             }
+            // ((24.2) Held up in a jam on the way back isn't back: it vanished from the road into its bay across town,
+            // in plain sight. Plan the way again; only where nobody's watching does it give up and go straight home.)
+            if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !v.leaving
+                    && World.hypot(v.x - v.homeX, v.y - v.homeY) > 160 && inView(v.x, v.y)) {
+                if (v.rerouteCd <= 0 && v.jamTries < 8) {
+                    v.jamTries++;
+                    v.rerouteCd = 4;
+                    route(v, v.homeX, v.homeY);
+                }
+                if (v.jamTries < 8) {
+                    v.stuckTimer = 0;
+                    return false;
+                }
+            }
+            v.jamTries = 0;
             // An army truck back at base parks in its bay again.
             if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !w.peopleNear(v.homeX, v.homeY, 14)
                     && w.countZombiesNear(v.homeX, v.homeY, 14) == 0)
@@ -7766,6 +7795,17 @@ final class Fleet {
         v.stuckTimer += dt;
         boolean moving = driveStep(v, dt, 45, 1);
         if (moving) w.runOver(v.x, v.y, 10, Math.max(v.speed, 25), v.angle);
+        // ((24.2) A tank stuck on its way back was taken off the map after eight seconds, in front of you. In view and
+        // still a way off, it tries another way first.)
+        if ((!moving || v.stuckTimer > 8) && inView(v.x, v.y) && World.hypot(v.x - v.homeX, v.y - v.homeY) > 160 && v.jamTries < 8) {
+            if (v.rerouteCd <= 0) {
+                v.jamTries++;
+                v.rerouteCd = 4;
+                v.stuckTimer = 0;
+                route(v, v.homeX, v.homeY);
+            }
+            return false;
+        }
         return !moving || v.stuckTimer > 8;
     }
 

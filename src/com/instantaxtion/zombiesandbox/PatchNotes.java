@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "24.1";
-    static final int VERSION_CODE = 241;
+    static final String VERSION = "24.2";
+    static final int VERSION_CODE = 242;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "24.2  -  Fixes",
+                    "The Kills list no longer jumps down when you open it.",
+                    "Police and army vehicles not on a call stop at red lights.",
+                    "Army trucks and tanks held up on the way back no longer vanish in plain sight.",
+            },
             {
                     "24.1  -  Follow-up",
                     "A second police safe zone opens when far more people are heading for shelter than there's room for.",
