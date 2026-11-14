@@ -1816,6 +1816,14 @@ final class Menu {
             if (i == CityConfig.ISLANDS || i == CityConfig.ARCHIPELAGO) {
                 c.drawCircle(ex - u * 1.2f, ey, u * 0.9f, fill);
                 c.drawCircle(ex + u * 1.1f, ey + u * 0.4f, u * 0.65f, fill);
+            } else if (i == CityConfig.DESERT) {
+                // ((22.9) A sun over a saguaro.)
+                c.drawCircle(ex + u * 1.1f, ey - u * 0.9f, u * 0.75f, fill);
+                c.drawRect(ex - u * 0.95f, ey - u * 1.5f, ex - u * 0.35f, ey + u, fill);
+                c.drawRect(ex - u * 1.75f, ey - u * 0.2f, ex - u * 0.95f, ey + u * 0.25f, fill);
+                c.drawRect(ex - u * 1.75f, ey - u * 0.9f, ex - u * 1.35f, ey + u * 0.25f, fill);
+                c.drawRect(ex - u * 0.35f, ey - u * 0.5f, ex + u * 0.35f, ey - u * 0.05f, fill);
+                c.drawRect(ex - u * 0.05f, ey - u * 1.1f, ex + u * 0.35f, ey - u * 0.05f, fill);
             } else if (i == CityConfig.TOWERS) {
                 // ((15.2) Skyscrapers, packed close.)
                 c.drawRect(ex - u * 1.8f, ey - u * 0.9f, ex - u * 1.05f, ey + u, fill);
@@ -2054,7 +2062,7 @@ final class Menu {
 
     private static final int[] MAP_COLORS = {0xFF8BD450, 0xFF6F8EC8, 0xFFE0A050, 0xFF9A9A90, 0xFF4CAF50, 0xFFB07050,
             0xFFD8C050, 0xFF50A0C0, 0xFFC050C0, 0xFF90B060, 0xFF3A9AD8, 0xFF2F6EA8, 0xFF48B0B0, 0xFF6A8098, 0xFF30B8D0,
-            0xFFE8A040, 0xFF4E9A5A, 0xFF5A86B0, 0xFFC8C8C8, 0xFF3AA8D0, 0xFFE05A6A, 0xFFB898D0};
+            0xFFE8A040, 0xFF4E9A5A, 0xFFD89A48, 0xFFC8C8C8, 0xFF3AA8D0, 0xFFE05A6A, 0xFFB898D0};
 
     private ArrayList<ArrayList<ArrayList<String>>> notesLines;
     private float notesW;

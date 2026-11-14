@@ -278,6 +278,8 @@ final class Country {
 
     /** Kinds of tree (City.treeKind): broadleaf and pine. */
     static final byte TK_BROAD = 0, TK_PINE = 1;
+    /** ((22.9) Desert City's: palms, saguaro cacti and desert scrub. */
+    static final byte TK_PALM = 2, TK_CACTUS = 3, TK_SCRUB = 4;
     /**
      * The land (cities built since 10.10): how hilly it is, how big its mountains are, how wooded, what share of
      * the woods are pines, how many lakes, how far up the mountains the snow starts (as a share of the highest

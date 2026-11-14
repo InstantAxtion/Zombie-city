@@ -3830,6 +3830,11 @@ final class GameView extends View implements Menu.Host {
             float x = cx + (t[0] - cx) * ts, y = cy + (t[1] - cy) * ts, r = t[2] * ts;
             if (x + r < vx0 || x - r > vx1 || y + r < vy0 || y - r > vy1) continue;
             int kind = t.length > 3 ? (int) t[3] : 0;
+            if (kind >= Country.TK_PALM) {
+                // ((22.9) Desert City: a palm, a saguaro or desert scrub.)
+                City.desertTree(c, fill, x, y, r, kind, 1 - see * 0.5f, t[0] * 0.13f + t[1] * 0.07f);
+                continue;
+            }
             if (kind == Country.TK_PINE) {
                 // A pine: dark, pointed boughs round a lighter tip.
                 float a = 1 - see * 0.5f, spin = t[0] * 0.13f + t[1] * 0.07f;

@@ -143,9 +143,57 @@ final class Neighbourhoods {
                     "Eco Village", "Garden Co-op", "Community Allotments", "Tiny House Village", "Wildflower Meadow", "Community Orchard"),
     };
 
+    /**
+     * ((22.9) Desert City's own: the neon of the casino strip, adobe in the old quarter, stucco and terracotta out in
+     * the sprawl, motels and diners on the highway side. Only that map uses them (and every district gets one).
+     */
+    static final Theme[] DESERT_THEMES = {
+            new Theme("The Strip", b(City.DT_DOWNTOWN), true,
+                    c(0xFFD8A030, 0xFF8E2A6A, 0xFF2A6A8E, 0xFFE8E0D0, 0xFFC03050), c(0xFFF0E0B0, 0xFFE8B8D0, 0xFFF8F4EC, 0xFFE8C860),
+                    c(0xFF8E2A6A, 0xFF2A6A8E, 0xFFD8A030, 0xFFC03050), c(0xFFF8D040, 0xFFF070B0, 0xFF40D0D0, 0xFFF8F4EC, 0xFFFF7040),
+                    c(0xFFD8B860, 0xFFE070A8, 0xFF40C0C0, 0xFFF0EEE8, 0xFFA07840, 0xFFE8C860, 0xFFB850D0), 0xFFE0CCA8, 3,
+                    "Casino", "Grand Hotel", "Nightclub", "Wedding Chapel Gardens", "Boutique Hotel", "Pyramid Building",
+                    "Wax Museum", "Multiplex Cinema", "Comedy Club & Bar", "Retro Arcade"),
+            new Theme("Old Adobe Quarter", b(City.DT_OLDTOWN, City.DT_MIDTOWN, City.DT_CAMPUS), true,
+                    c(0xFFA0603A, 0xFFB86A3E, 0xFF9A5838, 0xFFC07848), c(0xFFD8A878, 0xFFC8905A, 0xFFE4C890, 0xFFB87850, 0xFFE8D0A8),
+                    c(0xFFA0603A, 0xFF8E4A2E, 0xFF3E6A6A), c(0xFFE4C890, 0xFF40A0A0, 0xFFE8B8A0, 0xFFD8A878),
+                    c(0xFFD8A878, 0xFFC8905A, 0xFFE4C890), 0xFFC8A880, 2,
+                    "Adobe Compound", "Spanish Colonial Hacienda", "Taqueria Plaza", "Bazaar", "Rock Garden", "Domed Basilica"),
+            new Theme("Highway Motels", b(City.DT_INDUSTRIAL, City.DT_MIDTOWN), true,
+                    c(0xFF7E5A3A, 0xFF5A6E7E, 0xFFB86A3E, 0xFF8A8478), c(0xFFE8D8B0, 0xFF60B0B0, 0xFFE08050, 0xFFF0E8D8),
+                    c(0xFF3A8AB0, 0xFFD85A3A, 0xFFE0A030), c(0xFFF0E8D8, 0xFF60C0C0, 0xFFF08060, 0xFFF8D860),
+                    c(0xFFC8B89A, 0xFFD8C8A8, 0xFFB8A070), 0xFFC8B898, 0,
+                    "Motel", "Retro Diner", "UFO Diner", "Giant Donut Drive-In", "Space Rocket Display", "Drive-in Cinema",
+                    "Gas Station Superstore", "Car Wash", "Burger Drive-Thru", "Mobile Home Park"),
+            new Theme("Desert Modern", b(City.DT_SUBURB, City.DT_PARKSIDE), false,
+                    c(0xFFA0603A, 0xFFB86A3E, 0xFF9A8A70, 0xFFC89060), c(0xFFE4C890, 0xFFD0A878, 0xFFE8D8B8, 0xFFC8A070, 0xFFF0E0C8),
+                    c(0xFFA0603A, 0xFF9A8A70), c(0xFFE4C890, 0xFFD0A878),
+                    c(0xFFE4C890, 0xFFD0A878), 0xFFD8C8A8, 0,
+                    "Adobe Compound", "Spanish Colonial Hacienda", "Mid-Century Modern Homes", "Taqueria Plaza", "Rock Garden"),
+            new Theme("Adobe Lanes", b(City.DT_OLDTOWN, City.DT_MIDTOWN), false,
+                    c(0xFFA0603A, 0xFFB86A3E, 0xFF8E4A2E), c(0xFFD8A878, 0xFFC8905A, 0xFFE4C890, 0xFFB87850),
+                    c(0xFFA0603A, 0xFF3E6A6A), c(0xFFE4C890, 0xFFD8A878, 0xFF40A0A0),
+                    c(0xFFD8A878, 0xFFC8905A, 0xFFE4C890), 0xFFC8A880, 0,
+                    "Adobe Compound", "Taqueria Plaza", "Bazaar", "Spanish Colonial Hacienda"),
+            new Theme("Desert Yards", b(City.DT_INDUSTRIAL), false,
+                    c(0xFF8A7A62, 0xFF9A6A48, 0xFF7E848A, 0xFFA8A098), c(0xFFC8B89A, 0xFFB8946A, 0xFFA8A098, 0xFFD8C8A8),
+                    c(0xFF8A7A62, 0xFF7E848A), c(0xFFC8B89A, 0xFFD8C8A8),
+                    c(0xFFC8B89A, 0xFFB8946A, 0xFFA8A098, 0xFFD0C0A0), 0xFFC0B090, 0,
+                    "Fuel Depot", "Wind & Solar Farm", "Water Tower", "Self-Storage Units", "Recycling Centre"),
+            new Theme("Stucco Sprawl", b(City.DT_SUBURB, City.DT_PARKSIDE, City.DT_MIDTOWN), false,
+                    c(0xFFB8643A, 0xFFA8583A, 0xFFE8E2D6, 0xFFC87A4A, 0xFFD8D0C0), c(0xFFF4EEE2, 0xFFEAD8BC, 0xFFF0D8C0, 0xFFE8C8A0, 0xFFF8F4EC),
+                    c(0xFFB8643A, 0xFFE8E2D6), c(0xFFF4EEE2, 0xFFEAD8BC, 0xFF70B8B0),
+                    c(0xFFF4EEE2, 0xFFEAD8BC, 0xFFE8C8A0), 0xFFDCCCAE, 0,
+                    "Mid-Century Modern Homes", "Courtyard Bungalows", "Geodesic Homes", "Mobile Home Park", "Rock Garden"),
+    };
+
     /** Gives each district of the city a theme that suits it; the named ones once each, and they rename it. */
     static void assign(City city, long seed) {
         Random r = new Random(seed * 7349L + 38);
+        if (city.cfg.desert()) {
+            assignDesert(city, r);
+            return;
+        }
         boolean[] used = new boolean[THEMES.length];
         for (City.District d : city.districts) {
             int bit = 1 << d.type;
@@ -160,6 +208,29 @@ final class Neighbourhoods {
             // (Now and then a district is just itself.)
             if (pick < 0 || r.nextFloat() < 0.15f) continue;
             d.theme = THEMES[pick];
+            if (d.theme.named) {
+                used[pick] = true;
+                d.name = d.theme.name;
+            }
+        }
+    }
+
+    /** ((22.9) Desert City: every district one of the desert themes; the heart of town the Strip. */
+    private static void assignDesert(City city, Random r) {
+        boolean[] used = new boolean[DESERT_THEMES.length];
+        for (int k = 0; k < city.districts.size(); k++) {
+            City.District d = city.districts.get(k);
+            int bit = 1 << d.type, n = 0, pick = -1;
+            for (int t = 0; t < DESERT_THEMES.length; t++) {
+                Theme th = DESERT_THEMES[t];
+                if ((th.types & bit) == 0 || (th.named && used[t]) || (th.named && !d.labelled())) continue;
+                if (r.nextInt(++n) == 0) pick = t;
+            }
+            // (The middle of town is the Strip.)
+            if (k == 0 && !used[0]) pick = 0;
+            // (Anything else - the country round town - the stucco sprawl.)
+            if (pick < 0) pick = DESERT_THEMES.length - 1;
+            d.theme = DESERT_THEMES[pick];
             if (d.theme.named) {
                 used[pick] = true;
                 d.name = d.theme.name;

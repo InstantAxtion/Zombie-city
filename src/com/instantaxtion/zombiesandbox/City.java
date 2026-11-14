@@ -31,7 +31,9 @@ final class City {
             D_FLOWERS = 13, D_CROPS = 14, D_ROUNDABOUT = 15, D_FLOODLIGHT = 16, D_FOUNTAIN = 17, D_FLAGS = 18,
             D_YARD = 19, D_MAST = 20, D_SALT = 21, D_PILES = 22, D_UMBRELLA = 23, D_LIFEGUARD = 24, D_BOAT = 25,
             D_SHIP = 26, D_CRANE = 27, D_CONTAINERS = 28, D_TENT = 29, D_CAMPFIRE = 30, D_PICNIC = 31, D_FALLS = 32,
-            D_SIGN = 33, D_LOOKOUT = 34, D_FIRETOWER = 35, D_LANDMARK = 36, D_STRINGS = 37;
+            D_SIGN = 33, D_LOOKOUT = 34, D_FIRETOWER = 35, D_LANDMARK = 36, D_STRINGS = 37,
+            // ((22.9) Desert City's army test range.)
+            D_RANGE = 38;
     static final int FACILITY_POLICE = 0, FACILITY_BASE = 1, FACILITY_HOSPITAL = 2, FACILITY_FIRE = 3;
 
     /** A police station or military base: where reinforcements come from and a preferred safe zone. */
@@ -216,6 +218,14 @@ final class City {
     static final float TREE_HEIGHT = 14f;
 
     final CityConfig cfg;
+    /** ((22.9) Desert City (CityConfig.desert): everything it changes in building and drawing the map is for it alone. */
+    final boolean desert;
+    /** ((22.9) Desert City: ground kept green (the oases, the parks, gardens round water); null elsewhere. */
+    private boolean[] lush;
+    /** ((22.9) Desert City: the casino strip, the first great street across town. */
+    private Street stripSt;
+    /** ((22.9) Desert City: the army base out in the desert, with its test range ({x0, y0, x1, y1} in tiles). */
+    private int[] testRange;
     /** Where the city is: its look and its names. */
     final Country country;
     /** The town's name, the same every time for a given city code. */
@@ -622,6 +632,7 @@ final class City {
     City(CityConfig cfg, float detail) {
         progress(0.03f, "Laying out the streets");
         this.cfg = cfg;
+        this.desert = cfg.desert();
         this.detail = detail;
         w = h = cfg.tiles();
         rnd = new Random(cfg.seed);
@@ -2658,9 +2669,13 @@ final class City {
         boolean big = Math.max(bw, bh) > (w > 220 ? 84 : 68) && depth < 3 && !rural;
         // (Since 10.28 more of the bigger streets are avenues: two lanes each way.)
         if (cfg.civic >= 12 && !rural && depth < 4 && Math.max(bw, bh) > (w > 220 ? 60 : 52)) big = true;
+        // ((22.9) Desert City: wide roads, an avenue round nearly every few blocks.)
+        if (desert && depth < 6 && Math.max(bw, bh) > 44) big = true;
         int roadW = big ? 5 : 3, minSide = 16;
         // ((11.1) The great cross-town routes, the first splits of a big town, are boulevards: three lanes each way.)
         if (cfg.civic >= 27 && big && depth <= 1 && Math.max(bw, bh) > 150) roadW = 7;
+        // ((22.9) Desert City: the first street across town is the Strip, a boulevard whatever the size of the map.)
+        if (desert && depth == 0 && stripSt == null) roadW = 7;
         // ((15.2) Downtown Towers: past the first cross-town routes, every street is a narrow one between the towers.)
         if (cfg.towers() && depth >= 2) {
             roadW = 3;
@@ -2726,6 +2741,7 @@ final class City {
         (vertical ? vLines : hLines).add(at * 2 + roadW);
         Street st = vertical ? new Street(at, y0, at + roadW, y1, true, big) : new Street(x0, at, x1, at + roadW, false, big);
         carve(st);
+        if (desert && depth == 0 && stripSt == null) stripSt = st;
         // The first side's own street, when it runs across this one, is carried on into the second side.
         int nextHint;
         if (vertical) {
@@ -2862,6 +2878,9 @@ final class City {
             // (10.30) A big army base of its own out in the country, on the Massive maps (laid out first, so the
             // towns and farms go round it).
             if (cfg.outskirtsBase()) outskirtsBase();
+            // ((22.9) Desert City: the army base and its test range out in the desert; fewer places out there.)
+            if (desert && m >= 16 && cfg.militaryBase()) outskirtsBase();
+            if (desert) n = Math.max(1, n / 2);
             hamlets(n);
         }
         if (m > 0) countryside(townX0, townY0, townX1, townY1);
@@ -2915,12 +2934,15 @@ final class City {
         boolean[] used = new boolean[blocks.size()];
         // Hamlets out in the country are just homes, farms and the odd shop.
         for (int k = 0; k < blocks.size(); k++) if (blocks.get(k).length > 4 && blocks.get(k)[4] >= 2) used[k] = true;
+        // ((22.9) Desert City: the casino strip, before anything else takes the blocks along it.)
+        if (desert && stripSt != null) strip(used);
         // ((15.5) The Military Town's great base, in the middle where the streets were kept clear of it.)
         if (bigBase != null) {
             militaryBase(bigBase[0] + 1, bigBase[1] + 1, bigBase[2] - bigBase[0] - 2, bigBase[3] - bigBase[1] - 2);
         } else if (cfg.militaryBase()) {
             int best = -1, bestArea = 0;
-            for (int k = 0; k < blocks.size(); k++) {
+            // ((22.9) Desert City: the base is out in the desert already (the extra ones are in town as usual).)
+            for (int k = 0; k < (testRange != null ? 0 : blocks.size()); k++) {
                 int[] b = blocks.get(k);
                 int bw = b[2] - b[0] - 2, bh = b[3] - b[1] - 2;
                 if (used[k] || bw < 9 || bh < 9) continue;
@@ -3278,6 +3300,7 @@ final class City {
                 f.name = f.name + " (" + (amp > 0 ? street.substring(0, amp) : street) + ")";
             }
 
+        if (desert) desertify();
         // Street lamps on the pavement corners at junctions.
         for (int y = 1; y < h - 1; y++)
             for (int x = 1; x < w - 1; x++) {
@@ -3481,7 +3504,7 @@ final class City {
         // The open lower half depends on what kind of base it is (trucks are parked along the bottom right).
         Random bt = new Random(cfg.seed * 977L + salt);
         // ((10.52) Never the same kind twice on one map.)
-        int type = great ? BT_AIR : bt.nextInt(BASE_TYPES.length);
+        int type = great ? BT_AIR : forceBaseType >= 0 ? forceBaseType : bt.nextInt(BASE_TYPES.length);
         for (int k = 0; k < 8 && cfg.civic >= 23 && !great; k++) {
             boolean dup = false;
             for (Facility f : facilities) if (f.kind == FACILITY_BASE && f.baseType == type) dup = true;
@@ -3530,6 +3553,9 @@ final class City {
         return base;
     }
 
+    /** ((22.9) A kind of base to lay out instead of a random one (-1 for random). */
+    private int forceBaseType = -1;
+
     /** (10.30) Army checkpoints on the road to the country base: {x, y, angle of the road} in world units. */
     final List<float[]> checkpoints = new ArrayList<float[]>();
     /** Where the soldiers stand at them (two each), in world units. */
@@ -3562,23 +3588,34 @@ final class City {
             bh = small ? 32 : w >= 650 ? 58 : 48;
         }
         int clear = small ? 10 : 40;
+        // ((22.9) Desert City: a base of its own size, nearer the edge of town, with its test range behind it.)
+        int rh = 0;
+        if (desert) {
+            bw = w >= 650 ? 72 : 54;
+            bh = w >= 650 ? 46 : 36;
+            rh = bh + 6;
+            clear = 12;
+        }
         float tcx = (townX0 + townX1) / 2f, tcy = (townY0 + townY1) / 2f;
         int[] prev = new int[w * h];
         for (int tries = 0; tries < 1500; tries++) {
             int x = 14 + rnd.nextInt(Math.max(1, w - bw - 28)), y = 14 + rnd.nextInt(Math.max(1, h - bh - 28));
-            if (!allOpen(x - 6, y - 6, bw + 12, bh + 12)) continue;
+            if (desert && y - rh < 14) continue;
+            if (!allOpen(x - 6, y - 6 - rh, bw + 12, bh + 12 + rh)) continue;
             // (Kept off the wild side of the map, the hills and the park, unless there's nowhere else.)
             // ((10.52) The smaller one on a Default map never: there's not the room for the park there as well.)
-            if ((tries < 900 || small) && (inWildBand(x, y, small) || inWildBand(x + bw, y + bh, small) || inWildBand(x + bw, y, small) || inWildBand(x, y + bh, small))) continue;
+            if ((tries < 900 || small) && (inWildBand(x, y - rh, small) || inWildBand(x + bw, y - rh, small) || inWildBand(x, y, small) || inWildBand(x + bw, y + bh, small) || inWildBand(x + bw, y, small) || inWildBand(x, y + bh, small))) continue;
             if (railY0 >= 0 && railY0 + railRows >= y - 8 && railY0 <= y + bh + 8) continue;
             // (Out in the country, not on the edge of town.)
-            if (x + bw > townX0 - clear && x < townX1 + clear && y + bh > townY0 - clear && y < townY1 + clear) continue;
+            if (x + bw > townX0 - clear && x < townX1 + clear && y + bh > townY0 - clear - rh && y - rh < townY1 + clear) continue;
             // The gate that faces town.
             int gx = x + bw / 2 - 1, gy = y + bh / 2 - 1;
             int[][] gates = {{gx + 1, y + bh, 0, 1}, {gx + 1, y - 1, 0, -1}, {x + bw, gy + 1, 1, 0}};
             int[] gate = gates[0];
             float gd = Float.MAX_VALUE;
             for (int[] g : gates) {
+                // (The test range is behind the top gate.)
+                if (desert && g[3] < 0) continue;
                 float d = (float) World.hypot(g[0] - tcx, g[1] - tcy);
                 if (d < gd) {
                     gd = d;
@@ -3599,8 +3636,21 @@ final class City {
             List<Integer> path = new ArrayList<Integer>();
             for (int c = end; c != -1; c = prev[c]) path.add(0, c);
             if (path.size() > 260) continue;
+            if (desert) {
+                boolean crosses = false;
+                for (int c : path) if (c % w >= x - 1 && c % w <= x + bw && c / w >= y - rh - 1 && c / w < y) crosses = true;
+                if (crosses) continue;
+            }
+            if (desert) forceBaseType = BT_TRAINING;
             Facility base = militaryBase(x, y, bw, bh, 29);
+            forceBaseType = -1;
             base.satellite = true;
+            if (desert) {
+                // The town's own base, out here: the test range fenced off behind it, through its top gate.
+                base.satellite = false;
+                base.name = base.name.replace("(" + BASE_TYPES[BT_TRAINING] + ")", "(Test Range)");
+                testRange(x, y - rh, bw, rh, x + bw / 2 - 1);
+            }
             carve(gateRoad);
             {
                 float ang = (float) Math.atan2(gate[3], gate[2]);
@@ -6181,6 +6231,13 @@ final class City {
             if (cnt == least && lmRnd.nextInt(++n) == 0) pick = d;
         }
         if (pick == null) return false;
+        placeLandmark(pick, x, y, bw, bh);
+        lmLeft--;
+        return true;
+    }
+
+    /** Lays out a landmark on the inside of a block (bw by bh tiles from x, y). */
+    private void placeLandmark(Landmarks.Def pick, int x, int y, int bw, int bh) {
         Random r = new Random(lmRnd.nextLong());
         int[][] plan = pick.plan(bw, bh, r);
         fill(x, y, bw, bh, pick.ground);
@@ -6198,8 +6255,6 @@ final class City {
             openAreas.add(new float[]{(x + bw / 2f) * T, (y + bh / 2f) * T, pick.ground == PLAZA ? 1 : 0});
         lmCount[pick.id]++;
         lmAt.add(new float[]{x, y, pick.id});
-        lmLeft--;
-        return true;
     }
 
     /**
@@ -6539,6 +6594,8 @@ final class City {
         int height = cfg.height();
         if (kind == HOUSE) {
             floors = 1 + rnd.nextInt(2);
+            // ((22.9) Desert City: low adobe and stucco, a single storey.)
+            if (desert) floors = 1;
             int[] hr = cfg.variety() ? country.houseRoofs37 : country.houseRoofs, hw = cfg.variety() ? country.houseWalls37 : country.houseWalls;
             roof = hr[rnd.nextInt(hr.length)];
             wall = hw[rnd.nextInt(hw.length)];
@@ -9594,6 +9651,10 @@ final class City {
 
     private void park(int x, int y, int pw, int ph) {
         fill(x, y, pw, ph, GRASS);
+        if (desert) {
+            desertPark(x, y, pw, ph);
+            return;
+        }
         int cx = x + pw / 2, cy = y + ph / 2;
         boolean organic = cfg.layout() == 2 || (cfg.layout() == 1 && rnd.nextBoolean());
         if (organic) {
@@ -9677,7 +9738,7 @@ final class City {
                 boolean real = drawnRealistic;
                 switch (t) {
                     case SIDEWALK: col = country.pavement != 0 ? country.pavement : real ? 0xFF96938C : 0xFF8F8D87; break;
-                    case GRASS: case TREE: col = country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
+                    case GRASS: case TREE: col = desert ? grassColour(x, y) : country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
                     case PLAZA: case STATUE: col = country.plaza != 0 ? country.plaza : real ? 0xFFB2A58A : 0xFFB3A487; break;
                     case LOT: col = real ? 0xFF46474A : 0xFF48494D; break;
                     case BUILDING: col = country.pavement != 0 ? country.pavement : real ? 0xFF96938C : 0xFF8F8D87; break;
@@ -9687,7 +9748,7 @@ final class City {
                     case SAND: col = sandColor(); break;
                     case PIER: col = 0xFF8C6C4A; break;
                     case ROCK: col = 0xFF7E796E; break;
-                    case TRAIL: col = country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
+                    case TRAIL: col = desert ? grassColour(x, y) : country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
                     default: col = real ? 0xFF38393C : 0xFF3A3D43; break;
                 }
                 if (paved && (t == SIDEWALK || t == BUILDING || t == PLAZA)) {
@@ -9700,7 +9761,7 @@ final class City {
                 if (t == CAR && isLotCar(x, y)) col = 0xFF48494D;
                 if (t == CAR && carKind.get(y * w + x) == 2) col = 0xFF6A6E5E;
                 if (slipTile != null && slipTile[y * w + x] && (t == ROAD || t == CAR))
-                    col = country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837;
+                    col = desert ? grassColour(x, y) : country.grass != 0 ? country.grass : real ? 0xFF4F6F36 : 0xFF4C7837;
                 else if (curveTile != null && curveTile[y * w + x] && (t == ROAD || t == CAR))
                     col = country.pavement != 0 ? country.pavement : real ? 0xFF96938C : 0xFF8F8D87;
                 else if (t == ROAD || (t == CAR && col != 0xFF48494D && col != 0xFF6A6E5E)) {
@@ -9758,6 +9819,38 @@ final class City {
                     p.setColor(0xFF5A564E);
                     float cx0 = fx + prnd.nextFloat() * T, cy0 = fy + prnd.nextFloat() * T;
                     c.drawLine(cx0, cy0, cx0 + prnd.nextFloat() * 6 - 3, cy0 + prnd.nextFloat() * 6 - 3, p);
+                } else if ((t == GRASS || t == TREE || t == TRAIL) && desert && !lushAt(x, y)) {
+                    // ((22.9) Sand: grit and pebbles, now and then a dry tuft or a stone.)
+                    for (int k = 0; k < 5; k++) {
+                        p.setColor(prnd.nextBoolean() ? 0xFFB8986A : 0xFFE6D2A2);
+                        float sx = fx + prnd.nextFloat() * T, sy = fy + prnd.nextFloat() * T;
+                        if (fine) c.drawCircle(sx, sy, 0.8f, p);
+                    }
+                    if (prnd.nextFloat() < 0.1f) {
+                        p.setColor(0xFF9A8A58);
+                        float gx = fx + prnd.nextFloat() * T, gy = fy + prnd.nextFloat() * T;
+                        c.drawLine(gx, gy, gx - 1.5f, gy - 2, p);
+                        c.drawLine(gx, gy, gx + 1.5f, gy - 2, p);
+                        c.drawLine(gx, gy, gx, gy - 2.5f, p);
+                    }
+                    if (prnd.nextFloat() < 0.04f) {
+                        float bx = fx + 3 + prnd.nextFloat() * (T - 6), by = fy + 3 + prnd.nextFloat() * (T - 6);
+                        p.setColor(0x40000000);
+                        c.drawCircle(bx + 0.6f, by + 0.6f, 1.6f, p);
+                        p.setColor(0xFFA08A70);
+                        c.drawCircle(bx, by, 1.5f, p);
+                    }
+                    // The green of watered ground beside spills over its edge in soft scallops.
+                    for (int k = 0; k < 4; k++) {
+                        int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h || !lushAt(nx, ny)) continue;
+                        byte o = tiles[ny * w + nx];
+                        if (o != GRASS && o != TREE && o != TRAIL) continue;
+                        p.setColor(grassColour(nx, ny));
+                        float ex = fx + T / 2f + (nx - x) * T / 2f, ey = fy + T / 2f + (ny - y) * T / 2f;
+                        float along = (prnd.nextFloat() - 0.5f) * T * 0.6f;
+                        c.drawCircle(ex + (ny != y ? along : 0), ey + (nx != x ? along : 0), 4 + prnd.nextFloat() * 5, p);
+                    }
                 } else if (t == GRASS || t == TREE || t == TRAIL) {
                     for (int k = 0; k < 6; k++) {
                         p.setColor(prnd.nextBoolean() ? 0xFF578A3F : 0xFF426B30);
@@ -10026,6 +10119,9 @@ final class City {
                     float r = 7.5f + prnd.nextFloat() * 2f;
                     byte kind = treeKindAt(y * w + x);
                     if (kind == Country.TK_PINE) r *= 0.82f;
+                    // ((22.9) A saguaro and a bush of scrub are smaller than a tree.)
+                    if (kind == Country.TK_CACTUS) r *= 0.6f;
+                    else if (kind == Country.TK_SCRUB) r *= 0.55f;
                     p.setColor(0x50000000);
                     c.drawCircle(cx + TREE_HEIGHT * 0.28f, cy + TREE_HEIGHT * 0.38f, r, p);
                     p.setColor(0xFF4A3524);
@@ -10056,8 +10152,10 @@ final class City {
                     p.setColor(0xFF4A3524);
                     c.drawCircle(cx, cy, 1.6f, p);
                     if (!regionOnly) {
-                        trees.add(new float[]{cx, cy, r});
-                        if (canopies()) canopy(c, p, cx, cy, r, Country.TK_BROAD);
+                        // ((22.9) Palms along the desert's streets.)
+                        if (desert) trees.add(new float[]{cx, cy, r, Country.TK_PALM});
+                        else trees.add(new float[]{cx, cy, r});
+                        if (canopies()) canopy(c, p, cx, cy, r, desert ? Country.TK_PALM : Country.TK_BROAD);
                     }
                 }
     }
@@ -10076,6 +10174,10 @@ final class City {
     }
 
     private void canopy(Canvas c, Paint p, float x, float y, float r, int kind) {
+        if (kind >= Country.TK_PALM) {
+            desertTree(c, p, x, y, r, kind, 1, x * 0.13f + y * 0.07f);
+            return;
+        }
         int dark, light;
         switch (kind) {
             case Country.TK_PINE: dark = 0xFF1C3E26; light = 0xFF2C5C36; break;
@@ -10101,6 +10203,7 @@ final class City {
         }
         if (sand > 0) return sandColor();
         if (plaza > 0) return country.plaza != 0 ? country.plaza : drawnRealistic ? 0xFFB2A58A : 0xFFB3A487;
+        if (desert) return grassColour(x, y);
         return country.grass != 0 ? country.grass : drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
     }
 
@@ -10248,6 +10351,12 @@ final class City {
                         p.setStrokeWidth(0.5f);
                         float cx = fx + r.nextFloat() * T, cy = fy + r.nextFloat() * T;
                         c.drawLine(cx, cy, cx + r.nextFloat() * 6 - 3, cy + r.nextFloat() * 6 - 3, p);
+                    }
+                } else if ((t == GRASS || t == TREE) && desert && !lushAt(x, y)) {
+                    // ((22.9) Wind-blown sand: soft light and dark drifts.)
+                    if (r.nextFloat() < 0.35f) {
+                        p.setColor(r.nextBoolean() ? 0x14FFF4D8 : 0x10603A10);
+                        c.drawCircle(fx + r.nextFloat() * T, fy + r.nextFloat() * T, 4 + r.nextFloat() * 8, p);
                     }
                 } else if (t == GRASS || t == TREE) {
                     // Mown lawn stripes.
@@ -10963,6 +11072,10 @@ final class City {
         float dw = x1 - x0, dh = y1 - y0;
         boolean wide = dw >= dh;
         p.setStyle(Paint.Style.FILL);
+        if (kind == D_RANGE) {
+            drawTestRange(c, p, x0, y0, x1, y1, (int) d[6]);
+            return;
+        }
         if (kind == D_STRINGS) {
             // ((22.8) A wire across the street, sagging a little, hung with lanterns, bulbs or flags.)
             float ax = d[1], ay = d[2], bx = d[3], by = d[4], len = (float) Math.hypot(bx - ax, by - ay);
@@ -11739,7 +11852,7 @@ final class City {
         for (int q = 0; q < elev.length; q++) top = Math.max(top, elev.get(q));
         // (Only real mountains get snow.)
         // (Snow lower down in the north and the Alps; none in the tropics or the desert.)
-        float snow = country.snowLine > 0 && top > 55 ? top * country.snowLine : Float.MAX_VALUE;
+        float snow = !desert && country.snowLine > 0 && top > 55 ? top * country.snowLine : Float.MAX_VALUE;
         int[] px = new int[w * h];
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {
@@ -11766,7 +11879,7 @@ final class City {
         if (x < 0 || y < 0 || x >= w || y >= h) return 0;
         byte t = tiles[y * w + x];
         if (bridge != null && bridge[y * w + x]) return 0;
-        if (t == GRASS || t == TREE || t == TRAIL) return country.grass != 0 ? country.grass : drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
+        if (t == GRASS || t == TREE || t == TRAIL) return desert ? grassColour(x, y) : country.grass != 0 ? country.grass : drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
         if (t == ROCK) return 0xFF7E796E;
         if (t == SAND) return sandColor();
         return 0;
@@ -15006,5 +15119,405 @@ final class City {
         dist[n] = nd;
         queue[tail++] = n;
         return tail;
+    }
+
+    // ------------------------------------------------------------------ ((22.9) Desert City)
+
+    /** A landmark design by its name, or null. */
+    private static Landmarks.Def landmarkNamed(String name) {
+        for (Landmarks.Def d : Landmarks.all()) if (d.name.equals(name)) return d;
+        return null;
+    }
+
+    /** The casino strip's designs, in the order they come along it (the Casino over and over). */
+    private static final String[] STRIP = {"Casino", "Grand Hotel", "Casino", "Nightclub", "Wedding Chapel Gardens", "Casino",
+            "Boutique Hotel", "Pyramid Building", "Casino", "Motel", "Wax Museum", "Casino", "Multiplex Cinema", "Retro Diner",
+            "UFO Diner"};
+    /** Neon for the strip's own big buildings: {roof, wall}. */
+    private static final int[][] NEON = {{0xFFD8A030, 0xFFF8E8B0}, {0xFF8E2A6A, 0xFFF070B0}, {0xFF2A6A8E, 0xFF40D0D0},
+            {0xFFC03050, 0xFFF8D040}, {0xFFE8E0D0, 0xFFB850D0}, {0xFF3A3A48, 0xFFFF7040}};
+
+    /**
+     * The casino strip: the blocks along the middle stretch of the first great street across town, each a casino,
+     * a grand hotel, a nightclub, a wedding chapel and the like, or a big neon-lit building of its own.
+     */
+    private void strip(boolean[] used) {
+        Street st = stripSt;
+        boolean v = st.vertical;
+        float mid = v ? (townY0 + townY1) / 2f : (townX0 + townX1) / 2f;
+        float reach = (v ? townY1 - townY0 : townX1 - townX0) * 0.3f;
+        if (lmRnd == null) {
+            lmRnd = new Random(cfg.seed * 7919L + 35);
+            lmCount = new int[Landmarks.all().size()];
+        }
+        Random r = new Random(cfg.seed * 1301L + 39);
+        int next = 0;
+        for (int k = 0; k < blocks.size(); k++) {
+            int[] b = blocks.get(k);
+            if (used[k] || b.length > 4) continue;
+            boolean touches = v ? (b[2] == st.x0 || b[0] == st.x1) && b[1] < st.y1 && b[3] > st.y0
+                    : (b[3] == st.y0 || b[1] == st.y1) && b[0] < st.x1 && b[2] > st.x0;
+            if (!touches) continue;
+            float along = v ? (b[1] + b[3]) / 2f : (b[0] + b[2]) / 2f;
+            if (Math.abs(along - mid) > reach) continue;
+            int ix = b[0] + 1, iy = b[1] + 1, iw = b[2] - b[0] - 2, ih = b[3] - b[1] - 2;
+            if (iw < 5 || ih < 5) continue;
+            used[k] = true;
+            fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+            curDistrict = districtType(ix + iw / 2, iy + ih / 2);
+            int s = Math.min(iw, ih), l = Math.max(iw, ih);
+            Landmarks.Def pick = null;
+            for (int t = 0; t < STRIP.length && pick == null; t++) {
+                Landmarks.Def d = landmarkNamed(STRIP[(next + t) % STRIP.length]);
+                if (d != null && s >= d.minS && l >= d.minL) {
+                    pick = d;
+                    next = (next + t + 1) % STRIP.length;
+                }
+            }
+            if (pick != null) {
+                placeLandmark(pick, ix, iy, iw, ih);
+                continue;
+            }
+            // Too small for any of them: a neon-lit block of its own on a forecourt.
+            fill(ix, iy, iw, ih, PLAZA);
+            int[] col = NEON[r.nextInt(NEON.length)];
+            int bx = ix + 1, by = iy + 1, bw = iw - 2, bh = ih - 2;
+            fill(bx, by, bw, bh, BUILDING);
+            buildingLots.add(new int[]{bx, by, bw, bh, col[0], r.nextInt(100000), OFFICE, 3 + r.nextInt(5), col[1], -1});
+        }
+    }
+
+    /**
+     * The army's test range behind the desert base: open sand fenced off (x0, y0, rw by rh tiles), through a gap in
+     * its fence opposite the base's top gate (columns gx to gx + 2), with targets, craters and wrecks drawn on it.
+     */
+    private void testRange(int x0, int y0, int rw, int rh, int gx) {
+        testRange = new int[]{x0, y0, x0 + rw, y0 + rh};
+        fill(x0, y0, rw, rh, SAND);
+        for (int i = x0; i < x0 + rw; i++) {
+            tiles[y0 * w + i] = FENCE;
+            tiles[(y0 + rh - 1) * w + i] = i >= gx && i < gx + 3 ? SAND : FENCE;
+        }
+        for (int j = y0; j < y0 + rh; j++) {
+            tiles[j * w + x0] = FENCE;
+            tiles[j * w + x0 + rw - 1] = FENCE;
+        }
+        decor.add(new float[]{D_RANGE, (x0 + 1) * T, (y0 + 1) * T, (x0 + rw - 1) * T, (y0 + rh - 1) * T, 0, rnd.nextInt(1 << 20)});
+    }
+
+    /** The test range's ground: dust and tracks, firing points by the gate, targets far off, craters and wrecks. */
+    private void drawTestRange(Canvas c, Paint p, float x0, float y0, float x1, float y1, int seed) {
+        Random r = new Random(seed);
+        float rw = x1 - x0, rh = y1 - y0;
+        p.setStyle(Paint.Style.FILL);
+        // Churned-up dirt, darker in the impact area.
+        for (int k = 0; k < (int) (rw * rh / 14000); k++) {
+            float px = x0 + r.nextFloat() * rw, py = y0 + r.nextFloat() * rh, pr = 10 + r.nextFloat() * 26;
+            p.setColor(r.nextBoolean() ? 0x30704A28 : 0x22A07A48);
+            c.drawCircle(px, py, pr, p);
+        }
+        float iy0 = y0 + rh * 0.08f, iy1 = y0 + rh * 0.62f;
+        p.setColor(0x2A5A3A1E);
+        c.drawOval(new RectF(x0 + rw * 0.1f, iy0, x1 - rw * 0.1f, iy1), p);
+        // Vehicle tracks winding across.
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(2.2f);
+        for (int k = 0; k < 4; k++) {
+            Path tr = new Path();
+            float sx = x0 + r.nextFloat() * rw;
+            tr.moveTo(sx, y1);
+            float mx = x0 + r.nextFloat() * rw;
+            tr.quadTo(x0 + r.nextFloat() * rw, y0 + rh * 0.75f, mx, y0 + rh * 0.5f);
+            tr.quadTo(x0 + r.nextFloat() * rw, y0 + rh * 0.25f, x0 + r.nextFloat() * rw, y0);
+            p.setColor(0x40604028);
+            c.drawPath(tr, p);
+            c.save();
+            c.translate(4, 0);
+            c.drawPath(tr, p);
+            c.restore();
+        }
+        // Berms across the range.
+        p.setStrokeWidth(5f);
+        p.setStrokeCap(Paint.Cap.ROUND);
+        for (int k = 0; k < 3; k++) {
+            float by = y0 + rh * (0.3f + k * 0.18f), bx = x0 + rw * (0.15f + r.nextFloat() * 0.3f);
+            p.setColor(0x60886038);
+            c.drawLine(bx, by, bx + rw * 0.3f, by, p);
+            p.setColor(0x40E8D0A0);
+            p.setStrokeWidth(2f);
+            c.drawLine(bx, by - 1.5f, bx + rw * 0.3f, by - 1.5f, p);
+            p.setStrokeWidth(5f);
+        }
+        p.setStrokeCap(Paint.Cap.BUTT);
+        p.setStyle(Paint.Style.FILL);
+        // Craters in the impact area: a dark bowl, a pale thrown-up rim.
+        int craters = Math.max(6, (int) (rw * rh / 26000));
+        for (int k = 0; k < craters; k++) {
+            float cx = x0 + rw * (0.12f + r.nextFloat() * 0.76f), cy = iy0 + r.nextFloat() * (iy1 - iy0), cr = 3 + r.nextFloat() * 6;
+            p.setColor(0x50D8C090);
+            c.drawCircle(cx, cy, cr * 1.5f, p);
+            p.setColor(0xFF5A4028);
+            c.drawCircle(cx, cy, cr, p);
+            p.setColor(0xFF3A2A1A);
+            c.drawCircle(cx + cr * 0.15f, cy + cr * 0.2f, cr * 0.55f, p);
+        }
+        // Burnt-out hulks used as targets.
+        for (int k = 0; k < 4; k++) {
+            float hx = x0 + rw * (0.16f + k * 0.21f + r.nextFloat() * 0.06f), hy = iy0 + (iy1 - iy0) * (0.3f + r.nextFloat() * 0.4f);
+            c.save();
+            c.translate(hx, hy);
+            c.rotate(r.nextFloat() * 360);
+            c.translate(-hx, -hy);
+            p.setColor(0x50000000);
+            c.drawRect(hx - 6, hy - 9, hx + 8, hy + 11, p);
+            p.setColor(0xFF3A3830);
+            c.drawRect(hx - 7, hy - 10, hx + 7, hy + 10, p);
+            p.setColor(0xFF4E4A3A);
+            c.drawCircle(hx, hy, 4.5f, p);
+            p.setColor(0xFF2A2822);
+            c.drawRect(hx - 1, hy - 16, hx + 1, hy - 3, p);
+            c.restore();
+        }
+        // A row of targets along the far end, each on its post: white boards with red rings.
+        int targets = Math.max(4, (int) (rw / 48));
+        for (int k = 0; k < targets; k++) {
+            float tx = x0 + rw * (k + 0.5f) / targets, ty = y0 + 8;
+            p.setColor(0xFF7A5A3A);
+            c.drawRect(tx - 6, ty + 2, tx + 6, ty + 4, p);
+            p.setColor(0xFFF2EEE4);
+            c.drawRect(tx - 4, ty - 4, tx + 4, ty + 3, p);
+            p.setColor(0xFFC8302A);
+            c.drawCircle(tx, ty - 0.5f, 2.6f, p);
+            p.setColor(0xFFF2EEE4);
+            c.drawCircle(tx, ty - 0.5f, 1.6f, p);
+            p.setColor(0xFFC8302A);
+            c.drawCircle(tx, ty - 0.5f, 0.7f, p);
+        }
+        // Firing points by the gate: sandbagged bays under a line of red flags.
+        float fy = y1 - 16;
+        int bays = Math.max(3, (int) (rw / 100));
+        for (int k = 0; k < bays; k++) {
+            float fx = x0 + rw * (k + 0.5f) / bays;
+            if (Math.abs(fx - (x0 + x1) / 2) < 18) continue;
+            p.setColor(0xFFB8A070);
+            c.drawRect(fx - 8, fy - 3, fx + 8, fy + 3, p);
+            p.setColor(0xFF8A7650);
+            for (int q = -2; q <= 2; q++) c.drawCircle(fx + q * 3.4f, fy - 3, 1.8f, p);
+            p.setColor(0xFF6A5A3A);
+            c.drawRect(fx - 0.6f, fy + 4, fx + 0.6f, fy + 11, p);
+            p.setColor(0xFFE0302A);
+            c.drawRect(fx + 0.6f, fy + 4, fx + 5, fy + 7, p);
+        }
+        // A warning sign on the gate side.
+        p.setColor(0xFFE8C020);
+        c.drawRect((x0 + x1) / 2 + 14, y1 - 8, (x0 + x1) / 2 + 26, y1 - 2, p);
+        p.setColor(0xFF2A2A2A);
+        c.drawRect((x0 + x1) / 2 + 15, y1 - 6, (x0 + x1) / 2 + 25, y1 - 5, p);
+    }
+
+    /** A park in the desert: watered green, with palms, and a pond in it if it's big enough (an oasis in town). */
+    private void desertPark(int x, int y, int pw, int ph) {
+        if (lush == null) lush = new boolean[w * h];
+        for (int j = y; j < y + ph; j++) for (int i = x; i < x + pw; i++) lush[j * w + i] = true;
+        if (pw >= 10 && ph >= 10) pond(x + pw * 0.32f, y + ph * 0.35f, Math.min(pw, ph) * 0.2f, rnd, x, y, x + pw, y + ph);
+        for (int j = y; j < y + ph; j++)
+            for (int i = x; i < x + pw; i++)
+                if (tiles[j * w + i] == GRASS && rnd.nextFloat() < 0.12f && !hasNeighbor(i, j, TREE) && !hasNeighbor(i, j, WATER))
+                    tiles[j * w + i] = TREE;
+        // A path across, clear of the pond.
+        int cy = y + ph * 3 / 4;
+        for (int i = x; i < x + pw; i++) if (tiles[cy * w + i] == GRASS || tiles[cy * w + i] == TREE) tiles[cy * w + i] = PLAZA;
+    }
+
+    /**
+     * A pond (centre and radius in tiles), on open sand or grass only and inside the rectangle given, its level set a
+     * little below its lowest shore. Returns how many tiles it covers.
+     */
+    private int pond(float cx, float cy, float rad, Random r, int bx0, int by0, int bx1, int by1) {
+        float ph1 = r.nextFloat() * 6.3f, ph2 = r.nextFloat() * 6.3f;
+        int reach = (int) (rad * 1.4f) + 1;
+        List<Integer> cells = new ArrayList<Integer>();
+        float level = Float.MAX_VALUE;
+        for (int y = Math.max(by0, (int) cy - reach); y < Math.min(by1, (int) cy + reach + 1); y++)
+            for (int x = Math.max(bx0, (int) cx - reach); x < Math.min(bx1, (int) cx + reach + 1); x++) {
+                float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+                double a = Math.atan2(dy, dx);
+                float rr = rad * (1 + 0.18f * (float) Math.sin(3 * a + ph1) + 0.1f * (float) Math.sin(5 * a + ph2));
+                if (dx * dx + dy * dy >= rr * rr) continue;
+                int i = y * w + x;
+                if (tiles[i] != GRASS && tiles[i] != TREE) continue;
+                cells.add(i);
+                if (elev != null) level = Math.min(level, elev.get(i));
+            }
+        for (int i : cells) {
+            tiles[i] = WATER;
+            unpine(i);
+            if (elev != null) elev.set(i, level - 1);
+        }
+        return cells.size();
+    }
+
+    /**
+     * Desert City's land, once the city is built: oases out on the open sand, green and palms round all its water, and
+     * every tree a palm, a cactus or a bush of desert scrub (most of the country's woods are bare sand).
+     */
+    private void desertify() {
+        if (lush == null) lush = new boolean[w * h];
+        Random r = new Random(cfg.seed * 4111L + 39);
+        boolean outside = townX0 > 0;
+        if (outside) {
+            int want = w >= 600 ? 7 : w >= 300 ? 4 : 2;
+            boolean named = false;
+            for (int tries = 0; tries < 900 && want > 0; tries++) {
+                int rad = 5 + r.nextInt(5), R = rad + 5;
+                int cx = R + 2 + r.nextInt(Math.max(1, w - 2 * R - 4)), cy = R + 2 + r.nextInt(Math.max(1, h - 2 * R - 4));
+                if (cx > townX0 - 10 && cx < townX1 + 10 && cy > townY0 - 10 && cy < townY1 + 10) continue;
+                if (!allOpen(cx - R, cy - R, 2 * R + 1, 2 * R + 1)) continue;
+                if (pond(cx + 0.5f, cy + 0.5f, rad, r, 0, 0, w, h) < 8) continue;
+                want--;
+                if (!named) {
+                    named = true;
+                    String[] words = this.country.districtWords;
+                    natureLabel(words[r.nextInt(words.length)] + " Oasis", (cx + 0.5f) * T, (cy + rad + 2.5f) * T, NL_LAKE);
+                }
+            }
+        }
+        // How far each tile is from the water (up to 4).
+        int[] dist = new int[w * h];
+        Arrays.fill(dist, 99);
+        int[] q = new int[w * h];
+        int qh = 0, qt = 0;
+        for (int i = 0; i < w * h; i++)
+            if (tiles[i] == WATER) {
+                dist[i] = 0;
+                q[qt++] = i;
+            }
+        while (qh < qt) {
+            int i = q[qh++], x = i % w, y = i / w;
+            if (dist[i] >= 4) continue;
+            for (int k = 0; k < 4; k++) {
+                int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                int n = ny * w + nx;
+                if (dist[n] <= dist[i] + 1) continue;
+                dist[n] = dist[i] + 1;
+                q[qt++] = n;
+            }
+        }
+        for (int i = 0; i < w * h; i++) {
+            if (dist[i] < 1 || dist[i] > 4) continue;
+            byte t = tiles[i];
+            if (t != GRASS && t != TREE && t != TRAIL) continue;
+            int x = i % w, y = i / w;
+            if (dist[i] <= 3 || ((x * 7 + y * 3) & 3) == 0) lush[i] = true;
+            if (t == GRASS && dist[i] <= 2 && r.nextFloat() < 0.3f && !hasNeighbor(x, y, TREE) && !hasNeighbor(x, y, ROAD)
+                    && !hasNeighbor(x, y, BUILDING) && !hasNeighbor(x, y, DIRT)) tiles[i] = TREE;
+        }
+        // A cactus here and there out on the open sand.
+        if (outside)
+            for (int y = 2; y < h - 2; y++)
+                for (int x = 2; x < w - 2; x++) {
+                    int i = y * w + x;
+                    if (tiles[i] != GRASS || lush[i] || (x >= townX0 && x < townX1 && y >= townY0 && y < townY1)) continue;
+                    if (r.nextFloat() >= 0.006f || hasNeighbor(x, y, TREE) || hasNeighbor(x, y, ROAD) || hasNeighbor(x, y, DIRT)
+                            || hasNeighbor(x, y, BUILDING) || hasNeighbor(x, y, FENCE) || hasNeighbor(x, y, LOT)) continue;
+                    tiles[i] = TREE;
+                    setTreeKind(i, Country.TK_CACTUS);
+                }
+        // Every tree a desert one; most of the woods out in the country just sand.
+        for (int i = 0; i < w * h; i++) {
+            if (tiles[i] != TREE) continue;
+            int x = i % w, y = i / w;
+            boolean inTown = x >= townX0 && x < townX1 && y >= townY0 && y < townY1;
+            byte kind;
+            if (lush[i]) kind = Country.TK_PALM;
+            else if (treeKindAt(i) == Country.TK_CACTUS) kind = Country.TK_CACTUS;
+            else if (inTown) {
+                float f = r.nextFloat();
+                kind = f < 0.5f ? Country.TK_PALM : f < 0.75f ? Country.TK_CACTUS : Country.TK_SCRUB;
+            } else if (r.nextFloat() < 0.14f) kind = r.nextFloat() < 0.5f ? Country.TK_CACTUS : Country.TK_SCRUB;
+            else {
+                tiles[i] = GRASS;
+                unpine(i);
+                continue;
+            }
+            setTreeKind(i, kind);
+        }
+    }
+
+    /** ((22.9) Desert City: ground left green (by water, in the parks). */
+    private boolean lushAt(int x, int y) {
+        return lush != null && lush[y * w + x];
+    }
+
+    /** The colour of open ground (grass, or in the desert sand unless watered). */
+    private int grassColour(int x, int y) {
+        if (desert && !lushAt(x, y)) {
+            // (Broad, soft swells of lighter and darker sand, in a few steps so a row still goes down in long runs.)
+            float n = (float) (Math.sin(x * 0.043f + y * 0.017f) * Math.sin(y * 0.051f - x * 0.011f + 1.7f));
+            int step = Math.round(n * 2);
+            int base = drawnRealistic ? 0xFFCFB07A : 0xFFD2B47E;
+            return step == 0 ? base : step > 0 ? lighten(base, 0.025f * step) : darken(base, 1 + 0.025f * step);
+        }
+        if (desert) return drawnRealistic ? 0xFF5E8A3C : 0xFF5A8E3A;
+        return country.grass != 0 ? country.grass : drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
+    }
+
+    /**
+     * A palm, a saguaro or a bush of desert scrub seen from above (kind Country.TK_*), at alpha a (0 to 1). Drawn into
+     * the map picture and by the view close up.
+     */
+    static void desertTree(Canvas c, Paint p, float x, float y, float r, int kind, float a, float spin) {
+        if (kind == Country.TK_PALM) {
+            // Long fronds out from the crown.
+            for (int layer = 0; layer < 2; layer++) {
+                int col = layer == 0 ? 0xFF3E7430 : 0xFF5E9A40;
+                float len = layer == 0 ? r : r * 0.72f;
+                p.setColor(withAlpha(col, a));
+                for (int k = 0; k < 7; k++) {
+                    double an = spin + k * Math.PI * 2 / 7 + layer * 0.45f;
+                    float ex = x + (float) Math.cos(an) * len, ey = y + (float) Math.sin(an) * len;
+                    float mx = x + (float) Math.cos(an) * len * 0.5f, my = y + (float) Math.sin(an) * len * 0.5f;
+                    float nx = -(float) Math.sin(an) * len * 0.17f, ny = (float) Math.cos(an) * len * 0.17f;
+                    Path f = new Path();
+                    f.moveTo(x, y);
+                    f.quadTo(mx + nx, my + ny, ex, ey);
+                    f.quadTo(mx - nx, my - ny, x, y);
+                    f.close();
+                    c.drawPath(f, p);
+                }
+            }
+            p.setColor(withAlpha(0xFF7A5A34, a));
+            c.drawCircle(x, y, r * 0.16f, p);
+        } else if (kind == Country.TK_CACTUS) {
+            // A saguaro: the ribbed column and its arms, upturned.
+            float u = r * 0.55f;
+            p.setColor(withAlpha(0xFF3E6A34, a));
+            c.drawCircle(x, y, u, p);
+            float ax = (float) Math.cos(spin) * u * 1.5f, ay = (float) Math.sin(spin) * u * 1.5f;
+            c.drawCircle(x + ax, y + ay, u * 0.55f, p);
+            c.drawCircle(x - ay * 0.8f, y + ax * 0.8f, u * 0.45f, p);
+            p.setColor(withAlpha(0xFF5E9050, a));
+            c.drawCircle(x - u * 0.2f, y - u * 0.2f, u * 0.6f, p);
+            c.drawCircle(x + ax - u * 0.1f, y + ay - u * 0.1f, u * 0.3f, p);
+            p.setColor(withAlpha(0xFFE8E0A0, a));
+            c.drawCircle(x - u * 0.25f, y - u * 0.25f, Math.max(0.5f, u * 0.14f), p);
+        } else {
+            // Scrub: a low grey-green clump.
+            p.setColor(withAlpha(0xFF6E7448, a));
+            for (int k = 0; k < 5; k++) {
+                double an = spin + k * 1.3f;
+                c.drawCircle(x + (float) Math.cos(an) * r * 0.35f, y + (float) Math.sin(an) * r * 0.35f, r * 0.42f, p);
+            }
+            p.setColor(withAlpha(0xFF98A068, a));
+            for (int k = 0; k < 3; k++) {
+                double an = spin + 0.6f + k * 2.1f;
+                c.drawCircle(x + (float) Math.cos(an) * r * 0.25f - r * 0.1f, y + (float) Math.sin(an) * r * 0.25f - r * 0.1f, r * 0.22f, p);
+            }
+        }
+    }
+
+    private static int withAlpha(int col, float a) {
+        return ((int) (((col >>> 24) & 255) * Math.max(0, Math.min(1, a))) << 24) | (col & 0xFFFFFF);
     }
 }
