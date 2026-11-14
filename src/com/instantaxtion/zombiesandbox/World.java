@@ -36,6 +36,19 @@ final class World {
     private static final int[] HAIR = {0xFF2B1B10, 0xFF4A2E1A, 0xFF111111, 0xFFC8A45A, 0xFF8B4A2B, 0xFF777777};
     private static final int[] DOGS = {0xFF8B5A2B, 0xFF2B2320, 0xFFD9C49A, 0xFFB07A3E, 0xFF6E6A66, 0xFFEDE6DA};
     private static final int[] SKINS = {0xFFF1C27D, 0xFFE0AC69, 0xFFC68642, 0xFF8D5524, 0xFFFFDBAC};
+    /** ((22.6) Map version 37: more shirts, hair and skin tones. */
+    private static final int[] SHIRTS37 = {
+            0xFFD9534F, 0xFF5BC0DE, 0xFFF0AD4E, 0xFF5CB85C, 0xFFEEEEEE, 0xFF9B59B6, 0xFFE67E22, 0xFF34495E,
+            0xFFF1C40F, 0xFF1ABC9C, 0xFFE84393, 0xFF795548, 0xFF222222, 0xFF8BC34A, 0xFF2E86C1, 0xFFA93226,
+            0xFF117864, 0xFFF5B7B1, 0xFFAED6F1, 0xFFD7BDE2, 0xFF6E2C00, 0xFF1B2631, 0xFFB7950B, 0xFF7D3C98,
+            0xFF48C9B0, 0xFFFAD7A0, 0xFF808B96, 0xFFC0392B, 0xFF27AE60, 0xFFE8DAEF, 0xFF154360, 0xFFF39C12};
+    private static final int[] HAIR37 = {0xFF2B1B10, 0xFF4A2E1A, 0xFF111111, 0xFFC8A45A, 0xFF8B4A2B, 0xFF777777,
+            0xFFE6CE8A, 0xFFA0522D, 0xFFB03A1E, 0xFFDDDDDD, 0xFF5A3A28, 0xFF3A2A20, 0xFF6A4A8A, 0xFF2E6AA0};
+    private static final int[] SKINS37 = {0xFFF1C27D, 0xFFE0AC69, 0xFFC68642, 0xFF8D5524, 0xFFFFDBAC, 0xFFF6D3B3,
+            0xFFD9A066, 0xFFA86B3C, 0xFF6B3E1E, 0xFF4A2A16};
+    private int[] shirts() { return city.cfg.variety() ? SHIRTS37 : SHIRTS; }
+    private int[] hair() { return city.cfg.variety() ? HAIR37 : HAIR; }
+    private int[] skins() { return city.cfg.variety() ? SKINS37 : SKINS; }
 
     static final class Corpse {
         float x, y, angle, radius, rise, age;
@@ -1400,7 +1413,7 @@ final class World {
         e.phase = rnd.nextFloat() * 10;
         e.origin = origin;
         e.nameSeed = rnd.nextInt();
-        e.skin = SKINS[rnd.nextInt(SKINS.length)];
+        e.skin = skins()[rnd.nextInt(skins().length)];
         e.risen = time;
         if (type == Entity.COP) e.callsign = 11 + dispatch.copCount++;
         if (type == Entity.SOLDIER) {
@@ -1414,8 +1427,8 @@ final class World {
                 e.radius = 3.6f;
                 e.speed = 15 + rnd.nextFloat() * 6;
                 e.runSpeed = 36 + rnd.nextFloat() * 10;
-                e.body = SHIRTS[rnd.nextInt(SHIRTS.length)];
-                e.head = HAIR[rnd.nextInt(HAIR.length)];
+                e.body = shirts()[rnd.nextInt(shirts().length)];
+                e.head = hair()[rnd.nextInt(hair().length)];
                 break;
             case Entity.COP:
                 e.hp = 60;
@@ -1504,7 +1517,7 @@ final class World {
         if (e.isUndead()) {
             int base = originBody != 0 ? originBody
                     : type == Entity.BRUTE ? 0xFF4D3F4F : type == Entity.ZOMBIE_DOG ? DOGS[rnd.nextInt(DOGS.length)]
-                    : SHIRTS[rnd.nextInt(SHIRTS.length)];
+                    : shirts()[rnd.nextInt(shirts().length)];
             e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE ? 0.2f : 0.45f);
             // ((12.4) This strain's own look.)
             int tint = strainTint();
@@ -8820,7 +8833,7 @@ final class World {
             own.trainT = 0;
             boolean army = own.type == Entity.SOLDIER;
             String air = v.kind == Fleet.K_RESCUE_HELI ? "the rescue helicopter" : v.kind == Fleet.K_POLICE_HELI ? "the police helicopter" : "Air " + Math.max(1, v.number);
-            dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, own, (army ? "Private " : "Officer ") + Names.person(own.nameSeed)
+            dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, own, (army ? Names.soldierRank(own.nameSeed) : Names.copRank(own.nameSeed)) + " " + Names.person(own.nameSeed)
                     + " has put in to fly " + air + ". Heading to the pad to train.", v.padAt[0], v.padAt[1]);
             return own;
         }
@@ -8877,7 +8890,7 @@ final class World {
         v.flight.add(0, e);
         v.pilotComing = null;
         boolean army = e.type == Entity.SOLDIER;
-        dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, (army ? "Private " : "Officer ") + Names.person(e.nameSeed)
+        dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, (army ? Names.soldierRank(e.nameSeed) : Names.copRank(e.nameSeed)) + " " + Names.person(e.nameSeed)
                 + ": Checked out on the helicopter. Ready to fly.", e.x, e.y);
         return true;
     }

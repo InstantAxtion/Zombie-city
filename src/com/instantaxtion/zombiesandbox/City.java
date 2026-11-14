@@ -727,8 +727,8 @@ final class City {
             // Bigger and taller buildings take more to bring down.
             b.maxHp = b.hp = 150 + l[2] * l[3] * 22 + l[7] * 60;
             Random nr = new Random(l[5]);
-            if (k == CHURCH) b.name = country.churches[nr.nextInt(country.churches.length)];
-            else if (k == SCHOOL) b.name = country.schools[nr.nextInt(country.schools.length)];
+            if (k == CHURCH) { String[] ch = cfg.variety() ? country.churches37 : country.churches; b.name = ch[nr.nextInt(ch.length)]; }
+            else if (k == SCHOOL) { String[] sc = cfg.variety() ? country.schools37 : country.schools; b.name = sc[nr.nextInt(sc.length)]; }
             else if (k == TRAIN_STATION) {
                 b.name = "Central Station";
                 stationBuilding = b;
@@ -751,10 +751,12 @@ final class City {
                 stadiumNamed = true;
             }
             else if (k == MARKET) {
-                b.name = country.markets[nr.nextInt(country.markets.length)];
+                String[] mk = cfg.variety() ? country.markets37 : country.markets;
+                b.name = mk[nr.nextInt(mk.length)];
                 b.stock = 240;
             } else if (k == PHARMACY) {
-                b.name = country.pharmacies[nr.nextInt(country.pharmacies.length)];
+                String[] ph = cfg.variety() ? country.pharmacies37 : country.pharmacies;
+                b.name = ph[nr.nextInt(ph.length)];
                 b.stock = 60;
             } else if (k == SHOP) {
                 // Some shops are diners (and the rest are whatever kind of shop they are). ((16.9) No gun stores any more:
@@ -3229,7 +3231,7 @@ final class City {
         }
 
         // Street names: main roads get avenues and boulevards, the rest streets, lanes and courts.
-        List<String> names = new ArrayList<String>(Arrays.asList(country.streets));
+        List<String> names = new ArrayList<String>(Arrays.asList(cfg.variety() ? country.streets37 : country.streets));
         java.util.Collections.shuffle(names, rnd);
         int next = 0;
         for (Street st : streets) {
@@ -6043,8 +6045,9 @@ final class City {
             roof = 0xFF5E4A3A;
             wall = 0xFFC4A882;
         } else if (kind == SHOP) {
-            roof = country.shopRoofs[rnd.nextInt(country.shopRoofs.length)];
-            wall = country.shopWalls[rnd.nextInt(country.shopWalls.length)];
+            int[] sr = cfg.variety() ? country.shopRoofs37 : country.shopRoofs, sw = cfg.variety() ? country.shopWalls37 : country.shopWalls;
+            roof = sr[rnd.nextInt(sr.length)];
+            wall = sw[rnd.nextInt(sw.length)];
         } else if (kind == TOWER) {
             roof = 0xFF4B5536;
             wall = 0xFF6B7350;
@@ -6438,8 +6441,9 @@ final class City {
         int height = cfg.height();
         if (kind == HOUSE) {
             floors = 1 + rnd.nextInt(2);
-            roof = country.houseRoofs[rnd.nextInt(country.houseRoofs.length)];
-            wall = country.houseWalls[rnd.nextInt(country.houseWalls.length)];
+            int[] hr = cfg.variety() ? country.houseRoofs37 : country.houseRoofs, hw = cfg.variety() ? country.houseWalls37 : country.houseWalls;
+            roof = hr[rnd.nextInt(hr.length)];
+            wall = hw[rnd.nextInt(hw.length)];
         } else if (kind == WAREHOUSE) {
             floors = 1 + rnd.nextInt(2) + (height >= 2 ? 1 : 0);
             roof = WAREHOUSE_ROOFS[rnd.nextInt(WAREHOUSE_ROOFS.length)];
@@ -6447,7 +6451,8 @@ final class City {
         } else if (kind == APARTMENT) {
             floors = 3 + rnd.nextInt(4) + height * 2 + (cfg.towers() ? 6 : 0);
             roof = darken(ROOFS[rnd.nextInt(ROOFS.length)], 0.9f);
-            wall = country.apartmentWalls[rnd.nextInt(country.apartmentWalls.length)];
+            int[] aw = cfg.variety() ? country.apartmentWalls37 : country.apartmentWalls;
+            wall = aw[rnd.nextInt(aw.length)];
         } else if (kind == GARAGE) {
             floors = 3 + rnd.nextInt(2);
             roof = 0xFF6C6E70;

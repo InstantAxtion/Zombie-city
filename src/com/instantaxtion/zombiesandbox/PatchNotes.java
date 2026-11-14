@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.5";
-    static final int VERSION_CODE = 225;
+    static final String VERSION = "22.6";
+    static final int VERSION_CODE = 226;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.6  -  More of everything",
+                    "100 more one-of-a-kind buildings: 150 in all.",
+                    "Many more names, and officers and soldiers have ranks.",
+                    "Far more colours for houses, shops, flats, cars and people's clothes, hair and skin; more street and place names.",
+                    "Squad presets are only in the Squads button now, not repeated in the Cop and Soldier pickers.",
+            },
             {
                     "22.5  -  Population",
                     "Each city size now has a set population, rising smoothly: 2,500 on Tiny up to 30,000 on Large (Default 25,000).",

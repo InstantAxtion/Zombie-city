@@ -57,17 +57,17 @@ final class GameView extends View implements Menu.Host {
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
-            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_K9, -4, -10, -11};
+            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_K9, -4};
     private static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
-            "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop", "Response team", "Tactical team"};
+            "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
     private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
-            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR, -10, -11};
+            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
     private static final String[] MIL_NAMES = {"Soldier", "Commander", "Sniper", "Machine gunner", "National Guard",
-            "Grenadier", "Marine", "Recon scout", "Combat medic", "Combat engineer", "Mortar team", "Fire team", "Rifle squad"};
+            "Grenadier", "Marine", "Recon scout", "Combat medic", "Combat engineer", "Mortar team"};
     // One line about each option in the pickers.
     private static final String[] CIV_INFO = {"Goes about their day, runs and hides from zombies"};
     private static final String[] COP_INFO = {"Pistol, answers 911 calls", "Shield blocks bites from the front",
@@ -76,16 +76,12 @@ final class GameView extends View implements Menu.Host {
             "County deputy: patrols the back roads", "Patrols the trails and dirt roads, guards the ranger station",
             "Rescue specialist: finds the cut-off and gets them out",
             "Handler and police dog: the dog sniffs out hidden zombies and bites",
-            "On a police motorcycle: patrols fast and calls in the hordes it passes",
-            "Group: three officers, a riot cop and a marksman, in one tap",
-            "Group: four SWAT, a marksman and a K9 unit, in one tap"};
+            "On a police motorcycle: patrols fast and calls in the hordes it passes"};
     private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
             "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
-            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off",
-            "Group: two riflemen, a grenadier, a gunner and a medic, in one tap",
-            "Group: a commander and eight - riflemen, grenadier, gunner, medic and sniper - in one tap"};
+            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
     /** What the enemy tool makes: one of the dead. */
     private int enemyType() {
         return ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
@@ -7973,9 +7969,9 @@ final class GameView extends View implements Menu.Host {
                 // ((12.0) The specialists say what they are.)
                 : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman "
                 : e.role == Entity.ROLE_MOUNTED ? "Mounted officer " : e.role == Entity.ROLE_TRAFFIC ? "Traffic officer "
-                : e.role == Entity.ROLE_PRISON_GUARD ? "Prison guard " : "Officer ")
+                : e.role == Entity.ROLE_PRISON_GUARD ? "Prison guard " : Names.copRank(e.nameSeed) + " ")
                 + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
-        else if (e.type == Entity.SOLDIER) title = Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
+        else if (e.type == Entity.SOLDIER) title = (e.role == Entity.ROLE_COMMANDER ? "Capt. " : Names.soldierRank(e.nameSeed) + " ") + Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
         else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
         else title = Names.person(e.nameSeed) + "  -  " + Entity.NAMES[e.type];
         lines.add(doing(e));
@@ -8077,7 +8073,7 @@ final class GameView extends View implements Menu.Host {
         int kmh = Math.round(Math.abs(v.speed) * 0.55f);
         int aboard = v.crew.size() + v.riders.size() + v.passengers;
         // ((11.3) A police car or army truck out with nobody else aboard has its own driver, by name.)
-        String driver = v.driver != null ? (v.driver.type == Entity.COP ? "Officer " : v.driver.type == Entity.SOLDIER ? "Pvt. " : "")
+        String driver = v.driver != null ? (v.driver.type == Entity.COP ? Names.copRank(v.driver.nameSeed) + " " : v.driver.type == Entity.SOLDIER ? Names.soldierRank(v.driver.nameSeed) + " " : "")
                 + Names.person(v.driver.nameSeed) : null;
         String people = aboard == 0 ? (v.player != null ? "you're driving" : driver != null ? "driver only (" + driver + ")"
                 : v.occupied() ? "driver only" : "nobody aboard")
@@ -10258,15 +10254,6 @@ final class GameView extends View implements Menu.Host {
             return;
         }
         int type = tool == TOOL_ZOMBIE ? enemyType() : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
-        // ((22.0) A ready-made group: the whole of it in one tap (the brush size doesn't come into it).)
-        int preset = tool == TOOL_MIL ? MIL_ROLES[milVariant] : tool == TOOL_COP ? COP_ROLES[copVariant] : 0;
-        if (preset <= -10) {
-            int[] roles = tool == TOOL_MIL ? (preset == -10 ? World.FIRE_TEAM : World.RIFLE_SQUAD) : (preset == -10 ? World.RESPONSE_TEAM : World.TACTICAL_TEAM);
-            java.util.ArrayList<Entity> g = world.spawnGroup(roles, tool == TOOL_COP, wx, wy);
-            lastAction.addAll(g);
-            if (g.isEmpty() && world.messageTime <= 0) world.say("Nowhere to put them there");
-            return;
-        }
         int n = BRUSHES[brushIdx];
         // Only one commander at a time.
         if (tool == TOOL_MIL && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;

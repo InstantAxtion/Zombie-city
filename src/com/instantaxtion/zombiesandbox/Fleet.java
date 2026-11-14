@@ -752,7 +752,7 @@ final class Fleet {
         int m = c.carModels[w.rnd.nextInt(c.carModels.length)];
         if (m == M_BUS && !busOk) m = M_SEDAN;
         v.model = m;
-        v.color = m == M_TAXI ? c.taxiColor : m == M_BUS ? c.busColor : c.carColors[w.rnd.nextInt(c.carColors.length)];
+        v.color = m == M_TAXI ? c.taxiColor : m == M_BUS ? c.busColor : (w.city.cfg.variety() ? c.carColors37 : c.carColors)[w.rnd.nextInt((w.city.cfg.variety() ? c.carColors37 : c.carColors).length)];
     }
 
     /** (10.33) A road somewhere in town (for an army patrol through the streets), or null. */
