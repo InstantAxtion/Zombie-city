@@ -3,7 +3,7 @@ package com.instantaxtion.zombiesandbox;
 /** Someone in the city: a civilian, a cop, a soldier, a medic, a dog or one of the zombie kinds. */
 final class Entity {
     static final int CIVILIAN = 0, COP = 1, SOLDIER = 2, MEDIC = 3, DOG = 4, RAIDER = 5, ZOMBIE = 6, RUNNER = 7,
-            BRUTE = 8, CRAWLER = 9, SCREAMER = 10, ZOMBIE_DOG = 11, /** ((22.6) In the old spitter's place. */ BRUISER = 12, BLOATER = 13,
+            BRUTE = 8, /** ((25.0) In the old crawler's place: the giant, only ever put down by hand. */ GIANT = 9, SCREAMER = 10, ZOMBIE_DOG = 11, /** ((22.6) In the old spitter's place. */ BRUISER = 12, BLOATER = 13,
             /** (Firefighters went in 10.49: any in an old save load as civilians.) */
             FIREFIGHTER = 14,
             /** (The other game modes' gang members and enemy soldiers went in 19.6: any in an old save load as zombies.) */
@@ -11,19 +11,19 @@ final class Entity {
     static final int TYPE_COUNT = 17;
 
     /**
-     * (10.50) The kind someone of kind t is now: the kinds taken out of the game (crawlers, bloaters, spitters and
-     * screamers come back as ordinary zombies; firefighters, medics and raiders are ordinary people).
+     * (10.50) The kind someone of kind t is now: the kinds taken out of the game (bloaters, spitters and screamers
+     * come back as ordinary zombies - and crawlers, in saves from before 25.0: see SaveGame.type; firefighters, medics and raiders are ordinary people).
      */
     static int current(int t) {
         switch (t) {
-            case CRAWLER: case BLOATER: case SCREAMER: return ZOMBIE;
+            case BLOATER: case SCREAMER: return ZOMBIE;
             case FIREFIGHTER: case MEDIC: case RAIDER: return CIVILIAN;
             case GANGSTER: case INVADER: return ZOMBIE;
             default: return t;
         }
     }
     static final String[] NAMES = {"Civilian", "Cop", "Soldier", "Medic", "Dog", "Raider", "Zombie", "Runner", "Brute",
-            "Crawler", "Screamer", "Zombie dog", "Bruiser", "Bloater", "Firefighter", "Gang member", "Enemy soldier"};
+            "Giant", "Screamer", "Zombie dog", "Bruiser", "Bloater", "Firefighter", "Gang member", "Enemy soldier"};
 
     /** Soldiers' jobs: rifleman, the commander, snipers and machine gunners. */
     static final int ROLE_RIFLE = 0, ROLE_COMMANDER = 1, ROLE_SNIPER = 2, ROLE_GUNNER = 3;
@@ -207,6 +207,12 @@ final class Entity {
     transient float pathRetry;
     /** ((15.6) Locked up in the island prison (till it falls).) */
     boolean inmate;
+    /** ((25.0) Out of the prison in a break and on the run from the police, until they're caught. */
+    boolean escapee;
+    /** ((25.0) In a riot until then (game time); a police officer: the escapee they're after. */
+    transient float riotUntil;
+    transient float riotCd, riotX, riotY;
+    transient Entity collar;
     /** ((14.9) Flying lessons on the pad so far, for an officer or soldier training to be its pilot.) */
     float trainT;
     /** ((14.9) A mortar team: when it last fired (a new fire mission after a lull is called in), and its restocking.) */
@@ -454,6 +460,11 @@ final class Entity {
 
     boolean isArmed() {
         return type == COP || type == SOLDIER;
+    }
+
+    /** ((25.0) A brute or a giant: too big to be dropped with one lucky blow or shot, or shoved about. */
+    boolean big() {
+        return type == BRUTE || type == GIANT;
     }
 
     /** Anyone who can shoot: police, soldiers and civilians with a gun. */

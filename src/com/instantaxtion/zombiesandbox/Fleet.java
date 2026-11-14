@@ -50,6 +50,8 @@ final class Fleet {
     static final int K_IFV = 9, K_GUNTRUCK = 10;
     /** ((15.10) Planes at the airport: an airliner taking people out, a military transport flying troops in.) */
     static final int K_AIRLINER = 11, K_TRANSPORT = 12;
+    /** ((25.0) A passenger jet in trouble, coming down low over the city to crash. */
+    static final int K_CRASH = 13;
 
     /** Kinds of everyday car (which ones are about depends on the country). */
     static final int M_SEDAN = 0, M_PICKUP = 1, M_SUV = 2, M_KEI = 3, M_HATCH = 4, M_VAN = 5, M_TAXI = 6, M_BUS = 7,
@@ -2204,7 +2206,107 @@ final class Fleet {
         return false;
     }
 
+    /** ((25.0) A passenger jet in trouble: in low from far off, an engine on fire, down on (tx, ty). */
+    void sendCrashingPlane(float tx, float ty) {
+        Vehicle v = make(JET);
+        setKind(v, K_CRASH);
+        float a = w.rnd.nextFloat() * (float) Math.PI * 2;
+        v.angle = a;
+        v.x = tx - (float) Math.cos(a) * CRASH_RUN;
+        v.y = ty - (float) Math.sin(a) * CRASH_RUN;
+        v.tx = tx;
+        v.ty = ty;
+        v.speed = 210;
+        v.alt = 0.6f;
+        v.state = DRIVE;
+        vehicles.add(v);
+        w.emit(Sfx.JET, tx, ty);
+    }
+
+    /** ((25.0) How far out the crashing jet starts. */
+    static final float CRASH_RUN = 1100;
+
+    private boolean updateCrash(Vehicle v, float dt) {
+        float dx = v.tx - v.x, dy = v.ty - v.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        if (d < v.speed * dt + 2) {
+            w.planeCrashed(v.tx, v.ty, v.angle);
+            return true;
+        }
+        v.x += dx / d * v.speed * dt;
+        v.y += dy / d * v.speed * dt;
+        v.alt = Math.min(0.6f, d / CRASH_RUN * 0.6f);
+        float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
+        // A wing (and its engine) on fire, and black smoke pouring off it.
+        float ex = v.x - ca * 6 - sa * 30, ey = v.y - sa * 6 + ca * 30;
+        if (w.rnd.nextFloat() < dt * 50) w.particle(ex, ey, -ca * 20, -sa * 20, 0.4f, 2.5f + w.rnd.nextFloat() * 2, 0xFFFF8A2A, World.P_FIRE);
+        if (w.rnd.nextFloat() < dt * 40) w.particle(ex - ca * 10, ey - sa * 10, 0, 0, 2.5f, 5 + w.rnd.nextFloat() * 4, 0xFF2E2E2E, World.P_SMOKE);
+        if ((v.soundCd -= dt) <= 0) {
+            v.soundCd = 1.2f;
+            w.emit(Sfx.JET, v.x, v.y);
+        }
+        return false;
+    }
+
+    /**
+     * ((25.0) An ambulance out to a disaster: from the hospital (or in from the edge of town) with its lights going; at
+     * the scene it waits a while patching up the hurt nearby, then goes back. False if it can't get there.
+     */
+    boolean sendAmbulance(float tx, float ty) {
+        City.Facility h = city.nearestFacility(City.FACILITY_HOSPITAL, tx, ty);
+        float[] start = h != null ? city.nearestDrivable(h.gateX, h.gateY) : null;
+        if (start == null) {
+            float[] e = city.edgeSpawn(tx, ty);
+            start = e != null ? city.nearestDrivable(e[0], e[1]) : null;
+        }
+        float[] to = city.nearestDrivable(tx, ty);
+        if (start == null || to == null) return false;
+        Vehicle v = make(AMBULANCE);
+        v.x = start[0];
+        v.y = start[1];
+        v.homeX = start[0];
+        v.homeY = start[1];
+        if (!route(v, to[0], to[1])) return false;
+        v.state = DRIVE;
+        v.timer = 0;
+        v.angle = (float) Math.atan2(to[1] - v.y, to[0] - v.x);
+        vehicles.add(v);
+        w.emit(Sfx.AMB_SIREN, v.x, v.y);
+        return true;
+    }
+
+    private boolean ambulanceStep(Vehicle v, float dt) {
+        if (v.state == SCENE) {
+            v.speed = 0;
+            v.timer -= dt;
+            if ((v.checkCd -= dt) <= 0) {
+                v.checkCd = 1;
+                for (int i = 0, n = w.entities.size(); i < n; i++) {
+                    Entity e = w.entities.get(i);
+                    if (e.dead || e.isZombie() || e.infected || Math.abs(e.x - v.x) > 70 || Math.abs(e.y - v.y) > 70) continue;
+                    e.hp = Math.min(e.maxHp, e.hp + 8);
+                }
+            }
+            if (v.timer <= 0 || w.countZombiesNear(v.x, v.y, 50) >= 3) {
+                v.state = RETURN;
+                v.stuckTimer = 0;
+                return !route(v, v.homeX, v.homeY);
+            }
+            return false;
+        }
+        v.timer += dt;
+        boolean moving = driveStep(v, dt, 45, 1);
+        if (v.state == DRIVE && (!moving || v.timer > 90)) {
+            v.state = SCENE;
+            v.timer = 45;
+            v.speed = 0;
+            w.dispatch.chatter(Dispatch.WHO_POLICE, null, "EMS: On scene at " + city.placeName(v.x, v.y) + ", treating the injured.", v.x, v.y);
+            return false;
+        }
+        return v.state == RETURN && (!moving || v.timer > 200);
+    }
+
     private boolean updateJet(Vehicle v, float dt) {
+        if (v.kind == K_CRASH) return updateCrash(v, dt);
         if (v.kind == K_AIRLINER || v.kind == K_TRANSPORT) return updatePlane(v, dt);
         v.x += (float) Math.cos(v.angle) * v.speed * dt;
         v.y += (float) Math.sin(v.angle) * v.speed * dt;
@@ -4153,6 +4255,7 @@ final class Fleet {
 
     private boolean updateCar(Vehicle v, float dt) {
         if (!v.parked) v.pullTried = false;
+        if (v.type == AMBULANCE) return ambulanceStep(v, dt);
         if (v.kind == K_DOZER && v.state == SCENE) return dozerPush(v, dt);
         // ((14.0) Close, and the traffic rules won't take it the last bit up to a stopped vehicle: it goes straight in.)
         if (v.kind == K_DOZER && v.state == DRIVE && v.clearing != null && !v.clearing.removedFromFleet
@@ -7815,7 +7918,7 @@ final class Fleet {
         v.turret = turnTo(v.turret, aim, dt * 1.8f);
         if (z != null) {
             float off = Math.abs(aim - v.turret);
-            if (v.cannonCd <= 0 && off < 0.15f && w.countZombiesNear(z.x, z.y, 40) >= 3 && !w.peopleNear(z.x, z.y, 55)
+            if (v.cannonCd <= 0 && off < 0.15f && (w.countZombiesNear(z.x, z.y, 40) >= 3 || z.type == Entity.GIANT) && !w.peopleNear(z.x, z.y, 55)
                     && World.hypot(z.x - v.x, z.y - v.y) > 60) {
                 v.cannonCd = 3.5f;
                 w.tankShell(v.x + (float) Math.cos(v.turret) * 14, v.y + (float) Math.sin(v.turret) * 14, z.x, z.y);

@@ -451,6 +451,10 @@ final class SaveGame {
             out.writeInt(w.barrages);
             out.writeInt(w.perkStars);
             out.writeFloat(w.siteT);
+            // (Version 70, 25.0: the airstrike's cooldown, and the wreckage of planes that came down.)
+            out.writeFloat(Math.max(0, w.airstrikeReady - w.time));
+            out.writeInt(w.crashes.size());
+            for (float[] c : w.crashes) for (int k = 0; k < 4; k++) out.writeFloat(c[k]);
             // Version 71: the survivor bases.
             out.writeInt(w.bases.size());
             for (SurvivorBases.Base b : w.bases) {
@@ -484,6 +488,8 @@ final class SaveGame {
         t = version < 2 && t >= Entity.DOG ? t + 1 : t;
         // ((22.6) Type 12 was the spitter, long gone (they came back as zombies); it's the bruiser from version 68.)
         if (version < 68 && t == Entity.BRUISER) t = Entity.ZOMBIE;
+        // ((25.0) Type 9 was the crawler (back as a zombie); it's the giant from version 70.)
+        if (version < 70 && t == Entity.GIANT) t = Entity.ZOMBIE;
         // (Kinds no longer in the game load as what they'd be now: see Entity.current.)
         return Entity.current(t);
     }
@@ -555,8 +561,8 @@ final class SaveGame {
         out.writeBoolean(e.inmate);
         // Version 57 (17.0): a gang member's or enemy soldier's kit.
         out.writeByte(e.alpha ? 1 : 0); // (The other modes' kit until 19.6; from version 66 (21.0), whether it's an alpha.)
-        // Version 58 (17.2): under arrest.
-        out.writeByte(0);
+        // Version 58 (17.2): under arrest. ((25.0) Gone in 19.6; from version 70, an escaped inmate on the run.)
+        out.writeByte(e.escapee ? 1 : 0);
         // Version 59 (17.5): down and bleeding.
         out.writeFloat(0);
         // ((18.5) A hostage's captors; gone in 19.6.)
@@ -1075,6 +1081,11 @@ final class SaveGame {
                     if (version < 67) w.perkStars = Perks.legacy(w.perkStars);
                     w.siteT = in.readFloat();
                 }
+                if (version >= 70) {
+                    w.airstrikeReady = w.time + in.readFloat();
+                    int cn = in.readInt();
+                    for (int k = 0; k < cn; k++) w.crashes.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat()});
+                }
                 if (version >= 71) {
                     int bn = in.readInt();
                     for (int k = 0; k < bn; k++) {
@@ -1186,7 +1197,10 @@ final class SaveGame {
             int k = in.readByte();
             if (version >= 66) e.alpha = k == 1;
         }
-        if (version >= 58) in.readByte();
+        if (version >= 58) {
+            int k = in.readByte();
+            if (version >= 70) e.escapee = k == 1;
+        }
         if (version >= 59) in.readFloat();
         if (version >= 64) in.readInt();
         if (version >= 69) {

@@ -73,14 +73,14 @@ final class Defences {
             z.hp -= WIRE_HURT * dt;
             z.hurt = Math.max(z.hurt, 0.3f);
             if (up && z.hp <= 0) wireKills++;
-            c[2] -= (z.type == Entity.BRUTE ? WIRE_WEAR * 5 : WIRE_WEAR) * dt;
+            c[2] -= (z.type == Entity.GIANT ? WIRE_WEAR * 30 : z.type == Entity.BRUTE ? WIRE_WEAR * 5 : WIRE_WEAR) * dt;
             if (w.rnd.nextFloat() < dt * 0.8f) w.emit(Sfx.WIRE, c[0], c[1]);
             if (c[2] <= 0) {
                 wires.remove(i);
                 wired[t] = false;
                 w.wireGone(c[0], c[1]);
             }
-            return z.type == Entity.BRUTE ? 0.6f : WIRE_SLOW;
+            return z.type == Entity.GIANT ? 0.9f : z.type == Entity.BRUTE ? 0.6f : WIRE_SLOW;
         }
         // (The table said wire and there's none: put right.)
         wired[t] = false;

@@ -639,6 +639,7 @@ final class World {
                 case Entity.RUNNER: zs += 1.4f; break;
                 case Entity.BRUTE: zs += 4; break;
                 case Entity.BRUISER: zs += 2.2f; break;
+                case Entity.GIANT: zs += 14; break;
             }
             if (e.infected) zs += 0.8f;
         }
@@ -1334,7 +1335,8 @@ final class World {
     }
 
     int zombieCount() {
-        return counts[Entity.ZOMBIE] + counts[Entity.RUNNER] + counts[Entity.BRUTE] + counts[Entity.ZOMBIE_DOG] + counts[Entity.BRUISER];
+        return counts[Entity.ZOMBIE] + counts[Entity.RUNNER] + counts[Entity.BRUTE] + counts[Entity.ZOMBIE_DOG] + counts[Entity.BRUISER]
+                + counts[Entity.GIANT];
     }
 
     int humanCount() {
@@ -1486,6 +1488,16 @@ final class World {
                 e.skin = 0xFF829858;
                 e.mass = 1.9f;
                 break;
+            case Entity.GIANT:
+                // ((25.0) Only ever put down by hand: huge, slow, and it takes a squad's sustained fire, a tank or
+                // explosives to bring down (no lucky shot to the head does it).)
+                e.hp = GIANT_HP;
+                e.radius = 6.8f;
+                e.speed = 8 + rnd.nextFloat();
+                e.runSpeed = 11;
+                e.skin = 0xFF5C7448;
+                e.mass = 14f;
+                break;
             default:
                 // (Toned down in 10.50: tough, not a tank.)
                 e.hp = 170;
@@ -1498,9 +1510,9 @@ final class World {
         }
         if (e.isUndead()) {
             int base = originBody != 0 ? originBody
-                    : type == Entity.BRUTE ? 0xFF4D3F4F : type == Entity.BRUISER ? 0xFF6A3A34 : type == Entity.ZOMBIE_DOG ? DOGS[rnd.nextInt(DOGS.length)]
+                    : type == Entity.BRUTE ? 0xFF4D3F4F : type == Entity.GIANT ? 0xFF3A3036 : type == Entity.BRUISER ? 0xFF6A3A34 : type == Entity.ZOMBIE_DOG ? DOGS[rnd.nextInt(DOGS.length)]
                     : shirts()[rnd.nextInt(shirts().length)];
-            e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE || type == Entity.BRUISER ? 0.2f : 0.45f);
+            e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE || type == Entity.BRUISER || type == Entity.GIANT ? 0.2f : 0.45f);
             // ((12.4) This strain's own look.)
             int tint = strainTint();
             if (tint != 0 && type != Entity.ZOMBIE_DOG) e.skin = mix(e.skin, tint, 0.45f);
@@ -2131,6 +2143,7 @@ final class World {
             city.fieldWork(entities, Math.max(FIELD_MIN_WORK, city.fieldLastWork / steps + 1));
         }
         toolsStep(dt);
+        eventsStep(dt);
         dispatch.update(dt);
         if ((rosterCd -= dt) <= 0) {
             rosterCd = 5;
@@ -4277,7 +4290,8 @@ final class World {
     }
 
     private void thinkZombie(Entity z, float dt) {
-        if (z.blocked && !barriers.isEmpty()) bashBarrier(z, dt);
+        if (z.type == Entity.GIANT) giantStep(z, dt);
+        else if (z.blocked && !barriers.isEmpty()) bashBarrier(z, dt);
         z.chargeCd -= dt;
         if (z.surge > 0) z.surge -= dt;
         if (z.surgeCd > 0) z.surgeCd -= dt;
@@ -4292,7 +4306,7 @@ final class World {
         z.searchTimer -= dt;
         z.moanCd -= dt;
         if (z.scatterT > 0) z.scatterT -= dt;
-        if (rnd.nextFloat() < dt * 0.03f) emit(z.type == Entity.BRUTE ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
+        if (rnd.nextFloat() < dt * 0.03f) emit(z.big() ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
         // Senses: they see a long way in front, but only hear or smell what is close behind them. Once they
         // have spotted someone they keep track of them.
         // ((12.1) Balance: a little keener all round, 140 and 55 before.)
@@ -4526,7 +4540,7 @@ final class World {
                 float wx = Math.max(target.x0, Math.min(target.x1, z.x)) - z.x, wy = Math.max(target.y0, Math.min(target.y1, z.y)) - z.y;
                 steer(z, 0, 0, 0);
                 z.angle = turn(z.angle, (float) Math.atan2(wy, wx), dt * 4);
-                target.barricade -= (z.type == Entity.BRUTE ? 2.4f : z.type == Entity.BRUISER ? 1.4f : 0.8f) * dt * doorWeakness(target);
+                target.barricade -= (z.type == Entity.GIANT ? 8 : z.type == Entity.BRUTE ? 2.4f : z.type == Entity.BRUISER ? 1.4f : 0.8f) * dt * doorWeakness(target);
                 target.calmTimer = 0;
                 if (rnd.nextFloat() < dt * 0.6f) emit(Sfx.THUD, z.x, z.y);
                 z.stuckTime = 0;
@@ -4537,7 +4551,7 @@ final class World {
                 else steer(z, 0, 0, 0);
                 z.angle = turn(z.angle, (float) Math.atan2(ddy, ddx), dt * 4);
                 // ((10.58) Doors hold longer: a minute or two against a handful, not seconds.)
-                float dps = (z.type == Entity.BRUTE ? 10 : 4.5f) * (d < 14 ? 1 : 0.5f);
+                float dps = (z.type == Entity.GIANT ? 40 : z.type == Entity.BRUTE ? 10 : 4.5f) * (d < 14 ? 1 : 0.5f);
                 // (A group's fortified door holds a lot longer.)
                 if (target.holdout != null) dps *= 1 - target.holdout.fort * 0.006f;
                 // ((11.5) A bank's or a storage unit's door holds out far longer than a glass shop front.)
@@ -4564,7 +4578,8 @@ final class World {
                 if (car.speed < 15) {
                     steer(z, 0, 0, 0);
                     // Armour takes a lot of clawing; a car much less.
-                    float dps = car.type == Fleet.TANK ? (z.type == Entity.BRUTE ? 3 : 0.6f) : (z.type == Entity.BRUTE ? 10 : 4);
+                    float dps = car.type == Fleet.TANK ? (z.type == Entity.GIANT ? 12 : z.type == Entity.BRUTE ? 3 : 0.6f)
+                            : (z.type == Entity.GIANT ? 45 : z.type == Entity.BRUTE ? 10 : 4);
                     fleet.damage(car, dps * dt, false);
                     if (rnd.nextFloat() < dt * 1.5f) emit(Sfx.THUD, car.x, car.y);
                 } else {
@@ -4650,7 +4665,7 @@ final class World {
                     o.noiseTimer = 6;
                 }
             }
-        if (rnd.nextFloat() < 0.3f) emit(z.type == Entity.BRUTE ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
+        if (rnd.nextFloat() < 0.3f) emit(z.big() ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
     }
 
     private int tallyAt = -1;
@@ -5210,6 +5225,10 @@ final class World {
     private void bite(Entity z, Entity t, float nx, float ny) {
         // ((17.1) Not through a wall.)
         if (WALK_IN && city.insideOf(z.x, z.y) != city.insideOf(t.x, t.y) && !city.los(z.x, z.y, t.x, t.y)) return;
+        if (z.type == Entity.GIANT) {
+            giantSwipe(z, t, nx, ny);
+            return;
+        }
         // Body armour stops a lot of bites, from any side.
         if (t.type == Entity.COP && t.role == Entity.ROLE_SWAT && rnd.nextFloat() < 0.45f) {
             z.biteCd = 0.8f;
@@ -5221,7 +5240,7 @@ final class World {
             float face = (float) Math.cos(t.angle) * -nx + (float) Math.sin(t.angle) * -ny;
             if (face > 0.35f && rnd.nextFloat() < 0.85f) {
                 z.biteCd = 0.8f;
-                z.stun = Math.max(z.stun, z.type == Entity.BRUTE ? 0.2f : 0.5f);
+                z.stun = Math.max(z.stun, z.big() ? 0.2f : 0.5f);
                 tryMove(z, -nx * 5 / z.mass, -ny * 5 / z.mass);
                 emit(Sfx.SHIELD, t.x, t.y);
                 return;
@@ -5258,6 +5277,12 @@ final class World {
         float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
         // (10.45) Not a sure thing: a shove can glance off or be shrugged off, the more so from the untrained, against
         // a big one, or with more of them pressing in. (Only the one you're controlling shoves when you say.)
+        // ((25.0) Nobody shoves a giant.)
+        if (z.type == Entity.GIANT) {
+            e.angle = (float) Math.atan2(ddy, ddx);
+            emit(Sfx.THUD, z.x, z.y);
+            return;
+        }
         if (e != controlled) {
             float chance = strong ? 0.72f : 0.5f;
             if (z.type == Entity.BRUTE) chance -= 0.35f;
@@ -5390,10 +5415,10 @@ final class World {
         // ((14.8) A civilian wading in with something they've just picked up lands weaker blows, further apart.)
         boolean wild = wildSwing;
         if (wild) e.meleeCd += 0.6f;
-        if (z.isUndead() && z.type != Entity.BRUTE && rnd.nextFloat() < (wild ? 0.03f : axe ? 0.25f : 0.1f)) z.hp = 0;
+        if (z.isUndead() && !z.big() && rnd.nextFloat() < (wild ? 0.03f : axe ? 0.25f : 0.1f)) z.hp = 0;
         else z.hp -= (axe ? 36 : 22) * (wild ? 0.55f : 1);
         z.hurt = 1;
-        z.stun = Math.max(z.stun, z.type == Entity.BRUTE ? 0.2f : axe ? 0.4f : 0.8f);
+        z.stun = Math.max(z.stun, z.big() ? 0.2f : axe ? 0.4f : 0.8f);
         tryMove(z, ddx / d * (axe ? 5 : 9) / z.mass, ddy / d * (axe ? 5 : 9) / z.mass);
         bloodBurst(z.x, z.y, 3, ddx / d, ddy / d);
         emit(Sfx.MELEE, z.x, z.y);
@@ -5814,6 +5839,9 @@ final class World {
         if (e.base != null && baseMember(e, dt)) return;
         // ((14.2) A raider gang: out to strip the shops, and they'll shoot whoever's there for the same.)
         if (e.raider && raiderStep(e, dt)) return;
+        // ((25.0) In a riot, or on the run from a prison break.)
+        if (e.riotUntil > 0 && e != controlled && riotStep(e, dt)) return;
+        if (e.escapee && e != controlled && escapeeStep(e, dt)) return;
         // ((15.6) Locked up in the island prison: about the yard, and away from the dead if they're in there too.)
         if (e.inmate && !prisonFallen && e != controlled) {
             Entity z = nearest(e, 90, true, false);
@@ -7742,6 +7770,593 @@ final class World {
         return m;
     }
 
+    // ---- ((25.0) The giant, and the plane crash, the prison break and the riot ----
+
+    /** ((25.0) The giant: its health, how far past its reach it smashes barricades, and how fast. */
+    static final float GIANT_HP = 1200, GIANT_REACH = 10, GIANT_SMASH = 240;
+
+    /** ((25.0) A giant on the move, every step: barricades, wire and cars in its way give. */
+    private void giantStep(Entity z, float dt) {
+        // (Hardly staggered by anything.)
+        if (z.stun > 0.3f) z.stun = 0.3f;
+        if (!barriers.isEmpty()) bashBarrier(z, dt);
+        float reach = z.radius * 2.2f;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (Fleet.offRoad(v)) continue;
+            float dx = v.x - z.x, dy = v.y - z.y, r = reach + v.length() * 0.45f;
+            if (Math.abs(dx) > r || Math.abs(dy) > r) continue;
+            float d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            if (d > r) continue;
+            // Shoved aside and turned about, crumpled as it goes: a car rolls over, a tank barely moves.
+            float heavy = v.type == Fleet.TANK ? 0.15f : v.type == Fleet.TRUCK ? 0.5f : 1;
+            float push = Math.min(4, (r - d) * 0.4f + 14 * dt) * heavy;
+            float nx = v.x + dx / d * push, ny = v.y + dy / d * push;
+            if (!city.solidAt(nx, ny)) {
+                v.x = nx;
+                v.y = ny;
+            }
+            v.speed *= 0.5f;
+            v.angle += ((z.nameSeed & 1) == 0 ? 1 : -1) * dt * 2.2f * heavy;
+            fleet.damage(v, (v.type == Fleet.TANK ? 8 : 55) * dt, false);
+            if (rnd.nextFloat() < dt * 2) emit(Sfx.CRASH, v.x, v.y);
+            if (rnd.nextFloat() < dt * 8)
+                particle(v.x, v.y, rnd.nextFloat() * 50 - 25, rnd.nextFloat() * 50 - 25, 0.4f, 0.7f, 0xFFCFE8F2, P_DOT);
+        }
+    }
+
+    /** ((25.0) A giant's swipe: a heavy blow that throws whoever it hits back (no bite: nobody turns into one of these). */
+    private void giantSwipe(Entity z, Entity t, float nx, float ny) {
+        z.biteCd = 1.7f;
+        z.biteAt = time;
+        boolean shield = t.type == Entity.COP && t.role == Entity.ROLE_RIOT
+                && (float) Math.cos(t.angle) * -nx + (float) Math.sin(t.angle) * -ny > 0.35f;
+        t.hp -= shield ? 12 : 32;
+        t.hurt = 1;
+        t.killedByZombie = true;
+        t.fleeTimer = 3;
+        t.threatX = z.x;
+        t.threatY = z.y;
+        float throwBy = (shield ? 5 : 10) / t.mass;
+        for (int k = 0; k < 3; k++) tryMove(t, nx * throwBy, ny * throwBy);
+        t.knockX = nx * 200 / t.mass;
+        t.knockY = ny * 200 / t.mass;
+        t.stun = Math.max(t.stun, shield ? 0.4f : 0.9f);
+        bloodBurst(t.x, t.y, 5, nx, ny);
+        emit(shield ? Sfx.SHIELD : Sfx.MELEE, t.x, t.y);
+        if (rnd.nextFloat() < 0.4f) emit(Sfx.GROAN_DEEP, z.x, z.y);
+    }
+
+    private float giantSaidAt = -99;
+    int giantsPlaced, giantsKilled;
+
+    /** ((25.0) Giants put down by hand: the first call about them. */
+    void giantPlaced(Entity z) {
+        giantsPlaced++;
+        if (time - giantSaidAt < 20) return;
+        giantSaidAt = time;
+        dispatch.say(Dispatch.WHO_911, null, "\"There's something huge on " + city.placeName(z.x, z.y)
+                + "! It's tearing through cars like paper!\"", z.x, z.y, true);
+        dispatch.sighting(z.x, z.y, null);
+    }
+
+    /** ((25.0) A giant brought down. */
+    private void giantDown(Entity z) {
+        giantsKilled++;
+        dispatch.say(Dispatch.WHO_POLICE, null, "All units: the giant on " + city.placeName(z.x, z.y) + " is down. Repeat, it's down.", z.x, z.y, true);
+        timeline("A giant was brought down", z.x, z.y);
+        noise(z.x, z.y, 200);
+    }
+
+    /** ((25.0) The airstrike's cooldown: game time it's next ready. */
+    float airstrikeReady;
+    static final float AIRSTRIKE_COOLDOWN = 90;
+
+    /** ((25.0) Whole seconds until another airstrike can be called (0: ready). */
+    int airstrikeWait() {
+        return Math.max(0, (int) Math.ceil(airstrikeReady - time));
+    }
+
+    /** ((25.0) The sandbox's airstrike: free, but one every minute and a half. True if the jet's on its way. */
+    boolean freeAirstrike(float x, float y) {
+        int wait = airstrikeWait();
+        if (wait > 0) {
+            say("Airstrike not ready: " + wait + "s");
+            return false;
+        }
+        airstrike(x, y);
+        airstrikeReady = time + AIRSTRIKE_COOLDOWN;
+        return true;
+    }
+
+    /** ((25.0) Where planes came down: x, y, heading, seconds since. */
+    final ArrayList<float[]> crashes = new ArrayList<float[]>();
+    static final float CRASH_BURN = 75, CRASH_SMOKE = 200;
+    int planeCrashes;
+
+    /** ((25.0) A passenger jet coming down on (x, y). False if there's nowhere there for it to come down. */
+    boolean planeCrash(float x, float y) {
+        float[] p = city.findWalkable(x, y);
+        if (p == null) return false;
+        fleet.sendCrashingPlane(p[0], p[1]);
+        dispatch.say(Dispatch.WHO_INFO, null, "News: Air traffic control has lost contact with a passenger jet. It's coming down over "
+                + city.placeName(p[0], p[1]) + "!", p[0], p[1], true);
+        return true;
+    }
+
+    /** ((25.0) The jet hits the ground at (x, y) going along a: the fireball, the wreck, and those who walk out of it. */
+    void planeCrashed(float x, float y, float a) {
+        planeCrashes++;
+        float ca = (float) Math.cos(a), sa = (float) Math.sin(a);
+        explode(x, y, 75, 320);
+        // Down the line it skidded along, and the wings' fuel going up a moment after.
+        for (int k = 1; k <= 4; k++)
+            blastLater(x - ca * k * 26 + (rnd.nextFloat() - 0.5f) * 20, y - sa * k * 26 + (rnd.nextFloat() - 0.5f) * 20, 50, 160, 0.3f + k * 0.35f);
+        for (int k = 0; k < 7; k++) decal(x - ca * k * 14, y - sa * k * 14, 9 + rnd.nextFloat() * 6, 0xAA121212);
+        if (crashes.size() >= 4) crashes.remove(0);
+        crashes.add(new float[]{x, y, a, 0});
+        // Those who walk out of it, some hurt, a few bitten; and the infected aboard.
+        int alive = 0;
+        for (int k = 0; k < 9; k++) {
+            float ang = a + 1.57f * (k % 2 == 0 ? 1 : -1) + (rnd.nextFloat() - 0.5f) * 1.2f, r = 34 + rnd.nextFloat() * 22;
+            Entity e = spawn(Entity.CIVILIAN, x + (float) Math.cos(ang) * r - ca * k * 6, y + (float) Math.sin(ang) * r - sa * k * 6);
+            if (e == null) continue;
+            alive++;
+            e.hp *= 0.45f + rnd.nextFloat() * 0.45f;
+            e.hurt = 1;
+            e.home = null;
+            e.fleeTimer = 4 + rnd.nextFloat() * 4;
+            e.threatX = x;
+            e.threatY = y;
+            if (k % 3 == 1) {
+                e.infected = true;
+                e.infectTimer = turnTime(25 + rnd.nextFloat() * 30);
+            }
+        }
+        int dead = 0;
+        for (int k = 0; k < 5; k++) {
+            float ang = rnd.nextFloat() * TAU, r = 26 + rnd.nextFloat() * 26;
+            Entity z = spawn(Entity.ZOMBIE, x + (float) Math.cos(ang) * r, y + (float) Math.sin(ang) * r);
+            if (z == null) continue;
+            dead++;
+            z.hp *= 0.7f;
+            z.stun = 1.5f;
+        }
+        banner("PLANE CRASH", "A passenger jet has come down on " + city.placeName(x, y) + ". Survivors are walking out of the wreck - and not all of them are well.");
+        timeline("A passenger jet crashed", x, y);
+        dispatch.say(Dispatch.WHO_911, null, "\"A plane just came down on " + city.placeName(x, y) + "! There's fire everywhere - people are walking out of it!\"", x, y, true);
+        if (dead > 0) dispatch.sighting(x, y, null);
+        boolean amb = fleet.sendAmbulance(x, y);
+        dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: All units, aircraft down at " + city.placeName(x, y) + "."
+                + (amb ? " Ambulance en route." : "") + (alive > 0 ? " Reports of " + alive + " survivors." : ""), x, y);
+    }
+
+    /** ((25.0) The prison break: every inmate out of the gate at once and scattering. False if there's no prison, or it's already open. */
+    int escaped, recaptured;
+
+    boolean prisonBreak() {
+        if (city.prison == null || city.prisonGate == null) {
+            say("No prison on this map");
+            return false;
+        }
+        if (prisonFallen) {
+            say("The prison's already open");
+            return false;
+        }
+        prisonFallen = true;
+        city.openPrisonGate();
+        routesChanged();
+        int loose = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (!e.inmate) continue;
+            e.inmate = false;
+            if (e.dead) continue;
+            e.escapee = true;
+            e.riotX = e.riotY = 0;
+            loose++;
+        }
+        escaped += loose;
+        float gx = (city.prisonGate[0] + 1.5f) * City.T, gy = city.prisonGate[1] * City.T;
+        emit(Sfx.ALARM, gx, gy);
+        banner("PRISON BREAK", loose + " inmates have broken out of the prison and are scattering into town.");
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Prison break at " + city.placeName(gx, gy) + "! " + loose
+                + " inmates over the wall. All available units, round them up.", gx, gy, true);
+        timeline("A prison break: " + loose + " inmates loose", gx, gy);
+        return true;
+    }
+
+    /** ((25.0) On the run: from the dead like anyone, from the police most of all, and away into town. */
+    private boolean escapeeStep(Entity e, float dt) {
+        if (city.fieldAt(city.zombieDist, e.x, e.y) <= 100 / City.T + 6 && nearest(e, 90, true, false) != null) return false;
+        Entity cop = nearestPolice(e.x, e.y, 75);
+        if (cop != null) {
+            float d = (float) World.hypot(e.x - cop.x, e.y - cop.y) + 0.001f;
+            flee(e, (e.x - cop.x) / d, (e.y - cop.y) / d, e.runSpeed * 0.85f);
+            return true;
+        }
+        if ((e.riotX == 0 && e.riotY == 0) || World.hypot(e.riotX - e.x, e.riotY - e.y) < 14 || e.stuckTime > 4) {
+            float[] p = city.randomWalkableInTown(rnd);
+            e.riotX = p[0];
+            e.riotY = p[1];
+            e.stuckTime = 0;
+        }
+        walkToSpot(e, e.riotX, e.riotY, e.speed * 1.3f);
+        return true;
+    }
+
+    /** ((25.0) An officer after an escaped inmate: runs them down and takes them in. False to get on as usual. */
+    private boolean collarStep(Entity e, float dt) {
+        Entity s = e.collar;
+        if (s.dead || s.removed || !s.escapee || World.hypot(s.x - e.x, s.y - e.y) > 700 || nearest(e, 100, true, false) != null) {
+            e.collar = null;
+            return false;
+        }
+        float d = (float) World.hypot(s.x - e.x, s.y - e.y);
+        if (d < e.radius + s.radius + 5) {
+            s.escapee = false;
+            s.dead = true;
+            s.removed = true;
+            e.collar = null;
+            recaptured++;
+            int left = 0;
+            for (int i = 0, n = entities.size(); i < n; i++) if (entities.get(i).escapee && !entities.get(i).dead) left++;
+            dispatch.chatter(Dispatch.WHO_POLICE, e, "Escapee in custody on " + city.placeName(e.x, e.y) + "."
+                    + (left > 0 ? " " + left + " still at large." : " That's the last of them."), e.x, e.y);
+            if (left == 0) timeline("The last escaped inmate was caught", e.x, e.y);
+            return true;
+        }
+        walkToSpot(e, s.x, s.y, e.runSpeed);
+        return true;
+    }
+
+    /** ((25.0) The nearest police officer to (x, y) within r, from the grid. */
+    private Entity nearestPolice(float x, float y, float r) {
+        if (hashSize < 0) return null;
+        Entity best = null;
+        float bd = r * r;
+        int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
+        int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.type != Entity.COP) continue;
+                    float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
+                    if (d < bd) {
+                        bd = d;
+                        best = o;
+                    }
+                }
+            }
+        return best;
+    }
+
+    /** ((25.0) The riot: x, y, when it ends; the cars burnt, the shops looted, those held; the riot squad sent. */
+    float[] riot;
+    private int riotCars, riotLoots, riotHeld;
+    private final ArrayList<Entity> riotSquad = new ArrayList<Entity>();
+    int riots;
+    static final float RIOT_TIME = 120;
+
+    /** ((25.0) The crowd round (x, y) riots (topped up with a few more to make a crowd); the riot police are called. */
+    boolean riot(float x, float y) {
+        if (riot != null) {
+            say("There's a riot on already, on " + city.placeName(riot[0], riot[1]));
+            return false;
+        }
+        float[] p = city.findWalkable(x, y);
+        if (p == null) return false;
+        x = p[0];
+        y = p[1];
+        float until = time + RIOT_TIME;
+        int n = 0;
+        for (int i = 0, c = entities.size(); i < c; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.CIVILIAN || e.inmate || e.infected || e == controlled || e.zone != null) continue;
+            if ((e.x - x) * (e.x - x) + (e.y - y) * (e.y - y) > 150 * 150) continue;
+            rioter(e, x, y, until);
+            n++;
+        }
+        for (int k = n; k < 16; k++) {
+            double a = rnd.nextFloat() * Math.PI * 2;
+            float r = 20 + rnd.nextFloat() * 60;
+            Entity e = spawn(Entity.CIVILIAN, x + (float) Math.cos(a) * r, y + (float) Math.sin(a) * r);
+            if (e == null) continue;
+            rioter(e, x, y, until);
+            n++;
+        }
+        if (n == 0) return false;
+        riot = new float[]{x, y, until};
+        riotCars = riotLoots = riotHeld = 0;
+        riots++;
+        emit(Sfx.PANIC, x, y);
+        scareBirds(x, y, 200);
+        dispatch.say(Dispatch.WHO_911, null, "\"There's a riot on " + city.placeName(x, y) + "! They're smashing windows and setting cars on fire!\"", x, y, true);
+        timeline("A riot broke out", x, y);
+        callRiotPolice(x, y);
+        return true;
+    }
+
+    private void rioter(Entity e, float x, float y, float until) {
+        e.riotUntil = until - rnd.nextFloat() * 15;
+        e.riotCd = rnd.nextFloat();
+        e.riotX = x;
+        e.riotY = y;
+        e.collar = null;
+        e.fleeTimer = 0;
+        e.building = null;
+        if (e.task == Dispatch.T_HIDE) e.task = Dispatch.T_NONE;
+    }
+
+    /** ((25.0) Six riot officers to the riot: those about town first, the rest from the station. */
+    private void callRiotPolice(float x, float y) {
+        riotSquad.clear();
+        for (int pass = 0; pass < 2 && riotSquad.size() < 6; pass++)
+            for (int i = 0, n = entities.size(); i < n && riotSquad.size() < 6; i++) {
+                Entity e = entities.get(i);
+                if (e.dead || e.type != Entity.COP || e == controlled || (pass == 0) != (e.role == Entity.ROLE_RIOT)) continue;
+                if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_PATROL) continue;
+                if (World.hypot(e.x - x, e.y - y) > (pass == 0 ? 1500 : 450)) continue;
+                riotSquad.add(e);
+            }
+        float[] at = Campaign.arrival(this, true, x, y);
+        for (int k = riotSquad.size(); k < 6 && at != null; k++) {
+            Entity e = spawnCop(Entity.ROLE_RIOT, at[0] + (k % 3) * 6, at[1] + (k / 3) * 6);
+            if (e == null) break;
+            e.outsider = true;
+            riotSquad.add(e);
+        }
+        if (riotSquad.isEmpty()) {
+            dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: No units free for the riot on " + city.placeName(x, y) + ".", x, y);
+            return;
+        }
+        dispatch.order(riotSquad, x, y);
+        dispatch.say(Dispatch.WHO_POLICE, riotSquad.get(0), "Riot squad responding to " + city.placeName(x, y) + ". Shields up, batons out.", x, y);
+    }
+
+    /** ((25.0) In the riot: at the police lines, looting the shops, surging through the street. False to get on as usual. */
+    private boolean riotStep(Entity e, float dt) {
+        if (riot == null || time > e.riotUntil) {
+            e.riotUntil = 0;
+            e.collar = null;
+            return false;
+        }
+        // (The dead turning up end it for them: they run like anyone.)
+        if (city.fieldAt(city.zombieDist, e.x, e.y) <= 100 / City.T + 6 && nearest(e, 80, true, false) != null) {
+            e.riotUntil = 0;
+            e.collar = null;
+            return false;
+        }
+        e.riotCd -= dt;
+        if (e.riotCd <= 0) {
+            e.riotCd = 3 + rnd.nextFloat() * 3;
+            float roll = rnd.nextFloat();
+            Entity cop = roll < 0.4f ? nearestPolice(e.x, e.y, 110) : null;
+            e.collar = cop;
+            if (cop == null) {
+                City.Building shop = roll < 0.75f ? riotShop(riot[0], riot[1]) : null;
+                if (shop != null) {
+                    e.riotX = shop.doorX + rnd.nextFloat() * 16 - 8;
+                    e.riotY = shop.doorY + rnd.nextFloat() * 16 - 8;
+                } else {
+                    e.riotX = riot[0] + rnd.nextFloat() * 110 - 55;
+                    e.riotY = riot[1] + rnd.nextFloat() * 110 - 55;
+                }
+            }
+            if (rnd.nextFloat() < 0.12f) emit(Sfx.SCREAM, e.x, e.y);
+        }
+        Entity c = e.collar;
+        if (c != null && !c.dead) {
+            float dx = c.x - e.x, dy = c.y - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            if (d > e.radius + c.radius + 3) walkToSpot(e, c.x, c.y, e.runSpeed * 0.8f);
+            else {
+                steer(e, 0, 0, 0);
+                e.angle = (float) Math.atan2(dy, dx);
+                if (e.meleeCd <= 0) {
+                    // A blow at the line: a shield takes it; an officer without one is roughed up (never badly).
+                    e.meleeCd = 1.4f + rnd.nextFloat();
+                    e.swingAt = time;
+                    boolean shield = c.role == Entity.ROLE_RIOT && (float) Math.cos(c.angle) * -dx / d + (float) Math.sin(c.angle) * -dy / d > 0.2f;
+                    if (shield) emit(Sfx.SHIELD, c.x, c.y);
+                    else {
+                        if (c.hp > c.maxHp * 0.6f) c.hp -= 2;
+                        c.hurt = 0.5f;
+                        emit(Sfx.THUD, c.x, c.y);
+                    }
+                }
+            }
+            return true;
+        }
+        e.collar = null;
+        walkToSpot(e, e.riotX, e.riotY, e.speed * 1.6f);
+        return true;
+    }
+
+    /** ((25.0) A shop near the riot, not yet looted (or any shop near it), or null. */
+    private City.Building riotShop(float x, float y) {
+        City.Building best = null;
+        float bd = 170 * 170;
+        for (int i = 0, n = city.buildings.size(); i < n; i++) {
+            City.Building b = city.buildings.get(i);
+            if (!isShop(b) || b.collapsed) continue;
+            float d = (b.doorX - x) * (b.doorX - x) + (b.doorY - y) * (b.doorY - y) + (b.smashed ? 60 * 60 : 0);
+            if (d < bd) {
+                bd = d;
+                best = b;
+            }
+        }
+        return best;
+    }
+
+    private float eventsTick;
+
+    /** ((25.0) Every step: the wrecks burning; once a second, the riot and the escapees. */
+    private void eventsStep(float dt) {
+        for (int i = 0, n = crashes.size(); i < n; i++) {
+            float[] c = crashes.get(i);
+            c[3] += dt;
+            if (c[3] > CRASH_SMOKE) continue;
+            float ca = (float) Math.cos(c[2]), sa = (float) Math.sin(c[2]);
+            float along = rnd.nextFloat() * 60 - 20, fx = c[0] - ca * along + (rnd.nextFloat() - 0.5f) * 14, fy = c[1] - sa * along + (rnd.nextFloat() - 0.5f) * 14;
+            if (c[3] < CRASH_BURN && rnd.nextFloat() < dt * 30)
+                particle(fx, fy, rnd.nextFloat() * 10 - 5, -8 - rnd.nextFloat() * 12, 0.5f + rnd.nextFloat() * 0.5f, 2 + rnd.nextFloat() * 3,
+                        rnd.nextBoolean() ? 0xFFFFB030 : 0xFFFF6A1A, P_FIRE);
+            if (rnd.nextFloat() < dt * (c[3] < CRASH_BURN ? 10 : 3))
+                particle(fx, fy, rnd.nextFloat() * 8 - 4, -6 - rnd.nextFloat() * 8, 2 + rnd.nextFloat() * 1.5f, 5 + rnd.nextFloat() * 5, 0xFF3A3A3A, P_SMOKE);
+        }
+        if ((eventsTick -= dt) > 0) return;
+        eventsTick = 1;
+        // The fire burns anyone who stands in it.
+        for (int i = 0, n = crashes.size(); i < n; i++) {
+            float[] c = crashes.get(i);
+            if (c[3] >= CRASH_BURN) continue;
+            for (int k = 0, m = entities.size(); k < m; k++) {
+                Entity e = entities.get(k);
+                if (e.dead || Math.abs(e.x - c[0]) > 30 || Math.abs(e.y - c[1]) > 30) continue;
+                if ((e.x - c[0]) * (e.x - c[0]) + (e.y - c[1]) * (e.y - c[1]) > 18 * 18) continue;
+                e.hp -= 6;
+                e.hurt = 1;
+                e.killedByZombie = false;
+            }
+        }
+        if (riot != null) riotTick();
+        if (escaped > recaptured) roundUp();
+    }
+
+    /** ((25.0) Once a second in a riot: the looting, the cars set alight, the police lines; and the end of it. */
+    private void riotTick() {
+        if (time > riot[2]) {
+            endRiot();
+            return;
+        }
+        int rioters = 0;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.riotUntil <= time) continue;
+            rioters++;
+            // A shop window put in, and the place stripped.
+            if (rnd.nextFloat() < 0.5f) {
+                City.Building b = riotShop(e.x, e.y);
+                if (b != null && !b.smashed && World.hypot(b.doorX - e.x, b.doorY - e.y) < 20) {
+                    smash(b);
+                    if (b.stock > 0) b.stock = Math.max(0, b.stock - 60);
+                    if (riotLoots++ == 0)
+                        dispatch.say(Dispatch.WHO_911, null, "\"They're looting " + (b.name != null ? b.name : "the shops") + " on " + city.placeName(b.doorX, b.doorY) + "!\"", b.doorX, b.doorY);
+                }
+            }
+            // A car or two set alight.
+            if (riotCars < 2 && rnd.nextFloat() < 0.04f && burnCarNear(e.x, e.y)) {
+                riotCars++;
+                if (riotCars == 1) dispatch.say(Dispatch.WHO_911, null, "\"They've set a car on fire on " + city.placeName(e.x, e.y) + "!\"", e.x, e.y);
+            }
+            // At the police lines: shoved back by the shields, and some taken away or sent home.
+            Entity cop = nearestPolice(e.x, e.y, e.radius + 9);
+            if (cop != null) {
+                float dx = e.x - cop.x, dy = e.y - cop.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+                tryMove(e, dx / d * 7, dy / d * 7);
+                e.stun = Math.max(e.stun, 0.8f);
+                cop.swingAt = time;
+                cop.angle = (float) Math.atan2(-dy, -dx);
+                emit(Sfx.THUD, e.x, e.y);
+                float roll = rnd.nextFloat();
+                if (roll < 0.18f) {
+                    e.riotUntil = 0;
+                    e.dead = true;
+                    e.removed = true;
+                    riotHeld++;
+                } else if (roll < 0.4f) {
+                    e.riotUntil = 0;
+                    e.collar = null;
+                    e.fleeTimer = 4;
+                    e.threatX = cop.x;
+                    e.threatY = cop.y;
+                }
+            }
+        }
+        if (rioters == 0) endRiot();
+    }
+
+    /** ((25.0) A car near (x, y) set alight: a parked or abandoned one in the street, or one parked at the kerb. */
+    private boolean burnCarNear(float x, float y) {
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = fleet.vehicles.get(i);
+            if (v.type != Fleet.CAR || v.burnt || v.driver != null || !v.riders.isEmpty() || !(v.parked || v.broken || v.speed < 1)) continue;
+            if (Math.abs(v.x - x) > 22 || Math.abs(v.y - y) > 22) continue;
+            fleet.damage(v, v.maxHp * 1.6f, false);
+            v.burnt = true;
+            for (int k = 0; k < 12; k++)
+                particle(v.x, v.y, rnd.nextFloat() * 20 - 10, -10 - rnd.nextFloat() * 10, 0.6f, 2.5f, 0xFFFF8A2A, P_FIRE);
+            return true;
+        }
+        int tx0 = (int) (x / City.T), ty0 = (int) (y / City.T);
+        for (int ty = Math.max(0, ty0 - 1); ty <= Math.min(city.h - 1, ty0 + 1); ty++)
+            for (int tx = Math.max(0, tx0 - 1); tx <= Math.min(city.w - 1, tx0 + 1); tx++) {
+                int i = ty * city.w + tx;
+                if (burned[i] || !city.burnParkedCar(i)) continue;
+                burnTile(i);
+                for (int k = 0; k < 12; k++)
+                    particle((tx + 0.5f) * City.T, (ty + 0.5f) * City.T, rnd.nextFloat() * 20 - 10, -10 - rnd.nextFloat() * 10, 0.6f, 2.5f, 0xFFFF8A2A, P_FIRE);
+                return true;
+            }
+        return false;
+    }
+
+    /** ((25.0) The riot's over: everyone goes home, the riot squad back to its rounds. */
+    private void endRiot() {
+        float x = riot[0], y = riot[1];
+        riot = null;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.riotUntil <= 0) continue;
+            e.riotUntil = 0;
+            e.collar = null;
+        }
+        ArrayList<Entity> back = new ArrayList<Entity>();
+        for (int i = 0; i < riotSquad.size(); i++) if (!riotSquad.get(i).dead) back.add(riotSquad.get(i));
+        riotSquad.clear();
+        if (!back.isEmpty()) dispatch.dismiss(back);
+        dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: The riot on " + city.placeName(x, y) + " has been dispersed."
+                + (riotHeld > 0 ? " " + riotHeld + " arrested." : ""), x, y);
+        timeline("The riot was dispersed", x, y);
+    }
+
+    /** ((25.0) Once a second while inmates are loose: free officers nearby set off after them, one officer to each. */
+    private void roundUp() {
+        java.util.HashSet<Entity> taken = new java.util.HashSet<Entity>();
+        ArrayList<Entity> loose = new ArrayList<Entity>();
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead) continue;
+            if (e.escapee) loose.add(e);
+            else if (e.collar != null && e.type == Entity.COP) taken.add(e.collar);
+        }
+        if (loose.isEmpty()) {
+            escaped = recaptured;
+            return;
+        }
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity e = entities.get(i);
+            if (e.dead || e.type != Entity.COP || e.collar != null || e == controlled || e.role == Entity.ROLE_PRISON_GUARD || e.ride != null || e.rig != null) continue;
+            if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_PATROL) continue;
+            Entity best = null;
+            float bd = 500 * 500;
+            for (int k = 0; k < loose.size(); k++) {
+                Entity s = loose.get(k);
+                if (taken.contains(s)) continue;
+                float d = (s.x - e.x) * (s.x - e.x) + (s.y - e.y) * (s.y - e.y);
+                if (d < bd) {
+                    bd = d;
+                    best = s;
+                }
+            }
+            if (best == null) continue;
+            e.collar = best;
+            taken.add(best);
+        }
+    }
+
     /** A jet flies over and drops a line of bombs across (x, y). */
     void airstrike(float x, float y) {
         fleet.sendJet(x, y);
@@ -7942,8 +8557,9 @@ final class World {
         for (int i = 0; i < barriers.size(); i++) {
             float[] b = barriers.get(i);
             float ddx = b[0] - z.x, ddy = b[1] - z.y;
-            if (ddx * ddx + ddy * ddy > 15 * 15) continue;
-            b[2] -= (z.type == Entity.BRUTE ? 30 : 6) * dt;
+            float reach = z.type == Entity.GIANT ? 15 + GIANT_REACH : 15;
+            if (ddx * ddx + ddy * ddy > reach * reach) continue;
+            b[2] -= (z.type == Entity.GIANT ? GIANT_SMASH : z.type == Entity.BRUTE ? 30 : 6) * dt;
             if (rnd.nextFloat() < dt * 1.5f) emit(Sfx.THUD, b[0], b[1]);
             if (b[2] <= 0) {
                 removeBarricade(b);
@@ -10835,6 +11451,8 @@ final class World {
             Entity z = nearestInReach(e);
             if (z != null) shove(e, z, true);
         }
+        // ((25.0) After an escaped inmate.)
+        if (!soldier && e.collar != null && e != controlled && collarStep(e, dt)) return;
         // ((13.9) A combat medic with nothing to shoot at patches up the wounded nearby.)
         if (soldier && e.role == Entity.ROLE_CORPSMAN && e != controlled && medicStep(e, dt)) return;
         // ((14.7) In the squad of the one you're playing: with them, and shooting at what they shoot at.)
@@ -11249,7 +11867,7 @@ final class World {
             }
             boolean launcher = soldier && e.role == Entity.ROLE_GRENADIER;
             if (soldier && (e.role == Entity.ROLE_RIFLE || launcher) && e.grenades > 0 && e.grenadeCd <= 0 && d > (launcher ? 60 : 70)
-                    && d < (launcher ? 280 : 200) && countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) && !peopleNear(t.x, t.y, 60)) {
+                    && d < (launcher ? 280 : 200) && (countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) || (launcher && t.type == Entity.GIANT)) && !peopleNear(t.x, t.y, 60)) {
                 throwGrenade(e, t.x, t.y);
                 // (A launcher reloads quicker than a man can pull another pin.)
                 if (launcher) {
@@ -13815,11 +14433,14 @@ final class World {
                     // ((21.0) The alpha first, for anyone with a scope; the rest of them know to go for it too.)
                     if (o.alpha) score -= e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e.weapon == Entity.W_DMR ? 200 : 45;
                     if (o.type == Entity.RUNNER) score -= 25;
+                    // ((25.0) A giant: everyone's priority, the scopes and launchers most of all.)
+                    if (o.type == Entity.GIANT) score -= e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e.role == Entity.ROLE_GRENADIER
+                            || e.weapon == Entity.W_DMR ? 180 : 50;
                     // ((21.0) Fire discipline: one that others are already shooting at counts as further off, so a line
                     // of guns works along the front of a crowd instead of all killing the same one twice over. Not the
                     // big ones, which take all the fire they can get.)
                     // (Only out past sixty or so: one that's nearly on them gets every gun there is.)
-                    if (score > 65 && o.aimT > time && !o.alpha && o.type != Entity.BRUTE) score += Math.min(3, o.aimN - (o == e.aimPick ? 1 : 0)) * 12;
+                    if (score > 65 && o.aimT > time && !o.alpha && !o.big()) score += Math.min(3, o.aimN - (o == e.aimPick ? 1 : 0)) * 12;
                     // (10.27) A clear shot: not one with a friend standing in the way, when there's another to take.
                     if (score < best && city.los(e.x, e.y, o.x, o.y)) {
                         if (!friendInLine(e, o, (float) Math.sqrt(d2) + 0.001f)) {
@@ -14159,7 +14780,7 @@ final class World {
         float mx = e.x + ca * e.radius * (soldier ? 2.5f : 2f) - sa * e.radius * 0.3f;
         float my = e.y + sa * e.radius * (soldier ? 2.5f : 2f) + ca * e.radius * 0.3f;
         boolean scoped = e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e.weapon == Entity.W_DMR;
-        float hit = accuracy * (1 - (scoped ? 0.1f : 0.4f) * d / range) + (t.type == Entity.BRUTE ? 0.1f : 0);
+        float hit = accuracy * (1 - (scoped ? 0.1f : 0.4f) * d / range) + (t.type == Entity.BRUTE ? 0.1f : t.type == Entity.GIANT ? 0.2f : 0);
         // ((17.6) Behind cover, half as easy to hit; pinned down by fire, a worse shot.)
         // ((18.4) A police drone overhead marks them: the city's shots at them go true, and cover doesn't hide them.)
         boolean marked = !e.isZombie() && t.isZombie() && droneOver(t.x, t.y);
@@ -14171,7 +14792,11 @@ final class World {
             // Only a hit to the head really stops a zombie; body shots just wear it down.
             boolean headshot = t.isUndead() && rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : t.type == Entity.BRUISER ? 0.7f : 1)
                     * (t.spottedUntil > time && e.isArmed() ? SPOTTED_AIM : 1);
-            if (headshot) {
+            if (headshot && t.type == Entity.GIANT) {
+                // ((25.0) A shot to a giant's head hurts it, and no more.)
+                t.hp -= dmg * GUN_DAMAGE * 8;
+                if (wasUp && t.hp <= 0) t.bodyShot = true;
+            } else if (headshot) {
                 t.hp = 0;
                 t.gibbed = rnd.nextFloat() < 0.3f;
                 for (int k = 0; k < 6; k++)
@@ -15111,6 +15736,8 @@ final class World {
 
     /** ((13.4) One of the dead up against a barrier it wants to get past: over it, once it's pushed at it a while. */
     private boolean zombieClimb(Entity z, float probe) {
+        // ((25.0) A giant doesn't climb: it goes through.)
+        if (z.type == Entity.GIANT) return false;
         z.climbPress += stepDt * Math.max(1, z.lodStep);
         if (z.climbPress < CLIMB_PRESS) return false;
         if (!tryVault(z, probe)) {
@@ -15338,6 +15965,7 @@ final class World {
 
     private void onDeath(Entity e) {
         if (e.alpha) alphaDown(e);
+        if (e.type == Entity.GIANT) giantDown(e);
         if (e.type == Entity.COP) copsLost++;
         if (e.type == Entity.SOLDIER) soldiersLost++;
         if (e.kills > 0 && !e.isZombie()) {
@@ -15512,7 +16140,7 @@ final class World {
                     float side = ddx * -fy + ddy * fx >= 0 ? 1 : -1;
                     tryMove(o, -fy * side * 6 + fx * 3, fx * side * 6 + fy * 3);
                     if (!o.isZombie() || o.stun > 0) continue;
-                    o.hp -= speed * (o.type == Entity.BRUTE ? 0.3f : 0.9f);
+                    o.hp -= speed * (o.type == Entity.GIANT ? 0.12f : o.type == Entity.BRUTE ? 0.3f : 0.9f);
                     // ((12.1) Knocked flat, not finished: one hit by a car may get up again too.)
                     if (o.hp <= 0) o.bodyShot = true;
                     o.hurt = 1;
@@ -15523,7 +16151,7 @@ final class World {
                     bloodBurst(o.x, o.y, 8, fx, fy);
                     emit(Sfx.THUD, o.x, o.y);
                     // Hitting them dents the car: a brute is like hitting a wall.
-                    impact += o.type == Entity.BRUTE ? 28 : 6;
+                    impact += o.type == Entity.GIANT ? 70 : o.type == Entity.BRUTE ? 28 : 6;
                 }
             }
         return impact;
@@ -15699,7 +16327,7 @@ final class World {
     void marksmanShot(float fx, float fy, Entity t) {
         shotsFired++;
         if (rnd.nextFloat() < 0.85f && !peopleNear(t.x, t.y, 10)) {
-            t.hp -= t.type != Entity.BRUTE && rnd.nextFloat() < 0.55f ? t.hp + 1 : 40;
+            t.hp -= !t.big() && rnd.nextFloat() < 0.55f ? t.hp + 1 : 40;
             t.hurt = 1;
             t.killedByZombie = false;
             bloodBurst(t.x, t.y, 5, 0, 0);
@@ -15742,7 +16370,7 @@ final class World {
         if (!city.los(fx, fy, t.x, t.y) || peopleNear(t.x, t.y, 16)) return false;
         shotsFired++;
         if (rnd.nextFloat() < 0.7f) {
-            boolean head = t.type != Entity.BRUTE && rnd.nextFloat() < 0.15f;
+            boolean head = !t.big() && rnd.nextFloat() < 0.15f;
             t.hp -= head ? t.hp + 1 : dmg;
             t.hurt = 1;
             t.killedByZombie = false;
@@ -18603,7 +19231,7 @@ final class World {
         else steer(z, 0, 0, 0);
         z.angle = turn(z.angle, (float) Math.atan2(cy, cx), dt * 4);
         // ((13.4) Now and then one gets a grip and climbs over, slowly, instead of clawing the wall down.)
-        if (seg >= 0 && d < City.T * 0.5f + z.radius + 6 && rnd.nextFloat() < dt * 0.06f) {
+        if (seg >= 0 && z.type != Entity.GIANT && d < City.T * 0.5f + z.radius + 6 && rnd.nextFloat() < dt * 0.06f) {
             z.mx = cx;
             z.my = cy;
             if (tryVault(z, d + 3, true)) {
@@ -18613,7 +19241,7 @@ final class World {
                 return true;
             }
         }
-        dispatch.damageWall(zone, seg, (z.type == Entity.BRUTE ? 12 : z.type == Entity.BRUISER ? 7 : 4) * dt);
+        dispatch.damageWall(zone, seg, (z.type == Entity.GIANT ? 45 : z.type == Entity.BRUTE ? 12 : z.type == Entity.BRUISER ? 7 : 4) * dt);
         if (rnd.nextFloat() < dt * 0.8f) emit(Sfx.THUD, z.x, z.y);
         return true;
     }

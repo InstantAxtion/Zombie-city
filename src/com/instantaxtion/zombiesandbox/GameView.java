@@ -49,11 +49,12 @@ final class GameView extends View implements Menu.Host {
         // ((18.0) A mission: the commander's tools only - police, soldiers, vehicles and support to buy, and orders.)
         if (commander())
             return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
-        return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
+        // ((25.0) Events back on the bar: the plane crash, prison break and riot, and the airstrike with its cooldown.)
+        return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_BUILD || t == TOOL_ZONE;
     }
     private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
-            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde"};
+            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde", "Plane crash", "Prison break", "Riot"};
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
@@ -62,7 +63,7 @@ final class GameView extends View implements Menu.Host {
             "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
-    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE};
+    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
             Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
@@ -112,6 +113,12 @@ final class GameView extends View implements Menu.Host {
     private final java.util.ArrayList<RectF> hotPool = new java.util.ArrayList<RectF>(), timePool = new java.util.ArrayList<RectF>(),
             tacPool = new java.util.ArrayList<RectF>();
 
+    /** ((25.0) The Events button's name: the airstrike's with the seconds left while it's not ready. */
+    private String eventLabel() {
+        int wait = eventVariant == 4 && !commander() ? world.airstrikeWait() : 0;
+        return wait > 0 ? "Airstrike " + wait + "s" : EVENT_NAMES[eventVariant];
+    }
+
     private String rowLabel(int t) {
         return ROW_LABELS[t];
     }
@@ -128,7 +135,8 @@ final class GameView extends View implements Menu.Host {
     }
 
     private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile",
-            "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside"};
+            "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside",
+            "Huge and slow: smashes barricades, throws cars aside; takes a squad, a tank or explosives"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
@@ -144,7 +152,10 @@ final class GameView extends View implements Menu.Host {
             "Six mines round the spot: only the dead set them off",
             "Eight mortar shells walked across the spot, a couple of seconds after the call",
             "Six soldiers with a machine gun dropped on the spot, to hold it",
-            "Hundreds of the dead come in from the edge of town, heading for the spot"};
+            "Hundreds of the dead come in from the edge of town, heading for the spot",
+            "An airliner comes down on the spot: fire, wreckage, survivors - and some infected aboard",
+            "Every inmate breaks out of the prison at once (maps with a prison); the police round them up",
+            "The crowd here riots for a couple of minutes: looting, cars set alight, riot police called in"};
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_CLEAR = 3, BTN_MENU = 4, BTN_TOP = 5;
     /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
     private static final int TOP_BUTTONS = 6;
@@ -537,10 +548,10 @@ final class GameView extends View implements Menu.Host {
 
     private void buildIcons() {
         int[] bodies = {0xFFD9534F, 0xFF23408E, 0xFF55623A, 0xFFF2F2F2, 0xFFB07A3E, 0xFF2E2622, 0xFF4E5A3E, 0xFF6B3A36,
-                0xFF4D3F4F, 0xFF4E5A3E, 0xFF6A6F60, 0xFF5E6444, 0xFF5E6A3E, 0xFF6E7A48, 0xFF8A6A34, 0xFFC0282D, 0xFF7A6A4A};
+                0xFF4D3F4F, 0xFF3A3036, 0xFF6A6F60, 0xFF5E6444, 0xFF5E6A3E, 0xFF6E7A48, 0xFF8A6A34, 0xFFC0282D, 0xFF7A6A4A};
         int[] heads = {0xFF4A2E1A, 0xFF141C38, 0xFF3C4628, 0xFF4A2E1A, 0xFF8C6232, 0xFF9E2A22, 0xFF7C9A5E, 0xFF9DAA70,
-                0xFF6F8D55, 0xFF73905A, 0xFFC8D0B4, 0xFF4E5438, 0xFFA8BE52, 0xFF8E9A5A, 0xFFC8302A, 0xFF1A1410, 0xFF2E2E30};
-        float[] radii = {3.6f, 3.8f, 4f, 3.7f, 2.8f, 3.7f, 3.8f, 3.5f, 6.5f, 3.0f, 3.5f, 2.8f, 3.6f, 5.4f, 3.9f, 3.7f, 4f};
+                0xFF6F8D55, 0xFF5C7448, 0xFFC8D0B4, 0xFF4E5438, 0xFFA8BE52, 0xFF8E9A5A, 0xFFC8302A, 0xFF1A1410, 0xFF2E2E30};
+        float[] radii = {3.6f, 3.8f, 4f, 3.7f, 2.8f, 3.7f, 3.8f, 3.5f, 6.5f, 8f, 3.5f, 2.8f, 3.6f, 5.4f, 3.9f, 3.7f, 4f};
         for (int t = 0; t < Entity.TYPE_COUNT; t++) {
             Entity e = new Entity();
             e.type = t;
@@ -3237,6 +3248,7 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(m[0] - 0.7f, m[1] - 2.2f, m[0] + 0.7f, m[1] + 2.2f, fill);
             c.drawRect(m[0] - 2.2f, m[1] - 0.7f, m[0] + 2.2f, m[1] + 0.7f, fill);
         }
+        if (!world.crashes.isEmpty()) drawCrashSites(c, vx0, vy0, vx1, vy1);
 
         if (scale < 1.8f) drawDanger(c, vx0, vy0, vx1, vy1);
         // Zoomed out, a crowd is a heap of dots on top of each other: one dot per side in each little patch
@@ -5877,6 +5889,26 @@ final class GameView extends View implements Menu.Host {
     private void drawJet(Canvas c, Fleet.Vehicle v) {
         // ((15.10) A plane at the airport: an airliner, or a grey military transport; its shadow falls further off
         // the higher it is.)
+        if (v.kind == Fleet.K_CRASH) {
+            // ((25.0) The airliner coming down: bigger and closer, its shadow rushing in to meet it, a wing on fire.)
+            float u = 19f, off = 4 + v.alt * 60;
+            c.save();
+            c.translate(v.x + off, v.y + off * 1.3f);
+            c.rotate((float) Math.toDegrees(v.angle));
+            fill.setColor(0x38000000);
+            c.drawRect(-4.5f * u, -0.6f * u, 4.5f * u, 0.6f * u, fill);
+            c.drawRect(-1.6f * u, -4.2f * u, -0.6f * u, 4.2f * u, fill);
+            c.restore();
+            City.drawAirliner(c, fill, v.x, v.y, u, v.angle, 0xFFB8302A);
+            float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
+            float ex = v.x - ca * 6 - sa * 2 * u, ey = v.y - sa * 6 + ca * 2 * u;
+            float f = 0.5f + 0.5f * (float) Math.sin(world.time * 23);
+            fill.setColor(alpha(0xFFFF6A1A, 0.7f));
+            c.drawCircle(ex, ey, 9 + 3 * f, fill);
+            fill.setColor(alpha(0xFFFFE08A, 0.9f));
+            c.drawCircle(ex, ey, 4 + 2 * f, fill);
+            return;
+        }
         if (v.kind == Fleet.K_AIRLINER || v.kind == Fleet.K_TRANSPORT) {
             float u = 14f, off = 4 + v.alt * 60;
             c.save();
@@ -5916,6 +5948,93 @@ final class GameView extends View implements Menu.Host {
         fill.setColor(0xFF2E3A48);
         c.drawRect(6, -1.2f, 11, 1.2f, fill);
         c.restore();
+    }
+
+    /** ((25.0) How much bigger a giant is drawn than the room it takes up. */
+    private static final float GIANT_DRAW = 2.3f;
+
+    /** ((25.0) A giant's head: small, sunk between the shoulders, a heavy brow, the jaw hanging open, pale eyes. */
+    private void drawGiantHead(Canvas c, Entity e, float r) {
+        fill.setColor(City.darken(e.skin, 0.85f));
+        c.drawCircle(r * 0.28f, 0, r * 0.42f, fill);
+        fill.setColor(City.darken(e.skin, 0.6f));
+        oval.set(r * 0.4f, -r * 0.36f, r * 0.6f, r * 0.36f);
+        c.drawOval(oval, fill);
+        fill.setColor(0xFF2A0A0A);
+        oval.set(r * 0.55f, -r * 0.15f, r * 0.8f, r * 0.15f);
+        c.drawOval(oval, fill);
+        fill.setColor(0xFFF0E08A);
+        c.drawCircle(r * 0.52f, -r * 0.17f, r * 0.06f, fill);
+        c.drawCircle(r * 0.52f, r * 0.17f, r * 0.06f, fill);
+    }
+
+    /** ((25.0) Where planes came down: the broken, blackened fuselage, a torn-off wing and the scorched ground. */
+    private void drawCrashSites(Canvas c, float vx0, float vy0, float vx1, float vy1) {
+        for (int i = 0, n = world.crashes.size(); i < n; i++) {
+            float[] k = world.crashes.get(i);
+            if (k[0] < vx0 - 140 || k[0] > vx1 + 140 || k[1] < vy0 - 140 || k[1] > vy1 + 140) continue;
+            float u = 14f;
+            boolean burning = k[3] < World.CRASH_BURN;
+            c.save();
+            c.translate(k[0], k[1]);
+            c.rotate((float) Math.toDegrees(k[2]));
+            fill.setColor(0x70141210);
+            oval.set(-9.5f * u, -1.8f * u, 1.8f * u, 1.8f * u);
+            c.drawOval(oval, fill);
+            int hull = burning ? 0xFF4E4A46 : 0xFF6A6660, dark = 0xFF2A2724;
+            // The nose section, broken off and slewed round.
+            c.save();
+            c.rotate(14);
+            fill.setColor(hull);
+            c.drawRect(-0.6f * u, -0.55f * u, 2.4f * u, 0.55f * u, fill);
+            c.drawCircle(2.4f * u, 0, 0.55f * u, fill);
+            fill.setColor(dark);
+            c.drawRect(-0.6f * u, -0.55f * u, -0.2f * u, 0.55f * u, fill);
+            c.restore();
+            // The middle of it, with what's left of a wing, and the other wing torn off and lying apart.
+            c.save();
+            c.translate(-3.2f * u, 0.3f * u);
+            c.rotate(-9);
+            fill.setColor(0xFF8A8C90);
+            c.drawRect(-1.2f * u, -3.2f * u, 0.2f * u, -0.4f * u, fill);
+            fill.setColor(hull);
+            c.drawRect(-2f * u, -0.55f * u, 1.8f * u, 0.55f * u, fill);
+            fill.setColor(dark);
+            for (int w = 0; w < 4; w++) c.drawRect((-1.6f + w * 0.9f) * u, -0.2f * u, (-1.2f + w * 0.9f) * u, 0.2f * u, fill);
+            c.restore();
+            c.save();
+            c.translate(-2.4f * u, 3.4f * u);
+            c.rotate(64);
+            fill.setColor(0xFF7E8084);
+            c.drawRect(-2f * u, -0.45f * u, 2f * u, 0.45f * u, fill);
+            fill.setColor(0xFF505258);
+            c.drawCircle(-0.4f * u, 0.7f * u, 0.4f * u, fill);
+            c.restore();
+            // The tail, the fin still standing.
+            c.save();
+            c.translate(-6.6f * u, -0.4f * u);
+            c.rotate(22);
+            fill.setColor(hull);
+            c.drawRect(-1.6f * u, -0.45f * u, 1.2f * u, 0.45f * u, fill);
+            fill.setColor(burning ? 0xFF6A2A22 : 0xFF8A3A30);
+            c.drawRect(-1.7f * u, -0.22f * u, -0.6f * u, 0.22f * u, fill);
+            fill.setColor(0xFF8A8C90);
+            c.drawRect(-1.6f * u, -1.4f * u, -1.0f * u, 1.4f * u, fill);
+            c.restore();
+            // Bits of it all over.
+            fill.setColor(dark);
+            for (int b = 0; b < 9; b++) {
+                float bx = ((b * 37) % 11 - 5) * 0.9f * u - 3 * u, by = ((b * 23) % 7 - 3) * 0.8f * u;
+                c.drawRect(bx, by, bx + 0.35f * u, by + 0.25f * u, fill);
+            }
+            if (burning) {
+                float f = 0.5f + 0.5f * (float) Math.sin(world.time * 9 + i);
+                fill.setColor(alpha(0xFFFF8A2A, 0.35f + 0.2f * f));
+                c.drawCircle(-3f * u, 0, 1.6f * u, fill);
+                c.drawCircle(0.6f * u, 0.6f * u, 1.0f * u, fill);
+            }
+            c.restore();
+        }
     }
 
     private void drawJetShape(Canvas c, float s) {
@@ -7104,7 +7223,8 @@ final class GameView extends View implements Menu.Host {
         }
         // ((15.0) A mounted officer: the horse under them.)
         if (e.type == Entity.COP && e.role == Entity.ROLE_MOUNTED) drawHorse(c, e);
-        float r = e.radius;
+        // ((25.0) A giant is drawn far bigger than it stands in the street: two and a half times a brute.)
+        float r = e.type == Entity.GIANT ? e.radius * GIANT_DRAW : e.radius;
         // ((11.5) Small on screen - a dozen pixels across - just the body, the head and any gun drawn (see below), and
         // no separate shadow: the dark outline does that job at this size.)
         boolean small = scale < 1.8f && !healthBar && e != world.controlled;
@@ -7197,6 +7317,17 @@ final class GameView extends View implements Menu.Host {
                     fill.setColor(0xFF7A2A22);
                     c.drawCircle(r * 1.32f + sw, -r * 0.62f, r * 0.24f, fill);
                     c.drawCircle(r * 1.32f - sw, r * 0.62f, r * 0.24f, fill);
+                } else if (e.type == Entity.GIANT) {
+                    // ((25.0) Long, massive arms, the one that swipes sweeping round.)
+                    float swipe = anim ? 1 - Math.min(1, (now - e.biteAt) / 0.45f) : 0;
+                    stroke.setStrokeWidth(r * 0.44f);
+                    float lx = r * 1.3f + sw, ly = -r * 0.95f;
+                    float rx = r * 1.3f - sw + swipe * r * 0.45f, ry = r * 0.95f - swipe * r * 1.15f;
+                    c.drawLine(r * 0.05f, -r * 0.85f, lx, ly, stroke);
+                    c.drawLine(r * 0.05f, r * 0.85f, rx, ry, stroke);
+                    fill.setColor(City.darken(e.skin, 0.65f));
+                    c.drawCircle(lx, ly, r * 0.3f, fill);
+                    c.drawCircle(rx, ry, r * 0.3f, fill);
                 } else if (e.type == Entity.BRUTE) {
                     // Huge arms ending in fists.
                     stroke.setStrokeWidth(r * 0.62f);
@@ -7372,6 +7503,16 @@ final class GameView extends View implements Menu.Host {
                 c.drawOval(oval, fill);
                 fill.setColor(0x9A6A1A14);
                 c.drawCircle(-r * 0.25f, r * 0.2f, r * 0.38f, fill);
+            } else if (e.type == Entity.GIANT) {
+                // ((25.0) A great hunched back ridged with bone, torn open in places.)
+                fill.setColor(City.darken(e.body, 0.7f));
+                oval.set(-r * 0.62f, -r * 1.15f, r * 0.35f, r * 1.15f);
+                c.drawOval(oval, fill);
+                fill.setColor(0xFF8A8270);
+                for (int k = 0; k < 4; k++) c.drawCircle(-r * 0.5f + k * r * 0.17f, 0, r * 0.075f, fill);
+                fill.setColor(0xB07A1E16);
+                c.drawCircle(-r * 0.12f, -r * 0.6f, r * 0.17f, fill);
+                c.drawCircle(-r * 0.32f, r * 0.5f, r * 0.12f, fill);
             } else if (e.type == Entity.BRUTE) {
                 // A hunched hump of shoulders, wider than the rest of it.
                 fill.setColor(0xFF3A2E3C);
@@ -7383,7 +7524,8 @@ final class GameView extends View implements Menu.Host {
             }
 
             fill.setColor(e.head);
-            c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
+            if (e.type == Entity.GIANT) drawGiantHead(c, e, r);
+            else c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
             if (scale > 1.9f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
                     || e.type == Entity.RUNNER)) drawHair(c, e, r);
             if (e.raider) {
@@ -7430,7 +7572,7 @@ final class GameView extends View implements Menu.Host {
                     fill.setColor(0xFF4C5833);
                     c.drawCircle(r * 0.0f, -r * 0.1f, r * 0.2f, fill);
                 }
-            } else if (e.isUndead()) {
+            } else if (e.isUndead() && e.type != Entity.GIANT) {
                 if (e.armored) {
                     // ((13.8) Still in their helmet, so they can be told apart at a glance: police navy with the
                     // visor up, army olive.)
@@ -7957,7 +8099,7 @@ final class GameView extends View implements Menu.Host {
                     : i == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
                     : i == TOOL_MIL ? MIL_NAMES[milVariant]
                     : i == TOOL_COP ? copNames()[copVariant]
-                    : i == TOOL_PLACE ? PLACE_NAMES[placeVariant] : i == TOOL_EVENT ? EVENT_NAMES[eventVariant]
+                    : i == TOOL_PLACE ? PLACE_NAMES[placeVariant] : i == TOOL_EVENT ? eventLabel()
                     : i == TOOL_BUILD ? BUILD_NAMES[buildVariant] : i == TOOL_SQUAD ? SQUAD_NAMES[squadVariant] : TOOL_NAMES[i];
             float fit = text.measureText(name);
             if (fit > r.width() - 6 * dp) text.setTextSize(11.5f * dp * (r.width() - 6 * dp) / fit);
@@ -8164,6 +8306,10 @@ final class GameView extends View implements Menu.Host {
         if (e.infected) health += "   BITTEN: turns in " + Math.max(0, (int) e.infectTimer) + "s";
         if (e.fresh > 0) health += "   Freshly turned";
         lines.add(health);
+        // ((25.0) The giant; an escaped inmate; a rioter.)
+        if (e.type == Entity.GIANT) lines.add("A giant: shrugs off rifle fire and smashes through barricades - bring a squad, a tank or explosives");
+        if (e.escapee) lines.add("Escaped inmate: on the run from the police");
+        if (e.riotUntil > world.time) lines.add("Rioting");
         if (!e.canShoot() && e.melee > 0 && !e.isUndead()) lines.add("Carrying " + (e.melee == Entity.M_AXE ? "an axe" : "a " + Entity.MELEE_NAMES[e.melee].toLowerCase()));
         // ((12.0) What one of the dead was in life.)
         if (e.isUndead() && e.origin >= 0 && e.origin != Entity.CIVILIAN)
@@ -9325,7 +9471,8 @@ final class GameView extends View implements Menu.Host {
      * commander, a scope for the sniper), the dead's green skin and red eyes, a runner's speed lines, a brute's bulk.
      */
     private void drawPersonBadge(Canvas c, int type, Entity e, float cx, float cy, float size) {
-        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE || type == Entity.BRUISER;
+        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE || type == Entity.BRUISER || type == Entity.GIANT;
+        boolean giant = type == Entity.GIANT;
         int disc = zombie ? 0xFF2E4A22 : type == Entity.COP ? 0xFF1E3366 : type == Entity.SOLDIER ? 0xFF3A4328 : 0xFF5A4022;
         float r = size * 1.18f;
         fill.setColor(disc);
@@ -9335,7 +9482,7 @@ final class GameView extends View implements Menu.Host {
         c.drawCircle(cx, cy, r, stroke);
         c.save();
         c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.95f);
-        float bulk = type == Entity.BRUTE ? 1.35f : type == Entity.BRUISER ? 1.17f : 1f;
+        float bulk = giant ? 1.75f : type == Entity.BRUTE ? 1.35f : type == Entity.BRUISER ? 1.17f : 1f;
         // Shoulders.
         int shirt = type == Entity.COP ? e.body : type == Entity.SOLDIER ? e.body : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
         fill.setColor(shirt);
@@ -9349,6 +9496,15 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(0xFF8E1A12);
             c.drawCircle(cx - r * 0.2f, cy + r * 0.7f, r * 0.18f, fill);
             c.drawCircle(cx + r * 0.3f, cy + r * 0.85f, r * 0.13f, fill);
+        } else if (giant) {
+            // ((25.0) A giant: vast dark shoulders ridged with bone.)
+            fill.setColor(0xFF3A3036);
+            oval.set(cx - r * 0.78f * bulk, cy + r * 0.12f, cx + r * 0.78f * bulk, cy + r * 1.5f);
+            c.drawOval(oval, fill);
+            fill.setColor(0xFF9A927E);
+            for (int k = -2; k <= 2; k++) c.drawCircle(cx + k * r * 0.3f, cy + r * 0.3f + Math.abs(k) * r * 0.06f, r * 0.08f, fill);
+            fill.setColor(0xFF8E1A12);
+            c.drawCircle(cx + r * 0.35f, cy + r * 0.75f, r * 0.12f, fill);
         } else if (zombie) {
             // Torn shirt.
             fill.setColor(0xFF6E0A0A);
@@ -9359,12 +9515,17 @@ final class GameView extends View implements Menu.Host {
             c.drawCircle(cx - r * 0.32f, cy + r * 0.6f, r * 0.1f, fill);
         }
         // Head.
-        int skin = zombie ? (type == Entity.BRUTE ? 0xFF6F8D55 : 0xFF8FA173) : 0xFFE0AC69;
+        int skin = zombie ? (giant ? 0xFF5C7448 : type == Entity.BRUTE ? 0xFF6F8D55 : 0xFF8FA173) : 0xFFE0AC69;
         fill.setColor(skin);
-        float hr = r * 0.36f * (type == Entity.BRUTE ? 1.15f : type == Entity.BRUISER ? 1.07f : 1f), hy = cy - r * 0.12f;
+        float hr = r * 0.36f * (giant ? 0.85f : type == Entity.BRUTE ? 1.15f : type == Entity.BRUISER ? 1.07f : 1f), hy = cy - r * (giant ? 0.02f : 0.12f);
         c.drawCircle(cx, hy, hr, fill);
+        if (giant) {
+            // A heavy brow.
+            fill.setColor(0xFF3E5030);
+            c.drawRect(cx - hr * 0.95f, hy - hr * 0.35f, cx + hr * 0.95f, hy - hr * 0.08f, fill);
+        }
         // Eyes.
-        fill.setColor(zombie ? 0xFFFF3B2F : 0xFF1A1A1A);
+        fill.setColor(giant ? 0xFFF0E08A : zombie ? 0xFFFF3B2F : 0xFF1A1A1A);
         c.drawCircle(cx - hr * 0.38f, hy + hr * 0.05f, hr * 0.13f, fill);
         c.drawCircle(cx + hr * 0.38f, hy + hr * 0.05f, hr * 0.13f, fill);
         if (zombie) {
@@ -9540,6 +9701,8 @@ final class GameView extends View implements Menu.Host {
                     c.drawLine(cx + a * 0.7f, cy - a * 0.7f, cx - a * 0.7f, cy + a * 0.7f, stroke);
                     break;
             }
+        } else if (t == TOOL_EVENT && drawEventIcon(c, cx, cy, size)) {
+            // ((25.0) Drawn.)
         } else if (t == TOOL_EVENT) {
             // A warning triangle.
             fill.setColor(0xFFFFC24A);
@@ -9579,6 +9742,89 @@ final class GameView extends View implements Menu.Host {
             float a = size * 0.55f;
             c.drawLine(cx - a, cy - a, cx + a, cy + a, stroke);
             c.drawLine(cx - a, cy + a, cx + a, cy - a, stroke);
+        }
+    }
+
+    /**
+     * ((25.0) The pictures for some of the events: the airstrike's jet (dimmed, with the seconds left, while it's not
+     * ready), a plane coming down, the prison's bars bent apart, a petrol bomb for a riot. False for the rest.
+     */
+    private boolean drawEventIcon(Canvas c, float cx, float cy, float size) {
+        switch (eventVariant) {
+            case 4: {
+                int wait = commander() ? 0 : world.airstrikeWait();
+                c.save();
+                c.translate(cx, cy);
+                c.rotate(-45);
+                c.scale(size / 17, size / 17);
+                fill.setColor(wait > 0 ? 0xFF4A4E54 : 0xFFB8C0C8);
+                drawJetShape(c, 1f);
+                c.restore();
+                if (wait > 0) {
+                    fill.setColor(0xA0101114);
+                    c.drawCircle(cx, cy, size * 0.95f, fill);
+                    text.setTextAlign(Paint.Align.CENTER);
+                    float ts = text.getTextSize();
+                    text.setTextSize(size * 0.8f);
+                    text.setColor(0xFFFFC24A);
+                    c.drawText(wait + "s", cx, cy + size * 0.28f, text);
+                    text.setTextSize(ts);
+                }
+                return true;
+            }
+            case 12: {
+                City.drawAirliner(c, fill, cx, cy, size * 0.2f, 0.6f, 0xFFB8302A);
+                float ex = cx - size * 0.45f, ey = cy + size * 0.1f;
+                fill.setColor(0xFFFF6A1A);
+                c.drawCircle(ex, ey, size * 0.28f, fill);
+                fill.setColor(0xFFFFE08A);
+                c.drawCircle(ex, ey, size * 0.13f, fill);
+                fill.setColor(0x995A5A5A);
+                c.drawCircle(ex - size * 0.45f, ey - size * 0.35f, size * 0.24f, fill);
+                c.drawCircle(ex - size * 0.8f, ey - size * 0.65f, size * 0.18f, fill);
+                return true;
+            }
+            case 13: {
+                fill.setColor(0xFF8A8C90);
+                c.drawRect(cx - size * 0.9f, cy - size * 0.85f, cx + size * 0.9f, cy - size * 0.7f, fill);
+                c.drawRect(cx - size * 0.9f, cy + size * 0.7f, cx + size * 0.9f, cy + size * 0.85f, fill);
+                stroke.setColor(0xFF8A8C90);
+                stroke.setStrokeWidth(size * 0.14f);
+                for (int k = 0; k < 5; k++) {
+                    float bx = cx - size * 0.7f + k * size * 0.35f;
+                    if (k == 2) {
+                        c.drawLine(bx, cy - size * 0.7f, bx - size * 0.25f, cy, stroke);
+                        c.drawLine(bx - size * 0.25f, cy, bx, cy + size * 0.7f, stroke);
+                    } else if (k == 3) {
+                        c.drawLine(bx, cy - size * 0.7f, bx + size * 0.25f, cy, stroke);
+                        c.drawLine(bx + size * 0.25f, cy, bx, cy + size * 0.7f, stroke);
+                    } else c.drawLine(bx, cy - size * 0.7f, bx, cy + size * 0.7f, stroke);
+                }
+                fill.setColor(0xFFE07A2A);
+                c.drawCircle(cx, cy - size * 0.1f, size * 0.17f, fill);
+                c.drawRect(cx - size * 0.15f, cy + size * 0.05f, cx + size * 0.15f, cy + size * 0.5f, fill);
+                return true;
+            }
+            case 14: {
+                // A bottle with a burning rag.
+                c.save();
+                c.translate(cx, cy + size * 0.1f);
+                c.rotate(25);
+                fill.setColor(0xFF4E8A4A);
+                oval.set(-size * 0.32f, -size * 0.2f, size * 0.32f, size * 0.8f);
+                c.drawRoundRect(oval, size * 0.15f, size * 0.15f, fill);
+                c.drawRect(-size * 0.11f, -size * 0.55f, size * 0.11f, -size * 0.15f, fill);
+                fill.setColor(0xFFE8DCC0);
+                c.drawRect(-size * 0.08f, -size * 0.75f, size * 0.08f, -size * 0.5f, fill);
+                fill.setColor(0xFFFF6A1A);
+                c.drawCircle(0, -size * 0.88f, size * 0.22f, fill);
+                fill.setColor(0xFFFFD24A);
+                c.drawCircle(0, -size * 0.84f, size * 0.11f, fill);
+                c.restore();
+                return true;
+            }
+            default:
+                return false;
         }
     }
 
@@ -10519,14 +10765,22 @@ final class GameView extends View implements Menu.Host {
             Entity e = tool == TOOL_MIL ? world.spawnSoldier(MIL_ROLES[milVariant], wx + ox, wy + oy)
                     : tool == TOOL_COP ? world.spawnCop(COP_ROLES[copVariant], wx + ox, wy + oy)
                     : world.spawn(type, wx + ox, wy + oy);
-            if (e != null) lastAction.add(e);
-            else failed++;
+            if (e != null) {
+                lastAction.add(e);
+                if (e.type == Entity.GIANT && giantSaid != e) {
+                    giantSaid = e;
+                    world.giantPlaced(e);
+                }
+            } else failed++;
         }
         // ((12.0) Nobody placed: say why, rather than nothing happening at all.)
         if (failed == n && n > 0 && world.messageTime <= 0)
             world.say(world.entities.size() >= world.maxEntities ? "The city is full: no room for anyone else (Max population, in Settings)"
                     : "Nowhere to put them there");
     }
+
+    /** ((25.0) The last giant put down that the radio's been told about (once a tap, not once a giant). */
+    private Entity giantSaid;
 
     /** ((22.4) The Squads tool: one whole group where the finger lands. */
     private void spawnSquad(float wx, float wy) {
@@ -10582,11 +10836,22 @@ final class GameView extends View implements Menu.Host {
                 if (!world.indoorOutbreakAt(wx, wy)) world.say("Tap closer to a building");
                 break;
             case 3: world.supplyDrop(wx, wy); break;
-            case 4: world.airstrike(wx, wy); break;
+            case 4:
+                if (!world.freeAirstrike(wx, wy)) buzzError();
+                break;
             case 5: world.cityAlarm(); break;
             case 7: world.flare(wx, wy); break;
             case 8:
                 if (world.layMines(wx, wy) == 0) world.say("No room for mines there");
+                break;
+            case 12:
+                if (!world.planeCrash(wx, wy)) world.say("Nowhere for it to come down there");
+                break;
+            case 13:
+                if (!world.prisonBreak()) buzzError();
+                break;
+            case 14:
+                if (!world.riot(wx, wy) && world.messageTime <= 0) world.say("Nobody here to riot");
                 break;
             case 9: world.barrage(wx, wy); break;
             case 10: lastAction.addAll(world.airborne(wx, wy)); break;

@@ -867,13 +867,13 @@ public final class GameTests {
                 w.spawn(Entity.ZOMBIE, boarder.x + 30, boarder.y);
                 for (int f = 0; f < 60 && boarder.ammo + boarder.reserve >= ammo; f++) w.update(1 / 30f);
                 check(boarder.ammo + boarder.reserve < ammo, "shoots the one in the way before going on to the vehicle");
-                // No crawlers any more, and far fewer of the bitten come back as anything but an ordinary zombie.
+                // No crawlers (nor giants), and far fewer of the bitten come back as anything but an ordinary zombie.
                 int special = 0;
                 // ((12.4) The usual rates: not a strain with many runners or brutes.)
                 w.trait[World.TR_RUNNERS] = w.trait[World.TR_BRUTES] = false;
                 for (int k = 0; k < 10000; k++) {
                     int t = w.turnType(k % 2 == 0 ? Entity.CIVILIAN : Entity.COP);
-                    check(t != Entity.CRAWLER, "nobody comes back a crawler");
+                    check(t != Entity.GIANT, "nobody comes back a giant");
                     if (t != Entity.ZOMBIE) special++;
                 }
                 check(special > 500 && special < 1300, "about one in eleven comes back as a special kind (" + special + " in 10000)");
@@ -4658,6 +4658,88 @@ public final class GameTests {
                     aw.fleet.damage(mine, 10, false);
                     check(mine.hp < m0 && mine.hp > 0, "and gunfire hurts the city's own helicopters, which take more than one round");
                 }
+            }
+        });
+        test("25.0: the giant takes rifle fire and smashes a barricade; plane crash, prison break and riot; the airstrike's cooldown; saves", new Check() {
+            @Override
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                check(w.city.prison != null, "the map has a prison");
+                // The giant: spawned by hand, a squad shooting at it, a barricade in its way.
+                java.util.Random tr = new java.util.Random(25);
+                Entity g = null;
+                float[] bar = null;
+                for (int k = 0; k < 400 && bar == null; k++) {
+                    float[] s = w.city.randomStreetSpot(tr);
+                    bar = w.placeBarricade(s[0] + City.T * 1.5f, s[1]);
+                    if (bar == null) continue;
+                    g = w.spawn(Entity.GIANT, s[0], s[1]);
+                    if (g == null) {
+                        w.removeBarricade(bar);
+                        bar = null;
+                    }
+                }
+                check(g != null && g.type == Entity.GIANT && g.isZombie() && g.maxHp >= World.GIANT_HP * 0.8f, "a giant, spawned by hand (" + (g == null ? "-" : g.maxHp) + ")");
+                java.util.ArrayList<Entity> squad = w.spawnGroup(World.FIRE_TEAM, false, g.x, g.y - 70);
+                float hp0 = g.hp;
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                check(!w.barriers.contains(bar), "it smashes the barricade in a moment");
+                check(!g.dead && g.hp > 0, "it stands up to a fire team for three seconds (" + (int) g.hp + "/" + (int) g.maxHp + ")");
+                check(g.hp < hp0, "and they do hurt it (" + (int) hp0 + " to " + (int) g.hp + ")");
+                for (int k = 0; k < 2000; k++) check(w.turnType(Entity.CIVILIAN) != Entity.GIANT, "nobody turns into a giant");
+                for (Entity e : squad) e.dead = e.removed = true;
+                // The riot: the crowd, riot police, no zombies made; it ends.
+                float[] rs = w.city.randomStreetSpot(tr);
+                int zBefore = w.zombieCount() - 1;
+                for (Entity e : w.entities) if (e.isZombie() && e != g) e.dead = e.removed = true;
+                check(w.riot(rs[0], rs[1]), "a riot starts");
+                int rioters = 0;
+                for (Entity e : w.entities) if (e.riotUntil > w.time) rioters++;
+                check(rioters >= 10, "a crowd riots (" + rioters + ")");
+                for (int f = 0; f < 30 * 5; f++) w.update(1 / 30f);
+                int z = 0;
+                for (Entity e : w.entities) if (e.isZombie() && !e.dead && e != g) z++;
+                check(z == 0, "a riot makes no zombies (" + z + ", " + zBefore + " before)");
+                w.riot[2] = w.time;
+                for (int f = 0; f < 45; f++) w.update(1 / 30f);
+                check(w.riot == null, "and calms down");
+                // The prison break.
+                check(w.prisonBreak(), "the inmates break out");
+                int loose = 0;
+                for (Entity e : w.entities) if (e.escapee && !e.dead) loose++;
+                check(loose >= 20 && !w.prisonBreak(), "every inmate is out (" + loose + "), and only once");
+                for (int f = 0; f < 30 * 4; f++) w.update(1 / 30f);
+                // The plane crash.
+                float[] ps = w.city.randomStreetSpot(tr);
+                int people = w.counts[Entity.CIVILIAN];
+                check(w.planeCrash(ps[0], ps[1]), "a plane is coming down");
+                for (int f = 0; f < 30 * 9 && w.crashes.isEmpty(); f++) w.update(1 / 30f);
+                check(w.crashes.size() == 1, "it crashes, leaving a burning wreck");
+                for (int f = 0; f < 30 * 2; f++) w.update(1 / 30f);
+                check(w.counts[Entity.CIVILIAN] > people - 10, "with survivors walking out of it");
+                // The airstrike: free, once every minute and a half.
+                check(w.freeAirstrike(ps[0] + 300, ps[1]) && !w.freeAirstrike(ps[0], ps[1]) && w.airstrikeWait() > 80, "an airstrike, then a wait ("
+                        + w.airstrikeWait() + "s)");
+                // All of it kept in a save.
+                java.io.File file = java.io.File.createTempFile("zc25", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                int giants = 0, esc = 0;
+                for (Entity e : l.entities) {
+                    if (e.type == Entity.GIANT) giants++;
+                    if (e.escapee) esc++;
+                }
+                check(giants == 1 && esc > 0 && l.crashes.size() == 1 && l.airstrikeWait() > 70, "the giant, the escapees, the wreck and the cooldown kept in a save ("
+                        + giants + ", " + esc + ", " + l.crashes.size() + ", " + l.airstrikeWait() + ")");
+                l.time += World.AIRSTRIKE_COOLDOWN;
+                check(l.freeAirstrike(ps[0], ps[1]), "ready again once the wait is over");
             }
         });
         test("every screen draws", new Check() {
