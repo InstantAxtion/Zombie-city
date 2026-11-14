@@ -4093,7 +4093,7 @@ final class World {
                     int c = cy * gw + cx;
                     for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end && l.bandN < 4; k++) {
                         Entity o = sorted[k];
-                        if (o == l || o.dead || o.removed || o.type != Entity.CIVILIAN || o.leader != null || o.canShoot() || o.infected
+                        if (o == l || o.dead || o.removed || o.type != Entity.CIVILIAN || o.leader != null || o.canShoot() || o.infected || o.base != null
                                 || o == controlled || o.bandN > 0 || o.task != Dispatch.T_NONE || o.fleeTimer <= 0) continue;
                         if ((o.x - l.x) * (o.x - l.x) + (o.y - l.y) * (o.y - l.y) > 70 * 70) continue;
                         o.leader = l;
@@ -5810,6 +5810,8 @@ final class World {
             thinkMilitia(e, dt);
             if (e.militia) return;
         }
+        // ((25.0) One of a survivor base's people.)
+        if (e.base != null && baseMember(e, dt)) return;
         // ((14.2) A raider gang: out to strip the shops, and they'll shoot whoever's there for the same.)
         if (e.raider && raiderStep(e, dt)) return;
         // ((15.6) Locked up in the island prison: about the yard, and away from the dead if they're in there too.)
@@ -8333,6 +8335,7 @@ final class World {
         bands();
         cargoFlights();
         countHeading();
+        updateBases();
         if (city.prison != null) {
             prisonLife();
         }
@@ -12736,14 +12739,367 @@ final class World {
             }
             dispatch.say(Dispatch.WHO_INFO, null, group.size() + " armed residents have taken over a building on "
                     + city.placeName(b.doorX, b.doorY) + " and are holding the street.", b.doorX, b.doorY);
-            Holdout h = b.holdout != null ? b.holdout : found(b, false);
-            if (h != null) for (int k = 0; k < group.size(); k++) group.get(k).holdout = h;
+            // ((25.0) And they set about walling the place in: a survivor base.)
+            SurvivorBases.Base sb = foundBase(b, true);
+            if (sb != null) for (int k = 0; k < group.size(); k++) joinBase(group.get(k), sb, true);
+            else {
+                Holdout h = b.holdout != null ? b.holdout : found(b, false);
+                if (h != null) for (int k = 0; k < group.size(); k++) group.get(k).holdout = h;
+            }
             return;
         }
     }
 
+    // ------------------------------------------------------------------ (25.0) survivor bases
+
+    final ArrayList<SurvivorBases.Base> bases = new ArrayList<SurvivorBases.Base>();
+    int basesFounded, basesLost;
+    private float baseFoundedAt = -999;
+
+    /**
+     * Survivors found a base round building b (see SurvivorBases): null if it won't do there - too many already, too
+     * near a safe zone or another base, or a building that can't be walled round.
+     */
+    SurvivorBases.Base foundBase(City.Building b, boolean announce) {
+        if (b == null || b.collapsed || bases.size() >= SurvivorBases.MAX_BASES || city.cfg.mission >= 0) return null;
+        for (int i = 0; i < bases.size(); i++) if (bases.get(i).b == b) return bases.get(i);
+        // (One at a time: a city's survivors don't all dig in at once.)
+        if (time - baseFoundedAt < 45 && !bases.isEmpty()) return null;
+        SurvivorBases.Base s = SurvivorBases.plan(city, b);
+        if (s == null) return null;
+        float cx = s.cx(), cy = s.cy();
+        for (int i = 0; i < bases.size(); i++) {
+            SurvivorBases.Base o = bases.get(i);
+            if (s.tx1 + 4 >= o.tx0 && s.tx0 - 4 <= o.tx1 && s.ty1 + 4 >= o.ty0 && s.ty0 - 4 <= o.ty1) return null;
+        }
+        for (int i = 0; i < dispatch.zones.size(); i++) {
+            Dispatch.SafeZone z = dispatch.zones.get(i);
+            if (!z.removed && cx > z.left() - 200 && cx < z.right() + 200 && cy > z.top() - 200 && cy < z.bottom() + 200) return null;
+        }
+        s.name = SurvivorBases.nameFor(city, b, b.doorX > 0 ? (int) (b.doorX * 7 + b.doorY * 13) : bases.size());
+        bases.add(s);
+        basesFounded++;
+        baseFoundedAt = time;
+        if (announce)
+            dispatch.say(Dispatch.WHO_INFO, null, "News: Survivors on " + city.placeName(b.doorX, b.doorY) + " are walling themselves in. They're calling it "
+                    + s.name + ".", cx, cy);
+        return s;
+    }
+
+    /** (For loading a save: the base laid out round its building again, without the checks a new one has.) */
+    SurvivorBases.Base restoreBase(City.Building b) {
+        SurvivorBases.Base s = SurvivorBases.plan(city, b);
+        if (s != null) bases.add(s);
+        return s;
+    }
+
+    /** Once a second: each base counts its people, builds, mans its posts, works its gates and workshop - or falls. */
+    private void updateBases() {
+        // (Armed bands with people to protect found bases of their own.)
+        if (outbreak && ((int) time) % 5 == 2 && bases.size() < SurvivorBases.MAX_BASES) bandBases();
+        for (int i = bases.size() - 1; i >= 0; i--) {
+            SurvivorBases.Base s = bases.get(i);
+            s.age += 1;
+            s.saidCd -= 1;
+            float cx = s.cx(), cy = s.cy();
+            float half = Math.max(s.tx1 - s.tx0, s.ty1 - s.ty0) * City.T / 2f;
+            // Who's here.
+            s.members = s.guards = s.inside = 0;
+            for (int k = 0, n = gatherLiving(cx, cy, half + 260); k < n; k++) {
+                Entity e = gathered[k];
+                if (e.dead || e.base != s) continue;
+                s.members++;
+                if (e.militia) s.guards++;
+            }
+            for (int k = 0, n = gatherZ(cx, cy, half + 8); k < n; k++) if (s.contains(gathered[k].x, gathered[k].y, -1)) s.inside++;
+            boolean quiet = !zombieWithin(cx, cy, half + 90);
+            s.quietFor = quiet ? s.quietFor + 1 : 0;
+            if (s.members == 0 || s.b.collapsed || (s.inside > 0 && s.inside >= s.members * 2)) s.emptyFor += 1;
+            else s.emptyFor = 0;
+            if (s.emptyFor > 12) {
+                loseBase(s);
+                continue;
+            }
+            recruitToBase(s, quiet);
+            buildBase(s, quiet);
+            if (((int) time) % 3 == 0) manBase(s);
+            baseGates(s);
+            baseWorkshop(s);
+        }
+    }
+
+    private void loseBase(SurvivorBases.Base s) {
+        s.fallen = true;
+        bases.remove(s);
+        basesLost++;
+        // (The gates are left open; the wall stands, a ruin.)
+        for (int g : s.gates) {
+            float[] gb = SurvivorBases.barrierAt(this, g);
+            if (gb != null) removeBarricade(gb);
+        }
+        for (int k = 0, n = entities.size(); k < n; k++) {
+            Entity e = entities.get(k);
+            if (e.base == s) {
+                e.base = null;
+                e.onTower = false;
+            }
+        }
+        dispatch.say(Dispatch.WHO_INFO, null, "News: We've lost contact with " + s.name + ".", s.cx(), s.cy());
+    }
+
+    /** An armed survivor leading a band of three or more, somewhere quiet: they make a stand at the nearest building. */
+    private void bandBases() {
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity l = entities.get(i);
+            if (l.dead || l.type != Entity.CIVILIAN || !l.canShoot() || l.bandN < 3 || l.base != null || l == controlled || l.raider) continue;
+            if (zombieWithin(l.x, l.y, 160)) continue;
+            City.Building b = null;
+            float bd = 220 * 220;
+            for (int k = 0, m = city.buildings.size(); k < m; k++) {
+                City.Building o = city.buildings.get(k);
+                if (o.collapsed || o.capacity == 0 || !city.enterable(o)) continue;
+                float d = (o.doorX - l.x) * (o.doorX - l.x) + (o.doorY - l.y) * (o.doorY - l.y);
+                if (d < bd) {
+                    bd = d;
+                    b = o;
+                }
+            }
+            SurvivorBases.Base s = foundBase(b, true);
+            if (s == null) continue;
+            joinBase(l, s, true);
+            for (int k = 0, m = gatherLiving(l.x, l.y, 90); k < m; k++) {
+                Entity o = gathered[k];
+                if (o.leader == l && !o.dead) joinBase(o, s, false);
+            }
+            return;
+        }
+    }
+
+    /** Someone becomes one of a base's people: the armed take a post on its wall, the rest go inside it. */
+    private void joinBase(Entity e, SurvivorBases.Base s, boolean armed) {
+        e.base = s;
+        e.leader = null;
+        if (e.task == Dispatch.T_SEEK || e.task == Dispatch.T_HIDE) e.task = Dispatch.T_NONE;
+        e.seekZone = null;
+        if (armed && e.canShoot() && e.ammo + e.reserve >= 6) {
+            e.militia = true;
+            e.building = s.b;
+            e.postX = s.b.doorX;
+            e.postY = s.b.doorY;
+        }
+    }
+
+    private void recruitToBase(SurvivorBases.Base s, boolean quiet) {
+        if (((int) time) % 3 != 0 || s.members >= 30) return;
+        float cx = s.cx(), cy = s.cy();
+        int took = 0;
+        for (int k = 0, n = gatherLiving(cx, cy, 300); k < n && took < 3; k++) {
+            Entity e = gathered[k];
+            if (e.dead || e.type != Entity.CIVILIAN || e.base != null || e == controlled || e.raider || e.infected || e.inmate
+                    || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_SEEK) || e.zone != null) continue;
+            if (e.leader != null && e.leader.base != s) continue;
+            // (Not someone already nearly at a safe zone's gate.)
+            if (e.task == Dispatch.T_SEEK && e.seekZone != null && World.hypot(e.x - e.seekZone.x, e.y - e.seekZone.y) < World.hypot(e.x - cx, e.y - cy)) continue;
+            joinBase(e, s, e.canShoot());
+            took++;
+        }
+    }
+
+    /** The wall going up, section by section while it's quiet; then sandbags, then concrete; damage made good. */
+    private void buildBase(SurvivorBases.Base s, boolean quiet) {
+        if (!quiet || s.members == 0) return;
+        s.work += 0.2f + Math.min(10, s.members) * 0.05f;
+        // A section down (or not yet up) first.
+        while (s.work >= SurvivorBases.SECTION_WORK) {
+            int ni = SurvivorBases.nextSection(city, s, -1);
+            if (ni < 0) break;
+            int next = s.ring[ni];
+            float nx = (next % city.w + 0.5f) * City.T, ny = (next / city.w + 0.5f) * City.T;
+            // (Not under a car: it'd be shut in the wall for good.)
+            float[] b = vehicleAt(nx, ny) != null || vehicleAt(nx - 6, ny) != null || vehicleAt(nx + 6, ny) != null ? null : placeBarricade(nx, ny, s.tier);
+            if (b == null) {
+                // (Someone standing there, or it can't be built on: the next one, and this one later - or never.)
+                s.fails[ni]++;
+                int nj = SurvivorBases.nextSection(city, s, ni);
+                if (nj < 0) break;
+                int t = s.ring[nj];
+                if (placeBarricade((t % city.w + 0.5f) * City.T, (t / city.w + 0.5f) * City.T, s.tier) == null) {
+                    s.fails[nj]++;
+                    break;
+                }
+            }
+            s.work -= SurvivorBases.SECTION_WORK;
+        }
+        int up = SurvivorBases.wallsUp(city, s), want = s.ring.length - s.gates.length;
+        if (!s.walled && up >= want) {
+            s.walled = true;
+            s.work = 0;
+            if (s.said < 1) {
+                s.said = 1;
+                dispatch.say(Dispatch.WHO_INFO, null, "News: " + s.name + " has a wall all the way round now.", s.cx(), s.cy());
+            }
+        }
+        if (!s.walled || up < want) return;
+        // Patching what the dead have knocked about.
+        for (int t : s.ring) {
+            if (s.isGate(t)) continue;
+            float[] b = SurvivorBases.barrierAt(this, t);
+            if (b != null) b[2] = Math.min(BARRICADE_HP[Math.max(0, Math.min(2, (int) b[5]))], b[2] + 6);
+        }
+        // Towers, one every so often.
+        int maxTowers = s.tier == 0 ? Math.min(2, s.towers.length) : s.towers.length;
+        if (s.towersUp < maxTowers && s.quietFor > 0 && s.quietFor % 15 == 0) {
+            s.towersUp++;
+            if (s.towersUp == 1 && s.said < 2) {
+                s.said = 2;
+                dispatch.say(Dispatch.WHO_INFO, null, "News: " + s.name + " has a watchtower up. Their best shots are on it.", s.cx(), s.cy());
+            }
+        }
+        // Then a stronger wall.
+        if (s.tier < 2 && s.work >= (s.tier == 0 ? SurvivorBases.SANDBAG_WORK : SurvivorBases.CONCRETE_WORK)) {
+            s.work = 0;
+            s.tier++;
+            for (int t : s.ring) {
+                float[] b = SurvivorBases.barrierAt(this, t);
+                if (b != null) setTier(b, s.tier);
+            }
+            dispatch.say(Dispatch.WHO_INFO, null, "News: " + s.name + " has rebuilt its wall in " + (s.tier == 1 ? "sandbags." : "concrete."), s.cx(), s.cy());
+        }
+    }
+
+    /** The armed among them on the gates first, then up the towers, then round the door. */
+    private void manBase(SurvivorBases.Base s) {
+        ArrayList<Entity> guards = new ArrayList<Entity>();
+        for (int k = 0, n = gatherLiving(s.cx(), s.cy(), Math.max(s.tx1 - s.tx0, s.ty1 - s.ty0) * City.T + 260); k < n; k++) {
+            Entity e = gathered[k];
+            if (!e.dead && e.base == s && e.militia) guards.add(e);
+        }
+        ArrayList<float[]> spots = new ArrayList<float[]>();
+        float cx = s.cx(), cy = s.cy();
+        for (int g : s.gates) {
+            float gx = (g % city.w + 0.5f) * City.T, gy = (g / city.w + 0.5f) * City.T;
+            float dx = cx - gx, dy = cy - gy, l = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+            float[] p = city.findWalkable(gx + dx / l * City.T * 1.5f, gy + dy / l * City.T * 1.5f);
+            if (p != null) spots.add(new float[]{p[0], p[1], 0});
+        }
+        for (int k = 0; k < s.towersUp && k < s.towers.length; k++) spots.add(new float[]{s.towers[k][0], s.towers[k][1], 1});
+        for (int k = 0; k < guards.size(); k++) {
+            Entity e = guards.get(k);
+            e.building = s.b;
+            if (k < spots.size()) {
+                e.postX = spots.get(k)[0];
+                e.postY = spots.get(k)[1];
+                e.onTower = spots.get(k)[2] == 1;
+            } else {
+                float a = k * 2.4f;
+                float[] p = city.findWalkable(s.b.doorX + (float) Math.cos(a) * 22, s.b.doorY + (float) Math.sin(a) * 22);
+                e.postX = p != null ? p[0] : s.b.doorX;
+                e.postY = p != null ? p[1] : s.b.doorY;
+                e.onTower = false;
+            }
+        }
+    }
+
+    /** Shut when the dead come near (with nobody in the gateway), open again once they've been gone a while. */
+    private void baseGates(SurvivorBases.Base s) {
+        for (int g : s.gates) {
+            float gx = (g % city.w + 0.5f) * City.T, gy = (g / city.w + 0.5f) * City.T;
+            boolean shut = city.tiles[g] == City.FENCE;
+            boolean threat = zombieWithin(gx, gy, 110);
+            if (threat && !shut) {
+                float[] b = placeBarricade(gx, gy, s.tier);
+                if (b != null && s.saidCd <= 0) {
+                    s.saidCd = 40;
+                    dispatch.chatter(Dispatch.WHO_INFO, null, s.name + ": Shut the gate! They're coming!", gx, gy);
+                }
+            } else if (shut && !zombieWithin(gx, gy, 160) && s.quietFor >= 5) {
+                float[] b = SurvivorBases.barrierAt(this, g);
+                if (b != null) removeBarricade(b);
+            }
+        }
+    }
+
+    /** Once the wall's up: the workshop makes rounds, and the armoury hands a gun to the unarmed among them. */
+    private void baseWorkshop(SurvivorBases.Base s) {
+        if (!s.walled) return;
+        s.workshop += 0.02f + Math.min(12, s.members) * 0.012f;
+        if (s.workshop >= 1) {
+            s.workshop -= 1;
+            s.stash = Math.min(400, s.stash + 12);
+            if (s.said < 3) {
+                s.said = 3;
+                dispatch.say(Dispatch.WHO_INFO, null, "News: " + s.name + " has a workshop going, making its own ammunition.", s.cx(), s.cy());
+            }
+        }
+        if (s.stash < 20 || s.guards >= Math.min(10, Math.max(2, s.members / 2))) return;
+        for (int k = 0, n = gatherLiving(s.cx(), s.cy(), Math.max(s.tx1 - s.tx0, s.ty1 - s.ty0) * City.T); k < n; k++) {
+            Entity e = gathered[k];
+            if (e.dead || e.base != s || e.militia || e.hasGun || e.type != Entity.CIVILIAN || e.infected) continue;
+            e.hasGun = true;
+            e.weapon = Entity.W_STD;
+            e.magSize = 8;
+            e.ammo = 8;
+            e.reserve = 12;
+            s.stash -= 20;
+            joinBase(e, s, true);
+            return;
+        }
+    }
+
+    /**
+     * One of a base's unarmed people: inside its wall and about the place - lending a hand where a section's going up -
+     * or making their way back in. False when they should look to themselves (the dead right on them, or the base gone).
+     */
+    private boolean baseMember(Entity e, float dt) {
+        SurvivorBases.Base s = e.base;
+        if (s == null || s.fallen) {
+            e.base = null;
+            return false;
+        }
+        if (e.task == Dispatch.T_SEEK || e.task == Dispatch.T_HIDE) e.task = Dispatch.T_NONE;
+        if (e.fleeTimer > 0 && zombieWithin(e.x, e.y, 60)) return false;
+        float cx = s.cx(), cy = s.cy();
+        if (!s.contains(e.x, e.y, -1)) {
+            walkToSpot(e, s.b.doorX, s.b.doorY, e.speed * 1.4f);
+            return true;
+        }
+        e.baseSpotT -= dt;
+        if (e.baseSpotT <= 0) {
+            e.baseSpotT = 4 + rnd.nextFloat() * 6;
+            float px = -1, py = -1;
+            // (Helping with the next stretch of wall, while there's one to build.)
+            int ni = s.walled ? -1 : SurvivorBases.nextSection(city, s, -1);
+            if (ni >= 0) {
+                int t = s.ring[ni];
+                float tx = (t % city.w + 0.5f) * City.T, ty = (t / city.w + 0.5f) * City.T;
+                float dx = cx - tx, dy = cy - ty, l = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+                px = tx + dx / l * City.T;
+                py = ty + dy / l * City.T;
+            }
+            if (px < 0) {
+                px = (s.tx0 + 1.5f + rnd.nextFloat() * (s.tx1 - s.tx0 - 2)) * City.T;
+                py = (s.ty0 + 1.5f + rnd.nextFloat() * (s.ty1 - s.ty0 - 2)) * City.T;
+            }
+            float[] p = city.findWalkable(px, py);
+            if (p != null && s.contains(p[0], p[1], -1)) {
+                e.baseSpotX = p[0];
+                e.baseSpotY = p[1];
+            } else {
+                e.baseSpotX = s.b.doorX;
+                e.baseSpotY = s.b.doorY;
+            }
+        }
+        standAt(e, e.baseSpotX, e.baseSpotY, 0.6f);
+        return true;
+    }
+
     /** A militia member: hold the post, shoot what comes, and give up once the bullets are gone. */
     private void thinkMilitia(Entity e, float dt) {
+        // ((25.0) A base's guard tops up from its workshop's store.)
+        if (e.base != null && e.ammo + e.reserve <= 6 && e.base.stash >= 10) {
+            e.base.stash -= 10;
+            e.reserve += 10;
+        }
         if (e.holdout != null && e.ammo + e.reserve <= 4 && e.holdout.stash > 0) {
             // Back to the group's stash for more.
             int take = Math.min(e.holdout.stash, 30);
@@ -12761,14 +13117,16 @@ final class World {
         }
         // ((12.0) Reloading is seen to with everyone else's (see think): done here as well, they reloaded twice as fast.)
         e.fear = 5;
-        Entity t = pickTarget(e, e.weapon == Entity.W_HUNTING ? 260 : 150);
+        // ((25.0) Up a watchtower: they see and shoot further.)
+        float reach = (e.weapon == Entity.W_HUNTING ? 260 : 150) * (e.onTower ? 1.5f : 1);
+        Entity t = pickTarget(e, reach);
         if (t != null) {
             float d = (float) World.hypot(t.x - e.x, t.y - e.y);
             if (d < 14) {
                 float ax = e.x - t.x, ay = e.y - t.y;
                 flee(e, ax / (d + 0.01f), ay / (d + 0.01f), e.runSpeed);
             } else steer(e, 0, 0, 0);
-            aimAndFire(e, t, d, 150, dt);
+            aimAndFire(e, t, d, e.onTower ? 225 : 150, dt);
             return;
         }
         standAt(e, e.postX, e.postY, 1);

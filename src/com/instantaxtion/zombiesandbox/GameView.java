@@ -3064,6 +3064,7 @@ final class GameView extends View implements Menu.Host {
         }
 
         for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) drawZone(c, world.dispatch.zones.get(i));
+        for (int i = 0, n = world.bases.size(); i < n; i++) drawBase(c, world.bases.get(i), vx0, vy0, vx1, vy1);
         for (int i = 0, n = world.holdouts.size(); i < n; i++) {
             World.Holdout h = world.holdouts.get(i);
             if (h.b.x1 + 40 < vx0 || h.b.x0 - 40 > vx1 || h.b.y1 + 40 < vy0 || h.b.y0 - 40 > vy1) continue;
@@ -3993,6 +3994,59 @@ final class GameView extends View implements Menu.Host {
      * A survivor group's defences, growing as they work: boards over the door, then a ring of sandbags
      * round the building (gap at the door), then a plank wall further out.
      */
+    /**
+     * ((25.0) A survivor base: its ground (the wall is its barricades, drawn with the rest), a watchtower in each
+     * corner that's been built, the workshop's bench and crates by the door, and a flag.
+     */
+    private void drawBase(Canvas c, SurvivorBases.Base s, float vx0, float vy0, float vx1, float vy1) {
+        float T = City.T;
+        float x0 = s.tx0 * T, y0 = s.ty0 * T, x1 = (s.tx1 + 1) * T, y1 = (s.ty1 + 1) * T;
+        if (x1 < vx0 || x0 > vx1 || y1 < vy0 || y0 > vy1) return;
+        fill.setColor(0x16C89A40);
+        c.drawRect(x0 + T, y0 + T, x1 - T, y1 - T, fill);
+        for (int k = 0; k < s.towersUp && k < s.towers.length; k++) {
+            float tx = s.towers[k][0], ty = s.towers[k][1];
+            // Shadow, four legs, the platform and its rail.
+            fill.setColor(0x50000000);
+            c.drawRect(tx - 6, ty - 4, tx + 9, ty + 9, fill);
+            fill.setColor(0xFF4E3820);
+            c.drawRect(tx - 7, ty - 7, tx - 5, ty - 5, fill);
+            c.drawRect(tx + 5, ty - 7, tx + 7, ty - 5, fill);
+            c.drawRect(tx - 7, ty + 5, tx - 5, ty + 7, fill);
+            c.drawRect(tx + 5, ty + 5, tx + 7, ty + 7, fill);
+            fill.setColor(0xFF9C7446);
+            c.drawRect(tx - 6, ty - 6, tx + 6, ty + 6, fill);
+            fill.setColor(0xFFB88E5A);
+            for (int q = -5; q <= 4; q += 3) c.drawRect(tx - 5.5f, ty + q, tx + 5.5f, ty + q + 1.6f, fill);
+            stroke.setColor(0xFF5A4024);
+            stroke.setStrokeWidth(1.2f);
+            c.drawRect(tx - 6, ty - 6, tx + 6, ty + 6, stroke);
+        }
+        City.Building b = s.b;
+        float dx = b.doorX, dy = b.doorY;
+        float ox = Math.signum(s.cx() - dx), oy = Math.signum(s.cy() - dy);
+        if (s.walled) {
+            // The workshop: a bench, crates of rounds.
+            float wx = dx - oy * 14 - ox * 4, wy = dy + ox * 14 - oy * 4;
+            fill.setColor(0xFF6A5236);
+            c.drawRect(wx - 6, wy - 3, wx + 6, wy + 3, fill);
+            fill.setColor(0xFF8C8F94);
+            c.drawCircle(wx - 2, wy, 1.4f, fill);
+            fill.setColor(0xFF5E6B3A);
+            int crates = Math.min(4, (int) (s.stash / 40) + 1);
+            for (int q = 0; q < crates; q++) c.drawRect(wx + 8 + q * 4.5f, wy - 2, wx + 11.5f + q * 4.5f, wy + 2, fill);
+        }
+        // A flag on a pole by the door.
+        float fx = dx + oy * 12, fy = dy - ox * 12;
+        stroke.setColor(0xFF3A3A3A);
+        stroke.setStrokeWidth(1f);
+        c.drawLine(fx, fy, fx, fy - 12, stroke);
+        fill.setColor(0xFFD8B04A);
+        c.drawRect(fx, fy - 12, fx + 7, fy - 7.5f, fill);
+        fill.setColor(0xFF8E2E24);
+        c.drawRect(fx + 2.5f, fy - 11, fx + 4.5f, fy - 8.5f, fill);
+    }
+
     private void drawHoldout(Canvas c, World.Holdout h) {
         City.Building b = h.b;
         float f = h.fort;
@@ -6480,6 +6534,22 @@ final class GameView extends View implements Menu.Host {
             fill.setColor(0xD04A3A1C);
             c.drawRoundRect(oval, 7 * dp, 7 * dp, fill);
             text.setColor(0xFFF2E2B8);
+            c.drawText(label, sx, sy, text);
+        }
+        // ((25.0) Survivor bases: their name, how many, and how far they've got.)
+        for (int i = 0, n = world.bases.size(); i < n; i++) {
+            SurvivorBases.Base s = world.bases.get(i);
+            float sx = screenX(s.cx()), sy = screenY(s.ty0 * City.T) - 6 * dp;
+            if (sx < -100 * dp || sx > getWidth() + 100 * dp || sy < 0 || sy > barTop) continue;
+            String state = !s.walled ? "building its wall" : SurvivorBases.TIER_NAMES[s.tier] + " wall"
+                    + (s.towersUp > 0 ? ", " + s.towersUp + (s.towersUp == 1 ? " tower" : " towers") : "");
+            String label = s.name.toUpperCase(java.util.Locale.ROOT) + "  -  " + s.members + "  -  " + state;
+            float tw = text.measureText(label);
+            oval.set(sx - tw / 2 - 7 * dp, sy - 13 * dp, sx + tw / 2 + 7 * dp, sy + 5 * dp);
+            if (!claim(oval)) continue;
+            fill.setColor(0xD0503A16);
+            c.drawRoundRect(oval, 7 * dp, 7 * dp, fill);
+            text.setColor(0xFFFFE2A0);
             c.drawText(label, sx, sy, text);
         }
         for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {

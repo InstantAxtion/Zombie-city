@@ -85,6 +85,10 @@ final class Entity {
     transient Dispatch.SafeZone seekZone;
     /** ((24.0) Has told the others they've been bitten. */
     transient boolean biteSaid;
+    /** ((25.0) The survivor base they belong to, whether they're up a watchtower, and where in it they're making for. */
+    transient SurvivorBases.Base base;
+    transient boolean onTower;
+    transient float baseSpotX, baseSpotY, baseSpotT;
     /** (11.1) Police and soldiers with nothing on: where their beat or duty takes them next, and how long they wait there. */
     float dutyX, dutyY, dutyWait, dutyFor;
     /** (11.2) The way along the street an officer on the beat is walking. */

@@ -4361,6 +4361,44 @@ public final class GameTests {
                 check(rw.missionResult == 1, "cleared and held: the mission is won");
             }
         });
+        test("25.0: armed survivors found a base, wall it in and man it; it's kept in a save", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.seed = 3;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                World w = new World(c);
+                w.populate(c);
+                java.util.Random r = new java.util.Random(1);
+                for (int i = 0; i < 6; i++) {
+                    float[] p = w.city.randomWalkable(r);
+                    w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                }
+                w.recount();
+                float[] p = null;
+                for (int t = 0; t < 200; t++) {
+                    p = w.city.randomWalkableInTown(r);
+                    if (!w.zombieWithin(p[0], p[1], 600)) break;
+                }
+                for (int i = 0; i < 4; i++) w.armCivilian(w.spawn(Entity.CIVILIAN, p[0] + i * 6, p[1]), 30);
+                for (int s = 0; s < 30 * 120; s++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    // (The outbreak kept going far off, but not at the base.)
+                    for (Entity e : w.entities)
+                        if (e.isZombie() && !w.bases.isEmpty() && Math.hypot(e.x - w.bases.get(0).cx(), e.y - w.bases.get(0).cy()) < 900) e.hp = 0;
+                }
+                check(!w.bases.isEmpty(), "a survivor base was founded");
+                SurvivorBases.Base b = w.bases.get(0);
+                check(b.walled && SurvivorBases.wallsUp(w.city, b) >= b.ring.length - b.gates.length, "its wall is up (" + SurvivorBases.wallsUp(w.city, b) + " of " + b.ring.length + ")");
+                check(b.members >= 4 && b.guards >= 2, "people inside and guards on it (" + b.members + ", " + b.guards + ")");
+                check(b.towersUp >= 1, "a watchtower (" + b.towersUp + ")");
+                File f = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                check(l.bases.size() == w.bases.size() && l.bases.get(0).name.equals(b.name) && l.bases.get(0).walled, "kept in a save");
+            }
+        });
         test("23.0: experience levels and perks, kept in a save; survivor bands; the cargo plane drops its crates", new Check() {
             @Override
             public void run() throws Exception {

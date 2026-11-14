@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 69;
+    private static final int VERSION = 71;
 
     private SaveGame() {
     }
@@ -451,6 +451,22 @@ final class SaveGame {
             out.writeInt(w.barrages);
             out.writeInt(w.perkStars);
             out.writeFloat(w.siteT);
+            // Version 71: the survivor bases.
+            out.writeInt(w.bases.size());
+            for (SurvivorBases.Base b : w.bases) {
+                out.writeInt(w.city.buildings.indexOf(b.b));
+                out.writeUTF(b.name);
+                out.writeByte(b.tier);
+                out.writeFloat(b.work);
+                out.writeBoolean(b.walled);
+                out.writeByte(b.towersUp);
+                out.writeFloat(b.stash);
+                out.writeFloat(b.workshop);
+                out.writeFloat(b.age);
+                out.writeByte(b.said);
+            }
+            out.writeInt(w.basesFounded);
+            out.writeInt(w.basesLost);
         } finally {
             moved = null;
             homeIndex = null;
@@ -1058,6 +1074,32 @@ final class SaveGame {
                     // ((22.0) Stars then; the perks themselves now.)
                     if (version < 67) w.perkStars = Perks.legacy(w.perkStars);
                     w.siteT = in.readFloat();
+                }
+                if (version >= 71) {
+                    int bn = in.readInt();
+                    for (int k = 0; k < bn; k++) {
+                        int bi = in.readInt();
+                        String name = in.readUTF();
+                        int tier = in.readByte();
+                        float work = in.readFloat();
+                        boolean walled = in.readBoolean();
+                        int towers = in.readByte();
+                        float stash = in.readFloat(), workshop = in.readFloat(), age = in.readFloat();
+                        int said = in.readByte();
+                        SurvivorBases.Base b = bi >= 0 && bi < w.city.buildings.size() ? w.restoreBase(w.city.buildings.get(bi)) : null;
+                        if (b == null) continue;
+                        b.name = name;
+                        b.tier = tier;
+                        b.work = work;
+                        b.walled = walled;
+                        b.towersUp = towers;
+                        b.stash = stash;
+                        b.workshop = workshop;
+                        b.age = age;
+                        b.said = said;
+                    }
+                    w.basesFounded = in.readInt();
+                    w.basesLost = in.readInt();
                 }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
