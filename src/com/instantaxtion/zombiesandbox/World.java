@@ -2108,19 +2108,23 @@ final class World {
         if (lodFrame % 15 == 7) city.warmFacilityField();
         fieldTimer -= dt;
         occTimer -= dt;
-        if (fieldTimer <= 0) {
-            fieldTimer = quality == Q_FULL ? 0.25f : quality == Q_REDUCED ? 0.4f : 0.6f;
-            // ((10.34) Half as often in a crowded city: it's a whole-map search, and nobody moves far in between.)
-            if (entities.size() > 12000) fieldTimer *= 2;
-            // ((11.5) And half as often again from six thousand.)
-            else if (entities.size() > 6000) fieldTimer *= 1.5f;
-            if (entities.size() > 18000) {
-                // ((13.5) With over eighteen thousand, the two in turn, each every three quarters of a second: both at
-                // once were the longest step of every few.)
-                fieldTimer *= 0.75f;
-                fieldTurn = !fieldTurn;
-                city.computeFields(entities, fieldTurn, !fieldTurn);
-            } else city.computeFields(entities);
+        // ((24.0) A pass of the scent searches is started every so often and worked through a slice a step (see
+        // City.startFields), not done all at once: it was the longest step of every few.)
+        float fieldEvery = quality == Q_FULL ? 0.25f : quality == Q_REDUCED ? 0.4f : 0.6f;
+        // ((10.34) Half as often in a crowded city: it's a whole-map search, and nobody moves far in between.)
+        if (entities.size() > 12000) fieldEvery *= 2;
+        // ((11.5) And half as often again from six thousand.)
+        else if (entities.size() > 6000) fieldEvery *= 1.5f;
+        // ((13.5) With over eighteen thousand, each field every three quarters of a second.)
+        if (entities.size() > 18000) fieldEvery *= 1.5f;
+        if (fieldTimer <= 0 && !city.fieldsBusy()) {
+            fieldTimer = fieldEvery;
+            city.startFields(entities, true, true);
+        }
+        if (city.fieldsBusy()) {
+            // Enough a step to be done a step or so before the next pass is due.
+            int steps = Math.max(1, (int) (fieldEvery / Math.max(dt, 1e-3f)) - 1);
+            city.fieldWork(entities, Math.max(FIELD_MIN_WORK, city.fieldLastWork / steps + 1));
         }
         toolsStep(dt);
         dispatch.update(dt);
@@ -2530,8 +2534,8 @@ final class World {
     }
 
     /** ((11.5) Each one's cell, from the first pass over everyone to the second.) */
-    /** ((13.5) Which of the two maps of where the dead and the living are is worked out next, on the biggest maps. */
-    private boolean fieldTurn;
+    /** ((24.0) The least of a pass of the scent searches done in a step, in tiles: a small map's all at once.) */
+    private static final int FIELD_MIN_WORK = 40000;
 
     /**
      * ((13.5) Everyone within (x0, y0)-(x1, y1), into out, from the grid of who's where: for the screen, which looked
@@ -15217,19 +15221,48 @@ final class World {
 
     /** The nearest zombie a gunner on the ground can actually see. */
     Entity nearestVisibleZombie(float x, float y, float radius) {
-        Entity best = null;
-        float bd = radius * radius;
-        for (int i = 0, n = entities.size(); i < n; i++) {
-            Entity o = entities.get(i);
-            if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
-            float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
-            if (d < bd && city.los(x, y, o.x, o.y)) {
-                bd = d;
-                best = o;
+        // ((24.0) From the grid, as nearestZombie, not everyone in the city for every gun on every step; and the line of
+        // sight looked along for the nearest first, so only until one can be seen. A little beyond the radius in the
+        // grid, for anyone who's moved since it was laid out.)
+        float rr = radius * radius, pad = radius + 8;
+        int cx0 = Math.max(0, (int) ((x - pad) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + pad) / CELL));
+        int cy0 = Math.max(0, (int) ((y - pad) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + pad) / CELL));
+        int m = 0;
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = k + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
+                    float d = (o.x - x) * (o.x - x) + (o.y - y) * (o.y - y);
+                    if (d >= rr) continue;
+                    if (m == visZ.length) {
+                        visZ = Arrays.copyOf(visZ, m * 2);
+                        visD = Arrays.copyOf(visD, m * 2);
+                    }
+                    visZ[m] = o;
+                    visD[m++] = d;
+                }
             }
+        Entity best = null;
+        while (m > 0) {
+            int bi = 0;
+            for (int i = 1; i < m; i++) if (visD[i] < visD[bi]) bi = i;
+            Entity o = visZ[bi];
+            if (city.los(x, y, o.x, o.y)) {
+                best = o;
+                break;
+            }
+            visZ[bi] = visZ[--m];
+            visD[bi] = visD[m];
         }
+        for (int i = 0; i < visZ.length && visZ[i] != null; i++) visZ[i] = null;
         return best;
     }
+
+    /** ((24.0) The zombies near a gunner, nearest first, for nearestVisibleZombie.) */
+    private Entity[] visZ = new Entity[64];
+    private float[] visD = new float[64];
 
     /** One burst from the helicopter's door gun. */
     void airShot(float fx, float fy, Entity t) {

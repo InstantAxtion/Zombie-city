@@ -231,7 +231,8 @@ final class City {
     final byte[] tiles;
     final boolean[] solid;
     final boolean[] opaque;
-    final int[] humanDist, zombieDist;
+    /** ((24.0) Not final: each changes places with a spare table when a new search is done - see commit.) */
+    int[] humanDist, zombieDist;
     private final int[] queue;
     final Random rnd;
     /**
@@ -702,6 +703,7 @@ final class City {
         clearDoorways();
         Arrays.fill(humanDist, FAR);
         Arrays.fill(zombieDist, FAR);
+        abortFields();
         // ((11.5) Anything worked out from the tiles while the city was being built is let go of: it's done now.)
         clear3 = null;
         clr = null;
@@ -13965,8 +13967,45 @@ final class City {
         computeFields(entities, true, true);
     }
 
-    /** ((13.5) One or both: on the biggest maps they're worked out in turn, not in the same step.) */
+    /**
+     * ((13.5) One or both: on the biggest maps they're worked out in turn, not in the same step.)
+     * ((24.0) All at once, there and then: after a load, or for a test. In play they're worked out a slice at a time - see
+     * startFields and fieldWork.)
+     */
     void computeFields(List<Entity> entities, boolean doZombies, boolean doHumans) {
+        startFields(entities, doZombies, doHumans);
+        fieldWork(entities, Integer.MAX_VALUE);
+    }
+
+    /**
+     * (24.0) The scent searches, spread over several steps instead of all in one: each whole-map search was ten
+     * milliseconds or more, done four times a second in the middle of drawing - the longest steps of all. The search
+     * in progress fills a spare table, which changes places with the one everybody reads when it's done, so nobody
+     * ever sees half a field. The zombie field first, then the human one (which uses the new zombie field). The spare
+     * table is cleared a slice at a time too, before each search.
+     */
+    private int[] fieldBack;
+    /** The tiles set in the spare table (-1 not known: all of it is cleared), and how far clearing them has got. */
+    private int[] backTouched;
+    private int nBackTouched = -1, backCleared;
+    /** 0 nothing being worked out, 1 the zombie field, 2 the human field. */
+    private int fieldPhase;
+    /** Still clearing the spare table before the search starts. */
+    private boolean fClearing;
+    private int fqHead, fqTail, fLimit, fZombieLimit;
+    private boolean fDoHumans, fNearZombiesOnly;
+    /** How many tiles the last whole pass went through, and this one so far: to judge how much to do a step. */
+    int fieldLastWork;
+    private int fieldWorkNow;
+
+    /** A pass of the searches is under way. */
+    boolean fieldsBusy() {
+        return fieldPhase != 0;
+    }
+
+    /** Starts a new pass of the searches (dropping any under way), with everyone where they are now. */
+    void startFields(List<Entity> entities, boolean doZombies, boolean doHumans) {
+        abortFields();
         // Only near distances matter (how far the nearest zombie or person is, within smelling range), so
         // the searches stop spreading after a while instead of covering a whole massive map.
         // (10.31) Only the dead go by the scent of the living: with none about (a calm city of tens
@@ -13978,14 +14017,114 @@ final class City {
             if (e.isZombie()) hunters = true;
         }
         // ((10.34) Not so far out in a crowded city: that search covered most of a Gigantic map.)
-        zombieLimit = entities.size() > 12000 ? 48 : 70;
-        if (doZombies) bfs(zombieDist, entities, true, zombieLimit);
-        if (!doHumans) return;
+        fZombieLimit = entities.size() > 12000 ? 48 : 70;
         // (And with only the dead to smell them, only the living within reach of one count: the rest of the city
         // can't be smelled from anywhere a zombie is.)
-        nearZombiesOnly = true;
-        if (hunters) bfs(humanDist, entities, false, (int) (World.SCENT * 1.7f) + 4);
-        nearZombiesOnly = false;
+        fNearZombiesOnly = true;
+        fDoHumans = doHumans && hunters;
+        fieldWorkNow = 0;
+        if (fieldBack == null || fieldBack.length != w * h) {
+            fieldBack = new int[w * h];
+            nBackTouched = -1;
+        }
+        if (doZombies) beginSearch(true);
+        else if (fDoHumans) beginSearch(false);
+    }
+
+    /** Drops the pass under way: what it put in the spare table is cleared with the rest next time. */
+    private void abortFields() {
+        if (fieldPhase == 0) return;
+        if (!fClearing) {
+            // (The table was clear when it started: everything it has put there since is in its queue.)
+            if (backTouched == null || backTouched.length < fqTail) backTouched = new int[fqTail + fqTail / 2 + 64];
+            System.arraycopy(queue, 0, backTouched, 0, fqTail);
+            nBackTouched = fqTail;
+        }
+        fieldPhase = 0;
+        fqHead = fqTail = 0;
+    }
+
+    private void beginSearch(boolean zombies) {
+        fieldPhase = zombies ? 1 : 2;
+        fLimit = zombies ? fZombieLimit : (int) (World.SCENT * 1.7f) + 4;
+        fClearing = true;
+        backCleared = 0;
+        fqHead = fqTail = 0;
+    }
+
+    /**
+     * Goes on with the pass under way, through about budget tiles. True if that finished it (the new fields are in
+     * place).
+     */
+    boolean fieldWork(List<Entity> entities, int budget) {
+        if (fieldPhase == 0) return false;
+        while (fieldPhase != 0 && budget > 0) {
+            boolean zombies = fieldPhase == 1;
+            if (fClearing) {
+                // Clearing the spare table: the tiles the field it last held reached, or all of it.
+                int[] back = fieldBack;
+                if (nBackTouched < 0) {
+                    int to = (int) Math.min((long) back.length, (long) backCleared + Math.max(budget, 1) * 4L);
+                    Arrays.fill(back, backCleared, to, FAR);
+                    budget -= (to - backCleared) / 4 + 1;
+                    backCleared = to;
+                    if (backCleared < back.length) break;
+                } else {
+                    int[] tch = backTouched;
+                    int to = (int) Math.min((long) nBackTouched, (long) backCleared + Math.max(budget, 1) * 2L);
+                    for (int i = backCleared; i < to; i++) back[tch[i]] = FAR;
+                    budget -= (to - backCleared) / 2 + 1;
+                    backCleared = to;
+                    if (backCleared < nBackTouched) break;
+                }
+                fClearing = false;
+                nearZombiesOnly = !zombies && fNearZombiesOnly;
+                fqTail = seed(back, entities, zombies);
+                nearZombiesOnly = false;
+                fqHead = 0;
+                continue;
+            }
+            int h0 = fqHead;
+            fqTail = spread(fieldBack, fqTail, fLimit, budget);
+            budget -= fqHead - h0;
+            if (fqHead < fqTail) break;
+            fieldWorkNow += fqTail;
+            commit(zombies);
+            if (zombies) zombieLimit = fZombieLimit;
+            if (zombies && fDoHumans) beginSearch(false);
+            else {
+                fieldPhase = 0;
+                fieldLastWork = fieldWorkNow;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The finished search's table changes places with the field everybody reads; the old one is the spare now. */
+    private void commit(boolean zombies) {
+        int[] old = zombies ? zombieDist : humanDist;
+        int[] oldT = zombies ? touchedZ : touchedH;
+        int oldN = zombies ? nTouchedZ : nTouchedH;
+        int end = fqTail;
+        // The new field's list of tiles, in the array the spare table's list was in (it's been cleared).
+        int[] tch = backTouched;
+        if (tch == null || tch.length < end) tch = new int[end + end / 2 + 64];
+        System.arraycopy(queue, 0, tch, 0, end);
+        if (zombies) {
+            zombieDist = fieldBack;
+            touchedZ = tch;
+            nTouchedZ = end;
+        } else {
+            humanDist = fieldBack;
+            touchedH = tch;
+            nTouchedH = end;
+        }
+        fieldBack = old;
+        backTouched = oldT;
+        nBackTouched = oldT == null ? -1 : oldN;
+        backCleared = 0;
+        fqHead = fqTail = 0;
     }
 
     /** Can a vehicle drive over this tile, and at what cost: roads are cheap, sidewalks and lots dearer. */
@@ -14853,15 +14992,15 @@ final class City {
 
     private boolean nearZombiesOnly;
 
-    /** ((12.0) The tiles each field's last search reached, so only those are cleared next time - not the whole map.) */
+    /**
+     * ((12.0) The tiles each field's last search reached, so only those are cleared next time - not the whole map.)
+     * ((24.0) The queue of the search under way is the list of what it has reached in the spare table.)
+     */
     private int[] touchedZ, touchedH;
     private int nTouchedZ = -1, nTouchedH = -1;
 
-    private void bfs(int[] dist, List<Entity> entities, boolean zombies, int limit) {
-        int[] tch = zombies ? touchedZ : touchedH;
-        int nt = zombies ? nTouchedZ : nTouchedH;
-        if (nt < 0 || tch == null) Arrays.fill(dist, FAR);
-        else for (int i = 0; i < nt; i++) dist[tch[i]] = FAR;
+    /** The tiles a search starts from, into dist (all FAR to begin with) and the queue; how many. */
+    private int seed(int[] dist, List<Entity> entities, boolean zombies) {
         int tail = 0;
         if (!zombies && extraScent != null)
             for (int i = 0; i < extraScentN; i++) {
@@ -14881,20 +15020,13 @@ final class City {
                 queue[tail++] = t;
             }
         }
-        int end = spread(dist, tail, limit);
-        if (tch == null || tch.length < end) tch = new int[end + end / 2 + 64];
-        System.arraycopy(queue, 0, tch, 0, end);
-        if (zombies) {
-            touchedZ = tch;
-            nTouchedZ = end;
-        } else {
-            touchedH = tch;
-            nTouchedH = end;
-        }
+        return tail;
     }
 
-    private int spread(int[] dist, int tail, int limit) {
-        int head = 0;
+    /** ((24.0) Carries on from fqHead, through at most budget tiles; leaves fqHead where it got to.) */
+    private int spread(int[] dist, int tail, int limit, int budget) {
+        int head = fqHead;
+        int stop = budget >= Integer.MAX_VALUE - head ? Integer.MAX_VALUE : head + budget;
         // ((22.3) Whether a tile is on the edge of the map from a table, not worked out by dividing for each of the
         // hundreds of thousands it spreads over: a third of the search.)
         if (rim == null || rim.length != w * h) {
@@ -14904,7 +15036,8 @@ final class City {
         }
         boolean[] rim = this.rim, solid = this.solid;
         int w = this.w;
-        while (head < tail) {
+        int[] queue = this.queue;
+        while (head < tail && head < stop) {
             int t = queue[head++];
             int nd = dist[t] + 1;
             if (nd > limit) continue;
@@ -14925,6 +15058,7 @@ final class City {
             if (ty > 0) tail = visit(dist, t - w, nd, tail);
             if (ty < h - 1) tail = visit(dist, t + w, nd, tail);
         }
+        fqHead = head;
         return tail;
     }
 

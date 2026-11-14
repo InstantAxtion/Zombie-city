@@ -88,10 +88,29 @@ final class GameView extends View implements Menu.Host {
     }
 
     private String[] enemyNames() {
-        String[] n = new String[ZOMBIE_VARIANTS.length];
-        for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
+        return ENEMY_NAMES;
+    }
+
+    /** ((24.0) Worked out once, not on every frame the tool's label is drawn.) */
+    private static final String[] ENEMY_NAMES = namesOf(ZOMBIE_VARIANTS), CIV_NAMES = namesOf(CIV_VARIANTS);
+
+    private static String[] namesOf(int[] types) {
+        String[] n = new String[types.length];
+        for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[types[k]];
         return n;
     }
+
+    /** ((24.0) The i-th of a set of rectangles kept for reuse from frame to frame, made the first time it's wanted. */
+    private static RectF pooled(java.util.ArrayList<RectF> pool, int i) {
+        while (pool.size() <= i) pool.add(new RectF());
+        return pool.get(i);
+    }
+
+    /** ((24.0) The marks along a jet's or helicopter's side, for drawing: not a new array for each one each frame. */
+    private static final float[] SIDE_MARKS = {-3.6f, -2.0f, 2.0f, 3.6f};
+    private final RectF bannerRect = new RectF(), boatRect = new RectF();
+    private final java.util.ArrayList<RectF> hotPool = new java.util.ArrayList<RectF>(), timePool = new java.util.ArrayList<RectF>(),
+            tacPool = new java.util.ArrayList<RectF>();
 
     private String rowLabel(int t) {
         return ROW_LABELS[t];
@@ -1619,7 +1638,8 @@ final class GameView extends View implements Menu.Host {
         float y = getHeight() - 70 * dp;
         fill.setStyle(Paint.Style.FILL);
         fill.setColor(0xEE3A1E1E);
-        c.drawRoundRect(new RectF(getWidth() / 2f - tw / 2, y - 26 * dp, getWidth() / 2f + tw / 2, y + 12 * dp), 10 * dp, 10 * dp, fill);
+        bannerRect.set(getWidth() / 2f - tw / 2, y - 26 * dp, getWidth() / 2f + tw / 2, y + 12 * dp);
+        c.drawRoundRect(bannerRect, 10 * dp, 10 * dp, fill);
         text.setColor(0xFFFFE0E0);
         c.drawText(msg, getWidth() / 2f, y, text);
     }
@@ -1971,7 +1991,8 @@ final class GameView extends View implements Menu.Host {
         }
         for (int i = 0; i < hot.size() && y + rowH < getHeight() - 8 * dp; i++) {
             World.HotSpot h = hot.get(i);
-            RectF r = new RectF(left, y, right, y + rowH - 6 * dp);
+            RectF r = pooled(hotPool, hotRows.size());
+            r.set(left, y, right, y + rowH - 6 * dp);
             hotRows.add(r);
             fill.setColor(0xE0262A30);
             c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
@@ -2061,7 +2082,8 @@ final class GameView extends View implements Menu.Host {
         for (int i = all.size() - 1; i >= 0 && y + rowH < getHeight() - 8 * dp; i--) {
             World.Moment m = all.get(i);
             boolean there = !Float.isNaN(m.x);
-            RectF r = new RectF(left, y, right, y + rowH - 5 * dp);
+            RectF r = pooled(timePool, timeRows.size());
+            r.set(left, y, right, y + rowH - 5 * dp);
             timeRows.add(r);
             timeShown.add(m);
             fill.setColor(there ? 0xE0262A30 : 0xC01C1F24);
@@ -2332,7 +2354,8 @@ final class GameView extends View implements Menu.Host {
 
     private boolean tacClaim(String label, float x, float y) {
         float tw = text.measureText(label) / 2 + 2 * dp;
-        RectF r = new RectF(x - tw, y - text.getTextSize(), x + tw, y + 3 * dp);
+        RectF r = pooled(tacPool, tacUsed.size());
+        r.set(x - tw, y - text.getTextSize(), x + tw, y + 3 * dp);
         for (int i = 0; i < tacUsed.size(); i++) if (RectF.intersects(tacUsed.get(i), r)) return false;
         tacUsed.add(r);
         return true;
@@ -3553,7 +3576,7 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(-4.6f * u, -0.8f * u, 4 * u, 0.8f * u, fill);
             c.drawCircle(4 * u, 0, 0.8f * u, fill);
             fill.setColor(0xFF4A5040);
-            for (float ey : new float[]{-3.6f, -2.0f, 2.0f, 3.6f}) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, fill);
+            for (float ey : SIDE_MARKS) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, fill);
             c.restore();
         }
         for (int i = 0, n = world.birds.size(); i < n; i++) {
@@ -5820,7 +5843,7 @@ final class GameView extends View implements Menu.Host {
                 c.drawRect(-4.6f * u, -0.8f * u, 4 * u, 0.8f * u, fill);
                 c.drawCircle(4 * u, 0, 0.8f * u, fill);
                 fill.setColor(0xFF4A5040);
-                for (float ey : new float[]{-3.6f, -2.0f, 2.0f, 3.6f}) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, fill);
+                for (float ey : SIDE_MARKS) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, fill);
                 c.restore();
             } else City.drawAirliner(c, fill, v.x, v.y, u, v.angle, 0xFF2E6EB8);
             return;
@@ -7449,7 +7472,8 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(wx, sp - 0.8f, wx + 3, sp, fill);
         }
         fill.setColor(0x30000000);
-        c.drawOval(new RectF(-len + 1.5f, -wid + 2, len + 1.5f, wid + 2), fill);
+        boatRect.set(-len + 1.5f, -wid + 2, len + 1.5f, wid + 2);
+        c.drawOval(boatRect, fill);
         android.graphics.Path hull = new android.graphics.Path();
         hull.moveTo(-len, -wid);
         hull.lineTo(len * 0.5f, -wid);
@@ -9104,11 +9128,7 @@ final class GameView extends View implements Menu.Host {
 
     private String[] sandboxNames(int t) {
         switch (t) {
-            case TOOL_CIV: {
-                String[] n = new String[CIV_VARIANTS.length];
-                for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[CIV_VARIANTS[k]];
-                return n;
-            }
+            case TOOL_CIV: return CIV_NAMES;
             case TOOL_COP: return copNames();
             case TOOL_MIL: return MIL_NAMES;
             case TOOL_ZOMBIE: return enemyNames();

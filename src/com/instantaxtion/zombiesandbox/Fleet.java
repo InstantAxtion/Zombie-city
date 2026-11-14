@@ -108,6 +108,9 @@ final class Fleet {
         Route corOf;
         int corOfT = -1, corOfDx, corOfDy, corOfPi;
         final int[] corTs = new int[COR];
+        /** ((24.0) The junction ahead (-1 none), its tile and the way in, and what that was worked out from (see junctionRule). */
+        Route jaOf;
+        int jaFrom = -1, jaT = -1, jaDx, jaDy, jaId = -1, jaTile, jaDirX, jaDirY;
         /** (10.45) Until it next looks out for the dead on its way. */
         float spotCd;
         /** Where it's steering for on that line, and whether it is. */
@@ -822,6 +825,7 @@ final class Fleet {
             if (v.pathField != v.field) v.pathField = null;
             if (v.exitRoute != v.field) v.exitRoute = null;
             if (v.corOf != v.field) v.corOf = null;
+            if (v.jaOf != v.field) v.jaOf = null;
         }
     }
 
@@ -3316,28 +3320,47 @@ final class Fleet {
         float dist = 0;
         if (v.field != null && v.pathT >= 0) {
             int prev = city.tileIndex(v.x, v.y), t = v.pathT;
-            for (int k = 0; k < 7; k++) {
-                int nid = t == prev ? -1 : city.junctionIdAt((t % W + 0.5f) * City.T, (t / W + 0.5f) * City.T);
-                if (nid >= 0) {
-                    int sx = t % W - prev % W, sy = t / W - prev / W;
-                    if (Math.abs(sx) + Math.abs(sy) == 1) {
-                        dirx = sx;
-                        diry = sy;
-                    } else {
-                        dirx = v.pdx;
-                        diry = v.pdy;
+            // ((24.0) The junction ahead is the same as last time while it's on the same tile of the same route: looked
+            // for along the route only when that changes, not every step for every car.)
+            if (v.jaOf != v.field || v.jaFrom != prev || v.jaT != t || v.jaDx != v.pdx || v.jaDy != v.pdy) {
+                v.jaOf = v.field;
+                v.jaFrom = prev;
+                v.jaT = t;
+                v.jaDx = v.pdx;
+                v.jaDy = v.pdy;
+                v.jaId = -1;
+                for (int k = 0; k < 7; k++) {
+                    int nid = t == prev ? -1 : city.junctionIdAt((t % W + 0.5f) * City.T, (t / W + 0.5f) * City.T);
+                    if (nid >= 0) {
+                        int sx = t % W - prev % W, sy = t / W - prev / W;
+                        if (Math.abs(sx) + Math.abs(sy) == 1) {
+                            dirx = sx;
+                            diry = sy;
+                        } else {
+                            dirx = v.pdx;
+                            diry = v.pdy;
+                        }
+                        if (dirx == 0 && diry == 0) break;
+                        v.jaId = nid;
+                        v.jaTile = t;
+                        v.jaDirX = dirx;
+                        v.jaDirY = diry;
+                        break;
                     }
-                    if (dirx == 0 && diry == 0) break;
-                    float ex = (t % W + 0.5f - dirx * 0.5f) * City.T, ey = (t / W + 0.5f - diry * 0.5f) * City.T;
-                    dist = (ex - v.x) * dirx + (ey - v.y) * diry;
-                    if (dist < 90) id = nid;
-                    break;
+                    int next = downhill(v.field, t);
+                    if (next == t) break;
+                    prev = t;
+                    t = next;
                 }
-                int next = downhill(v.field, t);
-                if (next == t) break;
-                prev = t;
-                t = next;
             }
+            if (v.jaId >= 0) {
+                t = v.jaTile;
+                dirx = v.jaDirX;
+                diry = v.jaDirY;
+                float ex = (t % W + 0.5f - dirx * 0.5f) * City.T, ey = (t / W + 0.5f - diry * 0.5f) * City.T;
+                dist = (ex - v.x) * dirx + (ey - v.y) * diry;
+                if (dist < 90) id = v.jaId;
+            } else dirx = diry = 0;
         }
         if (id < 0) {
             v.clearedJ = -1;
