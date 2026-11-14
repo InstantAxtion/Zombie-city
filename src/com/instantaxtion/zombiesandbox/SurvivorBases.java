@@ -44,6 +44,8 @@ final class SurvivorBases {
         int said;
         /** Counted each second: everyone who belongs, those with guns on the posts, and the dead inside the walls. */
         transient int members, guards, inside;
+        /** How many it has room for. */
+        int room = 30;
         boolean fallen;
 
         float cx() {
@@ -114,6 +116,11 @@ final class SurvivorBases {
             if (!city.solid[t] && city.tiles[t] != City.WATER) towers.add(new float[]{(c[0] + 0.5f) * T, (c[1] + 0.5f) * T});
         }
         s.towers = towers.toArray(new float[towers.size()][]);
+        // (Room for as many as the open ground inside the wall will take: one for every three tiles of it.)
+        int open2 = 0;
+        for (int y = s.ty0 + 1; y < s.ty1; y++)
+            for (int x = s.tx0 + 1; x < s.tx1; x++) if (!city.solid[y * W + x]) open2++;
+        s.room = Math.max(8, Math.min(30, open2 / 3));
         return s;
     }
 

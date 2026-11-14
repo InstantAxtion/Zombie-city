@@ -447,6 +447,7 @@ final class GameView extends View implements Menu.Host {
                 followV = null;
                 inspectB = null;
                 inspectZ = null;
+                inspectBase = null;
                 click();
                 return true;
             }
@@ -580,6 +581,7 @@ final class GameView extends View implements Menu.Host {
         pinned.clear();
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         if (getWidth() > 0) centerCamera();
     }
 
@@ -881,6 +883,7 @@ final class GameView extends View implements Menu.Host {
         followV = null;
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         selection.clear();
         lastAction.clear();
         pinned.clear();
@@ -916,6 +919,7 @@ final class GameView extends View implements Menu.Host {
         selection.clear();
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         lastAction.clear();
         tool = TOOL_PAN;
         lastMessageCount = world.dispatch.messageCount;
@@ -949,6 +953,7 @@ final class GameView extends View implements Menu.Host {
         pinned.clear();
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         if (getWidth() > 0) centerCamera();
         records.gameStarted();
         autoCollapsed = false;
@@ -1037,11 +1042,12 @@ final class GameView extends View implements Menu.Host {
             else if (picker >= 0 || clearMenu) {
                 picker = -1;
                 clearMenu = false;
-            } else if (follow != null || followV != null || inspectB != null || inspectZ != null) {
+            } else if (follow != null || followV != null || inspectB != null || inspectZ != null || inspectBase != null) {
                 follow = null;
                 followV = null;
                 inspectB = null;
                 inspectZ = null;
+                inspectBase = null;
             } else shut = false;
             if (shut) {
                 click();
@@ -1746,7 +1752,7 @@ final class GameView extends View implements Menu.Host {
             else {
                 miniRect.set(getWidth() - 10 * dp - size, uiFloor() - 10 * dp - size, getWidth() - 10 * dp, uiFloor() - 10 * dp);
                 // ((12.0) Down there it's where a card opens: hidden while one is, rather than poking out round it.)
-                if (picker < 0 && (follow != null || followV != null || (tool == TOOL_PAN && (inspectZ != null || inspectB != null))
+                if (picker < 0 && (follow != null || followV != null || (tool == TOOL_PAN && (inspectZ != null || inspectB != null || inspectBase != null))
                         // ((12.0) Or over the open stats panel, with big text on a narrow screen.)
                         || (!statsCollapsed && RectF.intersects(miniRect, statsShown)))) {
                     miniRect.setEmpty();
@@ -8139,6 +8145,9 @@ final class GameView extends View implements Menu.Host {
             // ((12.0) Cards make way for the Clear menu: they were drawn over it.)
             if (inspectZ.removed) inspectZ = null;
             else drawZoneInspect(c, inspectZ);
+        } else if (inspectBase != null && tool == TOOL_PAN && !clearMenu) {
+            if (inspectBase.fallen) inspectBase = null;
+            else drawBaseInspect(c, inspectBase);
         } else if (inspectB != null && tool == TOOL_PAN && !clearMenu) {
             drawBuildingInspect(c, inspectB);
         } else if (hintTime > 0 && picker < 0 && headlines.isEmpty()) {
@@ -10010,6 +10019,7 @@ final class GameView extends View implements Menu.Host {
                 Object at = p.dead && world.controlled != p ? pinWhere.get(p) : null;
                 inspectB = null;
                 inspectZ = null;
+                inspectBase = null;
                 if (at instanceof Fleet.Vehicle) {
                     // ((12.0) In a car: the car, followed; in a building: the building's card, there on screen.)
                     follow = null;
@@ -10272,6 +10282,7 @@ final class GameView extends View implements Menu.Host {
                 followV = null;
                 inspectB = null;
                 inspectZ = null;
+                inspectBase = null;
                 camX -= (x - lastX) / scale;
                 camY -= (y - lastY) / scale;
                 clampCamera();
@@ -10393,6 +10404,7 @@ final class GameView extends View implements Menu.Host {
         inspectB = pick == null && followV == null ? world.city.buildingAt(wx, wy) : null;
         // ((12.0) Or a safe zone: its card.)
         inspectZ = null;
+        inspectBase = null;
         if (pick == null && followV == null)
             for (int i = 0; i < world.dispatch.zones.size(); i++) {
                 Dispatch.SafeZone z = world.dispatch.zones.get(i);
@@ -10401,6 +10413,60 @@ final class GameView extends View implements Menu.Host {
                     inspectB = null;
                 }
             }
+        // ((25.1) Or a survivor base: its card.)
+        if (pick == null && followV == null && inspectZ == null)
+            for (int i = 0; i < world.bases.size(); i++) {
+                SurvivorBases.Base sb = world.bases.get(i);
+                if (sb.contains(wx, wy, 0)) {
+                    inspectBase = sb;
+                    inspectB = null;
+                }
+            }
+    }
+
+    /** ((25.1) The survivor base whose card is showing.) */
+    private SurvivorBases.Base inspectBase;
+
+    /** (25.1) A survivor base's card: its people and guards, its wall, towers, gates and workshop. */
+    private void drawBaseInspect(Canvas c, SurvivorBases.Base s) {
+        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
+        String title = "Survivor base  -  " + s.name;
+        int up = SurvivorBases.wallsUp(world.city, s), want = s.ring.length - s.gates.length;
+        lines.add(!s.walled ? "Building its wall: " + up + " of " + want + " sections up"
+                : "A " + SurvivorBases.TIER_NAMES[s.tier] + " wall all the way round" + (s.tier < 2 ? " (" + (s.tier == 0 ? "sandbags" : "concrete") + " next)" : ""));
+        lines.add(s.members + (s.members == 1 ? " person" : " people") + "   " + s.guards + (s.guards == 1 ? " guard" : " guards") + " on the wall");
+        int shut = 0;
+        for (int g : s.gates) if (world.city.tiles[g] == City.FENCE) shut++;
+        lines.add(s.towersUp + (s.towersUp == 1 ? " watchtower" : " watchtowers") + "   " + s.gates.length + (s.gates.length == 1 ? " gate" : " gates")
+                + (shut > 0 ? " (shut)" : " (open)"));
+        lines.add(s.walled ? "Workshop: " + (int) s.stash + " rounds in store" : "Workshop: once the wall is up");
+        if (s.inside > 0) lines.add("The dead are inside the wall!");
+        text.setTextAlign(Paint.Align.LEFT);
+        float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
+        text.setTextSize(12.5f * dp);
+        java.util.ArrayList<String> wrapped = new java.util.ArrayList<String>();
+        for (String ln : lines) wrapped.addAll(wrapLine(ln, cw - 24 * dp));
+        lines = wrapped;
+        float ch = 30 * dp + lines.size() * lh + 8 * dp;
+        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
+        oval.set(left, top, left + cw, top + ch);
+        fill.setColor(0xE8101216);
+        c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
+        fill.setColor(0xFFD8B04A);
+        c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
+        text.setTextSize(14 * dp);
+        text.setColor(0xFFFFFFFF);
+        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
+        text.setTextSize(12.5f * dp);
+        for (int i = 0; i < lines.size(); i++) {
+            String l = lines.get(i);
+            text.setColor(l.startsWith("The dead") ? 0xFFFF8A6A : 0xFFB8BDC4);
+            c.drawText(fitText(l, cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
+        }
+        // Its ground outlined on the map.
+        stroke.setColor(0xCCFFD24A);
+        stroke.setStrokeWidth(2 * dp);
+        c.drawRect(screenX(s.tx0 * City.T), screenY(s.ty0 * City.T), screenX((s.tx1 + 1) * City.T), screenY((s.ty1 + 1) * City.T), stroke);
     }
 
     /** ((12.0) The safe zone whose card is showing.) */

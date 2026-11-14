@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "25.0";
-    static final int VERSION_CODE = 250;
+    static final String VERSION = "25.1";
+    static final int VERSION_CODE = 251;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "25.1  -  Base fixes",
+                    "Tap a survivor base to see its card: people, guards, wall, towers, gates and workshop.",
+                    "Base members stay inside when the dead are at the wall, instead of running out of the gate.",
+                    "Bases only take in as many people as they have room for.",
+            },
             {
                     "25.0  -  Holding Out",
                     "Survivor bases: armed survivors wall themselves in, upgrading from wood to sandbags to concrete, with gates, watchtowers and a workshop that makes ammo and arms more of them.",

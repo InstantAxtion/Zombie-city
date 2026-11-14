@@ -13463,9 +13463,10 @@ final class World {
             float half = Math.max(s.tx1 - s.tx0, s.ty1 - s.ty0) * City.T / 2f;
             // Who's here.
             s.members = s.guards = s.inside = 0;
-            for (int k = 0, n = gatherLiving(cx, cy, half + 260); k < n; k++) {
-                Entity e = gathered[k];
-                if (e.dead || e.base != s) continue;
+            // (Everyone who belongs, wherever they are - on the way in counts too.)
+            for (int k = 0, n = entities.size(); k < n; k++) {
+                Entity e = entities.get(k);
+                if (e.base != s || e.dead) continue;
                 s.members++;
                 if (e.militia) s.guards++;
             }
@@ -13548,7 +13549,7 @@ final class World {
     }
 
     private void recruitToBase(SurvivorBases.Base s, boolean quiet) {
-        if (((int) time) % 3 != 0 || s.members >= 30) return;
+        if (((int) time) % 3 != 0 || s.members >= s.room) return;
         float cx = s.cx(), cy = s.cy();
         int took = 0;
         for (int k = 0, n = gatherLiving(cx, cy, 300); k < n && took < 3; k++) {
