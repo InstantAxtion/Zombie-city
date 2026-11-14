@@ -571,13 +571,23 @@ final class Nav {
             }
             if (trees[i].used < trees[slot].used) slot = i;
         }
-        GoalTree t = new GoalTree();
+        // ((22.1) The one it replaces lends its arrays, rather than new ones the size of the whole network each time:
+        // in an outbreak that was most of the memory the game used and threw away.)
+        GoalTree old = trees[slot];
+        GoalTree t = old != null && old.dist.length == nodes ? old : new GoalTree();
         t.goal = g;
         t.used = treeClock;
-        t.dist = new int[nodes];
-        t.next = new int[nodes];
-        t.done = new boolean[nodes];
-        t.seg = new int[nodes][];
+        t.size = 0;
+        if (t == old) {
+            Arrays.fill(t.next, 0);
+            Arrays.fill(t.done, false);
+            Arrays.fill(t.seg, null);
+        } else {
+            t.dist = new int[nodes];
+            t.next = new int[nodes];
+            t.done = new boolean[nodes];
+            t.seg = new int[nodes][];
+        }
         Arrays.fill(t.dist, FAR);
         int kg = clusterOf(g);
         ensureIntra(kg);

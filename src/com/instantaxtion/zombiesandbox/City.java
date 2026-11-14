@@ -214,7 +214,18 @@ final class City {
     final int[] humanDist, zombieDist;
     private final int[] queue;
     final Random rnd;
-    final Bitmap bitmap;
+    /**
+     * ((22.1) The map picture, in tiles of TILE_PX square: drawn whole once into one big picture and cut up, the big
+     * one let go. On a phone the screen keeps its own copy of every picture it draws, and copies it over again
+     * whenever it changes: the whole map was one picture of up to 75 MB, copied over every time an army truck left
+     * or came back to its bay (more than once a second in an outbreak). Now only the tile that changed is.)
+     */
+    Bitmap[] mapTiles;
+    int mapCols, mapRows, mapW, mapH;
+    static final int TILE_PX = 512;
+    private Bitmap.Config mapConfig;
+    /** (Only while the whole map is being drawn; null otherwise.) */
+    Bitmap bitmap;
     float maxHeight;
     /** The Graphics setting: realistic ground, shadows and roofs, or the classic flat look. */
     static volatile boolean realistic = true;
@@ -669,6 +680,7 @@ final class City {
         Arrays.fill(zombieDist, FAR);
         // ((11.5) Anything worked out from the tiles while the city was being built is let go of: it's done now.)
         clear3 = null;
+        clr = null;
         stepC = null;
         // ((16.3) Where the names go on the map: on dry land.)
         placeLabels();
@@ -676,8 +688,9 @@ final class City {
         if (elev != null) steepAt(0);
         progress(0.5f, "Painting the map");
         // The big map uses 16-bit colour to keep memory down.
-        bitmap = Bitmap.createBitmap((int) (w * T * detail), (int) (h * T * detail),
-                w * detail > 140 ? Bitmap.Config.RGB_565 : Bitmap.Config.ARGB_8888);
+        mapW = Math.max(1, (int) (w * T * detail));
+        mapH = Math.max(1, (int) (h * T * detail));
+        mapConfig = w * detail > 140 ? Bitmap.Config.RGB_565 : Bitmap.Config.ARGB_8888;
         redraw();
     }
 
@@ -882,6 +895,7 @@ final class City {
         if (!live) {
             stepC = null;
             clear3 = null;
+        clr = null;
         }
         if (live) renderVersion++;
         if (tx < 1 || ty < 1 || tx >= w - 1 || ty >= h - 1) return null;
@@ -1234,6 +1248,7 @@ final class City {
         labels.clear();
         trees.clear();
         computeJunctions();
+        bitmap = Bitmap.createBitmap(mapW, mapH, mapConfig);
         Canvas canvas = new Canvas(bitmap);
         if (detail != 1f) canvas.scale(detail, detail);
         setRes(detail);
@@ -1241,6 +1256,8 @@ final class City {
         collectLabels = true;
         render(canvas);
         collectLabels = false;
+        for (Building b : buildings) if (b.collapsed) drawRubble(canvas, b);
+        cutTiles();
         // (Sorted top to bottom, so the view only looks at the rows of trees on screen.)
         java.util.Collections.sort(trees, new java.util.Comparator<float[]>() {
             @Override
@@ -1248,7 +1265,78 @@ final class City {
                 return Float.compare(a[1], b[1]);
             }
         });
-        for (Building b : buildings) if (b.collapsed) drawRubble(b);
+    }
+
+    /** ((22.1) The whole map picture just drawn, cut into tiles; the big picture let go. */
+    private void cutTiles() {
+        int cols = (mapW + TILE_PX - 1) / TILE_PX, rows = (mapH + TILE_PX - 1) / TILE_PX;
+        Bitmap[] t = mapTiles != null && mapCols == cols && mapRows == rows ? mapTiles : new Bitmap[cols * rows];
+        android.graphics.Rect src = new android.graphics.Rect();
+        RectF dst = new RectF();
+        for (int ty = 0; ty < rows; ty++)
+            for (int tx = 0; tx < cols; tx++) {
+                int x0 = tx * TILE_PX, y0 = ty * TILE_PX, tw = Math.min(TILE_PX, mapW - x0), th = Math.min(TILE_PX, mapH - y0);
+                Bitmap b = t[ty * cols + tx];
+                if (b == null || b.getWidth() != tw || b.getHeight() != th) t[ty * cols + tx] = b = Bitmap.createBitmap(tw, th, mapConfig);
+                src.set(x0, y0, x0 + tw, y0 + th);
+                dst.set(0, 0, tw, th);
+                new Canvas(b).drawBitmap(bitmap, src, dst, null);
+            }
+        mapTiles = t;
+        mapCols = cols;
+        mapRows = rows;
+        bitmap.recycle();
+        bitmap = null;
+    }
+
+    /** ((22.1) Something drawn into the map picture between world (x0, y0) and (x1, y1): into each tile it touches. */
+    interface MapPainter {
+        void paint(Canvas c);
+    }
+
+    void paintMap(float x0, float y0, float x1, float y1, MapPainter painter) {
+        if (mapTiles == null) return;
+        int px0 = Math.max(0, (int) Math.floor(x0 * detail) - 2), py0 = Math.max(0, (int) Math.floor(y0 * detail) - 2);
+        int px1 = Math.min(mapW - 1, (int) Math.ceil(x1 * detail) + 2), py1 = Math.min(mapH - 1, (int) Math.ceil(y1 * detail) + 2);
+        if (px1 < px0 || py1 < py0) return;
+        for (int ty = py0 / TILE_PX; ty <= py1 / TILE_PX; ty++)
+            for (int tx = px0 / TILE_PX; tx <= px1 / TILE_PX; tx++) {
+                Canvas c = new Canvas(mapTiles[ty * mapCols + tx]);
+                c.translate(-tx * TILE_PX, -ty * TILE_PX);
+                if (detail != 1f) c.scale(detail, detail);
+                c.clipRect(x0, y0, x1, y1);
+                painter.paint(c);
+            }
+    }
+
+    private final android.graphics.Rect tileSrc = new android.graphics.Rect();
+    private final RectF tileDst = new RectF();
+
+    /**
+     * ((22.1) Draws the part of the map picture from (sx0, sy0) to (sx1, sy1) - in its pixels - into dst, a tile at a
+     * time (the whole map with sx1 < 0).
+     */
+    void drawMap(Canvas c, float sx0, float sy0, float sx1, float sy1, RectF dst, Paint paint) {
+        if (mapTiles == null) return;
+        if (sx1 < 0) {
+            sx0 = sy0 = 0;
+            sx1 = mapW;
+            sy1 = mapH;
+        }
+        float kx = dst.width() / Math.max(1e-3f, sx1 - sx0), ky = dst.height() / Math.max(1e-3f, sy1 - sy0);
+        int c0 = Math.max(0, (int) (sx0 / TILE_PX)), c1 = Math.min(mapCols - 1, (int) ((sx1 - 1e-3f) / TILE_PX));
+        int r0 = Math.max(0, (int) (sy0 / TILE_PX)), r1 = Math.min(mapRows - 1, (int) ((sy1 - 1e-3f) / TILE_PX));
+        for (int ty = r0; ty <= r1; ty++)
+            for (int tx = c0; tx <= c1; tx++) {
+                Bitmap b = mapTiles[ty * mapCols + tx];
+                float ox = tx * TILE_PX, oy = ty * TILE_PX;
+                float ix0 = Math.max(sx0, ox), iy0 = Math.max(sy0, oy), ix1 = Math.min(sx1, ox + b.getWidth()), iy1 = Math.min(sy1, oy + b.getHeight());
+                if (ix1 <= ix0 || iy1 <= iy0) continue;
+                tileSrc.set((int) Math.floor(ix0 - ox), (int) Math.floor(iy0 - oy), (int) Math.ceil(ix1 - ox), (int) Math.ceil(iy1 - oy));
+                tileDst.set(dst.left + (ox + tileSrc.left - sx0) * kx, dst.top + (oy + tileSrc.top - sy0) * ky,
+                        dst.left + (ox + tileSrc.right - sx0) * kx, dst.top + (oy + tileSrc.bottom - sy0) * ky);
+                c.drawBitmap(b, tileSrc, tileDst, paint);
+            }
     }
 
     /** The first tree (in the sorted list) at or below y. */
@@ -2414,6 +2502,7 @@ final class City {
         nav = null;
         stepC = null;
         clear3 = null;
+        clr = null;
         for (int i = 0; i < tiles.length; i++) {
             byte t = tiles[i];
             solid[i] = t == BUILDING || t == TREE || t == CAR || t == STATUE || t == FENCE || t == PUMP || (t == WATER && !isFord(i)) || t == ROCK;
@@ -4913,8 +5002,9 @@ final class City {
                 solidChanged(y * w + x);
             }
         clear3 = null;
+        clr = null;
         stepC = null;
-        if (bitmap != null) redrawArea(prisonGate[0] * T - 2 * T, prisonGate[1] * T - T, prisonGate[2] * T + 2 * T, prisonGate[3] * T + 3 * T);
+        if (mapTiles != null) redrawArea(prisonGate[0] * T - 2 * T, prisonGate[1] * T - T, prisonGate[2] * T + 2 * T, prisonGate[3] * T + 3 * T);
     }
 
     /**
@@ -5153,12 +5243,16 @@ final class City {
         stepsChanged(best);
         int bx = best % w, by = best / w;
         // Paint the empty bay over the parked truck (and its shadow) on the map picture.
-        Canvas c = new Canvas(bitmap);
-        if (detail != 1f) c.scale(detail, detail);
-        Paint p = new Paint();
-        p.setColor(0xFF6A6E5E);
-        c.drawRect(bx * T, by * T, bx * T + T + 2, by * T + T + 2, p);
-        changed(bx * T, by * T, bx * T + T + 2, by * T + T + 2);
+        final float ex0 = bx * T, ey0 = by * T, ex1 = bx * T + T + 2, ey1 = by * T + T + 2;
+        paintMap(ex0, ey0, ex1, ey1, new MapPainter() {
+            @Override
+            public void paint(Canvas c) {
+                Paint p = new Paint();
+                p.setColor(0xFF6A6E5E);
+                c.drawRect(ex0, ey0, ex1, ey1, p);
+            }
+        });
+        changed(ex0, ey0, ex1, ey1);
         return new float[]{(bx + 0.5f) * T, (by + 0.5f) * T};
     }
 
@@ -5291,9 +5385,13 @@ final class City {
         solid[i] = true;
         clearChanged(i);
         stepsChanged(i);
-        Canvas c = new Canvas(bitmap);
-        if (detail != 1f) c.scale(detail, detail);
-        drawCar(c, new Paint(), tx, ty);
+        final int px = tx, py = ty;
+        paintMap(tx * T - 4, ty * T - 4, tx * T + T + 4, ty * T + T + 4, new MapPainter() {
+            @Override
+            public void paint(Canvas c) {
+                drawCar(c, new Paint(), px, py);
+            }
+        });
         changed(tx * T - 4, ty * T - 4, tx * T + T + 4, ty * T + T + 4);
     }
 
@@ -8969,34 +9067,39 @@ final class City {
     }
 
     /** (14.2) Draws this part of the map again, as it is now, into the map picture (a building put back up). */
-    synchronized void redrawArea(float x0, float y0, float x1, float y1) {
-        Canvas c = new Canvas(bitmap);
-        if (detail != 1f) c.scale(detail, detail);
-        c.clipRect(x0, y0, x1, y1);
-        setRes(detail);
-        regionOnly = true;
-        rwx0 = x0;
-        rwy0 = y0;
-        rwx1 = x1;
-        rwy1 = y1;
-        rx0 = Math.max(0, (int) (x0 / T) - 3);
-        ry0 = Math.max(0, (int) (y0 / T) - 3);
-        rx1 = Math.min(w, (int) (x1 / T) + 3);
-        ry1 = Math.min(h, (int) (y1 / T) + 3);
-        try {
-            render(c);
-            for (Building b : buildings) if (b.collapsed && !offRegion(b.x0, b.y0, b.x1, b.y1)) drawRubble(c, b);
-            for (int[] t : charred) charTile(c, t[0], t[1]);
-        } finally {
-            regionOnly = false;
-        }
+    synchronized void redrawArea(final float x0, final float y0, final float x1, final float y1) {
+        paintMap(x0, y0, x1, y1, new MapPainter() {
+            @Override
+            public void paint(Canvas c) {
+                setRes(detail);
+                regionOnly = true;
+                rwx0 = x0;
+                rwy0 = y0;
+                rwx1 = x1;
+                rwy1 = y1;
+                rx0 = Math.max(0, (int) (x0 / T) - 3);
+                ry0 = Math.max(0, (int) (y0 / T) - 3);
+                rx1 = Math.min(w, (int) (x1 / T) + 3);
+                ry1 = Math.min(h, (int) (y1 / T) + 3);
+                try {
+                    render(c);
+                    for (Building b : buildings) if (b.collapsed && !offRegion(b.x0, b.y0, b.x1, b.y1)) drawRubble(c, b);
+                    for (int[] t : charred) charTile(c, t[0], t[1]);
+                } finally {
+                    regionOnly = false;
+                }
+            }
+        });
         changed(x0, y0, x1, y1);
     }
 
-    private void drawRubble(Building b) {
-        Canvas c = new Canvas(bitmap);
-        if (detail != 1f) c.scale(detail, detail);
-        drawRubble(c, b);
+    private void drawRubble(final Building b) {
+        paintMap(b.x0, b.y0, b.x1, b.y1, new MapPainter() {
+            @Override
+            public void paint(Canvas c) {
+                drawRubble(c, b);
+            }
+        });
         changed(b.x0, b.y0, b.x1, b.y1);
     }
 
@@ -9029,11 +9132,14 @@ final class City {
     }
 
     /** Scorches a burnt-out car into the map. */
-    void charTile(int tx, int ty) {
-        Canvas c = new Canvas(bitmap);
-        if (detail != 1f) c.scale(detail, detail);
+    void charTile(final int tx, final int ty) {
         charred.add(new int[]{tx, ty});
-        charTile(c, tx, ty);
+        paintMap(tx * T - T, ty * T - T, tx * T + 2 * T, ty * T + 2 * T, new MapPainter() {
+            @Override
+            public void paint(Canvas c) {
+                charTile(c, tx, ty);
+            }
+        });
         changed(tx * T - T, ty * T - T, tx * T + 2 * T, ty * T + 2 * T);
     }
 
@@ -12837,6 +12943,14 @@ final class City {
                 if (clear3 == null) buildClear3();
                 int ci = cy * w + cx;
                 if ((clear3[ci >>> 6] & (1L << ci)) != 0) return false;
+                // ((22.1) Or near something, but not that near.)
+                if (clr == null) buildClr();
+                int sx = City.fl(x / CLR_CELL), sy = City.fl(y / CLR_CELL);
+                int room = clr[sy * w * 2 + sx];
+                if (room > r) {
+                    float dx = x - (sx * CLR_CELL + CLR_CELL / 2f), dy = y - (sy * CLR_CELL + CLR_CELL / 2f), m = room - r;
+                    if (dx * dx + dy * dy <= m * m) return false;
+                }
             }
         }
         int tx0 = City.fl((x - r) / T), tx1 = City.fl((x + r) / T);
@@ -12879,6 +12993,39 @@ final class City {
      * for every step anyone takes, all over the map.) */
     private long[] clear3;
 
+    /**
+     * ((22.1) How far each spot is from anything solid: for each quarter of a tile (8 units across), the distance in
+     * whole units from its middle to the nearest solid tile among the nine round it - capped at 20, a unit short to
+     * allow for walls drawn a fraction outside their building - so a person whose circle fits inside that clearance
+     * can't be touching anything, without looking at a single tile, building or wall. Most people walk the
+     * pavements beside buildings, where the open-ground mask above says no and the full look was a fifth of each step.
+     */
+    private byte[] clr;
+    static final int CLR_CELL = 8;
+
+    private void buildClr() {
+        int cw = w * 2;
+        byte[] c = new byte[cw * h * 2];
+        for (int ty = 0; ty < h; ty++) for (int tx = 0; tx < w; tx++) clrTile(c, tx, ty);
+        clr = c;
+    }
+
+    private void clrTile(byte[] c, int tx, int ty) {
+        int cw = w * 2;
+        for (int sy = 0; sy < 2; sy++)
+            for (int sx = 0; sx < 2; sx++) {
+                float cx = (tx * 2 + sx) * CLR_CELL + CLR_CELL / 2f, cy = (ty * 2 + sy) * CLR_CELL + CLR_CELL / 2f;
+                float best = 21;
+                for (int ky = ty - 1; ky <= ty + 1; ky++)
+                    for (int kx = tx - 1; kx <= tx + 1; kx++) {
+                        if (!solidTile(kx, ky)) continue;
+                        float dx = Math.max(0, Math.max(kx * T - cx, cx - (kx * T + T))), dy = Math.max(0, Math.max(ky * T - cy, cy - (ky * T + T)));
+                        best = Math.min(best, (float) Math.sqrt(dx * dx + dy * dy));
+                    }
+                c[(ty * 2 + sy) * cw + tx * 2 + sx] = (byte) Math.max(0, Math.min(20, (int) (best - 1)));
+            }
+    }
+
     private void buildClear3() {
         long[] c = new long[(w * h >>> 6) + 1];
         clear3 = c;
@@ -12896,6 +13043,11 @@ final class City {
 
     /** ((11.5) A tile has changed: the open-ground mask round it is worked out again.) */
     private void clearChanged(int i) {
+        if (clr != null && i >= 0 && i < w * h) {
+            int x = i % w, y = i / w;
+            for (int j = Math.max(0, y - 1); j <= Math.min(h - 1, y + 1); j++)
+                for (int k = Math.max(0, x - 1); k <= Math.min(w - 1, x + 1); k++) clrTile(clr, k, j);
+        }
         if (clear3 == null || i < 0 || i >= w * h) return;
         int x = i % w, y = i / w;
         for (int j = Math.max(0, y - 1); j <= Math.min(h - 1, y + 1); j++)

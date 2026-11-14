@@ -764,10 +764,7 @@ final class Menu {
             mw = mh * city.worldW() / city.worldH();
         }
         RectF map = new RectF(x0 + (maxW - mw) / 2, y, x0 + (maxW + mw) / 2, y + mh);
-        if (city.bitmap != null) {
-            bmpSrc.set(0, 0, city.bitmap.getWidth(), city.bitmap.getHeight());
-            c.drawBitmap(city.bitmap, bmpSrc, map, bmpPaint);
-        }
+        city.drawMap(c, 0, 0, -1, -1, map, bmpPaint);
         fill.setColor(0x55000000);
         c.drawRect(map, fill);
         float[] bm = world.battleMap;
@@ -1474,9 +1471,8 @@ final class Menu {
         City city = world.city;
         fill.setColor(0xFF1C1F24);
         c.drawRect(replayMap, fill);
-        bmpSrc.set(0, 0, city.bitmap.getWidth(), city.bitmap.getHeight());
         bmpPaint.setAlpha(150);
-        c.drawBitmap(city.bitmap, bmpSrc, replayMap, bmpPaint);
+        city.drawMap(c, 0, 0, -1, -1, replayMap, bmpPaint);
         bmpPaint.setAlpha(255);
         if (frames == 0) {
             text.setTextAlign(Paint.Align.CENTER);
@@ -1747,7 +1743,8 @@ final class Menu {
                 try {
                     City city = new City(copy, 360f / (copy.tiles() * City.T));
                     if (key.equals(buildingKey)) {
-                        preview = city.bitmap;
+                        // ((22.1) A preview is small enough to be a single tile.)
+                        preview = city.mapTiles != null && city.mapTiles.length == 1 ? city.mapTiles[0] : null;
                         previewResidents = city.totalResidents;
                         previewForce = World.forecast(copy, city, settings.maxPopulation());
                         previewKey = key;

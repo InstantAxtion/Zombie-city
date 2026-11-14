@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "22.0";
-    static final int VERSION_CODE = 220;
+    static final String VERSION = "22.1";
+    static final int VERSION_CODE = 221;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "22.1  -  Less lag",
+                    "Before an outbreak the city runs about five times lighter: people off screen wait until you look or the dead appear.",
+                    "No more stutters when the map changes: it's drawn in tiles instead of one giant picture.",
+                    "Faster collision checks and less memory churn during outbreaks.",
+            },
             {
                     "22.0  -  The Big One",
                     "Less lag: the screen only redraws as often as the city changes, and slow phones take longer steps instead of falling behind.",

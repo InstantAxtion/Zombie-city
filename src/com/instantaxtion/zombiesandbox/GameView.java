@@ -1682,9 +1682,8 @@ final class GameView extends View implements Menu.Host {
                 miniMap = android.graphics.Bitmap.createBitmap(MINI, MINI, android.graphics.Bitmap.Config.ARGB_8888);
                 Canvas mc = new Canvas(miniMap);
                 Paint p = new Paint(Paint.FILTER_BITMAP_FLAG);
-                miniSrc.set(0, 0, world.city.bitmap.getWidth(), world.city.bitmap.getHeight());
                 roofDst.set(0, 0, MINI, MINI);
-                mc.drawBitmap(world.city.bitmap, miniSrc, roofDst, p);
+                world.city.drawMap(mc, 0, 0, -1, -1, roofDst, p);
                 miniTimer = 0;
             }
             fill.setColor(0xE0101216);
@@ -2090,9 +2089,8 @@ final class GameView extends View implements Menu.Host {
                 tacMap = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888);
             Canvas mc = new Canvas(tacMap);
             Paint p = new Paint(Paint.FILTER_BITMAP_FLAG);
-            miniSrc.set(0, 0, city.bitmap.getWidth(), city.bitmap.getHeight());
             roofDst.set(0, 0, bw, bh);
-            mc.drawBitmap(city.bitmap, miniSrc, roofDst, p);
+            city.drawMap(mc, 0, 0, -1, -1, roofDst, p);
             // Dimmed, so what's on it stands out.
             p.setColor(0x70000000);
             mc.drawRect(0, 0, bw, bh, p);
@@ -2930,11 +2928,20 @@ final class GameView extends View implements Menu.Host {
         world.viewY1 = camY + getHeight() / scale;
         // Realistic graphics smooth the map when zoomed in; classic keeps the crisp pixels.
         bmpPaint.setFilterBitmap(realistic || scale < 1.5f);
-        if (world.city.detail >= 0.999f) c.drawBitmap(world.city.bitmap, 0, 0, bmpPaint);
-        else {
-            mapSrc.set(0, 0, world.city.bitmap.getWidth(), world.city.bitmap.getHeight());
-            mapDst.set(0, 0, world.city.worldW(), world.city.worldH());
-            c.drawBitmap(world.city.bitmap, mapSrc, mapDst, bmpPaint);
+        // ((22.1) Only the tiles of the map picture on screen.)
+        {
+            City mc = world.city;
+            float vx0 = Math.max(0, camX), vy0 = Math.max(0, camY);
+            float vx1 = Math.min(mc.worldW(), camX + getWidth() / scale), vy1 = Math.min(mc.worldH(), camY + getHeight() / scale);
+            float dl = mc.detail;
+            float sx0 = (float) Math.floor(vx0 * dl), sy0 = (float) Math.floor(vy0 * dl);
+            float sx1 = Math.min(mc.mapW, (float) Math.ceil(vx1 * dl)), sy1 = Math.min(mc.mapH, (float) Math.ceil(vy1 * dl));
+            if (sx1 > sx0 && sy1 > sy0) {
+                mapDst.set(sx0 / dl, sy0 / dl, sx1 / dl, sy1 / dl);
+                mc.drawMap(c, sx0, sy0, sx1, sy1, mapDst, bmpPaint);
+            }
+        }
+        if (world.city.detail < 0.999f) {
             // ((16.6) Close in on a low-detail map: the parked vehicles drawn sharp, not left as smudges.)
             if (scale > 1.1f) world.city.drawParked(c, camX - City.T, camY - City.T, camX + getWidth() / scale + City.T, camY + getHeight() / scale + City.T);
         }
@@ -3841,7 +3848,7 @@ final class GameView extends View implements Menu.Host {
             // blurred over the rooms.)
             float roofA = 1 - sb;
             bmpPaint.setAlpha((int) (255 * roofA));
-            c.drawBitmap(world.city.bitmap, roofSrc, roofDst, bmpPaint);
+            world.city.drawMap(c, roofSrc.left, roofSrc.top, roofSrc.right, roofSrc.bottom, roofDst, bmpPaint);
             bmpPaint.setAlpha(255);
             if (roofA >= 0.999f) sharpRoof(c, b, s, cx, cy);
             drawDamage(c, b, rx0, ry0, rx1, ry1, roofA);

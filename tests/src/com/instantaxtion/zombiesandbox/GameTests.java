@@ -4343,6 +4343,60 @@ public final class GameTests {
                 check(rw.missionResult == 1, "cleared and held: the mission is won");
             }
         });
+        test("22.1: in peace, those off screen wait; the first of the dead wakes everyone; the map is drawn in tiles; collision short cut agrees", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 2210;
+                World w = new World(c);
+                w.populate(c);
+                // The screen on one corner of the map.
+                w.viewX0 = 0;
+                w.viewY0 = 0;
+                w.viewX1 = 400;
+                w.viewY1 = 800;
+                for (int f = 0; f < 30 * 3; f++) { w.update(1 / 30f); w.evCount = 0; }
+                Entity calm = null;
+                for (Entity e : w.entities)
+                    if (e.type == Entity.CIVILIAN && !e.dead && e.task == Dispatch.T_NONE && e.rig == null && e.ride == null && e.x > 2000 && e.y > 2000) { calm = e; break; }
+                check(calm != null, "someone calm off screen");
+                float x0 = calm.x, y0 = calm.y;
+                for (int f = 0; f < 30 * 3; f++) { w.update(1 / 30f); w.evCount = 0; }
+                check(calm.x == x0 && calm.y == y0, "in peace, off screen, they wait where they are");
+                float[] p = w.city.findWalkable(calm.x + 300, calm.y);
+                w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                w.recount();
+                boolean moved = false;
+                for (int f = 0; f < 30 * 4 && !moved; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    moved = calm.x != x0 || calm.y != y0 || calm.dead || calm.hidden;
+                }
+                check(moved, "the first of the dead and they're going about their day again");
+                // The map picture: tiles, no one big picture kept.
+                City city = w.city;
+                check(city.mapTiles != null && city.bitmap == null && city.mapTiles.length == city.mapCols * city.mapRows && city.mapCols > 1,
+                        "the map is kept in tiles (" + city.mapCols + " x " + city.mapRows + ")");
+                android.graphics.Bitmap out = android.graphics.Bitmap.createBitmap(200, 200, android.graphics.Bitmap.Config.ARGB_8888);
+                city.drawMap(new android.graphics.Canvas(out), 0, 0, -1, -1, new android.graphics.RectF(0, 0, 200, 200), null);
+                int lit = 0;
+                for (int y = 0; y < 200; y += 10) for (int x = 0; x < 200; x += 10) if ((out.img.getRGB(x, y) & 0xFFFFFF) != 0) lit++;
+                check(lit > 300, "and drawn whole from them (" + lit + " of 400 points)");
+                // The quick collision look gives the same answers as the full one.
+                java.util.Random r = new java.util.Random(4);
+                int differ = 0;
+                for (int i = 0; i < 20000; i++) {
+                    float x = r.nextFloat() * city.worldW(), y = r.nextFloat() * city.worldH(), rad = 2 + r.nextFloat() * 5;
+                    City.slowSteps = false;
+                    boolean fast = city.circleBlocked(x, y, rad);
+                    City.slowSteps = true;
+                    if (fast != city.circleBlocked(x, y, rad)) differ++;
+                }
+                City.slowSteps = false;
+                check(differ == 0, "collision short cut agrees with the full look (" + differ + " differ)");
+            }
+        });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

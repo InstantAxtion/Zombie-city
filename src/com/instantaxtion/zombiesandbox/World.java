@@ -2063,6 +2063,10 @@ final class World {
     /** ((16.8) Over eighteen thousand people: the biggest cities' slower pace for those off screen. */
     private boolean lodHuge;
 
+    /** ((22.1) Calm civilians off screen wait in peace (see update); a switch for comparisons. */
+    static boolean PAUSE_UNSEEN = true;
+    private boolean peaceful;
+
     private void sleep(int i, int every) {
         // (Not if they've just died, or been taken over, or anything has been added in the meantime.)
         if (i >= lodWake.length || entities.get(i).dead || entities.get(i) == controlled) return;
@@ -2131,6 +2135,10 @@ final class World {
             lodSet = Arrays.copyOf(lodSet, lodWake.length);
             lodQuiet = Arrays.copyOf(lodQuiet, lodWake.length);
         }
+        // ((22.1) Peace: nobody dead anywhere, and a screen to be off. The moment that ends, everyone is looked at again.)
+        boolean wasPeaceful = peaceful;
+        peaceful = PAUSE_UNSEEN && zombies == 0 && viewX1 > viewX0 && controlled == null;
+        if (wasPeaceful && !peaceful) Arrays.fill(lodWake, 0);
         // (Looking somewhere else, everyone is looked at again: those coming into view move straight away.)
         if (Math.abs(viewX0 - lodViewX) > 24 || Math.abs(viewY0 - lodViewY) > 24) {
             Arrays.fill(lodWake, 0);
@@ -2164,6 +2172,16 @@ final class World {
                 lodHuge = huge;
                 lodBusy = huge ? 6 : crowd ? 3 : 2;
                 lodNear = huge ? 4 : 2;
+            }
+            // ((22.1) In peace - not one of the dead anywhere - someone going about their day where nobody can see them
+            // waits where they are until they're on screen, or the first of the dead turns up: what they do off
+            // screen then can't matter to anyone. The tens of thousands of calm walkers off screen were most of
+            // each step before an outbreak.)
+            if (peaceful && e.type == Entity.CIVILIAN && e.task == Dispatch.T_NONE && e.fleeTimer <= 0 && e != controlled
+                    && e.rig == null && e.ride == null && !onScreen(e)) {
+                e.lodStep = 0;
+                sleep(i, 45);
+                continue;
             }
             // Far from any zombie and just going about their day: they decide what to do a third as often
             // (but still move every frame), which lets a city of thousands run smoothly.
@@ -15364,7 +15382,12 @@ final class World {
     // ------------------------------------------------------------------ death, corpses, explosions
 
     private void cleanup() {
+        // ((22.1) Those passed over this step (calm, off screen, nothing near) can't have died in it of anything of
+        // their own: they're looked at on every eighth step, with everyone else. Looking at all thirty thousand every
+        // step, just in case, was a twentieth of the time.)
+        boolean sweep = lodFrame % 8 == 0;
         for (int i = entities.size() - 1; i >= 0; i--) {
+            if (!sweep && i < lodWake.length && lodWake[i] - lodFrame > 1 && lodSet[i] != lodFrame) continue;
             Entity e = entities.get(i);
             if (e.hp <= 0) e.dead = true;
             if (!e.dead) continue;
