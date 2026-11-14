@@ -107,10 +107,8 @@ final class LandmarkArt3 {
     /** A picnic table with its benches, along u, with a parasol (c1 != 0) over it. */
     static void picnic(Canvas c, Paint p, float x, float y, int c1, int c2) {
         rect(c, p, 0x30000000, x - 5 + SX, y - 4.5f + SY, x + 5 + SX, y + 4.5f + SY);
-        rect(c, p, 0xFF7A5A3A, x - 5, y - 4.5f, x + 5, y - 3);
-        rect(c, p, 0xFF7A5A3A, x - 5, y + 3, x + 5, y + 4.5f);
+        rect(c, p, 0xFF7A5A3A, x - 5, y - 4.5f, x + 5, y + 4.5f);
         rect(c, p, 0xFF9A7448, x - 5, y - 2.2f, x + 5, y + 2.2f);
-        line(c, p, 0x40000000, 0.4f, x - 5, y, x + 5, y);
         if (c1 != 0) parasol(c, p, x, y, 4.6f, c1, c2);
     }
 
@@ -148,8 +146,12 @@ final class LandmarkArt3 {
 
     /** A square pyramid tent (a market stall) seen from above. */
     static void tent(Canvas c, Paint p, float x0, float y0, float x1, float y1, int col) {
-        float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
         sh(c, p, x0, y0, x1, y1, 1.8f);
+        tentTop(c, p, x0, y0, x1, y1, col);
+    }
+
+    static void tentTop(Canvas c, Paint p, float x0, float y0, float x1, float y1, int col) {
+        float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
         poly(c, p, City.lighten(col, 0.12f), x0, y0, x1, y0, cx, cy);
         poly(c, p, col, x0, y0, x0, y1, cx, cy);
         poly(c, p, City.darken(col, 0.82f), x1, y0, x1, y1, cx, cy);
@@ -607,7 +609,7 @@ final class LandmarkArt3 {
                 // Tables in the middle.
                 int[][] pc = {{0xFFD8443A, 0xFFF2E8D0}, {0xFF3A7AC8, 0xFFF2E8D0}, {0xFF4AA65A, 0xFFF2E8D0}, {0xFFE8B83A, 0xFFD8443A}};
                 int t = 0;
-                float st = Math.max(22, Math.min(32, L / 10));
+                float st = Math.max(26, (float) Math.sqrt(au * (S - 72) / 30f));
                 for (float v = 36; v <= S - 36; v += st) {
                     for (float u = 18 + ((int) (v / st) % 2) * st * 0.45f; u < au - 6; u += st) {
                         if (Math.abs(v - S / 2) < 8) continue;
@@ -670,7 +672,8 @@ final class LandmarkArt3 {
         float a0 = down ? y + wid : y - 4, a1 = a0 + 4;
         rect(c, p, 0x30000000, x + 2, down ? a1 : a0 - 1, x + len - cab - 1, down ? a1 + 1 : a0);
         float aw = (len - cab - 3) / 6;
-        for (int k = 0; k < 6; k++) rect(c, p, k % 2 == 0 ? awn : 0xFFF2EADA, x + 2 + k * aw, a0, x + 2 + (k + 1) * aw, a1);
+        rect(c, p, 0xFFF2EADA, x + 2, a0, x + len - cab - 1, a1);
+        for (int k = 0; k < 6; k += 2) rect(c, p, awn, x + 2 + k * aw, a0, x + 2 + (k + 1) * aw, a1);
     }
 
     // An aquarium: a long building with a wavy blue roof and glass rotunda ends, a seal pool and a fish sign.
@@ -918,10 +921,12 @@ final class LandmarkArt3 {
                 p.setStrokeCap(Paint.Cap.ROUND);
                 trackPath(c, p, xs, ys, 2 * SX, 2 * SY, 0x30000000, w + 4);
                 trackPath(c, p, xs, ys, 0, 0, 0xFFD8342A, w + 3);
+                p.setStrokeCap(Paint.Cap.BUTT);
                 for (int i = 0; i < m; i += 2) {
                     int j = (i + 1) % m;
                     line(c, p, 0xFFF2F0EA, w + 3, xs[i], ys[i], xs[j], ys[j]);
                 }
+                p.setStrokeCap(Paint.Cap.ROUND);
                 trackPath(c, p, xs, ys, 0, 0, 0xFF4E5054, w);
                 trackPath(c, p, xs, ys, 0, 0, 0x10FFFFFF, w * 0.3f);
                 p.setStrokeCap(Paint.Cap.BUTT);
@@ -1033,11 +1038,11 @@ final class LandmarkArt3 {
                 // Awnings over the shop windows on all four sides.
                 int ca = 0xFF2E5E46, cb = 0xFFEDE4CC;
                 float bx0 = x0 + T, by0 = y0 + T, bx1 = x1 - T, by1 = y1 - T;
-                for (float x = bx0 + 6; x + 18 <= bx1 - 6; x += 24) {
+                for (float x = bx0 + 6; x + 18 <= bx1 - 6; x += 28) {
                     awning(c, p, x, by1, x + 18, by1 + 5, true, ca, cb);
                     awning(c, p, x, by0 - 5, x + 18, by0, true, ca, cb);
                 }
-                for (float y = by0 + 6; y + 18 <= by1 - 6; y += 24) {
+                for (float y = by0 + 6; y + 18 <= by1 - 6; y += 28) {
                     awning(c, p, bx1, y, bx1 + 5, y + 18, false, ca, cb);
                     awning(c, p, bx0 - 5, y, bx0, y + 18, false, ca, cb);
                 }
@@ -1064,11 +1069,11 @@ final class LandmarkArt3 {
                 poly(c, p, 0xFF3E4652, 1.5f, S - 1.5f, L - 1.5f, S - 1.5f, L - m, S - m, m, S - m);
                 poly(c, p, 0xFF525C6A, 1.5f, 1.5f, 1.5f, S - 1.5f, m, S - m, m, m);
                 poly(c, p, 0xFF444E5A, L - 1.5f, 1.5f, L - 1.5f, S - 1.5f, L - m, S - m, L - m, m);
-                for (float u = 12; u < L - 12; u += 10) {
+                for (float u = 12; u < L - 12; u += 14) {
                     rect(c, p, 0xFFD8D0BC, u, 2, u + 3.5f, 5);
                     rect(c, p, 0xFFD8D0BC, u, S - 5, u + 3.5f, S - 2);
                 }
-                for (float v = 12; v < S - 12; v += 10) {
+                for (float v = 12; v < S - 12; v += 14) {
                     rect(c, p, 0xFFD8D0BC, 2, v, 5, v + 3.5f);
                     rect(c, p, 0xFFD8D0BC, L - 5, v, L - 2, v + 3.5f);
                 }
@@ -1103,8 +1108,8 @@ final class LandmarkArt3 {
                     for (float v = tv0 + 2.5f; v < tv1; v += 2.5f) line(c, p, 0x22000000, 0.4f, tu0, v, tu1, v);
                     frame(c, p, 0x90C8E4EC, 0.8f, tu0, tv0, tu1, tv1);
                     int k = 0;
-                    for (float v = tv0 + 11; v < tv1 - 7; v += 22) {
-                        for (float u = tu0 + 11; u < tu1 - 7; u += 22) {
+                    for (float v = tv0 + 12; v < tv1 - 7; v += 25) {
+                        for (float u = tu0 + 12; u < tu1 - 7; u += 25) {
                             parasol(c, p, u, v, 5, k % 2 == 0 ? 0xFF2E5E46 : 0xFFC8503A, 0xFFEDE4CC);
                             k++;
                         }
@@ -1137,10 +1142,11 @@ final class LandmarkArt3 {
 
     static void awning(Canvas c, Paint p, float x0, float y0, float x1, float y1, boolean across, int ca, int cb) {
         rect(c, p, 0x30000000, x0 + 1, y0 + 1.5f, x1 + 1, y1 + 1.5f);
+        rect(c, p, cb, x0, y0, x1, y1);
         if (across) {
-            for (int k = 0; k < 6; k++) rect(c, p, k % 2 == 0 ? ca : cb, x0 + (x1 - x0) * k / 6, y0, x0 + (x1 - x0) * (k + 1) / 6, y1);
+            for (int k = 0; k < 6; k += 2) rect(c, p, ca, x0 + (x1 - x0) * k / 6, y0, x0 + (x1 - x0) * (k + 1) / 6, y1);
         } else {
-            for (int k = 0; k < 6; k++) rect(c, p, k % 2 == 0 ? ca : cb, x0, y0 + (y1 - y0) * k / 6, x1, y0 + (y1 - y0) * (k + 1) / 6);
+            for (int k = 0; k < 6; k += 2) rect(c, p, ca, x0, y0 + (y1 - y0) * k / 6, x1, y0 + (y1 - y0) * (k + 1) / 6);
         }
     }
 
@@ -1285,19 +1291,26 @@ final class LandmarkArt3 {
                 }
                 int[] tc = {0xFFC83A32, 0xFFE8A030, 0xFF2E7A6A, 0xFF3A5AA8, 0xFF8A3A7A, 0xFFE0D8C0, 0xFF4A8A3A, 0xFFD06A3A};
                 // Rows of stalls back to back, walkways between them.
-                float sd = Math.max(13, Math.min(20, L / 18)), walk = sd * 1.3f, v = 8;
+                float sd = Math.max(13, Math.min(20, L / 18)), walk = sd * 1.3f;
+                int nRows = Math.max(1, Math.min(4, (int) ((S - 12 + walk) / (2 * sd + walk))));
+                float v = (S - (nRows * (2 * sd + walk) - walk)) / 2;
                 int rows = 0;
                 float[] walks = new float[8];
                 int nw = 0;
-                while (v + sd * 2 <= S - 6 && rows < 4) {
+                while (rows < nRows) {
                     for (int side = 0; side < 2; side++) {
                         float sv = v + side * sd;
                         int slot = 0;
                         for (float u = 22; u + sd <= L - 8; u += sd + 1, slot++) {
                             if (slot % 6 == 5) continue;
+                            if (slot % 6 == 0) {
+                                float ue = u;
+                                for (int q = 0; q < 4 && ue + 2 * sd + 1 <= L - 8; q++) ue += sd + 1;
+                                rect(c, p, 0x38000000, u + 1.8f * SX, sv + 1.8f * SY, ue + sd + 1.8f * SX, sv + sd + 1.8f * SY);
+                            }
                             int col = tc[r.nextInt(tc.length)];
                             if (r.nextInt(5) == 0) booth(c, p, u, sv, sd, col);
-                            else tent(c, p, u, sv, u + sd, sv + sd, col);
+                            else tentTop(c, p, u, sv, u + sd, sv + sd, col);
                         }
                     }
                     v += sd * 2;
@@ -1305,12 +1318,12 @@ final class LandmarkArt3 {
                     v += walk;
                     rows++;
                 }
-                if (nw > 0 && walks[nw - 1] > S - 6) nw--;
+                nw = Math.max(0, nw - 1);
                 // Lanterns zigzag over the walkways; little tables and crowds of crates.
                 for (int w = 0; w < nw; w++) {
                     float wv = walks[w];
-                    for (float u = 22; u + sd * 2 <= L - 6; u += sd * 2) {
-                        lanterns(c, p, u, wv - walk / 2 + 1, u + sd * 2, wv + walk / 2 - 1);
+                    for (float u = 22; u + sd * 3 <= L - 6; u += sd * 3) {
+                        lanterns(c, p, u, wv - walk / 2 + 1, u + sd * 3, wv + walk / 2 - 1);
                     }
                     for (int k = 0; k < 4; k++) {
                         float u = 30 + r.nextFloat() * (L - 50);

@@ -647,7 +647,7 @@ final class LandmarkArt1 {
                 f.lamp(pu0 - 5, S - 6);
                 f.lamp(pu1 + 5, S - 6);
                 // The dinosaur on the one lawn, an ammonite bed on the other.
-                dino(f, 4, bv1 + 7, pu0 - 9, S - 6);
+                dino(f, 4, bv1 + 7, pu0 - 16, S - 6);
                 float ac = (pu1 + L) / 2 + 2, av = (bv1 + 5 + S - 4) / 2, R = Math.min((L - pu1) / 2 - 8, (S - 4 - bv1 - 5) / 2 - 3);
                 if (R > 5) {
                     f.circle(0xFF8B6B4A, ac, av, R);
@@ -737,7 +737,7 @@ final class LandmarkArt1 {
                 f.ring(0xFF9A988E, 1.2f, dc, dvc, ds * T * 0.7f);
                 c.restore();
                 // The orrery: a night-blue disc, star dots, brass orbits and planets round a golden sun.
-                float ou0 = du1 + T * 0.5f, ou1 = L - 2, oc = (ou0 + ou1) / 2, ov = S / 2;
+                float ou0 = du1 + T * 0.5f, ou1 = L - 3 * T - 4 - ou0 > S * 0.7f ? L - 3 * T - 4 : L - 2, oc = (ou0 + ou1) / 2, ov = S / 2;
                 float R = Math.min((ou1 - ou0) / 2, S / 2) - 4;
                 f.line(0xFFC8A860, 1, 0, ov, L, ov);
                 if (R > 12) {
@@ -842,13 +842,13 @@ final class LandmarkArt1 {
         f.poly(0xFF545C66, 0, 0, 0, S, m, S - m, m, m);
         f.poly(0xFF464D56, L, 0, L, S, L - m, S - m, L - m, m);
         f.poly(0xFF3C434C, 0, S, L, S, L - m, S - m, m, S - m);
-        for (float u = m + 3; u < L - m - 3; u += 9) {
+        for (float u = m + 5; u < L - m - 3; u += 12) {
             f.rect(0xFFDCD4C4, u - 1.6f, 1.2f, u + 1.6f, m - 1.4f);
             f.rect(0xFF8CA4B0, u - 1, 2, u + 1, m - 2);
             f.rect(0xFFDCD4C4, u - 1.6f, S - m + 1.4f, u + 1.6f, S - 1.2f);
             f.rect(0xFF6E8490, u - 1, S - m + 2, u + 1, S - 2);
         }
-        for (float v = m + 3; v < S - m - 3; v += 9) {
+        for (float v = m + 5; v < S - m - 3; v += 12) {
             f.rect(0xFFDCD4C4, 1.2f, v - 1.6f, m - 1.4f, v + 1.6f);
             f.rect(0xFF8CA4B0, 2, v - 1, m - 2, v + 1);
             f.rect(0xFFDCD4C4, L - m + 1.4f, v - 1.6f, L - 1.2f, v + 1.6f);
@@ -1033,7 +1033,7 @@ final class LandmarkArt1 {
                 c.restore();
                 f.rect(0xFFB8B2A6, T - 4, T - 4, hu1 + 4, S - T + 4);
                 // The band shell at the far end, the stage before it, rows of seats curving round.
-                float pu0 = hu1 + 8, rs = Math.min(S * 0.24f, (L - pu0) * 0.32f), sc = L - 4 - rs * 0.25f, sv = S / 2;
+                float pu0 = hu1 + 8, rs = Math.min(S * 0.24f, (L - pu0) * 0.32f), sc = L - 3 - rs * 0.85f, sv = S / 2;
                 c.save();
                 f.clip(pu0 - 2, 12, sc - rs * 0.75f, S - 12);
                 for (float rr = rs * 0.95f; rr < sc - pu0 + 2; rr += 5.5f) {
@@ -1390,7 +1390,7 @@ final class LandmarkArt1 {
                 float L = f.L, S = f.S;
                 f.rect(0xFF8C826E, 0, 0, L, S);
                 // The gate block: a crenellated stone parapet round a red tiled roof.
-                float bu0 = S * 0.4f, bu1 = L - S * 0.4f, bv0 = S * 0.08f, bv1 = S * 0.92f;
+                float tr = Math.min(S / 2 - 0.5f, L * 0.22f), bu0 = tr * 0.8f, bu1 = L - tr * 0.8f, bv0 = S * 0.08f, bv1 = S * 0.92f;
                 f.rect(0xFFA49882, bu0, bv0, bu1, bv1);
                 crenels(f, 0xFF8A7E6A, bu0, bv0, bu1, bv1, 2.2f);
                 hip(f, 0xFFA0503A, bu0 + 4, bv0 + 4, bu1 - 4, bv1 - 4, true);
@@ -1399,7 +1399,7 @@ final class LandmarkArt1 {
                 f.rect(0xFFF0E8D8, L / 2, S / 2 - 5.5f, L / 2 + 5, S / 2 - 5);
                 // The flanking round towers with conical slate roofs.
                 for (int e = 0; e < 2; e++) {
-                    float u = e == 0 ? S / 2 : L - S / 2, v = S / 2, rad = S / 2 - 0.5f;
+                    float u = e == 0 ? tr + 0.5f : L - tr - 0.5f, v = S / 2, rad = tr;
                     f.circle(0x48000000, u + 2.5f, v + 2.5f, rad);
                     f.circle(0xFF9A8E78, u, v, rad);
                     for (int k = 0; k < 16; k++) {
@@ -1626,7 +1626,8 @@ final class LandmarkArt1 {
                         float b0 = q < 2 ? gv0 + 7 : vm + 9, b1 = q < 2 ? vm - 9 : gv1 - 7;
                         if (a1 - a0 < 6 || b1 - b0 < 5) continue;
                         f.roundRect(0xFF7A5A3A, a0, b0, a1, b1, 2);
-                        for (int k = 0; k < 10; k++)
+                        f.roundRect(0xFF4A7E3A, a0 + 1, b0 + 1, a1 - 1, b1 - 1, 2);
+                        for (int k = 0; k < 18; k++)
                             f.circle(fl[r.nextInt(fl.length)], a0 + 1.5f + r.nextFloat() * (a1 - a0 - 3), b0 + 1.5f + r.nextFloat() * (b1 - b0 - 3), 1);
                     }
                     f.rect(0xFFD9CDB0, gu0, vm - 4, gu1 - 3, vm + 4);
