@@ -1797,14 +1797,17 @@ final class LandmarkArt10 {
                                 Math.max(f.x(ru0 + 2, pv0), f.x(pu1, pv1)), Math.max(f.y(ru0 + 2, pv0), f.y(pu1, pv1)));
                         for (int j = 0; j < 5; j++) f.line(0xFF5A8A40, 0.6f, ru0 + 3 + j, pv1 - 1, ru0 + 2.5f + j * 1.3f, pv1 - 5);
                     }
-                    if (ru1 - hu1 > 10) {
-                        f.tree((hu1 + ru1) / 2 + 2, (hv0 + hv1) / 2, 5.5f, 0xFF5A9040);
-                        f.tree((pu1 + ru1) / 2 + 2, (pv0 + pv1) / 2, 5.5f, 0xFF4E8A3A);
-                        for (int j = 0; j < 4; j++) f.circle(0xFFD04A30, (hu1 + ru1) / 2 + 2 + (j - 1.5f) * 2.2f, (hv0 + hv1) / 2 + (j % 2) * 2, 0.7f);
-                    }
+                    // An orchard of little fruit trees filling the rest.
+                    int j = 0;
+                    for (float u = Math.max(hu1, pu1) + 9; u < L - 15; u += 14, j++)
+                        for (int s = 0; s < 2; s++) {
+                            float tv = s == 0 ? (hv0 + hv1) / 2 : (pv0 + pv1) / 2;
+                            f.tree(u, tv, Math.min(5.5f, (hv1 - hv0) / 2), (j + s) % 2 == 0 ? 0xFF5A9040 : 0xFF4E8A3A);
+                            for (int t = 0; t < 4; t++) f.circle((j + s) % 2 == 0 ? 0xFFD04A30 : 0xFFE0C040, u + (t - 1.5f) * 2, tv - 1 + (t % 2) * 2.2f, 0.7f);
+                        }
                 }
                 // The long communal table on the cross path, under a festoon of lights.
-                float tu0 = split + 4, tu1 = Math.min(L - 14, tu0 + 26);
+                float tu0 = split + 6, tu1 = Math.min(L - 14, tu0 + 30);
                 if (tu1 - tu0 > 12) {
                     f.rect(0x38000000, tu0 + 1, gm - 2 + 1.2f, tu1 + 1, gm + 2 + 1.2f);
                     f.rect(0xFF9A7650, tu0, gm - 2, tu1, gm + 2);
@@ -1845,11 +1848,644 @@ final class LandmarkArt10 {
         d.roofCol = 0xFF6E8A48;
         out.add(d);
     }
-    static void mobileHomes(List<Landmarks.Def> out) {}
-    static void gatedEstate(List<Landmarks.Def> out) {}
-    static void tudor(List<Landmarks.Def> out) {}
-    static void mews(List<Landmarks.Def> out) {}
-    static void tinyHouses(List<Landmarks.Def> out) {}
+
+    // ------------------------------------------------------------------ 11. Mobile Home Park
+
+    static final int[] TRAILER = {0xFF5AA0A0, 0xFFC08A50, 0xFF7A8AB0, 0xFFB86A5A, 0xFF8AA060, 0xFFD0B060};
+
+    static void mobileHomes(List<Landmarks.Def> out) {
+        // Rows of mobile homes along a lane, each on its own little lot with an awning, a deck, chairs and flamingos.
+        D d = new D("Mobile Home Park", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                ArrayList<int[]> a = new ArrayList<int[]>();
+                boolean two = S >= 14;
+                int n = (L - 1) / 4, u0 = (L - (n * 4 - 2)) / 2;
+                int lv = two ? Math.min(5, (S - 5) / 2) : Math.min(5, S - 5);
+                for (int i = 0; i < n; i++) {
+                    a.add(B(u0 + i * 4, 1, 2, lv, 1));
+                    if (two) a.add(B(u0 + i * 4 + (i % 2), S - 1 - lv, 2, lv, 1));
+                }
+                return arr(a);
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                boolean two = Math.round(S / T) >= 14;
+                f.rect(0xFF7A9A58, 0, 0, L, S);
+                // The lane: worn asphalt with a centre crack line and gravel verges.
+                float lv0 = (q[0][1] + q[0][3]) * T + 10, lv1 = two ? q[1][1] * T - 10 : S - 6;
+                if (!two) lv0 = Math.max(lv0, lv1 - 24);
+                f.rect(0xFFB8AE98, 0, lv0 - 3, L, lv1 + 3);
+                f.rect(0xFF6E6C68, 0, lv0, L, lv1);
+                f.specks(r, (int) (L * (lv1 - lv0) / 25), 0x20000000, 0x18FFFFFF, 0, lv0, L, lv1, 0.8f);
+                for (float u = 4; u < L; u += 9) f.line(0xFFD8C890, 0.5f, u, (lv0 + lv1) / 2, u + 4, (lv0 + lv1) / 2);
+                Random rr = new Random(3);
+                for (int i = 0; i < q.length; i++) {
+                    int[] b = q[i];
+                    boolean top = b[1] * T < S / 2;
+                    float u0 = b[0] * T, u1 = (b[0] + b[2]) * T, v0 = b[1] * T, v1 = (b[1] + b[3]) * T;
+                    // A carport-style awning down the trailer's side, then the lot's bits and pieces.
+                    float au0 = u1, au1 = u1 + T * 0.85f;
+                    f.rect(0x40000000, au0 + 2, v0 + 6, au1 + 2, v1 - 2);
+                    f.rect(0xFFD8D8D0, au0, v0 + 4, au1, v1 - 4);
+                    for (float v = v0 + 6; v < v1 - 4; v += 2.4f) f.line(0xFFB0B0A8, 0.4f, au0, v, au1, v);
+                    f.rect(TRAILER[i % TRAILER.length], au1 - 0.8f, v0 + 4, au1, v1 - 4);
+                    float dv = top ? v1 : v0 - 6;
+                    f.rect(0xFF9A7A58, u0 + 3, dv, u0 + 12, dv + 6);
+                    for (float u = u0 + 4.5f; u < u0 + 12; u += 1.5f) f.line(0xFF7A5A3A, 0.3f, u, dv, u, dv + 6);
+                    float yv = top ? v1 + 3 : v0 - 3;
+                    int kind = rr.nextInt(4);
+                    bed(f, rr, u0 - 1, top ? v1 + 1 : v0 - 3, u0 + 2.5f, top ? v1 + 3 : v0 - 1, 0xFFE0C040, 0xFFE06080);
+                    if (kind == 0) {
+                        for (int k = 0; k < 2; k++) {
+                            float fu = u0 + 16 + k * 3.5f, fv2 = yv + k;
+                            f.oval(0x30000000, fu - 1, fv2, fu + 2.4f, fv2 + 2);
+                            f.oval(0xFFE87AA0, fu - 1.4f, fv2 - 1, fu + 1.4f, fv2 + 1);
+                            f.circle(0xFFE87AA0, fu + 1.6f, fv2 - 1.4f, 0.7f);
+                            f.line(0xFFE87AA0, 0.5f, fu + 0.8f, fv2 - 0.4f, fu + 1.6f, fv2 - 1.4f);
+                        }
+                    } else if (kind == 1) {
+                        f.circle(0x40000000, u0 + 17.5f, yv + 0.7f, 1.6f);
+                        f.circle(0xFF2A2A2A, u0 + 17, yv, 1.6f);
+                        f.circle(0xFF5A5A5A, u0 + 16.6f, yv - 0.4f, 0.6f);
+                    } else if (kind == 2) {
+                        for (int k = 0; k < 2; k++) {
+                            f.rect(0x30000000, u0 + 15 + k * 3.5f + 0.4f, yv - 1 + 0.6f, u0 + 17.4f + k * 3.5f + 0.4f, yv + 1.4f + 0.6f);
+                            f.rect(k == 0 ? 0xFFE8E8E4 : 0xFF4A9A6A, u0 + 15 + k * 3.5f, yv - 1, u0 + 17.4f + k * 3.5f, yv + 1.4f);
+                        }
+                    } else {
+                        f.rect(0x30000000, u0 + 14 + 0.8f, yv - 2.5f + 1, u0 + 20 + 0.8f, yv + 2.5f + 1);
+                        f.rect(0xFF9A7A58, u0 + 14, yv - 1.5f, u0 + 20, yv + 1.5f);
+                        f.rect(0xFF7A5A3A, u0 + 14, yv - 2.8f, u0 + 20, yv - 2);
+                        f.rect(0xFF7A5A3A, u0 + 14, yv + 2, u0 + 20, yv + 2.8f);
+                    }
+                    if (bb(top, v0, v1, lv0, lv1, T)) f.tree(u0 + 8, top ? (v1 + lv0) / 2 + 4 : (lv1 + v0) / 2 - 4, 4.5f, 0xFF4E7A3A);
+                    // A white propane bottle at the back and a satellite dish on a pole.
+                    float bv = top ? v0 + 5 : v1 - 5;
+                    f.roundRect(0x40000000, u0 - 4 + 0.6f, bv - 1.4f + 0.8f, u0 - 1 + 0.6f, bv + 1.4f + 0.8f, 1.4f);
+                    f.roundRect(0xFFE8E8E4, u0 - 4, bv - 1.4f, u0 - 1, bv + 1.4f, 1.4f);
+                }
+                // Lot boundaries (chain-link) and a shade tree here and there.
+                for (int i = 0; i < q.length; i++) {
+                    int[] b = q[i];
+                    boolean top = b[1] * T < S / 2;
+                    float ub = b[0] * T - T * 0.5f - 1, va = top ? 0 : (b[1] - 1) * T + 4, vb = top ? (b[1] + b[3] + 0.5f) * T : S;
+                    f.line(0x70A0A4A8, 0.5f, ub, va, ub, vb);
+                }
+                for (float u = 14; u < L - 6; u += 44) {
+                    if (clear(q, u + 26, 6, 6)) f.tree(u + 26, 6, 7, 0xFF4E7A3A);
+                }
+                f.rect(0xFFE8E4D8, L - 20, lv1 + 2, L - 4, lv1 + 6);
+                f.rect(0xFF3A6A9A, L - 19, lv1 + 2.6f, L - 5, lv1 + 5.4f);
+            }
+
+            boolean bb(boolean top, float v0, float v1, float lv0, float lv1, float T) {
+                return top ? lv0 - v1 > 30 : v0 - lv1 > 30;
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                // A long tin roof with rounded ends, ribbed across, the coloured siding showing on the edges.
+                float W = f.L, H = f.S;
+                int col = TRAILER[part % TRAILER.length];
+                f.roundRect(col, 0, 0, W, H, 2.5f);
+                f.roundRect(0xFFD8D8D2, 0.9f, 0.9f, W - 0.9f, H - 0.9f, 2);
+                f.rect(0xFFE6E6E0, 0.9f, 0.9f, W - 0.9f, H * 0.45f);
+                for (float u = 3; u < W - 2; u += 1.6f) f.line(0x20000000, 0.35f, u, 1, u, H - 1);
+                f.line(0x30000000, 0.5f, 1, H / 2, W - 1, H / 2);
+                acUnit(f, W * 0.38f, H / 2, 2.2f);
+                f.circle(0x40000000, W * 0.75f + 0.6f, H / 2 + 0.8f, 1);
+                f.circle(0xFF8A8E92, W * 0.75f, H / 2, 1);
+                if (part % 2 == 0) {
+                    f.circle(0x40000000, W * 0.15f + 1, H * 0.3f + 1.4f, 2);
+                    f.circle(0xFFE8E8E4, W * 0.15f, H * 0.3f, 2);
+                    f.circle(0xFFB8B8B4, W * 0.15f + 0.5f, H * 0.3f + 0.5f, 1);
+                }
+            }
+        };
+        d.ground = City.GRASS;
+        d.districts = Variants.SUB | Variants.IND;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.APARTMENT;
+        d.inside = Variants.I_HOME;
+        d.roofCol = 0xFFD8D8D2;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 12. Gated Estate
+
+    static void gatedEstate(List<Landmarks.Def> out) {
+        // Big houses on sweeping lawns behind a stone wall, reached through a gatehouse and a private drive with a fountain.
+        D d = new D("Gated Estate", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                ArrayList<int[]> a = new ArrayList<int[]>();
+                int n = Math.max(1, (L - 2) / 6), cw = (L - 2) / n, lv = Math.min(S >= 13 ? 5 : 4, cw - 2);
+                for (int i = 0; i < n; i++) a.add(B(2 + i * cw, S >= 13 ? 2 : 1, cw - 1, lv, 2));
+                a.add(B(L / 2 + 1, S - 3, 2, 2, 1));
+                return arr(a);
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                lawn(f, 0xFF5E9A48, 0, 0, L, S, 10);
+                int[] gh = q[q.length - 1];
+                float gx = (gh[0] - 1) * T, gv0 = gh[1] * T, hv1 = (q[0][1] + q[0][3]) * T;
+                float dv = (hv1 + gv0) / 2;
+                // The drive: in through the gate, a fountain roundel, then a spur to each house's front.
+                int pave = 0xFFD0C8B8;
+                f.rect(pave, gx - 5, dv, gx + 5, S);
+                f.rect(pave, q[0][0] * T + 8, dv - 4, (q[q.length - 2][0] + q[q.length - 2][2]) * T - 8, dv + 4);
+                for (int i = 0; i + 1 < q.length; i++) {
+                    float hc = (q[i][0] + q[i][2] / 2f) * T;
+                    f.rect(pave, hc - 5, hv1, hc + 5, dv);
+                    f.rect(pave, hc - 12, hv1, hc + 12, hv1 + 6);
+                }
+                float fr = Math.min(9, (gv0 - hv1) / 2 - 3);
+                if (fr > 4) {
+                    f.circle(pave, gx, dv, fr + 5);
+                    f.circle(0xFF5E9A48, gx, dv, fr + 1);
+                    f.circle(0xFFB8B0A0, gx, dv, fr - 1);
+                    f.circle(0xFF5AA0C8, gx, dv, fr - 2.5f);
+                    f.circle(0xFFC8C0B0, gx, dv, 1.6f);
+                    for (int k = 0; k < 8; k++) {
+                        double a = k * Math.PI / 4;
+                        f.circle(0x90FFFFFF, gx + (float) Math.cos(a) * fr * 0.45f, dv + (float) Math.sin(a) * fr * 0.45f, 0.6f);
+                    }
+                }
+                // Clipped hedges between the plots, topiary at the doors, a row of trees behind.
+                for (int i = 0; i + 2 < q.length; i++) {
+                    float hu = (q[i][0] + q[i][2]) * T + T * 0.5f;
+                    for (float v = 4; v < dv - 8; v += 3.2f) f.bush(hu, v, 2.2f);
+                }
+                for (int i = 0; i + 1 < q.length; i++) {
+                    float hc = (q[i][0] + q[i][2] / 2f) * T;
+                    f.circle(0x40000000, hc - 14 + 1, hv1 + 3 + 1.4f, 2.4f);
+                    f.circle(0xFF3E6A34, hc - 14, hv1 + 3, 2.4f);
+                    f.circle(0x40000000, hc + 14 + 1, hv1 + 3 + 1.4f, 2.4f);
+                    f.circle(0xFF3E6A34, hc + 14, hv1 + 3, 2.4f);
+                    if (gv0 - hv1 > 40) {
+                        f.tree(q[i][0] * T + 6, dv + 16, 6, 0xFF4E8A3A);
+                        f.tree((q[i][0] + q[i][2]) * T - 4, dv + 18, 5, 0xFF7A3A34);
+                    }
+                }
+                // The estate wall: stone with piers, broken only at the gate, where a barrier arm stands.
+                int st = 0xFFB0A68E;
+                f.rect(0x40000000, 0, 2.2f, L, 3.6f);
+                f.rect(st, 0, 0, L, 2.4f);
+                f.rect(st, 0, 0, 2.4f, S);
+                f.rect(st, L - 2.4f, 0, L, S);
+                f.rect(st, 0, S - 2.4f, gx - 10, S);
+                f.rect(st, gx + 10, S - 2.4f, L, S);
+                for (float u = 0; u < L; u += 16) {
+                    if (Math.abs(u - gx) < 10) continue;
+                    f.rect(0xFFC8BEA6, u, 0, u + 3.4f, 3.4f);
+                    if (Math.abs(u - gx) > 12) f.rect(0xFFC8BEA6, u, S - 3.4f, u + 3.4f, S);
+                }
+                for (float v = 0; v < S; v += 16) {
+                    f.rect(0xFFC8BEA6, 0, v, 3.4f, v + 3.4f);
+                    f.rect(0xFFC8BEA6, L - 3.4f, v, L, v + 3.4f);
+                }
+                for (int s = -1; s <= 1; s += 2) {
+                    f.tree(s < 0 ? 14 : L - 14, S - 16, 7, 0xFF4E8A3A);
+                    for (float v = dv + 12; v < S - 10; v += 5) shrub(f, gx + s * 9, v, 1.8f, 0xFFF0F0F0);
+                }
+                f.line(0xFFD03A2A, 1, gx + 5, S - 6, gx - 4, S - 6);
+                f.line(0xFFF0F0F0, 1, gx + 2, S - 6, gx - 1, S - 6);
+                f.lamp(gx - 9, S - 4);
+                f.lamp(gx + 9, S - 4);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float W = f.L, H = f.S;
+                if (H > 2.5f * TT) {
+                    // A grand house: a slate main block with two forward wings, a terrace roof between, chimneys and skylights.
+                    int[] cols = {0xFF5A606A, 0xFF8A5A44, 0xFF6A645A};
+                    int col = cols[part % 3];
+                    float wing = Math.min(W * 0.3f, 22);
+                    hip(f, col, wing - 2, 0, W - wing + 2, H * 0.72f, true);
+                    f.rect(0xFFE0D8C8, wing, H * 0.72f, W - wing, H);
+                    f.frame(0xFFB8B0A0, 0.8f, wing, H * 0.72f, W - wing, H);
+                    f.rect(0x40000000, wing, H * 0.72f, W - wing, H * 0.72f + 1.4f);
+                    for (float u = wing + 3; u < W - wing - 2; u += 6) pot(f, u, H - 2.2f, 1.2f, 0);
+                    hip(f, col, 0, 0, wing, H, true);
+                    hip(f, col, W - wing, 0, W, H, true);
+                    stack(f, wing * 0.5f - 2, H * 0.3f, 4, 0xFFC8BEA6);
+                    stack(f, W - wing * 0.5f - 2, H * 0.3f, 4, 0xFFC8BEA6);
+                    skylight(f, W / 2 - 4, H * 0.18f, W / 2 + 4, H * 0.18f + 4);
+                } else {
+                    // The gatehouse: a pyramid roof with a lantern.
+                    hip(f, 0xFF5A606A, 0, 0, W, H, true);
+                    f.circle(0xFFD8B048, W / 2, H / 2, 1.2f);
+                }
+            }
+        };
+        d.ground = City.GRASS;
+        d.districts = Variants.SUB;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.APARTMENT;
+        d.inside = Variants.I_HOME;
+        d.roofCol = 0xFF5A606A;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 13. Tudor Cottages
+
+    /** A thatched roof with its ridge along u: rounded eaves, straw texture, a patterned ridge and eyebrow dormers. */
+    static void thatch(F f, Random r, float W, float H) {
+        int st = 0xFFB89A5E;
+        f.roundRect(City.darken(st, 0.7f), 0, 0, W, H, H * 0.3f);
+        f.roundRect(City.lighten(st, 0.06f), 0.6f, 0.6f, W - 0.6f, H / 2 + 0.5f, H * 0.28f);
+        f.roundRect(City.darken(st, 0.8f), 0.6f, H / 2 - 0.5f, W - 0.6f, H - 0.6f, H * 0.28f);
+        f.rect(City.lighten(st, 0.06f), 0.6f + H * 0.28f, H / 2 - 1, W - 0.6f - H * 0.28f, H / 2);
+        for (int k = 0; k < (int) (W * H / 4); k++) {
+            float u = 1.5f + r.nextFloat() * (W - 3), v = 1.5f + r.nextFloat() * (H - 3);
+            float dir = v < H / 2 ? -1.2f : 1.2f;
+            f.line(r.nextBoolean() ? 0x22000000 : 0x24FFFFFF, 0.3f, u, v, u, v + dir);
+        }
+        // The ridge: a thick band with a scalloped edge on both sides.
+        f.rect(0xFF8A6E40, H * 0.25f, H / 2 - 2, W - H * 0.25f, H / 2 + 2);
+        for (float u = H * 0.25f + 1.2f; u < W - H * 0.25f - 1; u += 2.4f) {
+            f.circle(0xFF8A6E40, u, H / 2 - 2, 1.2f);
+            f.circle(0xFF7A5E34, u, H / 2 + 2, 1.2f);
+        }
+        f.line(0xFFA88A54, 0.6f, H * 0.25f, H / 2 - 1, W - H * 0.25f, H / 2 - 1);
+        // Eyebrow dormers rising out of the front slope.
+        for (float u = W * 0.3f; u < W - 4; u += W * 0.4f) {
+            f.oval(0x40000000, u - 3.5f + 0.6f, H - 6 + 0.8f, u + 3.5f + 0.6f, H - 2 + 0.8f);
+            f.oval(City.lighten(st, 0.02f), u - 3.5f, H - 6.5f, u + 3.5f, H - 2.5f);
+            f.oval(0xFF3A3A3A, u - 1.8f, H - 3.6f, u + 1.8f, H - 2.6f);
+        }
+    }
+
+    static void tudor(List<Landmarks.Def> out) {
+        // Half-timbered cottages, some thatched and some tiled, in flower-crammed gardens along a winding lane.
+        D d = new D("Tudor Cottages", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                ArrayList<int[]> a = new ArrayList<int[]>();
+                for (int u = 1; u + 4 <= L - 1; u += 5) a.add(B(u, 1, 4, 3, 2));
+                for (int u = 3; u + 4 <= L - 1; u += 5) a.add(B(u, S - 4, 4, 3, 2));
+                return arr(a);
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                f.rect(0xFF6E9A4E, 0, 0, L, S);
+                // A winding lane between the two rows.
+                float m = S / 2;
+                Path lane = new Path();
+                f.mv(lane, 0, m - 6);
+                for (float u = 0; u < L; u += 20) f.qd(lane, u + 10, m - 6 + ((int) (u / 20) % 2 == 0 ? -4 : 4), u + 20, m - 6);
+                f.ln(lane, L, m + 6);
+                for (float u = L; u > 0; u -= 20) f.qd(lane, u - 10, m + 6 + ((int) (u / 20) % 2 == 0 ? 4 : -4), u - 20, m + 6);
+                lane.close();
+                f.fill(lane, 0xFFB8A888);
+                f.specks(r, (int) (L / 2), 0x22000000, 0x24FFFFFF, 0, m - 6, L, m + 6, 0.8f);
+                // Cottage gardens: dry-stone walls, a path to the door, beds of hollyhocks and roses, a bench.
+                Random rr = new Random(9);
+                for (int i = 0; i < q.length; i++) {
+                    int[] b = q[i];
+                    boolean top = b[1] * T < m;
+                    float u0 = b[0] * T, u1 = (b[0] + b[2]) * T, v0 = b[1] * T, v1 = (b[1] + b[3]) * T;
+                    float ga = top ? v1 : m + 7, gb = top ? m - 7 : v0;
+                    float du = (u0 + u1) / 2;
+                    if (gb - ga > 4) {
+                        float ea = top ? Math.max(ga + 1, gb - 6) : ga + 1, eb = top ? gb - 1 : Math.min(gb - 1, ga + 6);
+                        bed(f, rr, u0 - 4, ea, du - 3, eb, 0xFFE070A0, 0xFFF0E0F0, 0xFFC050A0, 0xFFE8D060, 0xFF9070C0);
+                        bed(f, rr, du + 3, ea, u1 + 4, eb, 0xFFE07070, 0xFFF0E8E0, 0xFFE8A0B0, 0xFF8090D0);
+                        if (gb - ga > 18) {
+                            shrub(f, du - 10, (ga + gb) / 2, 3, 0xFFE8A0B0);
+                            shrub(f, du + 11, (ga + gb) / 2 + 2, 2.6f, 0xFFF0F0F0);
+                            if (i % 2 == 0) f.bench(du + 12, top ? ga + 4 : gb - 4, true);
+                        }
+                        f.rect(0xFFC8B898, du - 2.5f, ga, du + 2.5f, gb);
+                        f.line(0xFF9A9080, 1.6f, u0 - 5, top ? gb : ga, du - 3, top ? gb : ga);
+                        f.line(0xFF9A9080, 1.6f, du + 3, top ? gb : ga, u1 + 5, top ? gb : ga);
+                    }
+                    // Back gardens: a vegetable patch, an apple tree, a beehive or a well.
+                    float ba = top ? 0 : v1, bb = top ? v0 : S;
+                    if (bb - ba > 8) veg(f, rr, u0 + 2, ba + 2, u0 + 20, bb - 2, true);
+                    if (i % 3 == 0) {
+                        float wu = u1 + 8, wv = top ? v0 + 10 : v1 - 10;
+                        if (clear(q, wu, wv, 5) && wu < L - 5) {
+                            f.circle(0x40000000, wu + 1, wv + 1.4f, 4);
+                            f.circle(0xFF9A9080, wu, wv, 4);
+                            f.circle(0xFF2A3A44, wu, wv, 2.4f);
+                            f.rect(0x40000000, wu - 4.5f + 1, wv - 1.5f + 1.5f, wu + 4.5f + 1, wv + 1.5f + 1.5f);
+                            gable(f, 0xFF8A4A36, wu - 4.5f, wv - 1.5f, wu + 4.5f, wv + 1.5f, false);
+                        }
+                    } else if (i % 3 == 1) {
+                        float hu = u1 + 7, hv = top ? v0 + 8 : v1 - 8;
+                        if (clear(q, hu, hv, 4) && hu < L - 4)
+                            for (int k = 0; k < 2; k++) {
+                                f.rect(0x40000000, hu + 0.8f, hv - 2 + k * 6 + 1, hu + 4.8f, hv + 2 + k * 6 + 1);
+                                f.rect(0xFFE8E4D8, hu, hv - 2 + k * 6, hu + 4, hv + 2 + k * 6);
+                                f.line(0x40000000, 0.4f, hu, hv + k * 6, hu + 4, hv + k * 6);
+                            }
+                    }
+                }
+                for (float u = 10; u < L - 6; u += 34) {
+                    float v = u % 68 < 34 ? 6 : S - 6;
+                    if (clear(q, u, v, 7)) f.tree(u, v, 7, 0xFF4E8A3A);
+                }
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float W = f.L, H = f.S;
+                if (part % 2 == 0) thatch(f, r, W, H);
+                else {
+                    // Old clay tiles with moss, and a half-timbered gable wing jettied out at one end.
+                    int col = 0xFF9A5A40;
+                    gable(f, col, 0, 0, W, H, true);
+                    for (int k = 0; k < 10; k++) {
+                        float u = 2 + r.nextFloat() * (W - 4), v = 2 + r.nextFloat() * (H - 4);
+                        f.circle(0x605A7A3A, u, v, 0.8f + r.nextFloat());
+                    }
+                    float wu = W - Math.min(14, W * 0.3f);
+                    f.rect(0x40000000, wu - 1.4f, 0, wu, H);
+                    gableV(f, City.darken(col, 0.95f), wu, 0, W, H, true);
+                    f.rect(0xFFF0E8D8, wu, H - 2.2f, W, H);
+                    for (float u = wu; u <= W; u += 2.6f) f.line(0xFF2A2420, 0.6f, u, H - 2.2f, u, H);
+                    f.line(0xFF2A2420, 0.6f, wu, H - 2.2f, W, H - 2.2f);
+                    f.line(0xFF2A2420, 0.5f, wu, H, wu + 2.6f, H - 2.2f);
+                    f.line(0xFF2A2420, 0.5f, W, H, W - 2.6f, H - 2.2f);
+                }
+                chimney(f, part % 2 == 0 ? W * 0.12f : W * 0.15f, H / 2 - 1.6f, 2);
+                if (part % 2 == 0) {
+                    f.rect(0xFFF0E8D8, 0.6f + H * 0.3f, H - 1.6f, W - 0.6f - H * 0.3f, H);
+                    for (float u = 0.6f + H * 0.3f; u <= W - H * 0.3f; u += 2.6f) f.line(0xFF2A2420, 0.6f, u, H - 1.6f, u, H);
+                }
+            }
+        };
+        d.ground = City.GRASS;
+        d.districts = Variants.OLD | Variants.SUB | Variants.PARK;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.APARTMENT;
+        d.inside = Variants.I_HOME;
+        d.roofCol = 0xFFB89A5E;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 14. Townhouse Mews
+
+    static void mews(List<Landmarks.Def> out) {
+        // A cobbled mews of converted stables and coach houses, painted doors and potted bays, an arch at each end.
+        D d = new D("Townhouse Mews", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                ArrayList<int[]> a = new ArrayList<int[]>();
+                int dep = S >= 14 ? 5 : 3;
+                for (int row = 0; row < 2; row++) {
+                    int v = row == 0 ? 1 : S - 1 - dep;
+                    for (int u = 1; u + 2 <= L - 1; ) {
+                        int w = Math.min(6, L - 1 - u);
+                        w -= w % 2;
+                        if (w < 2) break;
+                        a.add(B(u, v, w, dep, 2));
+                        u += w + 1;
+                    }
+                }
+                return arr(a);
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                f.rect(0xFF6E9450, 0, 0, L, S);
+                int dep = Math.round(S / T) >= 14 ? 5 : 3;
+                float c0 = (dep + 1) * T, c1 = S - (dep + 1) * T;
+                // Small back gardens behind each row, a cobbled lane between, with a gutter of flagstones down the middle.
+                for (int[] b : q) {
+                    boolean top = b[1] * T < S / 2;
+                    float u0 = b[0] * T, u1 = (b[0] + b[2]) * T;
+                    for (float u = u0; u <= u1 + 0.1f; u += 2 * T) f.line(0xFF7A6A58, 0.8f, u, top ? 0 : S - T, u, top ? T : S);
+                    f.rect(0xFFB0A898, u1, top ? 0 : c1, u1 + T, top ? c0 : S);
+                }
+                cobbles(f, r, 0xFF8A8478, 0, c0, L, c1);
+                f.rect(0xFFB0A898, 0, (c0 + c1) / 2 - 2, L, (c0 + c1) / 2 + 2);
+                // Painted doors, window boxes and bay trees in pots along both fronts.
+                int[] doors = {0xFF2A4A6A, 0xFF7A2A2A, 0xFF2A5A3A, 0xFFE0C040, 0xFF3A3A3A, 0xFF5A8AA0};
+                int k = 0;
+                for (int[] b : q) {
+                    boolean top = b[1] * T < S / 2;
+                    float fv = top ? (b[1] + b[3]) * T : b[1] * T;
+                    float sg = top ? 1 : -1;
+                    for (int h = 0; h < b[2] / 2; h++, k++) {
+                        float a = (b[0] + h * 2) * T;
+                        float du = a + (k % 2 == 0 ? 6 : 20);
+                        f.rect(doors[k % doors.length], du - 4.5f, Math.min(fv, fv + sg * 1.6f), du + 4.5f, Math.max(fv, fv + sg * 1.6f));
+                        f.line(0xFFE8E4DA, 0.4f, du, fv, du, fv + sg * 1.6f);
+                        float wu = k % 2 == 0 ? a + 20 : a + 6;
+                        f.rect(0xFF6A4A30, wu - 4, Math.min(fv, fv + sg * 1.4f), wu + 4, Math.max(fv, fv + sg * 1.4f));
+                        for (float u = wu - 3.4f; u < wu + 4; u += 1.4f) f.circle(k % 3 == 0 ? 0xFFE04060 : 0xFFE8E0F0, u, fv + sg * 0.8f, 0.6f);
+                        if (k % 2 == 1) pot(f, a + 1.8f, fv + sg * 3, 1.8f, 0);
+                        if (k % 5 == 3) {
+                            f.line(0xFF2A2A2A, 0.5f, a + 11, fv + sg * 3, a + 17, fv + sg * 3);
+                            f.circle(0xFF2A2A2A, a + 11, fv + sg * 3, 1.3f);
+                            f.circle(0xFF2A2A2A, a + 17, fv + sg * 3, 1.3f);
+                        }
+                    }
+                }
+                // Brick archways spanning the lane at each end, their shadows falling on the setts.
+                for (int e = 0; e < 2; e++) {
+                    float u0 = e == 0 ? 0 : L - 7, u1 = u0 + 7;
+                    f.rect(0x48000000, u0 + 2, c0 + 3, u1 + 2, c1 + 3);
+                    f.rect(0xFF8A4A36, u0, c0 - 2, u1, c1 + 2);
+                    for (float v = c0; v < c1; v += 2) f.line(0x30000000, 0.35f, u0, v, u1, v);
+                    f.rect(0xFFC8BEA6, u0, (c0 + c1) / 2 - 2, u1, (c0 + c1) / 2 + 2);
+                    f.rect(0xFFA05A42, u0, c0 - 2, u1, c0 - 1);
+                }
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                // Slate pitched roofs house by house, dormers to the lane, stacks on the party walls, a roof terrace or two.
+                float W = f.L, H = f.S;
+                int n = Math.max(1, Math.round(W / (2 * TT)));
+                float hw = W / n;
+                for (int k = 0; k < n; k++) {
+                    float a = k * hw, e = a + hw;
+                    int col = (k + part) % 3 == 1 ? 0xFF8A5040 : 0xFF54585E;
+                    if ((k + part * 2) % 5 == 4) {
+                        f.rect(0xFF54585E, a, 0, e, H);
+                        f.rect(0xFFA07A54, a + 1.4f, 1.4f, e - 1.4f, H - 1.4f);
+                        for (float u = a + 2.6f; u < e - 1.4f; u += 1.4f) f.line(0xFF7A5A3A, 0.3f, u, 1.4f, u, H - 1.4f);
+                        pot(f, a + 4, 4, 2, 0xFFE070A0);
+                        pot(f, e - 4, 4, 2, 0);
+                        parasol(f, (a + e) / 2, H * 0.6f, 4, 0xFFE8E4D8, 0xFF3A6A8A);
+                    } else {
+                        gable(f, col, a, 0, e, H, true);
+                        dormer(f, col, a + hw * 0.32f, H / 2 + 1, H - 1, 6);
+                        dormer(f, col, a + hw * 0.68f, 1, H / 2 - 1, 6);
+                    }
+                    if (k > 0) chimney(f, a - 2.5f, H / 2 - 1.6f, 2);
+                }
+            }
+        };
+        d.ground = City.GRASS;
+        d.districts = Variants.OLD | Variants.MID | Variants.DOWN;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.APARTMENT;
+        d.inside = Variants.I_HOME;
+        d.roofCol = 0xFF54585E;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 15. Tiny House Village
+
+    static final int[] TINY = {0xFFB8483A, 0xFF3A8A8A, 0xFFD8A838, 0xFF6A8A4A, 0xFF4A6A9A, 0xFF8A5A8A, 0xFFE07A40};
+
+    static void tinyHouses(List<Landmarks.Def> out) {
+        // Two rows of tiny houses, every one different, round a shared green with a fire circle, string lights and beds.
+        D d = new D("Tiny House Village", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                ArrayList<int[]> a = new ArrayList<int[]>();
+                int n = (L - 1) / 3, u0 = (L - (n * 3 - 1)) / 2;
+                for (int i = 0; i < n; i++) {
+                    a.add(B(u0 + i * 3, 1 + (i % 2), 2, 3, 1));
+                    if (S >= 11) a.add(B(u0 + i * 3, S - 4 - ((i + 1) % 2), 2, 3, 1));
+                }
+                return arr(a);
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                f.rect(0xFF769A52, 0, 0, L, S);
+                f.specks(r, (int) (L * S / 40), 0x18000000, 0x18FFFFFF, 0, 0, L, S, 0.8f);
+                float m = S / 2;
+                // A gravel loop through the green; decks and porches off every house.
+                f.rect(0xFFC8BC9C, 4, m - 4, L - 4, m + 4);
+                f.specks(r, (int) (L / 3), 0x20000000, 0x30FFFFFF, 4, m - 4, L - 4, m + 4, 0.7f);
+                for (int i = 0; i < q.length; i++) {
+                    int[] b = q[i];
+                    boolean top = b[1] * T < m;
+                    float u0 = b[0] * T, u1 = (b[0] + b[2]) * T, fv = top ? (b[1] + b[3]) * T : b[1] * T;
+                    float dv0 = top ? fv : fv - 6, dv1 = top ? fv + 6 : fv;
+                    f.rect(0x30000000, u0 + 1, dv0 + 1.2f, u1 + 1, dv1 + 1.2f);
+                    f.rect(i % 2 == 0 ? 0xFFB08A60 : 0xFF9A7A58, u0, dv0, u1, dv1);
+                    for (float u = u0 + 1.5f; u < u1; u += 1.5f) f.line(0x30000000, 0.3f, u, dv0, u, dv1);
+                    f.line(0xFFC8BC9C, 3, (u0 + u1) / 2, top ? dv1 : dv0, (u0 + u1) / 2, m);
+                    pot(f, u1 - 3, (dv0 + dv1) / 2, 1.3f, TINY[(i + 3) % TINY.length]);
+                    // Rain barrels and little raised beds round the backs.
+                    float bv = top ? b[1] * T - 3 : (b[1] + b[3]) * T + 3;
+                    if (bv > 3 && bv < S - 3) {
+                        f.circle(0x40000000, u1 + 3.6f, bv + 0.8f, 2);
+                        f.circle(0xFF3A5A7A, u1 + 3, bv, 2);
+                        f.circle(0xFF5A7A9A, u1 + 2.6f, bv - 0.4f, 1);
+                    }
+                }
+                // The fire circle with stump seats, raised beds, a picnic table, a hammock between two trees.
+                float gv0 = 0, gv1 = S;
+                for (int[] b : q) {
+                    if (b[1] * TT < m) gv0 = Math.max(gv0, (b[1] + b[3]) * T + 7);
+                    else gv1 = Math.min(gv1, b[1] * T - 7);
+                }
+                float gh = gv1 - gv0, cx = L * 0.5f, fr = Math.max(7, Math.min(12, gh / 2));
+                f.circle(0xFF9A8A6A, cx, m, fr + 2);
+                for (int k = 0; k < 10; k++) {
+                    double a = k * Math.PI / 5;
+                    float su = cx + (float) Math.cos(a) * fr, sv = m + (float) Math.sin(a) * fr;
+                    f.circle(0x40000000, su + 0.5f, sv + 0.7f, 1.7f);
+                    f.circle(0xFFA07A50, su, sv, 1.7f);
+                    f.circle(0xFFC8A070, su, sv, 0.9f);
+                }
+                f.circle(0xFF7A7470, cx, m, 3.8f);
+                f.circle(0xFF2A2420, cx, m, 2.8f);
+                f.circle(0xFFE0782A, cx, m, 1.4f);
+                f.circle(0xFFF0C050, cx - 0.3f, m - 0.3f, 0.6f);
+                Random rr = new Random(4);
+                int k = 0;
+                for (float u = 12; u < L - 12; u += 26, k++) {
+                    if (Math.abs(u - cx) < fr + 12) continue;
+                    float bv = gh > 34 ? (k % 2 == 0 ? m - 12 : m + 12) : m;
+                    if (gh > 34 && k % 3 == 1) {
+                        f.rect(0x30000000, u - 5 + 0.8f, bv - 2 + 1.2f, u + 5 + 0.8f, bv + 2 + 1.2f);
+                        f.rect(0xFF9A7A58, u - 5, bv - 1.6f, u + 5, bv + 1.6f);
+                        f.rect(0xFF7A5A3A, u - 5, bv - 3.6f, u + 5, bv - 2.6f);
+                        f.rect(0xFF7A5A3A, u - 5, bv + 2.6f, u + 5, bv + 3.6f);
+                        continue;
+                    }
+                    f.rect(0x30000000, u - 6 + 0.8f, bv - 2.5f + 1, u + 6 + 0.8f, bv + 2.5f + 1);
+                    f.rect(0xFF8A6440, u - 6.6f, bv - 3.1f, u + 6.6f, bv + 3.1f);
+                    if (k % 2 == 0) veg(f, rr, u - 6, bv - 2.5f, u + 6, bv + 2.5f, true);
+                    else bed(f, rr, u - 6, bv - 2.5f, u + 6, bv + 2.5f, 0xFFE8C040, 0xFFE07030, 0xFFF0F0E0);
+                }
+                for (float s = 6; s < L - 6; s += 2.4f) f.circle(0xFFF8E8A0, s, m - 5 + (float) Math.sin(s * 0.25f) * 1.2f, 0.45f);
+                if (L > 15 * T) {
+                    float hu = L - 24;
+                    f.tree(hu - 9, m + 1, 5, 0xFF4E8A3A);
+                    f.tree(hu + 9, m + 1, 5, 0xFF4E8A3A);
+                    f.oval(0x30000000, hu - 5, m - 1, hu + 6, m + 3);
+                    f.oval(0xFFD86A40, hu - 6, m - 2, hu + 6, m + 2);
+                    f.line(0xFFE8D8B0, 0.4f, hu - 9, m + 1, hu + 9, m + 1);
+                }
+                for (float u = 8; u < L - 4; u += 30) {
+                    if (clear(q, u, 5, 6)) f.tree(u, 5, 6, 0xFF4E8A3A);
+                    if (clear(q, u + 15, S - 5, 6)) f.tree(u + 15, S - 5, 6, 0xFF5A9040);
+                }
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float W = f.L, H = f.S;
+                int col = TINY[(part * 5 + part / 2) % TINY.length];
+                switch ((part * 3 + part / 2) % 4) {
+                    case 0: {
+                        // Mono-pitch metal roof falling across v.
+                        f.rect(City.lighten(col, 0.12f), 0, 0, W, H);
+                        for (float v = 0; v < H; v += H / 4) f.rect(Landmarks.shade(col, 1.12f - v / H * 0.35f), 0, v, W, v + H / 4);
+                        for (float u = 1.6f; u < W; u += 1.6f) f.line(0x30000000, 0.35f, u, 0, u, H);
+                        f.frame(City.darken(col, 0.6f), 0.6f, 0, 0, W, H);
+                        solar(f, W * 0.15f, 2, W * 0.6f, H * 0.45f);
+                        break;
+                    }
+                    case 1: {
+                        gable(f, 0xFF8A6A4A, 0, 0, W, H, true);
+                        f.rect(col, W - 1.4f, 0, W, H);
+                        skylight(f, W * 0.3f, H * 0.12f, W * 0.3f + 4, H * 0.12f + 3);
+                        break;
+                    }
+                    case 2: {
+                        // A curved (barrel) roof.
+                        int[] sh = {City.lighten(col, 0.25f), City.lighten(col, 0.12f), col, City.darken(col, 0.88f), City.darken(col, 0.75f)};
+                        for (int k = 0; k < 5; k++) f.rect(sh[k], 0, H * k / 5, W, H * (k + 1) / 5);
+                        for (float u = 2; u < W; u += 2) f.line(0x22000000, 0.35f, u, 0, u, H);
+                        f.frame(City.darken(col, 0.55f), 0.6f, 0, 0, W, H);
+                        break;
+                    }
+                    default: {
+                        deck(f, r, 0xFF6E8A48, 0, 0, W, H, 1.2f);
+                        for (int k = 0; k < 12; k++) f.circle(k % 3 == 0 ? 0xFFC8A858 : 0xFF8AA858, 2 + r.nextFloat() * (W - 4), 2 + r.nextFloat() * (H - 4), 0.9f);
+                        f.rect(col, 0, 0, W, 1.2f);
+                        skylight(f, W * 0.55f, H * 0.4f, W * 0.55f + 4, H * 0.4f + 4);
+                    }
+                }
+                f.circle(0x40000000, W * 0.82f + 0.6f, H * 0.7f + 0.8f, 0.9f);
+                f.circle(0xFF6A6E72, W * 0.82f, H * 0.7f, 0.9f);
+            }
+        };
+        d.ground = City.GRASS;
+        d.districts = Variants.SUB | Variants.PARK | Variants.UNI;
+        d.minS = 11;
+        d.minL = 12;
+        d.base = City.APARTMENT;
+        d.inside = Variants.I_HOME;
+        d.roofCol = 0xFF3A8A8A;
+        out.add(d);
+    }
     static void riverLofts(List<Landmarks.Def> out) {}
     static void bungalowCourt(List<Landmarks.Def> out) {}
     static void farmstead(List<Landmarks.Def> out) {}

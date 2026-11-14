@@ -1373,7 +1373,7 @@ final class LandmarkArt9 {
                 }
                 for (float u = 22; u < L - 14; u += 30) picnic(f, u, S - 12, true, 0xFF8A6A4A);
                 int[] lc = {0xFFF8E8A0, 0xFFF4C070, 0xFFF8F0D0};
-                for (float u = 8; u < L - 8; u += 26) string(f, u, 4, u + 14, S - 4, lc, 4, 0.55f);
+                for (float u = 14; u < L - 8; u += 56) string(f, u, 5, u + 20, S - 5, lc, 4, 0.6f);
                 // Spray cans, a stepladder and bins.
                 for (int j = 0; j < 8; j++) f.circle(mc[j % mc.length], 8 + r.nextFloat() * (L - 16), S - 6 + r.nextFloat() * 1.5f, 0.6f);
                 f.rect(0xFFB8B8B4, L - 14, 5, L - 12, 12);
@@ -1545,20 +1545,27 @@ final class LandmarkArt9 {
                 f.rect(0xFF6A4A30, su0, sv0, su1, sv1);
                 for (float v = sv0 + 2; v < sv1; v += 2) f.line(0x30000000, 0.4f, su0, v, su1, v);
                 f.frame(0xFF3A2A1E, 0.6f, su0, sv0, su1, sv1);
-                piano(f, su0 + 4, sv0 + (sv1 - sv0) * 0.33f, 1.1f);
+                piano(f, su0 + 3, sv0 + (sv1 - sv0) * 0.3f, 1.6f);
                 f.oval(0xFF8A4A22, su0 + 5, sv1 - 7, su0 + 13, sv1 - 3.4f);
                 f.line(0xFF2A1A12, 0.6f, su0 + 9, sv1 - 6.6f, su0 + 16, sv1 - 5.2f);
                 f.circle(0xFF2A2A2A, su0 + 3, sv1 - 4, 0.8f);
                 f.circle(0xFFB8BCC0, su0 + 3, sv1 - 4, 0.4f);
                 // Little round tables with candles before the stage.
-                for (float u = yu + 10; u < su0 - 5; u += 10)
-                    for (float v = 10; v < S - 8; v += 10) {
-                        cafeTable(f, u, v, 0xFF2A2A2E, 0xFF8A2A2A, 2);
-                        f.circle(0xFFF8D870, u, v, 0.5f);
+                for (float u = yu + 14, k = 0; u < su0 - 6; u += 20, k++)
+                    for (float v = 12 + (k % 2) * 9; v < S - 10; v += 20) {
+                        for (int j = 0; j < 3; j++) {
+                            double a = j * 2 * Math.PI / 3 + k;
+                            f.circle(0xFF6A2A2A, u + (float) Math.cos(a) * 3.8f, v + (float) Math.sin(a) * 3.8f, 1.3f);
+                            f.circle(0xFF8A3A3A, u + (float) Math.cos(a) * 3.8f - 0.3f, v + (float) Math.sin(a) * 3.8f - 0.3f, 0.7f);
+                        }
+                        f.circle(0x40000000, u + 0.7f, v + 0.9f, 2.6f);
+                        f.circle(0xFF1E1E22, u, v, 2.6f);
+                        f.circle(0xFFF8D870, u, v, 0.6f);
+                        f.circle(0x40F8D870, u, v, 1.4f);
                     }
                 // Warm lights strung over the courtyard.
                 int[] lc = {0xFFF8D890, 0xFFF4C070};
-                for (float v = 8; v < S - 6; v += 16) string(f, yu + 4, v, L - 4, v + 6, lc, 4, 0.55f);
+                for (float v = 10; v < S - 6; v += 34) string(f, yu + 4, v, L - 4, v + 10, lc, 4, 0.6f);
                 // The marquee over the street door, ringed with bulbs, and a gold-on-black poster frame.
                 float mv = S / 2;
                 f.rect(0x48000000, yu + 1, mv - 9 + 1.4f, yu + 6 + 1, mv + 9 + 1.4f);
@@ -1597,8 +1604,19 @@ final class LandmarkArt9 {
                     f.rect(0xFF6A4848, u + 1, v + 1, u + 3, v + 3);
                 }
                 // Plant, a smoke vent and a dome light over the bar.
+                f.frame(0xFFC8A040, 0.5f, 3, 3, L - 3, S - 3);
                 hvac(f, 4, 4, 7, 5);
                 hvac(f, 4, 11, 7, 5);
+                // A glazed lantern over the dance floor and a water tank.
+                float lu0 = L * 0.15f, lu1 = L * 0.45f, lv0 = S * 0.35f, lv1 = S * 0.65f;
+                f.rect(0x48000000, lu0 + 1.5f, lv0 + 2, lu1 + 1.5f, lv1 + 2);
+                f.rect(0xFF5A4A40, lu0, lv0, lu1, lv1);
+                glass(f, lu0 + 1, lv0 + 1, lu1 - 1, (lv0 + lv1) / 2, 0xFF9AB4C4, 3);
+                glass(f, lu0 + 1, (lv0 + lv1) / 2, lu1 - 1, lv1 - 1, 0xFF6A8494, 3);
+                f.line(0xFFC8A040, 0.8f, lu0 + 1, (lv0 + lv1) / 2, lu1 - 1, (lv0 + lv1) / 2);
+                f.circle(0x48000000, L - 8, 8.5f, 3.6f);
+                f.circle(0xFF6A4A30, L - 9, 7.5f, 3.6f);
+                f.circle(0xFF8A6440, L - 9.5f, 7, 2.6f);
                 f.rect(0xFF6A6A6E, L * 0.3f, S * 0.65f, L * 0.3f + 3, S * 0.65f + 3);
                 f.sign(city, "JAZZ", L / 2, S / 2, 5, 0xFFF0C860);
             }
@@ -1613,28 +1631,895 @@ final class LandmarkArt9 {
         out.add(d);
     }
 
+    // ------------------------------------------------------------------ 11 Vaudeville Theatre
+
     static void vaudeville(List<Landmarks.Def> out) {
+        // An old variety theatre: a domed and gilded front, the auditorium roof, a tall plain fly tower, a bulb-lit marquee.
+        D d = new D("Vaudeville Theatre", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                return new int[][]{B(1, 1, L - 2, Math.max(5, S - 4), 4)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float fv = (q[0][1] + q[0][3]) * T, uc = L / 2;
+                f.rect(0xFFB0A898, 0, 0, L, S);
+                for (float u = 0; u < L; u += 5) f.line(0x16000000, 0.4f, u, 0, u, S);
+                for (float v = 0; v < S; v += 5) f.line(0x16000000, 0.4f, 0, v, L, v);
+                f.rect(0xFF8A847A, 0, 0, L, T * 0.8f);
+                // Red carpet from the doors, brass stanchions and rope down each side.
+                float cw = Math.min(16, L * 0.12f);
+                f.rect(0xFF9A2A2A, uc - cw, fv, uc + cw, S);
+                f.rect(0xFFB0383A, uc - cw + 1, fv, uc + cw - 1, S);
+                for (float v = fv + 10; v < S - 1; v += 5) {
+                    f.circle(0xFFC8A040, uc - cw - 2, v, 0.9f);
+                    f.circle(0xFFC8A040, uc + cw + 2, v, 0.9f);
+                }
+                f.line(0xFF8A1A1A, 0.6f, uc - cw - 2, fv + 10, uc - cw - 2, S - 2);
+                f.line(0xFF8A1A1A, 0.6f, uc + cw + 2, fv + 10, uc + cw + 2, S - 2);
+                // The marquee: a deep canopy over the pavement, its edge ringed with bulbs and its top lettered.
+                float mw = Math.min(L * 0.36f, 60), md = Math.min(9, (S - fv) * 0.6f);
+                f.rect(0x50000000, uc - mw + 1.5f, fv + 1, uc + mw + 1.5f, fv + md + 2);
+                f.rect(0xFF2A2A30, uc - mw, fv, uc + mw, fv + md);
+                f.rect(0xFFC8A040, uc - mw + 0.8f, fv + 0.8f, uc + mw - 0.8f, fv + md - 0.8f);
+                f.rect(0xFF3A2A3A, uc - mw + 1.8f, fv + 1.8f, uc + mw - 1.8f, fv + md - 1.8f);
+                for (float u = uc - mw + 1.2f; u < uc + mw; u += 2) {
+                    f.circle(0xFFFFF0B0, u, fv + md - 0.6f, 0.5f);
+                    f.circle(0xFFFFF0B0, u, fv + 0.6f, 0.5f);
+                }
+                for (float v = fv + 2.6f; v < fv + md - 1; v += 2) {
+                    f.circle(0xFFFFF0B0, uc - mw + 0.6f, v, 0.5f);
+                    f.circle(0xFFFFF0B0, uc + mw - 0.6f, v, 0.5f);
+                }
+                // Poster cases, a ticket booth and lamps along the front.
+                for (int s = -1; s <= 1; s += 2) {
+                    for (float k = 0; k < 2; k++) {
+                        float u = uc + s * (mw + 6 + k * 9);
+                        if (u < 4 || u > L - 4) continue;
+                        f.rect(0xFFC8A040, u - 3, fv + 0.2f, u + 3, fv + 1.8f);
+                        f.rect(0xFFD87A5A, u - 2.4f, fv + 0.5f, u + 2.4f, fv + 1.5f);
+                    }
+                }
+                float bu = uc + mw + 8, bv = fv + md + 6;
+                if (bu + 6 < L && bv + 6 < S) {
+                    f.rect(0x48000000, bu - 4 + 1, bv - 4 + 1.4f, bu + 4 + 1, bv + 4 + 1.4f);
+                    f.rect(0xFF6A2A2A, bu - 4, bv - 4, bu + 4, bv + 4);
+                    dome(f, bu, bv, 3.4f, 0xFFC8A040, 8);
+                }
+                for (float u = 8; u < L - 4; u += 36) f.lamp(u, S - 3);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                f.rect(0xFF8A6A50, 0, 0, L, S);
+                f.rect(0xFF6E6A66, 1, 1, L - 1, S - 1);
+                // The fly tower at the back: a high brick box with smoke vents (its own deeper shadow).
+                float fu0 = L * 0.24f, fu1 = L * 0.76f, fv1 = S * 0.34f;
+                f.rect(0x60000000, fu0 + 3, 1 + 4, fu1 + 4, fv1 + 5);
+                f.rect(0xFF8A5040, fu0, 0.5f, fu1, fv1);
+                f.rect(0xFF9A6050, fu0 + 1, 1.5f, fu1 - 1, fv1 - 1);
+                for (float u = fu0 + 5; u < fu1 - 5; u += 8) {
+                    f.rect(0xFF5A4A40, u, fv1 * 0.35f, u + 4, fv1 * 0.35f + 4);
+                    f.rect(0xFF3A302A, u + 0.8f, fv1 * 0.35f + 0.8f, u + 3.2f, fv1 * 0.35f + 3.2f);
+                }
+                // Dressing-room wings either side, with plant.
+                hvac(f, 4, 4, 6, 4);
+                hvac(f, L - 11, 4, 6, 4);
+                // The auditorium roof: green copper hip with a round ventilator.
+                float av0 = fv1 + 1, av1 = S * 0.72f;
+                hip(f, 0xFF5E9282, 3, av0, L - 3, av1, true);
+                dome(f, L / 2, (av0 + av1) / 2, Math.min(6, (av1 - av0) * 0.25f), 0xFF7AAA98, 10);
+                f.circle(0xFFC8A040, L / 2, (av0 + av1) / 2, 0.8f);
+                // The front: a mansard band with corner domes and a gilded central gable.
+                float fv0 = av1 + 1;
+                f.rect(0xFFD8CCB0, 0.5f, fv0, L - 0.5f, S - 0.5f);
+                f.rect(0xFF545C68, 2, fv0 + 1, L - 2, S - 2.5f);
+                f.rect(0xFF6A727E, 2, fv0 + 1, L - 2, fv0 + (S - fv0) * 0.4f);
+                for (float u = 6; u < L - 5; u += 6) f.rect(0xFFE0D8C4, u, S - 4.5f, u + 2, S - 2.5f);
+                float cr = Math.min(6, (S - fv0) * 0.5f);
+                f.rect(0xFFD8CCB0, 0.5f, S - 2 * cr - 1, 2 * cr + 1, S - 0.5f);
+                f.rect(0xFFD8CCB0, L - 2 * cr - 1, S - 2 * cr - 1, L - 0.5f, S - 0.5f);
+                dome(f, cr + 0.8f, S - cr - 0.8f, cr, 0xFF6EA090, 10);
+                dome(f, L - cr - 0.8f, S - cr - 0.8f, cr, 0xFF6EA090, 10);
+                f.circle(0xFFE0C050, cr + 0.8f, S - cr - 0.8f, 0.9f);
+                f.circle(0xFFE0C050, L - cr - 0.8f, S - cr - 0.8f, 0.9f);
+                float gw = L * 0.12f;
+                f.rect(0x50000000, L / 2 - gw + 1.5f, fv0 + 1.5f, L / 2 + gw + 1.5f, S + 1);
+                f.rect(0xFFE0D4B8, L / 2 - gw - 1, fv0, L / 2 + gw + 1, S);
+                gableV(f, 0xFFB89A50, L / 2 - gw, fv0 + 0.6f, L / 2 + gw, S - 1.2f, 1.6f);
+                f.circle(0xFFE8C860, L / 2, S - 1.5f, 1.4f);
+                f.circle(0xFFE8C860, L / 2, fv0 + 1.5f, 1.1f);
+                f.sign(city, "VAUDEVILLE", L / 2, (av0 + av1) / 2 + 8, 5, 0xFFF4E4B0);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.districts = Variants.DOWN | Variants.OLD;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.OFFICE;
+        d.inside = Variants.I_SEATS;
+        d.roofCol = 0xFF5E9282;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 12 Comedy Club & Bar
+
+    /** A patio heater: a round steel hood with its glowing ring. */
+    static void heater(F f, float u, float v) {
+        f.circle(0x40000000, u + 0.8f, v + 1.1f, 2);
+        f.circle(0xFF7A7E84, u, v, 2);
+        f.circle(0xFFB0B4BA, u - 0.5f, v - 0.5f, 1);
+        f.ring(0xA0F08040, 0.5f, u, v, 1.4f);
     }
 
     static void comedyClub(List<Landmarks.Def> out) {
+        // A brick club with a rooftop bar of festoon lights and a painted spotlit mic, a roped queue and a heated yard.
+        D d = new D("Comedy Club & Bar", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                return new int[][]{B(1, 1, L - 2, Math.max(4, S / 2), 2)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float fv = (q[0][1] + q[0][3]) * T;
+                f.rect(0xFF6A6460, 0, 0, L, S);
+                f.specks(r, 60, 0x18000000, 0x12FFFFFF, 0, 0, L, S, 1.6f);
+                // The pavement before the door, then the yard laid with old setts.
+                f.rect(0xFFA8A296, 0, fv, L, fv + 12);
+                for (float u = 0; u < L; u += 4) f.line(0x18000000, 0.4f, u, fv, u, fv + 12);
+                f.rect(0xFF8A8278, 0, fv + 12, L, S);
+                for (float v = fv + 14; v < S; v += 2.5f) f.line(0x1E000000, 0.4f, 0, v, L, v);
+                // Queue: brass posts and red rope along the front, poster frames, a doorman's lamp.
+                float qu0 = L * 0.12f, qu1 = L * 0.5f;
+                for (float u = qu0; u <= qu1; u += 6) {
+                    f.circle(0x40000000, u + 0.5f, fv + 7.7f, 1);
+                    f.circle(0xFFC8A040, u, fv + 7, 1);
+                }
+                f.line(0xFFA82A2A, 0.7f, qu0, fv + 7, qu1, fv + 7);
+                for (float u = L * 0.55f; u < L - 6; u += 10) {
+                    f.rect(0xFF1E1E22, u, fv + 0.2f, u + 6, fv + 2);
+                    f.rect(r.nextBoolean() ? 0xFFE0B040 : 0xFFD05A4A, u + 0.6f, fv + 0.6f, u + 5.4f, fv + 1.6f);
+                }
+                // The yard: a brick wall, heaters, barrel tables, a food truck at the end.
+                f.rect(0xFF8A4A36, 0, S - 3, L, S);
+                for (float u = 0; u < L; u += 3) f.line(0x30000000, 0.4f, u, S - 3, u, S);
+                float yv = (fv + 12 + S - 3) / 2;
+                if (S - 3 - (fv + 12) > 14) {
+                    for (float u = 12; u < L - 26; u += 20) {
+                        f.circle(0x40000000, u + 0.8f, yv + 1, 2.6f);
+                        f.circle(0xFF6A4A30, u, yv, 2.6f);
+                        f.ring(0xFF3A3A3A, 0.4f, u, yv, 2.1f);
+                        f.circle(0xFF3A3A3A, u - 4.5f, yv, 1);
+                        f.circle(0xFF3A3A3A, u + 4.5f, yv, 1);
+                        heater(f, u + 10, yv - 4);
+                    }
+                    float tu = L - 14;
+                    f.rect(0x48000000, tu - 10 + 1.5f, yv - 5 + 2, tu + 10 + 1.5f, yv + 5 + 2);
+                    f.roundRect(0xFF3A6A8A, tu - 10, yv - 5, tu + 10, yv + 5, 1.5f);
+                    f.rect(0xFF2A333C, tu + 6, yv - 4, tu + 8.5f, yv + 4);
+                    f.rect(0xFFE0E0D8, tu - 8, yv - 5, tu + 4, yv - 3.6f);
+                    f.rect(0xFFF0C040, tu - 8, yv - 5.8f, tu + 4, yv - 5);
+                }
+                int[] lc = {0xFFF8E8A0, 0xFFF4C070};
+                string(f, 2, fv + 12, L - 2, S - 3, lc, 4, 0.55f);
+                string(f, 2, S - 3, L - 2, fv + 12, lc, 4, 0.55f);
+                f.lamp(4, fv + 4);
+                f.lamp(L - 4, fv + 4);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                // Brick parapet; one half a tarred roof with the club's painted mic and spotlight.
+                f.rect(0xFF7A4232, 0, 0, L, S);
+                f.rect(0xFF4E4A4A, 1.5f, 1.5f, L - 1.5f, S - 1.5f);
+                float h = L * 0.48f;
+                float cu = h * 0.5f, cv = S / 2, sr = Math.min(h, S) * 0.36f;
+                f.circle(0xFFE8D890, cu, cv, sr);
+                f.circle(0xFFF4E8B0, cu - sr * 0.15f, cv - sr * 0.15f, sr * 0.7f);
+                f.curve(0xFF2A2A2E, sr * 0.14f, cu - sr * 0.1f, cv + sr * 0.15f, cu + sr * 0.4f, cv + sr * 0.6f, cu + sr * 0.9f, cv + sr * 0.5f);
+                f.circle(0xFF3A3A3E, cu - sr * 0.2f, cv - sr * 0.1f, sr * 0.3f);
+                f.circle(0xFF6A6A70, cu - sr * 0.25f, cv - sr * 0.15f, sr * 0.22f);
+                for (float k = -0.4f; k <= 0.41f; k += 0.2f) {
+                    f.line(0x50000000, 0.4f, cu - sr * 0.47f, cv - sr * 0.1f + sr * k * 0.6f, cu + sr * 0.07f, cv - sr * 0.1f + sr * k * 0.6f);
+                    f.line(0x50000000, 0.4f, cu - sr * 0.2f + sr * k * 0.6f, cv - sr * 0.37f, cu - sr * 0.2f + sr * k * 0.6f, cv + sr * 0.17f);
+                }
+                hvac(f, 3, 3, 6, 4);
+                // The rooftop bar: decking, a bar counter, high tables, planters, festoons and parasols.
+                f.rect(0xFF9A7A54, h, 1.5f, L - 1.5f, S - 1.5f);
+                for (float v = 3, k = 0; v < S - 1.5f; v += 1.8f, k++) f.line(0x22000000, 0.4f, h, v, L - 1.5f, v);
+                f.rect(0x40000000, h + 2 + 1, 3 + 1.2f, h + 6 + 1, S - 3 + 1.2f);
+                f.rect(0xFF4A3424, h + 2, 3, h + 6, S - 3);
+                f.rect(0xFF8A6A4A, h + 2.6f, 3.6f, h + 5.4f, S - 3.6f);
+                for (float v = 5; v < S - 4; v += 3) f.circle(0xFF2A2A2A, h + 7.2f, v, 0.6f);
+                for (float u = h + 14; u < L - 5; u += 14)
+                    for (float v = 8; v < S - 6; v += 13) cafeTable(f, u, v, 0xFF2A2A2E, 0xFF5A5A60, 3);
+                for (float u = h + 12; u < L - 4; u += 8) pot(f, u, S - 3, 1.5f, 0);
+                parasol(f, L - 8, 7, 5, 0xFF2A4A5A, 0xFF3A5A6A);
+                int[] lc = {0xFFF8E8A0, 0xFFF4C070};
+                string(f, h + 1, 2, L - 2, S - 2, lc, 3, 0.5f);
+                string(f, h + 1, S - 2, L - 2, 2, lc, 3, 0.5f);
+                f.sign(city, "COMEDY", h * 0.5f, S - 4, 4, 0xFFF4E4B0);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.districts = Variants.DOWN | Variants.MID | Variants.UNI;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.SHOP;
+        d.inside = Variants.I_BAR;
+        d.roofCol = 0xFF4E4A4A;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 13 Stock Exchange
+
+    /** A bronze bull from above, head towards +u. */
+    static void bull(F f, float u, float v, float s) {
+        f.oval(0x40000000, u - 6 * s + 1.5f, v - 2.6f * s + 2, u + 5 * s + 1.5f, v + 2.6f * s + 2);
+        f.oval(0xFF5A4028, u - 6 * s, v - 2.6f * s, u + 4 * s, v + 2.6f * s);
+        f.oval(0xFF7A5634, u - 4 * s, v - 2 * s, u + 2.5f * s, v + 0.6f * s);
+        f.oval(0xFF4A3420, u + 3 * s, v - 1.6f * s, u + 6.5f * s, v + 1.6f * s);
+        f.curve(0xFFB89A5A, 0.8f * s, u + 4 * s, v - 1.4f * s, u + 5.5f * s, v - 3.4f * s, u + 7.5f * s, v - 2.8f * s);
+        f.curve(0xFFB89A5A, 0.8f * s, u + 4 * s, v + 1.4f * s, u + 5.5f * s, v + 3.4f * s, u + 7.5f * s, v + 2.8f * s);
+        f.curve(0xFF4A3420, 0.6f * s, u - 6 * s, v, u - 8 * s, v - 1 * s, u - 7.5f * s, v - 3 * s);
     }
 
     static void stockExchange(List<Landmarks.Def> out) {
+        // A classical exchange: a temple front of columns under a pediment, a glazed trading-floor roof, and a bull outside.
+        D d = new D("Stock Exchange", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                return new int[][]{B(1, 1, L - 2, Math.max(5, S - 5), 5)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float fv = (q[0][1] + q[0][3]) * T, uc = L / 2;
+                // Granite setts, a band of polished slabs before the steps.
+                f.rect(0xFFB8B2A8, 0, 0, L, S);
+                for (float u = 0; u < L; u += 8) f.line(0x18000000, 0.4f, u, fv, u, S);
+                for (float v = fv; v < S; v += 8) f.line(0x18000000, 0.4f, 0, v, L, v);
+                f.rect(0xFF9A948A, 0, 0, L, T * 0.8f);
+                // The portico columns stand on the top step, the flight runs down to the square.
+                float pw = L * 0.3f;
+                float st = Math.min(12, (S - fv) * 0.42f);
+                for (int k = 0; k < 6; k++) {
+                    float v = fv + k * st / 6, w = k * 1.5f;
+                    f.rect(k % 2 == 0 ? 0xFFDAD4C6 : 0xFFCCC6B8, uc - pw - 3 - w, v, uc + pw + 3 + w, v + st / 6);
+                    f.line(0x30000000, 0.5f, uc - pw - 3 - w, v + st / 6, uc + pw + 3 + w, v + st / 6);
+                }
+                for (float u = uc - pw + 2; u <= uc + pw - 1; u += (2 * pw - 3) / 7) {
+                    f.circle(0x40000000, u + 0.8f, fv + 2.4f, 2);
+                    f.circle(0xFFE8E2D4, u, fv + 1.6f, 2);
+                    f.circle(0xFFF8F4EA, u - 0.6f, fv + 1, 0.8f);
+                }
+                // Flagpoles, the charging bull, lamp standards and bollards.
+                float bv = fv + st + (S - fv - st) / 2;
+                if (S - fv - st > 14) {
+                    f.rect(0xFF9A948A, uc + pw + 10, bv - 7, uc + pw + 38, bv + 7);
+                    f.rect(0xFF8A847A, uc + pw + 11, bv - 6, uc + pw + 37, bv + 6);
+                    bull(f, uc + pw + 24, bv, 1.7f);
+                }
+                for (int k = 0; k < 3; k++) {
+                    float u = uc - pw - 30 + k * 8;
+                    if (u < 3) continue;
+                    f.circle(0x40000000, u + 0.6f, bv + 0.8f, 1);
+                    f.circle(0xFFD0D0D0, u, bv, 0.9f);
+                    int[] fc = {0xFF2A4A8A, 0xFFB83A3A, 0xFFE8E8E8};
+                    f.poly(fc[k], u + 0.6f, bv - 0.6f, u + 6, bv - 1.4f, u + 6, bv + 1.2f, u + 0.6f, bv + 0.6f);
+                }
+                for (float u = 4; u < L - 2; u += 7) {
+                    if (Math.abs(u - uc) < pw + 8) continue;
+                    f.circle(0xFF3A3A3E, u, S - 3, 0.9f);
+                }
+                f.lamp(uc - pw - 6, fv + st);
+                f.lamp(uc + pw + 6, fv + st);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                // Portland stone walls under a lead flat roof with a balustrade all round.
+                f.rect(0xFFD2CAB8, 0, 0, L, S);
+                f.rect(0xFF8E9094, 2.4f, 2.4f, L - 2.4f, S - 2.4f);
+                for (float u = 2.6f; u < L - 2; u += 1.6f) {
+                    f.circle(0xFFE6E0D2, u, 1.2f, 0.5f);
+                    f.circle(0xFFE6E0D2, u, S - 1.2f, 0.5f);
+                }
+                for (float v = 2.6f; v < S - 2; v += 1.6f) {
+                    f.circle(0xFFE6E0D2, 1.2f, v, 0.5f);
+                    f.circle(0xFFE6E0D2, L - 1.2f, v, 0.5f);
+                }
+                // The trading floor: a great iron-ribbed glass roof in the middle.
+                float gu0 = L * 0.22f, gu1 = L * 0.78f, gv0 = S * 0.2f, gv1 = S * 0.62f;
+                f.rect(0xFF6E7074, gu0 - 1, gv0 - 1, gu1 + 1, gv1 + 1);
+                glass(f, gu0, gv0, gu1, (gv0 + gv1) / 2, 0xFF9AB8C8, 3);
+                glass(f, gu0, (gv0 + gv1) / 2, gu1, gv1, 0xFF7A98AA, 3);
+                f.line(0xFF4A4C50, 1, gu0, (gv0 + gv1) / 2, gu1, (gv0 + gv1) / 2);
+                for (float u = gu0 + 6; u < gu1; u += 6) f.line(0xFF4A4C50, 0.7f, u, gv0, u, gv1);
+                // Corner pavilions with low hipped lead roofs.
+                float cw = Math.min(10, L * 0.12f);
+                hip(f, 0xFF6E747A, 2.4f, 2.4f, 2.4f + cw, 2.4f + cw, false);
+                hip(f, 0xFF6E747A, L - 2.4f - cw, 2.4f, L - 2.4f, 2.4f + cw, false);
+                // The temple front: a pediment roof over the portico, ridge running to the street.
+                float pw = L * 0.3f, pv0 = S * 0.68f;
+                f.rect(0x50000000, L / 2 - pw + 1.5f, pv0 + 1.5f, L / 2 + pw + 1.5f, S + 1.5f);
+                f.rect(0xFFDAD2C0, L / 2 - pw, pv0, L / 2 + pw, S);
+                gableV(f, 0xFF7A8088, L / 2 - pw + 1.5f, pv0 + 1, L / 2 + pw - 1.5f, S - 0.6f, 2);
+                f.rect(0xFFE6DECC, L / 2 - pw, S - 1.6f, L / 2 + pw, S);
+                f.circle(0xFFD8B040, L / 2, S - 1, 1.2f);
+                // Flagpoles on the roof and a lift motor room.
+                hvac(f, L - 12, S * 0.66f - 5, 7, 4);
+                f.circle(0xFFE8E8E8, 6, S - 6, 0.8f);
+                f.circle(0xFFE8E8E8, L - 6, S - 6, 0.8f);
+                f.sign(city, "EXCHANGE", L / 2, (gv0 + gv1) / 2, 5, 0xFFF4EED8);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.districts = Variants.DOWN;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.OFFICE;
+        d.inside = Variants.I_OFFICE;
+        d.roofCol = 0xFF8E9094;
+        out.add(d);
     }
 
+    // ------------------------------------------------------------------ 14 Bank Headquarters
+
     static void bankHQ(List<Landmarks.Def> out) {
+        // A stepped granite tower with a roof garden on its setback, a granite plaza with a fountain grid and a sculpture.
+        D d = new D("Bank Headquarters", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                int w = Math.max(6, Math.min(9, L / 2)), h = Math.max(6, Math.min(9, S - 3));
+                return new int[][]{B(1, (S - h) / 2, w, h, 16)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float tu1 = (q[0][0] + q[0][2]) * T;
+                // Polished granite paving in two tones.
+                f.rect(0xFFA8A09A, 0, 0, L, S);
+                for (float u = 0, k = 0; u < L; u += 8, k++)
+                    for (float v = 0, j = 0; v < S; v += 8, j++)
+                        if ((k + j) % 2 == 0) f.rect(0xFFB4ACA6, u, v, u + 8, v + 8);
+                f.frame(0x30000000, 0.6f, T - 3, q[0][1] * T - 3, tu1 + 3, (q[0][1] + q[0][3]) * T + 3);
+                // A grid of ground jets in a shallow dark pool.
+                float pu0 = tu1 + 10, pu1 = L - 10, pv0 = S * 0.18f, pv1 = S * 0.45f;
+                if (pu1 - pu0 > 16) {
+                    f.rect(0xFF7A7470, pu0 - 1.5f, pv0 - 1.5f, pu1 + 1.5f, pv1 + 1.5f);
+                    f.rect(0xFF2E4654, pu0, pv0, pu1, pv1);
+                    f.rect(0xFF3A5868, pu0 + 1, pv0 + 1, pu1 - 1, pv1 - 1);
+                    for (float u = pu0 + 4; u < pu1 - 2; u += 6)
+                        for (float v = pv0 + 4; v < pv1 - 2; v += 6) {
+                            f.circle(0x70FFFFFF, u, v, 1.4f);
+                            f.circle(0xC0FFFFFF, u, v, 0.6f);
+                        }
+                }
+                // The sculpture: a great polished steel ellipse twisting on a low black plinth.
+                float su = (tu1 + L) / 2, sv = S * 0.72f, sr = Math.min(12, (L - tu1) * 0.2f);
+                f.rect(0xFF2A2A2E, su - sr - 3, sv - sr * 0.6f - 3, su + sr + 3, sv + sr * 0.6f + 3);
+                f.oval(0x40000000, su - sr + 2, sv - sr * 0.5f + 3, su + sr + 2, sv + sr * 0.5f + 3);
+                f.oval(0xFF8A9098, su - sr, sv - sr * 0.5f, su + sr, sv + sr * 0.5f);
+                f.oval(0xFFC0C6CE, su - sr * 0.9f, sv - sr * 0.45f, su + sr * 0.5f, sv + sr * 0.2f);
+                f.oval(0xFF2A2A2E, su - sr * 0.45f, sv - sr * 0.18f, su + sr * 0.45f, sv + sr * 0.18f);
+                f.oval(0xFFE8ECF0, su - sr * 0.7f, sv - sr * 0.35f, su - sr * 0.2f, sv - sr * 0.15f);
+                // Plane trees in granite planters, benches and bollards on the street edges.
+                for (float u = tu1 + 10; u < L - 6; u += 22) {
+                    f.rect(0xFF8A827C, u - 5, S - 11, u + 5, S - 1);
+                    f.tree(u, S - 6, 6);
+                    f.rect(0xFF8A827C, u - 5, 1, u + 5, 11);
+                    f.tree(u, 6, 6);
+                }
+                for (float v = 12; v < S - 12; v += 7) f.circle(0xFF3A3A3E, L - 2.5f, v, 0.9f);
+                f.bench(su, sv + sr * 0.6f + 8, true);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                // Pink-grey granite: the base edge, the setback terrace, the upper tower and its crown.
+                f.rect(0xFF8A7A76, 0, 0, L, S);
+                f.rect(0xFFA89894, 0.8f, 0.8f, L - 0.8f, S - 0.8f);
+                for (float u = 3; u < L - 1; u += 3) f.line(0x20000000, 0.5f, u, 0.8f, u, S - 0.8f);
+                float m = Math.min(L, S) * 0.16f;
+                // The roof garden on the setback: lawn, a clipped hedge border, small trees and paths.
+                f.rect(0xFF6A9450, 2.4f, 2.4f, L - 2.4f, S - 2.4f);
+                f.frame(0xFF4E7A3A, 1.6f, 3.2f, 3.2f, L - 3.2f, S - 3.2f);
+                f.rect(0xFFD0C4B0, 2.4f, S / 2 - 1.2f, L - 2.4f, S / 2 + 1.2f);
+                f.tree(2.4f + m * 0.5f, 2.4f + m * 0.5f, m * 0.4f);
+                f.tree(L - 2.4f - m * 0.5f, S - 2.4f - m * 0.5f, m * 0.4f);
+                f.bush(L - 2.4f - m * 0.5f, 2.4f + m * 0.5f, m * 0.3f);
+                f.bush(2.4f + m * 0.5f, S - 2.4f - m * 0.5f, m * 0.3f);
+                // The upper tower: a deep shadow, its granite frame and glazed panels, then the crown.
+                float a = 2.4f + m, b = L - 2.4f - m, c0 = 2.4f + m, c1 = S - 2.4f - m;
+                f.rect(0x60000000, a + 2.5f, c0 + 3.5f, b + 3, c1 + 4);
+                f.rect(0xFF9A8A86, a, c0, b, c1);
+                f.rect(0xFFB4A4A0, a + 1, c0 + 1, b - 1, c1 - 1);
+                for (float u = a + 2.5f; u < b - 1; u += 2.5f) f.line(0x26000000, 0.5f, u, c0 + 1, u, c1 - 1);
+                float n = Math.min(b - a, c1 - c0) * 0.2f;
+                f.rect(0x50000000, a + n + 1.5f, c0 + n + 2, b - n + 1.5f, c1 - n + 2);
+                f.rect(0xFF7A6E6A, a + n, c0 + n, b - n, c1 - n);
+                f.rect(0xFF8E8280, a + n + 1, c0 + n + 1, b - n - 1, c1 - n - 1);
+                hvac(f, a + n + 1.5f, c0 + n + 1.5f, Math.min(6, b - a - 2 * n - 3), 4);
+                f.circle(0x40000000, b - n - 3, c1 - n - 2, 1.6f);
+                f.circle(0xFFD0D0D4, b - n - 3.6f, c1 - n - 2.6f, 1.2f);
+                f.line(0xFFD0D0D4, 0.5f, b - n - 3.6f, c1 - n - 2.6f, b - n - 3.6f, c1 - n - 8);
+                f.sign(city, "BANK", L / 2, S / 2, 5, 0xFFF0E8D8);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.districts = Variants.DOWN;
+        d.minS = 10;
+        d.minL = 14;
+        d.base = City.OFFICE;
+        d.inside = Variants.I_OFFICE;
+        d.roofCol = 0xFFA89894;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 15 Corporate Atrium
+
+    static int[][] atriumUV(int L, int S) {
+        int tw = L >= 18 ? 5 : L >= 16 ? 4 : 3, dep = Math.max(5, S - 4);
+        int aw = L - 2 - 2 * tw - 2;
+        return new int[][]{B(1, 1, tw, dep, 12), B(2 + tw, 2, aw, dep - 2, 6), B(L - 1 - tw, 1, tw, dep, 14)};
     }
 
     static void corporateAtrium(List<Landmarks.Def> out) {
+        // Two dark glass towers joined by a tall glazed atrium full of trees, glass links, a long reflecting pool.
+        D d = new D("Corporate Atrium", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                return atriumUV(L, S);
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float fv = (q[0][1] + q[0][3]) * T;
+                // Pale stone plaza on a fine grid.
+                f.rect(0xFFC8C4BC, 0, 0, L, S);
+                for (float u = 0; u < L; u += 4) f.line(0x14000000, 0.4f, u, 0, u, S);
+                for (float v = 0; v < S; v += 4) f.line(0x14000000, 0.4f, 0, v, L, v);
+                // Glass links over the gaps between the towers and the atrium.
+                for (int i = 0; i < 2; i++) {
+                    float gu0 = (q[i][0] + q[i][2]) * T, gu1 = q[i + 1][0] * T;
+                    float lv0 = (q[1][1]) * T + 6, lv1 = (q[1][1] + q[1][3]) * T - 6;
+                    f.rect(0x40000000, gu0 + 1, lv0 + 2, gu1 + 1, lv1 + 2);
+                    glass(f, gu0, lv0, gu1, lv1, 0xFF8AA8BC, 3);
+                }
+                // A long, narrow reflecting pool along the front, with a row of trees in grates.
+                float pv0 = fv + 5, pv1 = Math.min(S - 6, pv0 + 6);
+                f.rect(0xFF6A6A6E, 6, pv0 - 1, L - 6, pv1 + 1);
+                f.rect(0xFF2A3E4E, 7, pv0, L - 7, pv1);
+                f.rect(0x30FFFFFF, 9, pv0 + 1, L * 0.4f, pv0 + 2);
+                for (float u = 10; u < L - 6; u += 18) {
+                    float v = Math.min(S - 4, pv1 + 6);
+                    f.frame(0xFF6A6A6E, 0.6f, u - 3, v - 3, u + 3, v + 3);
+                    f.tree(u, v, 4.5f, 0xFF4A8A44);
+                }
+                // Bollards and a bike rack by the entrance, and a corporate logo stone.
+                float uc = L / 2;
+                f.rect(0xFF3A3C40, uc - 7, fv + 1, uc + 7, fv + 3.5f);
+                f.rect(0xFFC8A040, uc - 6, fv + 1.6f, uc + 6, fv + 2.9f);
+                for (float u = 3; u < L - 2; u += 6) f.circle(0xFF5A5C60, u, S - 1.5f, 0.8f);
+                f.lamp(4, fv + 3);
+                f.lamp(L - 4, fv + 3);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                if (part == 1) {
+                    // The atrium: a triangulated glass roof, ridge lit, trees showing through its panes.
+                    f.rect(0xFF5A6068, 0, 0, L, S);
+                    f.rect(0xFF3E5A6A, 1, 1, L - 1, S - 1);
+                    for (int k = 0; k < 7; k++) {
+                        float u = 3 + r.nextFloat() * (L - 6), v = 3 + r.nextFloat() * (S - 6);
+                        f.circle(0xFF3E6A44, u, v, 2.4f + r.nextFloat() * 1.6f);
+                    }
+                    f.rect(0x6090B4C8, 1, 1, L - 1, S / 2);
+                    f.rect(0x40607888, 1, S / 2, L - 1, S - 1);
+                    for (float u = 1; u < L; u += 4) {
+                        f.line(0xFFB8C4CC, 0.4f, u, 1, u + 4, S / 2);
+                        f.line(0xFFB8C4CC, 0.4f, u + 4, 1, u, S / 2);
+                        f.line(0xFF8A98A4, 0.4f, u, S / 2, u + 4, S - 1);
+                        f.line(0xFF8A98A4, 0.4f, u + 4, S / 2, u, S - 1);
+                    }
+                    f.line(0xFFE0E8EE, 1.2f, 1, S / 2, L - 1, S / 2);
+                    f.frame(0xFF8A949E, 0.8f, 1, 1, L - 1, S - 1);
+                } else {
+                    // A tower: dark glass curtain wall, a recessed crown and its plant screen.
+                    f.rect(0xFF2A3644, 0, 0, L, S);
+                    f.rect(0xFF3A4C5E, 0.8f, 0.8f, L - 0.8f, S - 0.8f);
+                    f.poly(0xFF4A6074, 0.8f, 0.8f, L - 0.8f, 0.8f, 0.8f, S * 0.5f);
+                    for (float u = 2.5f; u < L - 1; u += 2.5f) f.line(0x30FFFFFF, 0.4f, u, 0.8f, u, S - 0.8f);
+                    float m = Math.min(L, S) * 0.2f;
+                    f.rect(0x50000000, m + 1.5f, m + 2, L - m + 1.5f, S - m + 2);
+                    f.rect(0xFF5A626C, m, m, L - m, S - m);
+                    for (float v = m + 1.5f; v < S - m; v += 1.5f) f.line(0x40000000, 0.5f, m, v, L - m, v);
+                    hvac(f, m + 1, m + 2, Math.max(3, L - 2 * m - 2), 4);
+                    f.circle(0xFFE04040, L / 2, S - m - 2, 0.7f);
+                    if (part == 2) f.sign(city, "ATRIUM", L / 2, S * 0.75f, 4, 0xFFE0E8F0);
+                }
+            }
+        };
+        d.ground = City.PLAZA;
+        d.districts = Variants.DOWN | Variants.MID;
+        d.minS = 10;
+        d.minL = 14;
+        d.base = City.OFFICE;
+        d.inside = Variants.I_OFFICE;
+        d.roofCol = 0xFF3A4C5E;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 16 Fish Market Hall
+
+    /** A stack of fish crates: blue plastic with silver fish, or white boxes of ice. */
+    static void fishCrate(F f, Random r, float u, float v, boolean ice) {
+        f.rect(0x38000000, u + 0.6f, v + 0.8f, u + 6.6f, v + 4.8f);
+        if (ice) {
+            f.rect(0xFFE8ECEE, u, v, u + 6, v + 4);
+            f.rect(0xFFD0DCE4, u + 0.6f, v + 0.6f, u + 5.4f, v + 3.4f);
+            for (int k = 0; k < 4; k++) f.rect(0xFFF8FCFF, u + 1 + r.nextFloat() * 3.4f, v + 0.9f + r.nextFloat() * 2.2f, u + 1.8f + r.nextFloat() * 3.4f, v + 1.6f + r.nextFloat() * 2.2f);
+        } else {
+            f.rect(0xFF2E5A8A, u, v, u + 6, v + 4);
+            f.rect(0xFF3E6E9E, u + 0.5f, v + 0.5f, u + 5.5f, v + 3.5f);
+            for (int k = 0; k < 3; k++) {
+                float y = v + 1 + k * 0.9f;
+                f.oval(0xFFB8C0C8, u + 0.9f + (k % 2) * 0.6f, y - 0.4f, u + 4.6f + (k % 2) * 0.6f, y + 0.4f);
+            }
+        }
     }
 
     static void fishMarket(List<Landmarks.Def> out) {
+        // A barrel-roofed fish hall on a quay: crates of fish and ice, striped stalls, a moored trawler and the gulls.
+        D d = new D("Fish Market Hall", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                return new int[][]{B(1, 1, L - 2, Math.max(4, S * 45 / 100), 2)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float fv = (q[0][1] + q[0][3]) * T;
+                // Wet concrete quay, a dock basin along the front edge with timber fenders and bollards.
+                f.rect(0xFF9C9A94, 0, 0, L, S);
+                for (float u = 0; u < L; u += 12) f.line(0x1C000000, 0.5f, u, 0, u, S);
+                f.specks(r, 60, 0x18000000, 0x14FFFFFF, 0, 0, L, S, 1.6f);
+                float wv = S - Math.min(18, (S - fv) * 0.4f);
+                f.rect(0xFF2E5A6E, 0, wv, L, S);
+                f.rect(0xFF3A6A80, 0, wv + 3, L, S);
+                for (int k = 0; k < 10; k++) {
+                    float u = r.nextFloat() * (L - 10);
+                    f.line(0x40FFFFFF, 0.4f, u, wv + 4 + r.nextFloat() * (S - wv - 5), u + 6, wv + 4 + r.nextFloat() * (S - wv - 5));
+                }
+                f.rect(0xFFB0ACA4, 0, wv - 2.4f, L, wv);
+                for (float u = 4; u < L; u += 8) f.rect(0xFF5A4232, u, wv - 0.4f, u + 2, wv + 1.2f);
+                for (float u = 10; u < L - 4; u += 26) {
+                    f.circle(0x40000000, u + 0.6f, wv - 3.4f, 1.4f);
+                    f.circle(0xFF2A2A2A, u, wv - 4, 1.4f);
+                }
+                // A trawler moored alongside: hull, wheelhouse, gantry and nets.
+                float bu = L * 0.62f, bv = (wv + S) / 2 + 1, bl = Math.min(36, L * 0.3f), bw = Math.min(6, (S - wv) * 0.38f);
+                Path h = new Path();
+                f.mv(h, bu - bl / 2, bv - bw);
+                f.ln(h, bu + bl / 2 - 6, bv - bw);
+                f.qd(h, bu + bl / 2 + 2, bv, bu + bl / 2 - 6, bv + bw);
+                f.ln(h, bu - bl / 2, bv + bw);
+                f.ln(h, bu - bl / 2, bv - bw);
+                f.fill(h, 0xFF2A4A6A);
+                f.rect(0xFFE8E4DA, bu - bl / 2 + 1.5f, bv - bw + 1.4f, bu + bl / 2 - 6, bv + bw - 1.4f);
+                f.rect(0x40000000, bu + 1.5f, bv - bw * 0.6f + 1.4f, bu + 9.5f, bv + bw * 0.6f + 1.4f);
+                f.rect(0xFFF0EEE8, bu, bv - bw * 0.6f, bu + 8, bv + bw * 0.6f);
+                f.rect(0xFF2A333C, bu + 6, bv - bw * 0.5f, bu + 7.5f, bv + bw * 0.5f);
+                f.line(0xFFD86A2A, 1, bu - bl / 2 + 5, bv - bw, bu - bl / 2 + 5, bv + bw);
+                f.oval(0xFF4A7A5A, bu - bl / 2 + 2, bv - bw * 0.6f, bu - 2, bv + bw * 0.6f);
+                f.circle(0xFFE07030, bu - 5, bv - bw * 0.4f, 1);
+                // Stalls under blue and white striped awnings along the hall front.
+                float sw = 20;
+                int k = 0;
+                for (float u = 6; u + sw < L - 4; u += sw + 8, k++) {
+                    awning(f, u, fv, u + sw, fv + 5, 0xFF2E5A8A, 0xFFF0F0EC, 2.5f);
+                    f.rect(0xFF8A8E92, u, fv + 5.5f, u + sw, fv + 10);
+                    f.rect(0xFFE8F0F4, u + 0.6f, fv + 6, u + sw - 0.6f, fv + 9.4f);
+                    for (float x = u + 1.5f; x < u + sw - 2; x += 2.4f) {
+                        f.oval(k % 2 == 0 ? 0xFFB8C0C8 : 0xFFD88A6A, x, fv + 6.5f, x + 2, fv + 8.9f);
+                    }
+                }
+                // Crates heaped about the quay, a pallet truck, and gulls.
+                float cv0 = fv + 14, cv1 = wv - 8;
+                for (float u = 6; u < L - 10; u += 16)
+                    for (float v = cv0; v < cv1; v += 10) {
+                        fishCrate(f, r, u, v, (u + v) % 3 < 1.5f);
+                        fishCrate(f, r, u + 6.5f, v, (u + v) % 3 >= 1.5f);
+                        if (r.nextBoolean()) fishCrate(f, r, u + 3, v + 4.6f, true);
+                    }
+                for (int j = 0; j < 7; j++) {
+                    float u = r.nextFloat() * L, v = r.nextFloat() * S;
+                    f.line(0xFFF8F8F8, 0.6f, u - 1.6f, v - 0.6f, u, v);
+                    f.line(0xFFF8F8F8, 0.6f, u, v, u + 1.6f, v - 0.6f);
+                }
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                // A curved corrugated roof shaded across its span, iron ribs, a glazed ridge lantern.
+                int[] band = {0xFFB8BEC2, 0xFFC8CED2, 0xFFD2D8DC, 0xFFC4CACE, 0xFFAEB4B8, 0xFF9AA0A4, 0xFF888E92};
+                float bh = S / band.length;
+                for (int k = 0; k < band.length; k++) f.rect(band[k], 0, k * bh, L, (k + 1) * bh + 0.2f);
+                for (float u = 1.2f; u < L; u += 1.2f) f.line(0x14000000, 0.3f, u, 0, u, S);
+                for (float u = 8; u < L - 2; u += 10) f.line(0xFF6A7074, 0.8f, u, 0, u, S);
+                float lv0 = S * 0.4f, lv1 = S * 0.55f;
+                f.rect(0x40000000, 2, lv0 + 1, L - 1, lv1 + 1.5f);
+                glass(f, 2, lv0, L - 2, lv1, 0xFF8AAABA, 2.5f);
+                f.frame(0xFF5A6064, 0.6f, 0, 0, L, S);
+                // Louvred gable ends.
+                for (float v = 2; v < S - 2; v += 1.5f) {
+                    f.line(0xFF6A7074, 0.4f, 0.4f, v, 2.4f, v);
+                    f.line(0xFF6A7074, 0.4f, L - 2.4f, v, L - 0.4f, v);
+                }
+                f.sign(city, "FISH MARKET", L / 2, S * 0.25f, 5, 0xFF1E3A5A);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.districts = Variants.IND | Variants.OLD | Variants.MID;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.SHOP;
+        d.inside = Variants.I_SHELVES;
+        d.roofCol = 0xFFC4CACE;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 17 Chandlery & Sail Loft
+
+    /** An anchor laid flat: shank along +u from (u,v), stock across its top, curved arms at the crown. */
+    static void anchor(F f, float u, float v, float s, int col) {
+        f.line(0x40000000, 1.4f * s, u + 1, v + 1.4f, u + 10 * s + 1, v + 1.4f);
+        f.line(col, 1.4f * s, u, v, u + 10 * s, v);
+        f.line(col, 1.2f * s, u + 1.2f * s, v - 4 * s, u + 1.2f * s, v + 4 * s);
+        f.ring(col, 1 * s, u - 0.6f * s, v, 0.9f * s);
+        f.curve(col, 1.3f * s, u + 7 * s, v - 4.5f * s, u + 11.5f * s, v, u + 7 * s, v + 4.5f * s);
+        f.poly(col, u + 7 * s, v - 5.5f * s, u + 6 * s, v - 3.8f * s, u + 8.2f * s, v - 4 * s);
+        f.poly(col, u + 7 * s, v + 5.5f * s, u + 6 * s, v + 3.8f * s, u + 8.2f * s, v + 4 * s);
+    }
+
+    /** A coil of rope. */
+    static void rope(F f, float u, float v, float rad) {
+        f.circle(0x38000000, u + 0.8f, v + 1, rad);
+        f.circle(0xFFC8B080, u, v, rad);
+        for (float k = rad - 0.8f; k > 0.6f; k -= 1.1f) f.ring(0xFF9A8458, 0.4f, u, v, k);
     }
 
     static void chandlery(List<Landmarks.Def> out) {
+        // A weatherboarded chandlery and a long sail loft over a boatyard of rope coils, anchors, buoys and a sail spread out.
+        D d = new D("Chandlery & Sail Loft", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                int sw = Math.max(4, L * 35 / 100), sd = Math.max(4, Math.min(6, S / 2));
+                return new int[][]{B(1, 1, sw, sd, 2), B(sw + 2, 1, L - sw - 3, Math.max(3, Math.min(4, S / 3)), 3)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float yv = (q[0][1] + q[0][3]) * T, lv = (q[1][1] + q[1][3]) * T;
+                // Gravel yard with tarred timber staging.
+                f.rect(0xFFA89C88, 0, 0, L, S);
+                f.specks(r, 160, 0x20000000, 0x24FFFFFF, 0, 0, L, S, 1.1f);
+                f.rect(0xFF6A5A48, q[0][0] * T, yv, (q[0][0] + q[0][2]) * T, yv + 5);
+                for (float u = q[0][0] * T; u < (q[0][0] + q[0][2]) * T; u += 2) f.line(0x30000000, 0.4f, u, yv, u, yv + 5);
+                // A sail laid out under the loft for cutting: white panels with seams and a bolt rope.
+                float su0 = q[1][0] * T + 4, su1 = L - 4, sv0 = lv + 4, sv1 = Math.min(S - 6, lv + 4 + (S - lv) * 0.5f);
+                if (sv1 - sv0 > 10 && su1 - su0 > 20) {
+                    f.poly(0x30000000, su0 + 1, sv1 + 1.4f, su1 + 1, sv1 + 1.4f, su0 + (su1 - su0) * 0.15f + 1, sv0 + 1.4f);
+                    f.poly(0xFFF4F0E4, su0, sv1, su1, sv1, su0 + (su1 - su0) * 0.15f, sv0);
+                    for (float t = 0.15f; t < 1; t += 0.15f) {
+                        float u = su0 + (su1 - su0) * t;
+                        float top = sv0 + (sv1 - sv0) * Math.max(0, (t - 0.15f) / 0.85f);
+                        f.line(0x30000000, 0.4f, u, top, u, sv1);
+                    }
+                    f.line(0xFFC8B080, 0.7f, su0, sv1, su1, sv1);
+                    f.circle(0xFF8A2A2A, su0 + (su1 - su0) * 0.4f, sv1 - 3, 1.4f);
+                }
+                // Rope coils, chain, anchors, buoys and lobster pots about the yard.
+                float bv = Math.max(yv + 9, sv1 + 6);
+                rope(f, 8, yv + 12, 3.4f);
+                rope(f, 15, yv + 13, 2.6f);
+                anchor(f, 22, Math.min(S - 8, yv + 14), 1.2f, 0xFF4A4E54);
+                anchor(f, L * 0.6f, Math.min(S - 8, bv + 2), 1.4f, 0xFF3A3E44);
+                for (int k = 0; k < 18; k++) f.ring(0xFF5A5650, 0.6f, 8 + k * 0.6f + r.nextFloat(), S - 6 + r.nextFloat() * 2, 0.7f);
+                int[] bc = {0xFFE0602A, 0xFFD83A2A, 0xFFF0C040, 0xFFE0602A};
+                for (int k = 0; k < 6; k++) {
+                    float u = L - 30 + (k % 3) * 5, v = S - 10 + (k / 3) * 5;
+                    f.circle(0x38000000, u + 0.6f, v + 0.8f, 2);
+                    f.circle(bc[k % 4], u, v, 2);
+                    f.circle(0x60FFFFFF, u - 0.6f, v - 0.6f, 0.7f);
+                }
+                for (int k = 0; k < 3; k++) {
+                    float u = L - 12, v = S - 22 + k * 5.5f;
+                    if (v < bv) continue;
+                    f.rect(0x38000000, u + 0.6f, v + 0.8f, u + 7.6f, v + 5.3f);
+                    f.rect(0xFF6A7A5A, u, v, u + 7, v + 4.5f);
+                    for (float x = u + 1; x < u + 7; x += 1.2f) f.line(0x50000000, 0.3f, x, v, x, v + 4.5f);
+                }
+                // A dinghy upturned on trestles.
+                float du = L * 0.35f, dv = S - 9;
+                if (dv > bv) {
+                    f.rect(0xFF6A5040, du - 6, dv - 4, du - 5, dv + 4);
+                    f.rect(0xFF6A5040, du + 5, dv - 4, du + 6, dv + 4);
+                    Path h = new Path();
+                    f.mv(h, du - 9, dv - 2.8f);
+                    f.qd(h, du + 4, dv - 3.4f, du + 10, dv);
+                    f.qd(h, du + 4, dv + 3.4f, du - 9, dv + 2.8f);
+                    f.ln(h, du - 9, dv - 2.8f);
+                    f.fill(h, 0xFF2E5A7A);
+                    f.line(0xFFE8E4DA, 0.7f, du - 9, dv, du + 10, dv);
+                }
+                f.lamp(4, 4 + yv);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                if (part == 0) {
+                    // The shop: a slate gable over tarred weatherboard, a lantern and a ship's-bell sign.
+                    f.rect(0xFF2A2A2A, 0, 0, L, S);
+                    gable(f, 0xFF5A6068, 0.8f, 0.8f, L - 0.8f, S - 0.8f, 1.6f);
+                    chimney(f, L * 0.7f, S * 0.18f, 2, 0xFF8A5A44);
+                    f.rect(0xFFE8E4DA, 2, S - 2.4f, L - 2, S - 0.8f);
+                    f.circle(0xFFC8A040, L / 2, S - 1.6f, 1.2f);
+                    f.sign(city, "CHANDLER", L / 2, S * 0.3f, 4, 0xFFF0E8D0);
+                } else {
+                    // The sail loft: a long red pantile roof with a run of roof lights and a hoist beam at one end.
+                    f.rect(0xFF3A2E26, 0, 0, L, S);
+                    gable(f, 0xFFA8503A, 0.6f, 0.6f, L - 0.6f, S - 0.6f, 1.4f);
+                    for (float u = 4; u < L - 6; u += 7) {
+                        glass(f, u, 1.4f, u + 4, S / 2 - 0.8f, 0xFF9AB4C4, 2);
+                    }
+                    f.rect(0x48000000, L - 4 + 1, S / 2 - 0.8f + 1, L + 1, S / 2 + 0.8f + 1);
+                    f.rect(0xFF5A4232, L - 4, S / 2 - 0.8f, L, S / 2 + 0.8f);
+                    f.circle(0xFF2A2A2A, L - 0.8f, S / 2, 0.5f);
+                    f.line(0xFF2A2A2A, 0.5f, L / 2, S / 2, L / 2 + 2, S / 2 - 2);
+                    f.circle(0xFFC8A040, L / 2, S / 2, 0.7f);
+                    f.sign(city, "SAIL LOFT", L / 2, S * 0.75f, 4, 0xFFF0E8D0);
+                }
+            }
+        };
+        d.ground = City.DIRT;
+        d.districts = Variants.IND | Variants.OLD;
+        d.minS = 10;
+        d.minL = 13;
+        d.base = City.SHOP;
+        d.inside = Variants.I_SHELVES;
+        d.roofCol = 0xFF5A6068;
+        out.add(d);
+    }
+
+    // ------------------------------------------------------------------ 18 Harbour Pub
+
+    /** A life ring on a post. */
+    static void lifeRing(F f, float u, float v) {
+        f.circle(0x38000000, u + 0.7f, v + 1, 2.2f);
+        f.ring(0xFFE84A2A, 1.2f, u, v, 1.7f);
+        for (int k = 0; k < 4; k++) {
+            double a = k * Math.PI / 2 + Math.PI / 4;
+            f.circle(0xFFF4F0E8, u + (float) Math.cos(a) * 1.7f, v + (float) Math.sin(a) * 1.7f, 0.65f);
+        }
     }
 
     static void harbourPub(List<Landmarks.Def> out) {
+        // An old timber-framed pub with a sagging stone-tiled roof, its shingle garden fenced with rope and set with anchors.
+        D d = new D("Harbour Pub", T_BUILDING) {
+            @Override
+            int[][] lp(int L, int S) {
+                return new int[][]{B(1, 1, Math.max(5, L * 45 / 100), Math.max(4, Math.min(6, S / 2)), 2)};
+            }
+
+            @Override
+            void g(City city, F f, int[][] q, Random r) {
+                float L = f.L, S = f.S, T = TT;
+                float pu1 = (q[0][0] + q[0][2]) * T, pv1 = (q[0][1] + q[0][3]) * T;
+                // Shingle all over, flagstones round the pub door.
+                f.rect(0xFFB4A88E, 0, 0, L, S);
+                f.specks(r, 260, 0x26000000, 0x30FFFFFF, 0, 0, L, S, 1.1f);
+                f.rect(0xFF8E8676, T - 3, pv1, pu1 + 3, pv1 + 8);
+                for (float u = T - 3; u < pu1 + 3; u += 5) f.line(0x30000000, 0.5f, u, pv1, u, pv1 + 8);
+                // Rope fence round the garden: stubby posts with the rope sagging between.
+                float g0 = pu1 + 6, gv0 = 6;
+                for (float u = g0; u < L - 4; u += 10) {
+                    f.curve(0xFFC8B080, 0.8f, u, gv0, u + 5, gv0 + 1.6f, u + 10, gv0);
+                    f.curve(0xFFC8B080, 0.8f, u, S - 5, u + 5, S - 3.4f, u + 10, S - 5);
+                }
+                for (float v = gv0; v < S - 5; v += 10) f.curve(0xFFC8B080, 0.8f, g0, v, g0 + 1.6f, v + 5, g0, v + 10);
+                for (float u = g0; u < L - 3; u += 10) {
+                    f.circle(0xFF4A3A2A, u, gv0, 1.2f);
+                    f.circle(0xFF4A3A2A, u, S - 5, 1.2f);
+                }
+                for (float v = gv0; v < S - 4; v += 10) f.circle(0xFF4A3A2A, g0, v, 1.2f);
+                // Picnic tables and barrel tables, two great anchors on display, life rings on posts.
+                for (float u = g0 + 12; u < L - 10; u += 18)
+                    for (float v = gv0 + 10; v < S - 12; v += 16) picnic(f, u, v, (int) (u + v) % 2 == 0, 0xFF8A6A4A);
+                anchor(f, g0 + 4, S - 12, 1.6f, 0xFF3A3A3E);
+                if (L - g0 > 40) anchor(f, L - 22, gv0 + 8, 1.4f, 0xFF5A4A3A);
+                lifeRing(f, g0, (gv0 + S - 5) / 2);
+                lifeRing(f, L - 4, gv0 + 2);
+                for (int k = 0; k < 3; k++) {
+                    float u = 6 + k * 8, v = Math.min(S - 8, pv1 + 16);
+                    f.circle(0x40000000, u + 0.8f, v + 1, 2.4f);
+                    f.circle(0xFF6A4A2A, u, v, 2.4f);
+                    f.ring(0xFF2A2A2A, 0.5f, u, v, 1.9f);
+                    f.circle(0xFF8A6440, u - 0.4f, v - 0.4f, 1);
+                }
+                // An old boat turned planter, full of flowers.
+                float bu = 18, bv = S - 9;
+                if (bv > pv1 + 22) {
+                    Path h = new Path();
+                    f.mv(h, bu - 10, bv - 3);
+                    f.qd(h, bu + 6, bv - 4, bu + 11, bv);
+                    f.qd(h, bu + 6, bv + 4, bu - 10, bv + 3);
+                    f.ln(h, bu - 10, bv - 3);
+                    f.fill(h, 0xFF6A8A9A);
+                    f.oval(0xFF5A4A3A, bu - 8, bv - 2, bu + 8, bv + 2);
+                    int[] fl = {0xFFE04A6A, 0xFFF0D040, 0xFFF4F0E8, 0xFFB04ACA};
+                    for (int k = 0; k < 9; k++) f.circle(fl[k % 4], bu - 7 + k * 1.8f, bv - 1 + (k % 3), 0.8f);
+                }
+                f.lamp(pu1 + 3, 3);
+            }
+
+            @Override
+            void rf(City city, F f, int part, Random r) {
+                float L = f.L, S = f.S;
+                // Stone-slate roof, the ridge sagging with age, a lean-to at one end, two big chimneys.
+                f.rect(0xFF3A3028, 0, 0, L, S);
+                float m = S / 2;
+                Path a = new Path();
+                f.mv(a, 0.8f, 0.8f);
+                f.ln(a, L - 0.8f, 0.8f);
+                f.ln(a, L * 0.8f, m - 0.2f);
+                f.qd(a, L * 0.5f, m + 1.2f, L * 0.08f, m - 0.2f);
+                f.ln(a, 0.8f, 0.8f);
+                f.fill(a, 0xFF8A8478);
+                Path b = new Path();
+                f.mv(b, 0.8f, S - 0.8f);
+                f.ln(b, L * 0.8f, S - 0.8f);
+                f.ln(b, L * 0.8f, m - 0.2f);
+                f.qd(b, L * 0.5f, m + 1.2f, L * 0.08f, m - 0.2f);
+                f.ln(b, 0.8f, S - 0.8f);
+                f.fill(b, 0xFF6A665C);
+                for (float v = 2; v < S - 1; v += 1.6f) f.line(0x22000000, 0.4f, 1, v, L * 0.79f, v);
+                f.specks(r, 40, 0x20000000, 0x30C8D0A0, 1, 1, L * 0.8f, S - 1, 1);
+                f.curve(0xFFA8A090, 1, L * 0.08f, m - 0.2f, L * 0.5f, m + 1.2f, L * 0.8f, m - 0.2f);
+                // The lean-to: a low tarred roof.
+                f.rect(0xFF2E2E30, L * 0.8f, 0.8f, L - 0.8f, S - 0.8f);
+                for (float v = 2; v < S - 1; v += 2) f.line(0x30FFFFFF, 0.3f, L * 0.8f, v, L - 0.8f, v);
+                chimney(f, L * 0.12f, m - 2, 2, 0xFF8A6A54);
+                chimney(f, L * 0.62f, m - 2, 3, 0xFF8A6A54);
+                f.sign(city, "THE ANCHOR", L * 0.4f, S - 3, 4, 0xFFF0E4C0);
+            }
+        };
+        d.ground = City.SAND;
+        d.districts = Variants.OLD | Variants.IND | Variants.MID;
+        d.minS = 10;
+        d.minL = 12;
+        d.base = City.SHOP;
+        d.inside = Variants.I_BAR;
+        d.roofCol = 0xFF8A8478;
+        out.add(d);
     }
 
     static void taqueria(List<Landmarks.Def> out) {
