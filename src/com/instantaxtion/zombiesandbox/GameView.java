@@ -19,12 +19,28 @@ import java.util.Random;
 /** Renders the world, runs the game loop and handles all touch input and on-screen buttons. */
 final class GameView extends View implements Menu.Host {
     private static final int TOOL_PAN = 0, TOOL_ORDER = 1, TOOL_CIV = 2, TOOL_MIL = 4, TOOL_ZOMBIE = 6, TOOL_PLACE = 7,
-            TOOL_EVENT = 8, TOOL_ZONE = 9, TOOL_BOMB = 10, TOOL_ERASE = 11, TOOL_BUILD = 12;
+            TOOL_EVENT = 8, TOOL_ZONE = 9, TOOL_BOMB = 10, TOOL_ERASE = 11, TOOL_BUILD = 12, TOOL_SQUAD = 13;
+    /** ((22.4) The order of the tools on the bar. */
+    private static final int[] BAR_ORDER = {0, 1, 2, 3, 4, 13, 6, 7, 8, 9, 10, 11, 12, 5};
     // Tool index -> entity type spawned (or -1). The zombie tool spawns the selected zombie variant.
     private static final int[] TOOL_TYPE = {-1, -1, Entity.CIVILIAN, Entity.COP, Entity.SOLDIER, Entity.CIVILIAN,
-            Entity.ZOMBIE, -1, -1, -1, -1, -1, -1};
+            Entity.ZOMBIE, -1, -1, -1, -1, -1, -1, -1};
     private static final String[] TOOL_NAMES = {"Move", "Orders", "People", "Police", "Military", "Medic", "Zombies",
-            "Place", "Events", "Safe Zone", "Bomb", "Erase", "Build"};
+            "Place", "Events", "Safe Zone", "Bomb", "Erase", "Build", "Squads"};
+    /** ((22.4) Ready-made groups, a whole one to a tap: what's in each (type, then roles for police and soldiers). */
+    private static final String[] SQUAD_NAMES = {"Fire team", "Rifle squad", "Sniper team", "Engineer squad", "Response team",
+            "Tactical team", "Riot line", "K9 patrol", "Survivors", "Horde"};
+    private static final String[] SQUAD_INFO = {"Four soldiers and a medic: rifles, a grenadier, a machine gunner",
+            "A commander and eight soldiers with a gunner and a medic", "A sniper and a recon scout to spot for them",
+            "Two combat engineers who dig in, with two riflemen to cover them", "Three officers, a riot shield and a marksman",
+            "Four SWAT, a marksman and a K9 handler", "Five riot shields shoulder to shoulder", "A K9 handler and a partner",
+            "Six civilians together", "Twenty of the dead: walkers, runners and a brute"};
+    private static final int[][] SQUAD_ROLES = {World.FIRE_TEAM, World.RIFLE_SQUAD, {Entity.ROLE_SNIPER, Entity.ROLE_RECON},
+            {Entity.ROLE_ENGINEER, Entity.ROLE_ENGINEER, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE}, World.RESPONSE_TEAM,
+            World.TACTICAL_TEAM, {Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT},
+            {Entity.ROLE_K9, 0}, null, null};
+    /** 0 soldiers, 1 police, 2 civilians, 3 the dead. */
+    private static final int[] SQUAD_SIDE = {0, 0, 0, 0, 1, 1, 1, 1, 2, 3};
     private static final String[] BUILD_NAMES = {"Road", "Pavement", "Grass", "Trees", "Wall", "House", "Shop", "Clear"};
     private static final String[] BUILD_INFO = {"Drag to lay a road", "Drag to pave", "Drag to grass over", "Drag to plant trees",
             "Drag to build a wall nobody can cross", "Tap to put up a house", "Tap to put up a shop", "Grass over, or knock a building down"};
@@ -191,7 +207,7 @@ final class GameView extends View implements Menu.Host {
         n[5] = land.ruralName != null ? land.ruralName : "Rural police";
         return n;
     }
-    private int zombieVariant, civVariant, milVariant, placeVariant, eventVariant, copVariant, buildVariant, zoneVariant;
+    private int zombieVariant, civVariant, milVariant, placeVariant, eventVariant, copVariant, buildVariant, zoneVariant, squadVariant;
     /** ((22.0) The Zone tool's choices: an ordinary safe zone, or the biggest block near the spot. */
     private static final String[] ZONE_NAMES = {"Safe zone", "Large safe zone"};
     private static final String[] ZONE_INFO = {"Walls in a block and guards it; it gets stronger the longer it holds",
@@ -1047,7 +1063,8 @@ final class GameView extends View implements Menu.Host {
         int n = 0;
         for (int i = 0; i < toolRects.length; i++) if (!hiddenTool(i)) n++;
         int[] shown = new int[n];
-        for (int i = 0, k = 0; i < toolRects.length; i++) {
+        for (int j = 0, k = 0; j < BAR_ORDER.length; j++) {
+            int i = BAR_ORDER[j];
             if (hiddenTool(i)) toolRects[i].setEmpty();
             else shown[k++] = i;
         }
@@ -7732,7 +7749,8 @@ final class GameView extends View implements Menu.Host {
             text.setTextSize(12 * dp);
             text.setColor(0xFFC8CCD2);
             String name = tool == TOOL_ZOMBIE ? enemyNames()[zombieVariant] : tool == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
-                    : tool == TOOL_MIL ? MIL_NAMES[milVariant] : tool == TOOL_COP ? copNames()[copVariant] : TOOL_NAMES[tool];
+                    : tool == TOOL_MIL ? MIL_NAMES[milVariant] : tool == TOOL_COP ? copNames()[copVariant]
+                    : tool == TOOL_SQUAD ? SQUAD_NAMES[squadVariant] : TOOL_NAMES[tool];
             c.drawText("\u25B2  Tools  -  " + name, w / 2f, barTop + 19 * dp, text);
         } else {
             fill.setColor(0xD80E0F12);
@@ -7763,7 +7781,7 @@ final class GameView extends View implements Menu.Host {
                     : i == TOOL_MIL ? MIL_NAMES[milVariant]
                     : i == TOOL_COP ? copNames()[copVariant]
                     : i == TOOL_PLACE ? PLACE_NAMES[placeVariant] : i == TOOL_EVENT ? EVENT_NAMES[eventVariant]
-                    : i == TOOL_BUILD ? BUILD_NAMES[buildVariant] : TOOL_NAMES[i];
+                    : i == TOOL_BUILD ? BUILD_NAMES[buildVariant] : i == TOOL_SQUAD ? SQUAD_NAMES[squadVariant] : TOOL_NAMES[i];
             float fit = text.measureText(name);
             if (fit > r.width() - 6 * dp) text.setTextSize(11.5f * dp * (r.width() - 6 * dp) / fit);
             c.drawText(name, cx, r.bottom - 7 * dp, text);
@@ -8950,7 +8968,7 @@ final class GameView extends View implements Menu.Host {
 
     private static boolean hasPicker(int t) {
         // (People have just the one kind since 10.50: no picker.)
-        return t == TOOL_COP || t == TOOL_MIL || t == TOOL_ZOMBIE || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
+        return t == TOOL_COP || t == TOOL_MIL || t == TOOL_ZOMBIE || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE || t == TOOL_SQUAD;
     }
 
     private String[] optionNames(int t) {
@@ -8986,6 +9004,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_PLACE: return PLACE_NAMES;
             case TOOL_BUILD: return BUILD_NAMES;
             case TOOL_ZONE: return ZONE_NAMES;
+            case TOOL_SQUAD: return SQUAD_NAMES;
             default: return EVENT_NAMES;
         }
     }
@@ -8999,6 +9018,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_PLACE: return PLACE_INFO;
             case TOOL_BUILD: return BUILD_INFO;
             case TOOL_ZONE: return ZONE_INFO;
+            case TOOL_SQUAD: return SQUAD_INFO;
             default: return EVENT_INFO;
         }
     }
@@ -9012,6 +9032,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_PLACE: return placeVariant;
             case TOOL_BUILD: return buildVariant;
             case TOOL_ZONE: return zoneVariant;
+            case TOOL_SQUAD: return squadVariant;
             default: return eventVariant;
         }
     }
@@ -9025,6 +9046,7 @@ final class GameView extends View implements Menu.Host {
             case TOOL_PLACE: placeVariant = v; break;
             case TOOL_BUILD: buildVariant = v; break;
             case TOOL_ZONE: zoneVariant = v; break;
+            case TOOL_SQUAD: squadVariant = v; break;
             default: eventVariant = v; break;
         }
     }
@@ -9185,6 +9207,26 @@ final class GameView extends View implements Menu.Host {
     }
 
     private void drawToolIcon(Canvas c, int t, float cx, float cy, float size) {
+        if (t == TOOL_SQUAD) {
+            // ((22.4) Three of them together, the one in front largest.)
+            int side = SQUAD_SIDE[squadVariant];
+            int type = side == 0 ? Entity.SOLDIER : side == 1 ? Entity.COP : side == 2 ? Entity.CIVILIAN : Entity.ZOMBIE;
+            Entity e = icons[type];
+            int role = e.role, body = e.body, head = e.head;
+            int[] roles = SQUAD_ROLES[squadVariant];
+            for (int k = 0; k < 3; k++) {
+                float ox = k == 0 ? -size * 0.62f : k == 1 ? size * 0.62f : 0, oy = k < 2 ? -size * 0.2f : size * 0.12f;
+                if (roles != null && side == 0) {
+                    e.role = Math.max(0, roles[((roles.length - 1 - k) % roles.length + roles.length) % roles.length]);
+                    e.head = e.role == Entity.ROLE_COMMANDER ? 0xFF8E1F1F : 0xFF3C4628;
+                } else if (roles != null && side == 1) e.role = Math.max(0, roles[((roles.length - 1 - k) % roles.length + roles.length) % roles.length]);
+                drawPersonBadge(c, type, e, cx + ox, cy + oy, size * (k < 2 ? 0.62f : 0.78f));
+            }
+            e.role = role;
+            e.body = body;
+            e.head = head;
+            return;
+        }
         int type = t == TOOL_ZOMBIE ? enemyType() : t == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[t];
         if (type >= 0) {
             Entity e = icons[type];
@@ -9795,7 +9837,7 @@ final class GameView extends View implements Menu.Host {
                 lastSpawnX = wx;
                 lastSpawnY = wy;
             }
-        } else if (tool != TOOL_BOMB && tool != TOOL_ZONE && tool != TOOL_ORDER && tool != TOOL_EVENT && tool != TOOL_BUILD) {
+        } else if (tool != TOOL_BOMB && tool != TOOL_ZONE && tool != TOOL_ORDER && tool != TOOL_EVENT && tool != TOOL_BUILD && tool != TOOL_SQUAD) {
             float ddx = wx - lastSpawnX, ddy = wy - lastSpawnY;
             float spacing = BRUSHES[brushIdx] > 1 ? 22 : 12;
             if (ddx * ddx + ddy * ddy > spacing * spacing) {
@@ -10211,6 +10253,10 @@ final class GameView extends View implements Menu.Host {
     }
 
     private void spawnBrush(float wx, float wy) {
+        if (tool == TOOL_SQUAD) {
+            spawnSquad(wx, wy);
+            return;
+        }
         int type = tool == TOOL_ZOMBIE ? enemyType() : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
         // ((22.0) A ready-made group: the whole of it in one tap (the brush size doesn't come into it).)
         int preset = tool == TOOL_MIL ? MIL_ROLES[milVariant] : tool == TOOL_COP ? COP_ROLES[copVariant] : 0;
@@ -10242,6 +10288,27 @@ final class GameView extends View implements Menu.Host {
         if (failed == n && n > 0 && world.messageTime <= 0)
             world.say(world.entities.size() >= world.maxEntities ? "The city is full: no room for anyone else (Max population, in Settings)"
                     : "Nowhere to put them there");
+    }
+
+    /** ((22.4) The Squads tool: one whole group where the finger lands. */
+    private void spawnSquad(float wx, float wy) {
+        int v = squadVariant, side = SQUAD_SIDE[v];
+        java.util.ArrayList<Entity> g;
+        if (side <= 1) g = world.spawnGroup(SQUAD_ROLES[v], side == 1, wx, wy);
+        else {
+            g = new java.util.ArrayList<Entity>();
+            int n = side == 2 ? 6 : 20;
+            for (int i = 0; i < n; i++) {
+                double a = i * 2.4, r = 6 + Math.sqrt(i) * 7;
+                int type = side == 2 ? Entity.CIVILIAN : i == 0 ? Entity.BRUTE : i % 4 == 1 ? Entity.RUNNER : Entity.ZOMBIE;
+                Entity e = world.spawn(type, wx + (float) (Math.cos(a) * r), wy + (float) (Math.sin(a) * r));
+                if (e != null) g.add(e);
+            }
+            // (The survivors stick together: everyone follows the first.)
+            if (side == 2) for (int i = 1; i < g.size(); i++) g.get(i).leader = g.get(0);
+        }
+        lastAction.addAll(g);
+        if (g.isEmpty() && world.messageTime <= 0) world.say("Nowhere to put them there");
     }
 
     /** The Place tool: vehicles, barricades, supply crates and medkits. */

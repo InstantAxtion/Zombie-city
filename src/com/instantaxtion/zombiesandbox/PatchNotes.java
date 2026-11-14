@@ -12,6 +12,7 @@ final class PatchNotes {
                     "50 one-of-a-kind landmarks, buildings and parks, each with its own detailed look.",
                     "Every new city gets a mix of them; big cities get them all.",
                     "Far fewer blocks of car park.",
+                    "New Squads button on the tool bar: fire team, rifle squad, sniper team, engineers, response and tactical teams, riot line, K9 patrol, survivors or a horde in one tap.",
                     "River City: streets stop at a junction instead of running into the water, and the banks are smooth curves.",
             },
             {
