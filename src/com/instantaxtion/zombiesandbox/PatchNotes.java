@@ -9,7 +9,7 @@ final class PatchNotes {
     static final String[][] NOTES = {
             {
                     "22.6  -  More of everything",
-                    "100 more one-of-a-kind buildings: 150 in all.",
+                    "57 more one-of-a-kind buildings so far: 107 in all (more on the way).",
                     "Many more names, and officers and soldiers have ranks.",
                     "Far more colours for houses, shops, flats, cars and people's clothes, hair and skin; more street and place names.",
                     "Squad presets are only in the Squads button now, not repeated in the Cop and Soldier pickers.",
