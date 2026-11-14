@@ -13715,8 +13715,17 @@ final class World {
             return false;
         }
         if (e.task == Dispatch.T_SEEK || e.task == Dispatch.T_HIDE) e.task = Dispatch.T_NONE;
-        if (e.fleeTimer > 0 && zombieWithin(e.x, e.y, 60)) return false;
         float cx = s.cx(), cy = s.cy();
+        if (zombieWithin(e.x, e.y, 70)) {
+            // ((25.1) The dead outside the wall are no reason to run - out through the gate, as half of them did in a
+            // siege. Back from the wall, towards the building; only one of them inside it sends them running.)
+            boolean inWithThem = false;
+            for (int k = 0, n = gatherZ(e.x, e.y, 70); k < n && !inWithThem; k++) inWithThem = s.contains(gathered[k].x, gathered[k].y, -1);
+            if (inWithThem || !s.contains(e.x, e.y, -1)) return false;
+            e.fleeTimer = 0;
+            standAt(e, s.b.doorX + (cx - s.b.doorX) * 0.3f, s.b.doorY + (cy - s.b.doorY) * 0.3f, 1.2f);
+            return true;
+        }
         if (!s.contains(e.x, e.y, -1)) {
             walkToSpot(e, s.b.doorX, s.b.doorY, e.speed * 1.4f);
             return true;
