@@ -2087,7 +2087,11 @@ final class World {
         lodSet[i] = lodFrame;
     }
 
+    /** ((24.0) This step's length, for what's timed deep in the movement code (it counted frames, not time). */
+    private float stepDt = 1 / 30f;
+
     void update(float dt) {
+        stepDt = dt;
         // ((10.36) The walking router is quick enough for far more routes than before: about forty a second.)
         pathBudget = Math.min(12, pathBudget + dt * 40);
         // (10.49) The walking router's map, worked out a few clusters at a time instead of all at once mid-trip.
@@ -2816,6 +2820,29 @@ final class World {
                             + "Someone has turned inside the " + e.zone.place + " safe zone. Their family had hidden the bite!", e.x, e.y);
                 return;
             }
+        }
+        // ((24.0) An officer or soldier who knows they're turning says so and steps away from the others, rather than
+        // dying and rising in the middle of their squad.)
+        if (e.infected && e.isArmed() && e != controlled && e.infectTimer < 4 && e.ride == null && e.rig == null) {
+            if (!e.biteSaid) {
+                e.biteSaid = true;
+                dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                        "I'm bitten. Keep away from me - do what you have to.", e.x, e.y);
+            }
+            e.task = Dispatch.T_NONE;
+            e.aiming = false;
+            float ax = 0, ay = 0;
+            for (int i = 0, n = gatherArmed(e.x, e.y, 70); i < n; i++) {
+                Entity o = gathered[i];
+                if (o == e || o.dead) continue;
+                float ox = e.x - o.x, oy = e.y - o.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
+                ax += ox / od;
+                ay += oy / od;
+            }
+            float al = (float) Math.sqrt(ax * ax + ay * ay);
+            if (al > 0.01f) steerClear(e, ax / al, ay / al, e.speed);
+            else steer(e, 0, 0, 0);
+            return;
         }
         if (e.fresh > 0) {
             e.fresh -= dt;
@@ -14694,7 +14721,7 @@ final class World {
 
     /** ((13.4) One of the dead up against a barrier it wants to get past: over it, once it's pushed at it a while. */
     private boolean zombieClimb(Entity z, float probe) {
-        z.climbPress += 1 / 30f * Math.max(1, z.lodStep);
+        z.climbPress += stepDt * Math.max(1, z.lodStep);
         if (z.climbPress < CLIMB_PRESS) return false;
         if (!tryVault(z, probe)) {
             z.climbPress = 0;

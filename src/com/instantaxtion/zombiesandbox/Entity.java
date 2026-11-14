@@ -83,6 +83,8 @@ final class Entity {
     transient float refusedUntil;
     /** ((24.0) The safe zone they're making for. */
     transient Dispatch.SafeZone seekZone;
+    /** ((24.0) Has told the others they've been bitten. */
+    transient boolean biteSaid;
     /** (11.1) Police and soldiers with nothing on: where their beat or duty takes them next, and how long they wait there. */
     float dutyX, dutyY, dutyWait, dutyFor;
     /** (11.2) The way along the street an officer on the beat is walking. */

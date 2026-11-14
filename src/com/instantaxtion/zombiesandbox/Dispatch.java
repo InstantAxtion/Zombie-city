@@ -2611,6 +2611,40 @@ final class Dispatch {
             policeZoneCd = 45;
             establish(false, null);
         }
+        // ((24.0) Far more making for the zones than they have places for: a second police zone, where most of those
+        // left over are. Everyone made for the one zone, twice as many as it could hold, and the rest walked about.)
+        if (policeZoneCd <= 0 && countZones(false) == 1 && freeCops >= 3) {
+            int places = 0, heading = 0;
+            for (int i = 0; i < zones.size(); i++) {
+                SafeZone z = zones.get(i);
+                if (z.removed) continue;
+                places += Math.max(0, z.capacity - z.sheltered);
+                heading += z.heading;
+            }
+            if (heading > places + 40) {
+                float sx = 0, sy = 0;
+                int n = 0;
+                for (int i = 0, count = w.entities.size(); i < count; i++) {
+                    Entity e = w.entities.get(i);
+                    if (e.dead || e.task != T_SEEK || e.seekZone == null) continue;
+                    if (World.hypot(e.x - e.seekZone.x, e.y - e.seekZone.y) < 500) continue;
+                    sx += e.x;
+                    sy += e.y;
+                    n++;
+                }
+                policeZoneCd = 60;
+                if (n >= 20) {
+                    overflowAt = new float[]{sx / n, sy / n};
+                    try {
+                        SafeZone z = establish(false, null);
+                        if (z != null) say(WHO_POLICE, null, "Police: The first safe zone can't take everyone. A second one is going up at "
+                                + z.place + ".", z.x, z.y);
+                    } finally {
+                        overflowAt = null;
+                    }
+                }
+            }
+        }
         if (militaryZoneCd <= 0 && countZones(true) < 2 && zombies >= 10 && freeSoldiers >= 3) {
             militaryZoneCd = 40;
             establish(true, null);
@@ -2787,9 +2821,15 @@ final class Dispatch {
      * it; better still with the precinct (or the base) in it, or a school, church, market, mall or stadium.
      * With a spot given, the block there.
      */
+    /** ((24.0) Where to put an overflow zone: among the people who couldn't get a place, not the whole city's middle. */
+    private float[] overflowAt;
+
     private int[] chooseBlock(boolean military, float[] at) {
         float px = city.worldW() / 2, py = city.worldH() / 2;
-        if (at == null) {
+        if (at == null && overflowAt != null) {
+            px = overflowAt[0];
+            py = overflowAt[1];
+        } else if (at == null) {
             float sx = 0, sy = 0;
             int n = 0;
             for (int i = 0, count = w.entities.size(); i < count; i++) {

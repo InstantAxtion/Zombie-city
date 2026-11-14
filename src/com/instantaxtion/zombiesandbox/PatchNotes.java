@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "24.0";
-    static final int VERSION_CODE = 240;
+    static final String VERSION = "24.1";
+    static final int VERSION_CODE = 241;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "24.1  -  Follow-up",
+                    "A second police safe zone opens when far more people are heading for shelter than there's room for.",
+                    "Bitten police and soldiers warn their squad and step away before they turn.",
+                    "Evacuation buses reach the stop before opening their doors.",
+                    "The dead climb over things at the same pace at any game speed.",
+            },
             {
                     "24.0  -  The Overhaul",
                     "Traffic: patrol cars no longer gridlock for good; jammed vehicles find another way, and none park in the road short of their base.",

@@ -5992,7 +5992,14 @@ final class Fleet {
             v.stuckTimer += dt;
             boolean going = driveStep(v, dt, 75, carAhead(v) ? 0.4f : 1f);
             if (going) hit(v, w.runOver(v.x, v.y, 9, v.speed, v.angle));
+            // ((24.0) The route running out short of the stop isn't arriving: it opened its doors wherever it was and
+            // the people at the stop never reached it. Planned again from there, a few times.)
+            if (!going && World.hypot(st.bx - v.x, st.by - v.y) > 60 && v.jamTries < 3 && route(v, st.bx, st.by)) {
+                v.jamTries++;
+                return false;
+            }
             if (!going || World.hypot(st.bx - v.x, st.by - v.y) < 28) {
+                v.jamTries = 0;
                 v.busPhase = 1;
                 v.timer = 0;
                 v.checkCd = 0;
