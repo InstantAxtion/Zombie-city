@@ -16,16 +16,59 @@ final class Names {
         return c.first[s % c.first.length] + " " + c.last[(s / c.first.length) % c.last.length];
     }
 
-    /** ((22.6) A police officer's rank, the same every time for each: most are officers, some sergeants and up. */
-    static String copRank(int seed) {
-        int r = ((seed * 0x9E3779B1) >>> 8) % 100;
-        return r < 58 ? "Officer" : r < 72 ? "Senior Officer" : r < 84 ? "Corporal" : r < 93 ? "Sergeant" : r < 98 ? "Detective" : "Lieutenant";
+    // ((25.0) Fuller rank ladders, and promotion up them: a step for every two levels of experience (World.gainXp).)
+    static final String[] COP_RANKS = {"Officer", "Officer II", "Senior Officer", "Corporal", "Sergeant", "Staff Sergeant",
+            "Detective", "Senior Detective", "Lieutenant", "Captain", "Commander"};
+    static final String[] TROOPER_RANKS = {"Trooper", "Senior Trooper", "Master Trooper", "Corporal", "Sergeant", "Lieutenant", "Captain"};
+    static final String[] DEPUTY_RANKS = {"Deputy", "Senior Deputy", "Corporal", "Sergeant", "Lieutenant", "Captain", "Undersheriff"};
+    static final String[] RANGER_RANKS = {"Ranger", "Senior Ranger", "Lead Ranger", "District Ranger", "Chief Ranger"};
+    static final String[] AGENT_RANKS = {"Agent", "Special Agent", "Senior Special Agent", "Supervisory Special Agent",
+            "Assistant Special Agent in Charge", "Special Agent in Charge"};
+    static final String[] SOLDIER_RANKS = {"Pvt.", "PV2", "PFC", "Spc.", "Cpl.", "Sgt.", "SSgt.", "SFC", "MSgt.", "1st Sgt.", "Sgt. Maj."};
+    static final String[] OFFICER_RANKS = {"2nd Lt.", "1st Lt.", "Capt.", "Maj.", "Lt. Col.", "Col."};
+
+    /** Where on its ladder someone starts (most near the bottom), from their seed. */
+    private static int start(int seed, int mul, int[] cuts) {
+        int r = ((seed * mul) >>> 8) % 100;
+        int i = 0;
+        while (i < cuts.length && r >= cuts[i]) i++;
+        return i;
     }
 
-    /** ((22.6) A soldier's rank: privates and specialists mostly, a few NCOs. */
-    static String soldierRank(int seed) {
-        int r = ((seed * 0x85EBCA6B) >>> 8) % 100;
-        return r < 30 ? "Pvt." : r < 52 ? "PFC" : r < 70 ? "Spc." : r < 84 ? "Cpl." : r < 94 ? "Sgt." : r < 98 ? "SSgt." : "Lt.";
+    /** The rank ladder a police officer is on (by agency), and their place on it now. */
+    static String[] copLadder(Entity e) {
+        return e.agency == 1 ? TROOPER_RANKS : e.agency == 2 ? DEPUTY_RANKS : e.agency == 3 ? RANGER_RANKS : e.agency == 4 ? AGENT_RANKS : COP_RANKS;
+    }
+
+    static int copRankIndex(Entity e) {
+        String[] l = copLadder(e);
+        int base = l == COP_RANKS ? start(e.nameSeed, 0x9E3779B1, new int[]{40, 58, 70, 80, 88, 93, 96, 98})
+                : start(e.nameSeed, 0x9E3779B1, new int[]{55, 78, 90, 97});
+        return Math.min(l.length - 1, base + e.level / 2);
+    }
+
+    static String copRank(Entity e) {
+        return copLadder(e)[copRankIndex(e)];
+    }
+
+    /** A soldier's rank: enlisted, or an officer's for commanders and pilots. */
+    static boolean officer(Entity e) {
+        return e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_PILOT;
+    }
+
+    static int soldierRankIndex(Entity e) {
+        if (officer(e)) return Math.min(OFFICER_RANKS.length - 1, (e.role == Entity.ROLE_COMMANDER ? 2 : 1) + e.level / 2);
+        int base = start(e.nameSeed, 0x85EBCA6B, new int[]{18, 32, 50, 66, 78, 88, 94, 97, 99});
+        return Math.min(SOLDIER_RANKS.length - 1, base + e.level / 2);
+    }
+
+    static String soldierRank(Entity e) {
+        return officer(e) ? OFFICER_RANKS[soldierRankIndex(e)] : SOLDIER_RANKS[soldierRankIndex(e)];
+    }
+
+    /** Anyone's rank (police or army), or null. */
+    static String rank(Entity e) {
+        return e.type == Entity.COP ? copRank(e) : e.type == Entity.SOLDIER ? soldierRank(e) : null;
     }
 
     static String dog(int seed) {

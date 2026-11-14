@@ -4038,6 +4038,7 @@ final class World {
     void gainXp(Entity e, float amount) {
         if (e == null || e.dead || e.isUndead() || e.type == Entity.DOG) return;
         e.xp += amount;
+        String rankWas = Names.rank(e);
         while (e.level + 1 < LEVEL_XP.length && e.xp >= LEVEL_XP[e.level + 1]) {
             e.level++;
             int[] order = e.role == Entity.ROLE_CORPSMAN ? PERKS_MEDIC : e.type == Entity.SOLDIER ? PERKS_SOLDIER
@@ -4056,6 +4057,13 @@ final class World {
             }
             if (e.level >= 2 && (e.type == Entity.COP || e.type == Entity.SOLDIER || e.canShoot()))
                 highlight(Names.person(e.nameSeed) + " reached level " + (e.level + 1) + ": " + perkName(p), e.x, e.y);
+        }
+        // ((25.0) And up a rank for it: announced, and on the radio.)
+        String rankNow = Names.rank(e);
+        if (rankWas != null && rankNow != null && !rankWas.equals(rankNow)) {
+            highlight(Names.person(e.nameSeed) + " promoted to " + rankNow, e.x, e.y);
+            dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                    "Field promotion: " + rankNow + " " + Names.person(e.nameSeed) + ".", e.x, e.y);
         }
     }
 
@@ -9426,7 +9434,7 @@ final class World {
             own.trainT = 0;
             boolean army = own.type == Entity.SOLDIER;
             String air = v.kind == Fleet.K_RESCUE_HELI ? "the rescue helicopter" : v.kind == Fleet.K_POLICE_HELI ? "the police helicopter" : "Air " + Math.max(1, v.number);
-            dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, own, (army ? Names.soldierRank(own.nameSeed) : Names.copRank(own.nameSeed)) + " " + Names.person(own.nameSeed)
+            dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, own, (army ? Names.soldierRank(own) : Names.copRank(own)) + " " + Names.person(own.nameSeed)
                     + " has put in to fly " + air + ". Heading to the pad to train.", v.padAt[0], v.padAt[1]);
             return own;
         }
@@ -9483,7 +9491,7 @@ final class World {
         v.flight.add(0, e);
         v.pilotComing = null;
         boolean army = e.type == Entity.SOLDIER;
-        dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, (army ? Names.soldierRank(e.nameSeed) : Names.copRank(e.nameSeed)) + " " + Names.person(e.nameSeed)
+        dispatch.say(army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, (army ? Names.soldierRank(e) : Names.copRank(e)) + " " + Names.person(e.nameSeed)
                 + ": Checked out on the helicopter. Ready to fly.", e.x, e.y);
         return true;
     }

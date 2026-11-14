@@ -8003,7 +8003,7 @@ final class GameView extends View implements Menu.Host {
             for (int k = 0; k < 3; k++) {
                 y += lh;
                 Entity tu = top3[k];
-                String ln = tu == null ? "-" : (k + 1) + ". " + Names.person(tu.nameSeed) + "  L" + (tu.level + 1) + "  " + tu.kills + " kills"
+                String ln = tu == null ? "-" : (k + 1) + ". " + (Names.rank(tu) != null ? Names.rank(tu) + " " : "") + Names.person(tu.nameSeed) + "  L" + (tu.level + 1) + "  " + tu.kills + " kills"
                         + (tu.saved > 0 ? ", " + tu.saved + " saved" : "");
                 c.drawText(shrinkToFit(ln, lineRoom), pad + 12 * dp, y, text);
                 text.setTextSize(11.5f * dp);
@@ -8287,14 +8287,16 @@ final class GameView extends View implements Menu.Host {
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SWAT)
             title = Country.swat()[1] + " " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.COP && e.role == Entity.ROLE_SAR) title = "Rescue specialist " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
-        else if (e.type == Entity.COP) title = (e.agency == 1 ? world.city.country.hpName + " " : e.agency == 2 ? world.city.country.ruralName + "'s deputy "
-                : e.agency == 3 ? "Park ranger " : e.agency == 4 ? Dispatch.federal(world.city.country) + " agent " : e.role == Entity.ROLE_PILOT ? "Pilot "
+        else if (e.type == Entity.COP) title = (e.agency == 1 ? world.city.country.hpName + " " + Names.copRank(e) + " "
+                : e.agency == 2 ? world.city.country.ruralName + "'s " + Names.copRank(e).toLowerCase(java.util.Locale.ROOT) + " "
+                : e.agency == 3 ? "Park " + Names.copRank(e).toLowerCase(java.util.Locale.ROOT) + " "
+                : e.agency == 4 ? Dispatch.federal(world.city.country) + " " + Names.copRank(e).toLowerCase(java.util.Locale.ROOT) + " " : e.role == Entity.ROLE_PILOT ? "Pilot "
                 // ((12.0) The specialists say what they are.)
                 : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman "
                 : e.role == Entity.ROLE_MOUNTED ? "Mounted officer " : e.role == Entity.ROLE_TRAFFIC ? "Traffic officer "
-                : e.role == Entity.ROLE_PRISON_GUARD ? "Prison guard " : Names.copRank(e.nameSeed) + " ")
+                : e.role == Entity.ROLE_PRISON_GUARD ? "Prison guard " : Names.copRank(e) + " ")
                 + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
-        else if (e.type == Entity.SOLDIER) title = (e.role == Entity.ROLE_COMMANDER ? "Capt. " : Names.soldierRank(e.nameSeed) + " ") + Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
+        else if (e.type == Entity.SOLDIER) title = Names.soldierRank(e) + " " + Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
         else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
         else title = Names.person(e.nameSeed) + "  -  " + Entity.NAMES[e.type];
         lines.add(doing(e));
@@ -8422,7 +8424,7 @@ final class GameView extends View implements Menu.Host {
         int kmh = Math.round(Math.abs(v.speed) * 0.55f);
         int aboard = v.crew.size() + v.riders.size() + v.passengers;
         // ((11.3) A police car or army truck out with nobody else aboard has its own driver, by name.)
-        String driver = v.driver != null ? (v.driver.type == Entity.COP ? Names.copRank(v.driver.nameSeed) + " " : v.driver.type == Entity.SOLDIER ? Names.soldierRank(v.driver.nameSeed) + " " : "")
+        String driver = v.driver != null ? (v.driver.type == Entity.COP ? Names.copRank(v.driver) + " " : v.driver.type == Entity.SOLDIER ? Names.soldierRank(v.driver) + " " : "")
                 + Names.person(v.driver.nameSeed) : null;
         String people = aboard == 0 ? (v.player != null ? "you're driving" : driver != null ? "driver only (" + driver + ")"
                 : v.occupied() ? "driver only" : "nobody aboard")
