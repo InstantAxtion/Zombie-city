@@ -4376,7 +4376,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() == 150, "150 designs (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 250, "250 designs (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();
@@ -4419,18 +4419,24 @@ public final class GameTests {
                 rc.set(CityConfig.OPT_SIZE, 3);
                 rc.seed = 11;
                 City rv = new City(rc, 0.1f);
-                int stubs = 0;
+                int stubs = 0, wide = 0;
                 for (int y = 1; y < rv.h - 1; y++)
                     for (int x = 1; x < rv.w - 1; x++) {
                         int t = y * rv.w + x;
                         if (rv.tiles[t] != City.ROAD || (rv.bridge != null && rv.bridge[t])) continue;
-                        // A road tile with water ahead along its way and road behind: a street ending in the river.
+                        // A road tile with water ahead along its way and road behind: a street ending in the river
+                        // (however wide; a street along the bank, with the water at its side, is fine).
+                        int dir = rv.roadDirAt(x, y);
                         boolean ns = rv.tiles[t - rv.w] == City.ROAD || rv.tiles[t + rv.w] == City.ROAD;
                         boolean we = rv.tiles[t - 1] == City.ROAD || rv.tiles[t + 1] == City.ROAD;
                         if (ns && !we && (rv.tiles[t - rv.w] == City.WATER || rv.tiles[t + rv.w] == City.WATER)) stubs++;
-                        if (we && !ns && (rv.tiles[t - 1] == City.WATER || rv.tiles[t + 1] == City.WATER)) stubs++;
+                        else if (we && !ns && (rv.tiles[t - 1] == City.WATER || rv.tiles[t + 1] == City.WATER)) stubs++;
+                        else if (dir == 2 && ((rv.tiles[t - 1] == City.WATER && rv.tiles[t + 1] == City.ROAD) || (rv.tiles[t + 1] == City.WATER && rv.tiles[t - 1] == City.ROAD))) wide++;
+                        else if (dir == 1 && ((rv.tiles[t - rv.w] == City.WATER && rv.tiles[t + rv.w] == City.ROAD) || (rv.tiles[t + rv.w] == City.WATER && rv.tiles[t - rv.w] == City.ROAD))) wide++;
                     }
-                check(stubs == 0, "no street runs into the river (" + stubs + " tiles)");
+                // (A wide street's end a tile or two from the water at a junction on the bank, or the ring road at the
+                // map's edge, is allowed for.)
+                check(stubs == 0 && wide <= 3, "no street runs into the river (" + stubs + " tiles, " + wide + " wide)");
                 check(rv.riverC != null && rv.bankAt(rv.riverC.length / 2, true) < rv.bankAt(rv.riverC.length / 2, false), "the banks' true line is known");
             }
         });

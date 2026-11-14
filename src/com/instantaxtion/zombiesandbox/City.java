@@ -5303,6 +5303,15 @@ final class City {
      */
     private void pruneRiverRoads() {
         boolean[] gone = new boolean[w * h];
+        // ((22.8) Again until nothing more goes: a street cut off at a corner of the bank only shows as one once the
+        // street along the bank beside it has gone (map version 38 on).)
+        for (int pass = 0; pass < (cfg.neighbourhoods() ? 4 : 1); pass++)
+            if (!pruneRiverPass(gone)) break;
+        pruneOrphanPavements(gone);
+    }
+
+    private boolean pruneRiverPass(boolean[] gone) {
+        boolean any = false;
         boolean[] seen = new boolean[w * h];
         for (int t0 = 0; t0 < w * h; t0++) {
             if (tiles[t0] != ROAD || seen[t0] || (bridge != null && bridge[t0])) continue;
@@ -5369,8 +5378,13 @@ final class City {
                     roadDir[t] = 0;
                     mainRoad[t] = false;
                     gone[t] = true;
+                    any = true;
                 }
         }
+        return any;
+    }
+
+    private void pruneOrphanPavements(boolean[] gone) {
         // Pavements by a street that's gone and by no other: grass too.
         for (int t = 0; t < w * h; t++) {
             if (tiles[t] != SIDEWALK) continue;
@@ -5390,7 +5404,8 @@ final class City {
 
     private boolean roadAt(boolean ns, int along, int lat) {
         int x = ns ? lat : along, y = ns ? along : lat;
-        return x >= 0 && y >= 0 && x < w && y < h && tiles[y * w + x] == ROAD;
+        // ((22.8) A car parked on the street is the street.)
+        return x >= 0 && y >= 0 && x < w && y < h && (tiles[y * w + x] == ROAD || (tiles[y * w + x] == CAR && cfg.neighbourhoods()));
     }
 
     private boolean bridgeAt(boolean ns, int along, int lat) {
