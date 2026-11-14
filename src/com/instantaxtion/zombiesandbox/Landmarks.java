@@ -77,6 +77,8 @@ final class Landmarks {
             LandmarkArt10.register(l);
             LandmarkArt11.register(l);
             LandmarkArt12.register(l);
+            // ((25.0) Theme Park Island's own, after all the rest so their ids stay as they were.)
+            LandmarkArt13.register(l);
             for (int i = 0; i < l.size(); i++) l.get(i).id = i;
             all = l;
         }

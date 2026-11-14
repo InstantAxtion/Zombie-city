@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "24.2";
-    static final int VERSION_CODE = 242;
+    static final String VERSION = "25.0";
+    static final int VERSION_CODE = 250;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "25.0  -  Holding Out",
+                    "Survivor bases: armed survivors wall themselves in, upgrading from wood to sandbags to concrete, with gates, watchtowers and a workshop that makes ammo and arms more of them.",
+                    "The Giant: a huge, slow zombie you can place, that smashes barricades and shoves cars aside.",
+                    "New events: plane crash, prison break and riot. The airstrike has a 90-second cooldown.",
+                    "More ranks for police, deputies, troopers, agents, rangers and soldiers, with field promotions as they level up.",
+                    "Police and soldiers drive more, and ride together.",
+                    "New map: Theme Park Island.",
+            },
             {
                     "24.2  -  Fixes",
                     "The Kills list no longer jumps down when you open it.",

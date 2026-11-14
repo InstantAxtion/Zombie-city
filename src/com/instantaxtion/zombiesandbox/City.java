@@ -223,6 +223,11 @@ final class City {
     private Street stripSt;
     /** ((22.9) Desert City: the army base out in the desert, with its test range ({x0, y0, x1, y1} in tiles). */
     private int[] testRange;
+    /** ((25.0) Theme Park Island (CityConfig.themePark): everything it changes in building and drawing the map is for it alone. */
+    final boolean themePark;
+    /** ((25.0) Theme Park Island: the park inside its ring of streets ({x0, y0, x1, y1} in tiles), and the mainland's shore. */
+    int[] parkRect;
+    private int mainShore;
     /** Where the city is: its look and its names. */
     final Country country;
     /** The town's name, the same every time for a given city code. */
@@ -318,12 +323,18 @@ final class City {
             if (front) {
                 bestX = w * (0.35f + r.nextFloat() * 0.3f);
                 bestY = seaY - Math.max(14, w / 14f);
+            } else if (themePark && k == 1) {
+                // ((25.0) The staff town on the mainland.)
+                int[] ir = islandRects[1];
+                bestX = (ir[0] + ir[2]) / 2f;
+                bestY = (ir[1] + ir[3]) / 2f;
             } else if (k > 0) {
                 float bestScore = -1;
                 for (int tries = 0; tries < 30; tries++) {
                     float x = m + ox + 6 + r.nextFloat() * (w - 2 * m - 12), y = m + oy + 6 + r.nextFloat() * (landH - 2 * m - 12);
                     if (islandRects != null) {
-                        int[] ir = islandRects[(k + tries) % islandRects.length];
+                        // ((25.0) Theme Park Island: the rest on the island.)
+                        int[] ir = islandRects[themePark ? 0 : (k + tries) % islandRects.length];
                         x = ir[0] + 6 + r.nextFloat() * (ir[2] - ir[0] - 12);
                         y = ir[1] + 6 + r.nextFloat() * (ir[3] - ir[1] - 12);
                     }
@@ -363,6 +374,8 @@ final class City {
                 int t = 0;
                 while (t < DT_COUNT - 1 && pick >= wts[t]) pick -= wts[t++];
                 d.type = t;
+                // ((25.0) The staff town: homes.)
+                if (themePark && k == 1) d.type = DT_SUBURB;
             }
             usedUnique[d.type] = true;
             String wd = words.get(word++ % words.size());
@@ -624,6 +637,7 @@ final class City {
         progress(0.03f, "Laying out the streets");
         this.cfg = cfg;
         this.desert = cfg.desert();
+        this.themePark = cfg.themePark();
         this.detail = detail;
         w = h = cfg.tiles();
         rnd = new Random(cfg.seed);
@@ -2821,7 +2835,9 @@ final class City {
                 }
             ensureCrossings(bx0, bx1, railY0, railRows);
         } else if (waterKind == CityConfig.W_ISLANDS) {
-            islands();
+            // ((25.0) Theme Park Island: the one island, the park in the middle, the mainland across the strait.)
+            if (themePark) themeParkIsland();
+            else islands();
         } else if (waterKind == CityConfig.W_LAKE) {
             lakeTown(bx0, by0, bx1, by1, in);
         } else if (waterKind == CityConfig.W_RIVER) {
@@ -2913,6 +2929,8 @@ final class City {
         for (int k = 0; k < blocks.size(); k++) if (blocks.get(k).length > 4 && blocks.get(k)[4] >= 2) used[k] = true;
         // ((22.9) Desert City: the casino strip, before anything else takes the blocks along it.)
         if (desert && stripSt != null) strip(used);
+        // ((25.0) Theme Park Island: the park's rides, the hotels along the beach, the staff town's clinic and housing.)
+        if (themePark) themeParkPlaces(used);
         // ((15.5) The Military Town's great base, in the middle where the streets were kept clear of it.)
         if (bigBase != null) {
             militaryBase(bigBase[0] + 1, bigBase[1] + 1, bigBase[2] - bigBase[0] - 2, bigBase[3] - bigBase[1] - 2);
@@ -2964,7 +2982,8 @@ final class City {
                 if (used[k] || b[2] - b[0] - 2 < 6 || b[3] - b[1] - 2 < 6) continue;
                 float cx = (b[0] + b[2]) / 2f * T, cy = (b[1] + b[3]) / 2f * T;
                 // (On the Islands, the first three precincts go one to each island.)
-                if (islandRects != null && n < islandRects.length && island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != n) continue;
+                // ((25.0) On Theme Park Island the headquarters is in the staff town.)
+                if (islandRects != null && n < islandRects.length && island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != (themePark ? 1 - n : n)) continue;
                 boolean near = false;
                 for (Facility f : facilities)
                     if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < w * T / (cfg.policeStations() > 3 ? 4.5f : 3f))
@@ -3110,7 +3129,8 @@ final class City {
             }
         }
         // ((22.0) A second mall on the bigger maps, and a walled prison out towards the edge of town.)
-        if (cfg.v22() && w >= 256 && !rural) {
+        // ((25.0) Not on Theme Park Island: one mall is plenty.)
+        if (cfg.v22() && w >= 256 && !rural && !themePark) {
             int k = bigBlock(used, 11, 9, 0.45f);
             if (k >= 0) {
                 used[k] = true;
@@ -3138,7 +3158,8 @@ final class City {
                 landPrison(b[0] + 1, b[1] + 1, b[2] - 1, b[3] - 1);
             }
         }
-        if ((w >= 256 || cfg.density() == 2) && !rural) {
+        // ((25.0) Nor a stadium or a power station on the resort island.)
+        if ((w >= 256 || cfg.density() == 2) && !rural && !themePark) {
             int k = bigBlock(used, 12, 11, 0.6f);
             if (k >= 0) {
                 used[k] = true;
@@ -3147,7 +3168,7 @@ final class City {
                 stadium(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
             }
         }
-        if (!rural) {
+        if (!rural && !themePark) {
             int best = -1;
             float bestD = Float.MAX_VALUE;
             float ix0 = w / 2f + shiftX + (float) Math.cos(industryAngle) * w * 0.4f, iy0 = h / 2f + shiftY + (float) Math.sin(industryAngle) * h * 0.4f;
@@ -3278,6 +3299,7 @@ final class City {
             }
 
         if (desert) desertify();
+        if (themePark) tropics();
         // Street lamps on the pavement corners at junctions.
         for (int y = 1; y < h - 1; y++)
             for (int x = 1; x < w - 1; x++) {
@@ -4197,6 +4219,10 @@ final class City {
         int j = w / 64;
         if (cfg.archipelago()) {
             archipelagoLayout(r, j);
+            return;
+        }
+        if (themePark) {
+            themeParkLayout(r, j);
             return;
         }
         // (Since 10.10 there are two, three or four islands, laid out a few different ways.)
@@ -10087,9 +10113,11 @@ final class City {
                     c.drawCircle(cx, cy, 1.6f, p);
                     if (!regionOnly) {
                         // ((22.9) Palms along the desert's streets.)
-                        if (desert) trees.add(new float[]{cx, cy, r, Country.TK_PALM});
+                        // ((25.0) And on Theme Park Island.)
+                        boolean palm = desert || (themePark && island(x, y) == 0);
+                        if (palm) trees.add(new float[]{cx, cy, r, Country.TK_PALM});
                         else trees.add(new float[]{cx, cy, r});
-                        if (canopies()) canopy(c, p, cx, cy, r, desert ? Country.TK_PALM : Country.TK_BROAD);
+                        if (canopies()) canopy(c, p, cx, cy, r, palm ? Country.TK_PALM : Country.TK_BROAD);
                     }
                 }
     }
@@ -15469,5 +15497,499 @@ final class City {
 
     private static int withAlpha(int col, float a) {
         return ((int) (((col >>> 24) & 255) * Math.max(0, Math.min(1, a))) << 24) | (col & 0xFFFFFF);
+    }
+
+    // ------------------------------------------------------------------ ((25.0) Theme Park Island)
+
+    /**
+     * Where Theme Park Island's two places are: the island itself (islandRects[0]), most of the top of the map, and
+     * across the strait below it the staff town on the mainland (islandRects[1]), which runs along the bottom of the map.
+     */
+    private void themeParkLayout(Random r, int j) {
+        int mainH = Math.max(32, Math.round(h * 0.15f));
+        mainShore = h - mainH;
+        int strait = Math.max(22, Math.round(h * 0.075f));
+        int mx = Math.max(8, Math.round(w * 0.06f)), my = Math.max(8, Math.round(h * 0.045f));
+        int ix0 = mx + r.nextInt(j), iy0 = my + r.nextInt(j), ix1 = w - mx - r.nextInt(j), iy1 = mainShore - strait;
+        int sw = Math.max(40, Math.round(w * 0.24f)), scx = w / 2 + Math.round((r.nextFloat() - 0.5f) * w * 0.2f);
+        int sy0 = mainShore + Math.max(7, Math.round(h * 0.03f)), sy1 = h - Math.max(3, Math.round(h * 0.03f));
+        islandRects = new int[][]{{ix0, iy0, ix1, iy1}, {scx - sw / 2, sy0, scx + sw / 2, sy1}};
+        islandLinks = new int[][]{{0, 1, 1}};
+        causewayIsland = 1;
+        String town = country.townName(new Random(cfg.seed * 131L + 17));
+        if (town.equals(name)) town = country.townName(new Random(cfg.seed * 977L + 1));
+        islandNames = new String[]{name + " Island", town};
+    }
+
+    /**
+     * Theme Park Island: the island's ring of streets, the park in the middle inside a ring of its own (left as open
+     * plaza for its rides: see parkRides), the town's grid in the four pieces round it, a rounded outline with a wide
+     * beach all round; across the strait the mainland's shore and woods along the bottom of the map, the staff town on
+     * the coast road there, the one bridge across, a road off the map, and the ferry's two piers.
+     */
+    private void themeParkIsland() {
+        fill(0, 0, w, h, WATER);
+        bridge = new boolean[w * h];
+        Random sr = new Random(cfg.seed * 59L + 25);
+        int[] q = islandRects[0], s = islandRects[1];
+        int x0 = q[0], y0 = q[1], x1 = q[2], y1 = q[3], iw = x1 - x0, ih = y1 - y0;
+        fill(x0 - 1, y0 - 1, iw + 2, ih + 2, SIDEWALK);
+        carve(new Street(x0, y0, x1, y0 + 3, false, false));
+        carve(new Street(x0, y1 - 3, x1, y1, false, false));
+        carve(new Street(x0, y0, x0 + 3, y1, true, false));
+        carve(new Street(x1 - 3, y0, x1, y1, true, false));
+        int pw = Math.min(iw - 30, Math.max(30, Math.min(Math.round(iw * (w < 300 ? 0.3f : 0.48f)), 190 + iw / 8)));
+        int ph = Math.min(ih - 22, Math.max(28, Math.min(Math.round(ih * 0.52f), 160 + ih / 8)));
+        int px0 = x0 + (iw - pw) / 2 + Math.round((sr.nextFloat() - 0.5f) * (iw - pw) * 0.3f);
+        int py0 = y0 + (ih - ph) / 2 + Math.round((sr.nextFloat() - 0.5f) * (ih - ph) * 0.3f);
+        int px1 = px0 + pw, py1 = py0 + ph;
+        // (The park's long sides are avenues right across the island.)
+        carve(new Street(x0, py0, x1, py0 + 3, false, true));
+        carve(new Street(x0, py1 - 3, x1, py1, false, true));
+        carve(new Street(px0, py0, px0 + 3, py1, true, true));
+        carve(new Street(px1 - 3, py0, px1, py1, true, true));
+        parkRect = new int[]{px0 + 3, py0 + 3, px1 - 3, py1 - 3};
+        fill(px0 + 3, py0 + 3, pw - 6, ph - 6, PLAZA);
+        split(x0 + 3, y0 + 3, x1 - 3, py0, 0, -1, -1);
+        split(x0 + 3, py1, x1 - 3, y1 - 3, 0, -1, -1);
+        split(x0 + 3, py0 + 3, px0, py1 - 3, 0, -1, -1);
+        split(px1, py0 + 3, x1 - 3, py1 - 3, 0, -1, -1);
+        // The staff town's grid.
+        int sx0 = s[0], sy0 = s[1], sx1 = s[2], sy1 = s[3];
+        fill(sx0 - 1, sy0 - 1, sx1 - sx0 + 2, sy1 - sy0 + 2, SIDEWALK);
+        carve(new Street(sx0, sy0, sx1, sy0 + 3, false, true));
+        carve(new Street(sx0, sy1 - 3, sx1, sy1, false, false));
+        carve(new Street(sx0, sy0, sx0 + 3, sy1, true, false));
+        carve(new Street(sx1 - 3, sy0, sx1, sy1, true, false));
+        split(sx0 + 3, sy0 + 3, sx1 - 3, sy1 - 3, 0, -1, -1);
+        // The island's outline: a rounded shape, gently lobed (the park well inside it); the staff town keeps its all.
+        float[] amp = new float[4], ph0 = new float[4];
+        for (int k = 0; k < 4; k++) {
+            amp[k] = 0.03f + sr.nextFloat() * 0.05f;
+            ph0[k] = sr.nextFloat() * (float) Math.PI * 2;
+        }
+        List<int[]> kept = new ArrayList<int[]>();
+        for (int[] b : blocks) {
+            float bx = (b[0] + b[2]) / 2f, by = (b[1] + b[3]) / 2f;
+            int il = island((int) bx, (int) by);
+            if (il == 1) kept.add(b);
+            if (il != 0) continue;
+            float hx = iw / 2f, hy = ih / 2f;
+            float nx = (bx - (x0 + x1) / 2f) / hx, ny = (by - (y0 + y1) / 2f) / hy;
+            float a = (float) Math.atan2(ny, nx);
+            float d = (float) Math.pow(Math.pow(Math.abs(nx), 2.6) + Math.pow(Math.abs(ny), 2.6), 1 / 2.6);
+            float r = 0.94f;
+            for (int k = 0; k < 4; k++) r += amp[k] * (float) Math.sin((k + 2) * a + ph0[k]);
+            if (d < r) kept.add(b);
+        }
+        boolean[] town = new boolean[w * h];
+        for (int[] b : kept)
+            for (int y = Math.max(0, b[1] - 3); y < Math.min(h, b[3] + 3); y++)
+                for (int x = Math.max(0, b[0] - 3); x < Math.min(w, b[2] + 3); x++) {
+                    int t = y * w + x;
+                    boolean inside = x >= b[0] && x < b[2] && y >= b[1] && y < b[3];
+                    if (inside || tiles[t] == ROAD) town[t] = true;
+                }
+        for (int y = py0; y < py1; y++) for (int x = px0; x < px1; x++) town[y * w + x] = true;
+        for (int t = 0; t < w * h; t++)
+            if (!town[t] && tiles[t] != WATER) {
+                tiles[t] = WATER;
+                roadDir[t] = 0;
+                mainRoad[t] = false;
+            }
+        // Stray bits of road (and blocks only they reach) go too.
+        int[] comp = new int[w * h];
+        Arrays.fill(comp, -1);
+        List<Integer> sizes = new ArrayList<Integer>(), compIsland = new ArrayList<Integer>();
+        int[] qu = new int[w * h];
+        for (int s0 = 0; s0 < w * h; s0++) {
+            if (tiles[s0] != ROAD || comp[s0] >= 0) continue;
+            int id = sizes.size(), head = 0, tail = 0;
+            qu[tail++] = s0;
+            comp[s0] = id;
+            while (head < tail) {
+                int c = qu[head++], x = c % w, y = c / w;
+                int[] nb = {x > 0 ? c - 1 : -1, x < w - 1 ? c + 1 : -1, y > 0 ? c - w : -1, y < h - 1 ? c + w : -1};
+                for (int jn : nb)
+                    if (jn >= 0 && comp[jn] < 0 && tiles[jn] == ROAD) {
+                        comp[jn] = id;
+                        qu[tail++] = jn;
+                    }
+            }
+            sizes.add(tail);
+            compIsland.add(island(s0 % w, s0 / w));
+        }
+        int[] biggest = new int[3];
+        for (int k = 0; k < sizes.size(); k++) {
+            int il = compIsland.get(k) + 1;
+            biggest[il] = Math.max(biggest[il], sizes.get(k));
+        }
+        for (int t = 0; t < w * h; t++)
+            if (comp[t] >= 0 && sizes.get(comp[t]) < biggest[compIsland.get(comp[t]) + 1] / 6) {
+                tiles[t] = WATER;
+                roadDir[t] = 0;
+                mainRoad[t] = false;
+            }
+        blocks.clear();
+        for (int[] b : kept) {
+            boolean touches = false;
+            for (int y = Math.max(0, b[1] - 1); y <= Math.min(h - 1, b[3]) && !touches; y++)
+                for (int x = Math.max(0, b[0] - 1); x <= Math.min(w - 1, b[2]) && !touches; x++)
+                    if (tiles[y * w + x] == ROAD) touches = true;
+            if (touches) blocks.add(b);
+            else fill(b[0], b[1], b[2] - b[0], b[3] - b[1], WATER);
+        }
+        // The island's coast: a little grass and palms behind a wide beach of sand most of the way round.
+        int[] dist = chamfer(0);
+        double p0 = sr.nextDouble() * 10, ck = Math.max(0.35, Math.min(1, w / 600.0));
+        for (int t = 0; t < w * h; t++) {
+            if (dist[t] <= 0 || dist[t] > 230) continue;
+            int x = t % w, y = t / w;
+            if (y > mainShore - 10) continue;
+            double coast = 12 + 5 * Math.sin(x * 0.043 + y * 0.021 + p0) + 3.5 * Math.sin(x * 0.019 - y * 0.051 + p0 * 2)
+                    + 2.2 * Math.sin(x * 0.17 + y * 0.09 + p0 * 4) + 0.7 * Math.sin((x + y) * 0.37 + p0 * 5);
+            coast = Math.max(7, Math.min(22, coast)) * ck;
+            double beach = Math.max(3, 5.5 + 2.5 * Math.sin(x * 0.04 + y * 0.065 + p0 * 1.7)) * Math.max(0.5, ck);
+            double d = dist[t] / 10.0;
+            if (d > coast) continue;
+            tiles[t] = d > coast - beach ? SAND : sr.nextFloat() < (d > 3 ? 0.2f : 0.06f) && d > 1.2 ? TREE : GRASS;
+        }
+        // Streets that ran on into the water stop at the last corner instead.
+        boolean[] dug = new boolean[w * h];
+        for (int[] e : deadEnds()) trimStub(e, dug);
+        fixJunctions(dug);
+        for (int t = 0; t < w * h; t++) if (dug[t]) tiles[t] = GRASS;
+        for (int si = streets.size() - 1; si >= 0; si--) {
+            Street st = streets.get(si);
+            boolean any = false;
+            for (int y = st.y0; y < st.y1 && !any; y++)
+                for (int x = st.x0; x < st.x1 && !any; x++)
+                    if (x >= 0 && y >= 0 && x < w && y < h && tiles[y * w + x] == ROAD) any = true;
+            if (!any) streets.remove(si);
+        }
+        // The mainland: a beach along its shore, then grass and woods down to the edge of the map.
+        double m0 = sr.nextDouble() * 10;
+        for (int x = 0; x < w; x++) {
+            int shore = mainShore + (int) Math.round(2.2 * Math.sin(x * 0.045 + m0) + 1.4 * Math.sin(x * 0.11 + m0 * 2));
+            int beach = 2 + (int) Math.round(1.5 + 1.5 * Math.sin(x * 0.07 + m0 * 3));
+            for (int y = Math.max(0, shore); y < h; y++) {
+                int t = y * w + x;
+                if (tiles[t] != WATER) continue;
+                double wood = Math.sin(x * 0.06 + m0) * Math.sin(y * 0.05 - m0) + 0.4 * Math.sin((x + y) * 0.13);
+                tiles[t] = y < shore + beach ? SAND : y < shore + beach + 1 ? GRASS : sr.nextFloat() < (wood > 0.25 ? 0.55f : 0.07f) ? TREE : GRASS;
+            }
+        }
+        // The coast road along the mainland, through the staff town, off the map both ways.
+        carve(new Street(0, sy0, sx0, sy0 + 3, false, true));
+        carve(new Street(sx1, sy0, w, sy0 + 3, false, true));
+        // The bridge across the strait, and the road off the map from the staff town.
+        int[] a = islandRects[0], b = islandRects[1];
+        int lo = Math.max(a[0], b[0]), hi = Math.min(a[2], b[2]);
+        int bx = mainLine(true, lo, hi, (lo + hi) / 2 - 1, a, b);
+        linkRoad(true, bx, (a[3] + mainShore) / 2, true);
+        int cx = mainLine(true, b[0], b[2], (b[0] + b[2]) / 2 - 1, b, null);
+        if (Math.abs(cx - bx) < 6) cx = bx;
+        linkRoad(true, cx, h - 1, false);
+        causewayEnd = new float[]{(cx + 1.5f) * T, (h - 1.5f) * T};
+        dropStrandedLand();
+        themeParkFerry(bx, sr);
+        // People go down to the beaches.
+        int mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+        for (int[] d : new int[][]{{0, 1}, {-1, 0}, {1, 0}, {0, -1}}) {
+            for (int s1 = 0; s1 < w; s1++) {
+                int x = mx + d[0] * s1, y = my + d[1] * s1;
+                if (x < 0 || y < 0 || x >= w || y >= h || tiles[y * w + x] == WATER) break;
+                if (tiles[y * w + x] == SAND) {
+                    openAreas.add(new float[]{(x + 0.5f) * T, (y + 0.5f) * T, 0});
+                    break;
+                }
+            }
+        }
+        // Boats out at sea.
+        for (int k = 0; k < w / 20; k++) {
+            int ox = 4 + rnd.nextInt(w - 40), oy = 4 + rnd.nextInt(h - 8);
+            if (tiles[oy * w + ox] != WATER || tiles[oy * w + ox + 2] != WATER || bridge[oy * w + ox]) continue;
+            addDecor(D_BOAT, ox * T, oy * T, ox * T + 30, oy * T + 10, rnd.nextInt(3));
+        }
+    }
+
+    /**
+     * The ferry across the strait: a pier out from the island's south shore and one from the mainland's, straight across
+     * from each other well along from the bridge, a path from each up to the road, and the two landings (city.ferry).
+     */
+    private void themeParkFerry(int bridgeX, Random sr) {
+        int[] q = islandRects[0];
+        int best = -1, bestTop = 0, bestBot = 0;
+        float bs = -Float.MAX_VALUE;
+        for (int fx = q[0] + 8; fx < q[2] - 8; fx++) {
+            if (Math.abs(fx - bridgeX) < Math.max(24, w / 9)) continue;
+            int top = -1, bot = -1;
+            for (int y = (q[1] + q[3]) / 2; y < mainShore + 10; y++)
+                if (tiles[y * w + fx] == WATER) {
+                    top = y;
+                    break;
+                }
+            if (top < 0) continue;
+            for (int y = Math.min(h - 1, mainShore + 10); y > top; y--)
+                if (tiles[y * w + fx] == WATER) {
+                    bot = y;
+                    break;
+                }
+            if (bot - top < 16) continue;
+            boolean clear = true;
+            for (int y = top; y <= bot && clear; y++)
+                for (int x = fx - 3; x <= fx + 4 && clear; x++)
+                    if (tiles[y * w + x] != WATER || bridge[y * w + x]) clear = false;
+            if (!clear) continue;
+            // (Land under both ends: the island's shore, and the mainland's.)
+            if (tiles[(top - 1) * w + fx + 1] == WATER || tiles[(bot + 1) * w + fx + 1] == WATER) continue;
+            float score = -(bot - top) * 0.5f - Math.abs(Math.abs(fx - bridgeX) - w * 0.22f) * 0.3f;
+            if (score > bs) {
+                bs = score;
+                best = fx;
+                bestTop = top;
+                bestBot = bot;
+            }
+        }
+        if (best < 0) return;
+        int fx = best, len = Math.max(4, Math.min(7, (bestBot - bestTop) / 5));
+        for (int k = 0; k < len; k++) {
+            tiles[(bestTop + k) * w + fx] = PIER;
+            tiles[(bestTop + k) * w + fx + 1] = PIER;
+            tiles[(bestBot - k) * w + fx] = PIER;
+            tiles[(bestBot - k) * w + fx + 1] = PIER;
+        }
+        ferry = new float[]{(fx + 1) * T, (bestTop + len + 1.5f) * T, (fx + 1) * T, (bestBot - len - 0.5f) * T};
+        // A paved path from each pier to the nearest road.
+        for (int dir = -1; dir <= 1; dir += 2) {
+            for (int y = dir < 0 ? bestTop - 1 : bestBot + 1; y > 0 && y < h - 1; y += dir) {
+                byte t0 = tiles[y * w + fx], t1 = tiles[y * w + fx + 1];
+                if (t0 == ROAD || t1 == ROAD || t0 == BUILDING || t1 == BUILDING || t0 == WATER || t0 == SIDEWALK) break;
+                for (int x = fx - 1; x <= fx + 2; x++) {
+                    byte t = tiles[y * w + x];
+                    if (t == GRASS || t == TREE || t == SAND) {
+                        tiles[y * w + x] = x == fx - 1 || x == fx + 2 ? PLAZA : SIDEWALK;
+                        unpine(y * w + x);
+                    }
+                }
+            }
+        }
+        natureLabel("Ferry", (fx + 1) * T, (bestTop + len + 3) * T, NL_LANDMARK);
+    }
+
+    /** Theme Park Island's own places: the park's rides, the resort hotels along the beach, the staff town's clinic and housing. */
+    private void themeParkPlaces(boolean[] used) {
+        if (lmRnd == null) {
+            lmRnd = new Random(cfg.seed * 7919L + 35);
+            lmCount = new int[Landmarks.all().size()];
+        }
+        if (parkRect != null) parkRides();
+        // The staff town: the clinic in the middle of it, the staff housing round it.
+        int[] s = islandRects[1];
+        float scx = (s[0] + s[2]) / 2f, scy = (s[1] + s[3]) / 2f;
+        List<Integer> staff = new ArrayList<Integer>();
+        for (int k = 0; k < blocks.size(); k++) {
+            int[] b = blocks.get(k);
+            if (!used[k] && b.length <= 4 && island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) == 1) staff.add(k);
+        }
+        int placed = 0;
+        while (!staff.isEmpty() && placed < 3) {
+            int bi = 0;
+            float bd = Float.MAX_VALUE;
+            for (int i = 0; i < staff.size(); i++) {
+                int[] b = blocks.get(staff.get(i));
+                float d = (float) Math.hypot((b[0] + b[2]) / 2f - scx, (b[1] + b[3]) / 2f - scy);
+                if (d < bd) {
+                    bd = d;
+                    bi = i;
+                }
+            }
+            int k = staff.remove(bi);
+            if (placeOn(k, used, placed == 0 ? "Staff Clinic" : "Staff Housing")) placed++;
+        }
+        // The resort along the beach: hotels, villas and pool clubs on the blocks by the sand.
+        int next = 0;
+        for (int k = 0; k < blocks.size(); k++) {
+            int[] b = blocks.get(k);
+            if (used[k] || b.length > 4 || island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != 0) continue;
+            boolean shore = false;
+            for (int y = Math.max(0, b[1] - 8); y < Math.min(h, b[3] + 8) && !shore; y++)
+                for (int x = Math.max(0, b[0] - 8); x < Math.min(w, b[2] + 8) && !shore; x++)
+                    if (tiles[y * w + x] == SAND) shore = true;
+            if (!shore) continue;
+            // (On the small maps, villas only: the big hotels would leave no room for anyone to live.)
+            for (int t = 0; t < RESORT.length; t++)
+                if (placeOn(k, used, w < 300 ? "Beach Villas" : RESORT[(next + t) % RESORT.length])) {
+                    next = (next + t + 1) % RESORT.length;
+                    break;
+                }
+        }
+    }
+
+    /** Theme Park Island's beach hotels, in the order they come round the shore. */
+    private static final String[] RESORT = {"Resort Hotel", "Beach Villas", "Pool Club", "Tower Hotel", "Beach Villas",
+            "Resort Hotel", "Surf Lodge", "Pool Club"};
+    /** The park's rides and halls, in the order they're handed out round the middle. */
+    private static final String[] RIDES = {"Log Flume", "Carousel", "Drop Tower", "Teacups", "Swing Ride", "Food Court",
+            "Pirate Ship", "Bumper Cars", "Spinning Coaster", "Splash Pad", "Midway Games", "Arcade Hall"};
+
+    /** Puts landmark design name on block k (if it fits), marking it used. */
+    private boolean placeOn(int k, boolean[] used, String name) {
+        int[] b = blocks.get(k);
+        int iw = b[2] - b[0] - 2, ih = b[3] - b[1] - 2;
+        Landmarks.Def d = landmarkNamed(name);
+        if (d == null || Math.min(iw, ih) < d.minS || Math.max(iw, ih) < d.minL) return false;
+        used[k] = true;
+        fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+        placeLandmark(d, b[0] + 1, b[1] + 1, iw, ih);
+        return true;
+    }
+
+    /** Places design name on the parcel {x0, y0, x1, y1} if it fits. */
+    private boolean placeParcel(int[] pc, String name) {
+        Landmarks.Def d = landmarkNamed(name);
+        int pw = pc[2] - pc[0], ph = pc[3] - pc[1];
+        if (d == null || Math.min(pw, ph) < d.minS || Math.max(pw, ph) < d.minL) return false;
+        placeLandmark(d, pc[0], pc[1], pw, ph);
+        return true;
+    }
+
+    /**
+     * The theme park: its plaza cut into parcels by walks three tiles wide, the big roller coaster across one corner,
+     * the castle at the heart of it, the Ferris wheel by it, the gate on the side facing the bridge, and a ride on every
+     * other parcel.
+     */
+    private void parkRides() {
+        int x0 = parkRect[0], y0 = parkRect[1], x1 = parkRect[2], y1 = parkRect[3], pw = x1 - x0, ph = y1 - y0;
+        Random r = new Random(cfg.seed * 1709L + 43);
+        int cw = Math.max(20, Math.min(96, Math.round(pw * 0.4f))), ch = Math.max(18, Math.min(72, Math.round(ph * 0.5f)));
+        if (pw - cw < 12) cw = pw;
+        if (ph - ch < 12) ch = ph;
+        // (On the smallest maps no big coaster: rides and halls all over.)
+        if (w < 200) cw = ch = 0;
+        boolean left = r.nextBoolean();
+        int cx0 = left ? x0 : x1 - cw;
+        int[] coaster = {cx0, y0, cx0 + cw, y0 + ch};
+        List<int[]> parcels = new ArrayList<int[]>();
+        int m = Math.max(16, Math.min(34, Math.round(Math.min(pw, ph) * 0.22f)));
+        if (cw == 0) parkSplit(x0, y0, x1, y1, m, r, parcels);
+        if (cw > 0 && cw < pw) parkSplit(left ? x0 + cw + 3 : x0, y0, left ? x1 : x1 - cw - 3, y0 + ch, m, r, parcels);
+        if (cw > 0 && ch < ph) parkSplit(x0, y0 + ch + 3, x1, y1, m, r, parcels);
+        if (cw > 0) placeParcel(coaster, "Thunder Mountain Coaster");
+        // The heart: the parcel nearest the middle of the park, then the Ferris wheel's (the nearest that's big enough).
+        float mx = (x0 + x1) / 2f, my = (y0 + y1) / 2f;
+        int gate = -1;
+        float gd = Float.MAX_VALUE;
+        for (int i = 0; i < parcels.size(); i++) {
+            int[] pc = parcels.get(i);
+            if (pc[3] != y1) continue;
+            float d = Math.abs((pc[0] + pc[2]) / 2f - mx);
+            if (d < gd) {
+                gd = d;
+                gate = i;
+            }
+        }
+        boolean[] done = new boolean[parcels.size()];
+        if (gate >= 0 && placeParcel(parcels.get(gate), "Park Gate")) done[gate] = true;
+        for (String star : new String[]{"Fairytale Castle", "Ferris Wheel"}) {
+            int bi = -1;
+            float bd = Float.MAX_VALUE;
+            for (int i = 0; i < parcels.size(); i++) {
+                int[] pc = parcels.get(i);
+                if (done[i]) continue;
+                Landmarks.Def d = landmarkNamed(star);
+                int s0 = Math.min(pc[2] - pc[0], pc[3] - pc[1]), l0 = Math.max(pc[2] - pc[0], pc[3] - pc[1]);
+                if (d == null || s0 < d.minS || l0 < d.minL) continue;
+                float dd = (float) Math.hypot((pc[0] + pc[2]) / 2f - mx, (pc[1] + pc[3]) / 2f - my) - 2.5f * s0;
+                if (dd < bd) {
+                    bd = dd;
+                    bi = i;
+                }
+            }
+            if (bi >= 0 && placeParcel(parcels.get(bi), star)) done[bi] = true;
+        }
+        int next = r.nextInt(RIDES.length);
+        for (int i = 0; i < parcels.size(); i++) {
+            if (done[i]) continue;
+            int[] pc = parcels.get(i);
+            for (int t = 0; t < RIDES.length; t++)
+                if (placeParcel(pc, RIDES[(next + t) % RIDES.length])) {
+                    next = (next + t + 1) % RIDES.length;
+                    break;
+                }
+        }
+        openAreas.add(new float[]{mx * T, my * T, 1});
+    }
+
+    /** Cuts a piece of the park into parcels no more than m tiles a side, with walks three tiles wide between. */
+    private void parkSplit(int x0, int y0, int x1, int y1, int m, Random r, List<int[]> out) {
+        int bw = x1 - x0, bh = y1 - y0;
+        if (bw < 6 || bh < 6) return;
+        boolean canX = bw >= 21, canY = bh >= 21;
+        if ((bw <= m && bh <= m) || (!canX && !canY)) {
+            out.add(new int[]{x0, y0, x1, y1});
+            return;
+        }
+        boolean cutX = canX && (!canY || bw >= bh);
+        int len = cutX ? bw : bh, at = Math.round(len * (0.38f + r.nextFloat() * 0.24f));
+        at = Math.max(9, Math.min(len - 12, at));
+        if (cutX) {
+            parkSplit(x0, y0, x0 + at, y1, m, r, out);
+            parkSplit(x0 + at + 3, y0, x1, y1, m, r, out);
+        } else {
+            parkSplit(x0, y0, x1, y0 + at, m, r, out);
+            parkSplit(x0, y0 + at + 3, x1, y1, m, r, out);
+        }
+    }
+
+    /**
+     * The tropics, once the city is built: palms instead of broadleaf trees near the island's beaches, and umbrellas
+     * and lifeguard towers along the sand.
+     */
+    private void tropics() {
+        Random r = new Random(cfg.seed * 4111L + 43);
+        int[] dist = new int[w * h];
+        Arrays.fill(dist, 99);
+        int[] q = new int[w * h];
+        int qh = 0, qt = 0;
+        for (int i = 0; i < w * h; i++)
+            if (tiles[i] == SAND) {
+                dist[i] = 0;
+                q[qt++] = i;
+            }
+        while (qh < qt) {
+            int i = q[qh++], x = i % w, y = i / w;
+            if (dist[i] >= 14) continue;
+            for (int k = 0; k < 4; k++) {
+                int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                int n = ny * w + nx;
+                if (dist[n] <= dist[i] + 1) continue;
+                dist[n] = dist[i] + 1;
+                q[qt++] = n;
+            }
+        }
+        for (int i = 0; i < w * h; i++) {
+            if (tiles[i] != TREE) continue;
+            int x = i % w, y = i / w;
+            if (island(x, y) == 0 || (y < mainShore && dist[i] < 14) || dist[i] < 4) setTreeKind(i, Country.TK_PALM);
+        }
+        // Along the island's beaches: umbrellas on the sand near the water, a lifeguard tower now and then.
+        int guard = 0;
+        for (int y = 4; y < mainShore - 4; y++)
+            for (int x = 4; x < w - 4; x++) {
+                int i = y * w + x;
+                if (tiles[i] != SAND || ((x * 5 + y * 3) % 11) != 0) continue;
+                boolean wet = false, busy = false;
+                for (int dy = -3; dy <= 3; dy++)
+                    for (int dx = -3; dx <= 3; dx++) {
+                        byte t = tiles[(y + dy) * w + x + dx];
+                        if (t == WATER) wet = true;
+                        if (t == ROAD || t == PIER || t == BUILDING || bridge[(y + dy) * w + x + dx]) busy = true;
+                    }
+                if (!wet || busy || r.nextFloat() < 0.35f) continue;
+                if (++guard % 9 == 0) addDecor(D_LIFEGUARD, x * T + 3, y * T + 2, x * T + 13, y * T + 12, 0);
+                else addDecor(D_UMBRELLA, x * T + 1, y * T + 1, x * T + 15, y * T + 15, r.nextInt(5));
+            }
     }
 }

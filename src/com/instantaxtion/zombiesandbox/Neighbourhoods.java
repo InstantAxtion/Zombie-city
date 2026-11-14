@@ -187,11 +187,55 @@ final class Neighbourhoods {
                     "Mid-Century Modern Homes", "Courtyard Bungalows", "Geodesic Homes", "Mobile Home Park", "Rock Garden"),
     };
 
+    /**
+     * ((25.0) Theme Park Island's own: the park itself in the middle, pastel resort hotels and villas along the beaches,
+     * a marina village of shops and cafes, palm-shaded lanes of beach houses, and the staff town on the mainland. Only
+     * that map uses them (and every district gets one).
+     */
+    static final Theme[] RESORT_THEMES = {
+            new Theme("Adventure Park", b(City.DT_DOWNTOWN, City.DT_MIDTOWN, City.DT_OLDTOWN, City.DT_SUBURB, City.DT_INDUSTRIAL,
+                    City.DT_CAMPUS, City.DT_PARKSIDE), true,
+                    c(0xFFC8483C, 0xFF3A8AC0, 0xFFE8B040, 0xFF4EA868), c(0xFFF4ECDC, 0xFFF0D8E0, 0xFFE0F0F0),
+                    c(0xFFC8483C, 0xFF3A8AC0, 0xFFE8B040), c(0xFFF4ECDC, 0xFFF8D860, 0xFF70C8D8),
+                    c(0xFFF4ECDC, 0xFFF0D8E0, 0xFFE0F0F0), 0xFFE0D2B8, 3),
+            new Theme("Resort Row", b(City.DT_DOWNTOWN, City.DT_MIDTOWN), true,
+                    c(0xFFE8E4DC, 0xFF3E8A98, 0xFFC87A5A, 0xFFF0EEE8), c(0xFFF8F4EC, 0xFFF2DCC8, 0xFFDCEEF0, 0xFFF4E2C0, 0xFFEAD0D8),
+                    c(0xFF3E8A98, 0xFFC87A5A, 0xFFE8E4DC), c(0xFFF8F4EC, 0xFF70C8C8, 0xFFF0B8A0, 0xFFF8E0A0),
+                    c(0xFFF8F4EC, 0xFFDCEEF0, 0xFFF2DCC8, 0xFFE0E8F0, 0xFF9AD0D8, 0xFFF4E2C0), 0xFFE8DCC4, 2,
+                    "Resort Hotel", "Tower Hotel", "Pool Club", "Beach Villas", "Surf Lodge", "Boutique Hotel", "Grand Hotel"),
+            new Theme("Marina Village", b(City.DT_MIDTOWN, City.DT_DOWNTOWN, City.DT_OLDTOWN), true,
+                    c(0xFF3E6E8E, 0xFFB86A4A, 0xFF4E8A7A, 0xFFE8E4DC), c(0xFFF4EEE2, 0xFFF0D8B8, 0xFFD8ECEC, 0xFFF8E8C8),
+                    c(0xFF3E6E8E, 0xFFC8483C, 0xFF4E8A7A), c(0xFFF8F4EC, 0xFFF0C890, 0xFF80C8D0, 0xFFF0A0A0),
+                    c(0xFFF4EEE2, 0xFFD8ECEC, 0xFFF0D8B8), 0xFFE0D6C2, 2,
+                    "Surf Lodge", "Pool Club", "Boutique Hotel", "Water Park"),
+            new Theme("Beach Lanes", b(City.DT_MIDTOWN, City.DT_SUBURB), false,
+                    c(0xFF4E8A9A, 0xFFC8805A, 0xFFE8E4DC, 0xFF6A9A6A), c(0xFFF8F4EC, 0xFFF2E0C0, 0xFFD8EEF0, 0xFFF4D8D0, 0xFFE8F0D8),
+                    c(0xFF4E8A9A, 0xFFC8805A), c(0xFFF8F4EC, 0xFF80C8D0, 0xFFF0B8A0),
+                    c(0xFFF8F4EC, 0xFFD8EEF0, 0xFFF2E0C0), 0xFFE4DCC8, 0,
+                    "Beach Villas", "Surf Lodge"),
+            new Theme("Palm Gardens", b(City.DT_SUBURB, City.DT_PARKSIDE, City.DT_MIDTOWN, City.DT_DOWNTOWN, City.DT_OLDTOWN,
+                    City.DT_INDUSTRIAL, City.DT_CAMPUS), false,
+                    c(0xFFC8805A, 0xFF4E8A9A, 0xFFB8A070, 0xFF8AAA70), c(0xFFF8F0E0, 0xFFF0E4C8, 0xFFE0F0EC, 0xFFF8E0D8),
+                    c(0xFFC8805A, 0xFF4E8A9A), c(0xFFF8F0E0, 0xFFF0E4C8),
+                    c(0xFFF8F0E0, 0xFFE0F0EC), 0xFFE0D8C4, 0,
+                    "Beach Villas"),
+            new Theme("Staff Town", b(City.DT_SUBURB, City.DT_MIDTOWN, City.DT_DOWNTOWN, City.DT_OLDTOWN, City.DT_INDUSTRIAL,
+                    City.DT_CAMPUS, City.DT_PARKSIDE), true,
+                    c(0xFF6A6E74, 0xFF7E5A44, 0xFF5A6A7A, 0xFF8A7E6A), c(0xFFE0D8C8, 0xFFD0C8B8, 0xFFC8D0D4, 0xFFE4D4BC),
+                    c(0xFF5A6A7A, 0xFF7E5A44), c(0xFFE0D8C8, 0xFFC8D0D4),
+                    c(0xFFE0D8C8, 0xFFC8D0D4, 0xFFD0C8B8), 0, 0,
+                    "Staff Housing", "Staff Clinic"),
+    };
+
     /** Gives each district of the city a theme that suits it; the named ones once each, and they rename it. */
     static void assign(City city, long seed) {
         Random r = new Random(seed * 7349L + 38);
         if (city.cfg.desert()) {
             assignDesert(city, r);
+            return;
+        }
+        if (city.cfg.themePark()) {
+            assignResort(city, r);
             return;
         }
         boolean[] used = new boolean[THEMES.length];
@@ -231,6 +275,32 @@ final class Neighbourhoods {
             // (Anything else - the country round town - the stucco sprawl.)
             if (pick < 0) pick = DESERT_THEMES.length - 1;
             d.theme = DESERT_THEMES[pick];
+            if (d.theme.named) {
+                used[pick] = true;
+                d.name = d.theme.name;
+            }
+        }
+    }
+
+    /**
+     * ((25.0) Theme Park Island: the middle of the island the park, the first district on the mainland the staff town,
+     * every other one a resort theme that suits it (Palm Gardens for the rest).
+     */
+    private static void assignResort(City city, Random r) {
+        int last = RESORT_THEMES.length - 1;
+        boolean[] used = new boolean[RESORT_THEMES.length];
+        for (int k = 0; k < city.districts.size(); k++) {
+            City.District d = city.districts.get(k);
+            int bit = 1 << d.type, n = 0, pick = -1;
+            for (int t = 1; t < last; t++) {
+                Theme th = RESORT_THEMES[t];
+                if ((th.types & bit) == 0 || (th.named && used[t]) || (th.named && !d.labelled())) continue;
+                if (r.nextInt(++n) == 0) pick = t;
+            }
+            if (k == 0) pick = 0;
+            else if (k == 1) pick = last;
+            if (pick < 0) pick = last - 1;
+            d.theme = RESORT_THEMES[pick];
             if (d.theme.named) {
                 used[pick] = true;
                 d.name = d.theme.name;

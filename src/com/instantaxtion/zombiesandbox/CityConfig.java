@@ -13,7 +13,9 @@ final class CityConfig implements OptionSet {
             // their numbers: see removed.) ((15.6) The first of them is the Prison Island now.)
             "Prison Island", "River City",
             // ((22.9) Desert City, in the old Seattle's place.)
-            "Desert City", "", "", "", "",
+            "Desert City",
+            // ((25.0) Theme Park Island, in the old New York's place.)
+            "Theme Park Island", "", "", "",
             "",
             // (10.60)
             "Archipelago", "",
@@ -38,7 +40,8 @@ final class CityConfig implements OptionSet {
             "A town on the coast, and out in the bay a walled prison on its own island, joined to the town by a causeway, with a ferry across. The outbreak starts inside the walls.",
             "A river runs right across the middle of town, with roads along both banks and a handful of bridges over it.",
             "A low, sprawling town of adobe and stucco out in the sand: a neon casino strip, palm-ringed oases, desert roads and an army test range out on the edge.",
-            "", "", "", "",
+            "A resort island in the sea: a theme park of rides round a big roller coaster and a Ferris wheel, beach hotels and pools, a bridge across the strait to the mainland and its staff town, and a ferry.",
+            "", "", "",
             "",
             "One big island city in the middle of the sea, with two to five smaller island towns round it, every one lived in and joined to it by a bridge, and a causeway to the mainland. Always one size.",
             "",
@@ -113,7 +116,7 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((15.6) Prison Island, in the old Los Angeles' place; (15.8) with a base)
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((22.0) River City, in the old Portland's place)
             {STYLE_HOUSES, 1, 0, 1, 1, 1, 2, 1},      // ((22.9) Desert City, in the old Seattle's place)
-            {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // New York
+            {STYLE_MIXED, 1, 2, 3, 1, 1, 1, 0},       // ((25.0) Theme Park Island, in the old New York's place)
             {STYLE_MIXED, 2, 2, 2, 2, 0, 3, 1},       // Sydney
             {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // Tokyo
             {STYLE_MIXED, 2, 1, 2, 2, 0, 3, 1},       // Paris
@@ -146,7 +149,7 @@ final class CityConfig implements OptionSet {
             {2, 2, 2, 2, 2, 1, 30},   // Islands
             {2, 2, 2, 2, 2, 1, 40}, {2, 2, 2, 2, 1, 1, 40},
             {1, 1, 1, 1, 3, 1, 30},   // Desert City
-            {2, 2, 2, 2, 1, 1, 55},
+            {1, 0, 1, 1, 1, 0, 35},   // Theme Park Island
             {2, 2, 2, 2, 1, 1, 40}, {2, 2, 2, 2, 1, 1, 50}, {3, 2, 2, 2, 1, 1, 55},
             {1, 1, 1, 1, 2, 1, 25},   // Garrison State
             {2, 2, 2, 2, 2, 1, 35},   // Archipelago
@@ -160,7 +163,7 @@ final class CityConfig implements OptionSet {
     private static final int[][] BUILDING_MIX = {
             {15, 6, 5}, {15, 15, 5}, {20, 0, 6}, {5, 8, 2}, {15, 3, 6}, {10, 0, 8}, {10, 2, 8}, {20, 5, 6},
             {25, 15, 4}, {0, 0, 10}, {30, 18, 4}, {20, 8, 5}, {15, 2, 6}, {10, 6, 3}, {20, 8, 5},
-            {20, 12, 5}, {20, 6, 5}, {8, 4, 6}, {35, 12, 4}, {25, 8, 5}, {35, 12, 5}, {35, 4, 6},
+            {20, 12, 5}, {20, 6, 5}, {8, 4, 6}, {35, 0, 5}, {25, 8, 5}, {35, 12, 5}, {35, 4, 6},
             {30, 8, 4},
             {20, 8, 5}, {12, 3, 6},
             {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 6, 6},
@@ -182,7 +185,7 @@ final class CityConfig implements OptionSet {
             {4, 2, 1, 1, 3, 0},
             {2, 1, 1, 1, 0, 2},
             {3, 2, 1, 2, 2, 1},
-            {3, 2, 1, 2, 1, 2}, {4, 2, 1, 1, 2, 1}, {4, 1, 1, 2, 1, 2}, {3, 2, 1, 3, 1, 1}, {3, 2, 2, 1, 2, 1},
+            {3, 2, 1, 2, 1, 2}, {4, 2, 1, 1, 2, 1}, {4, 1, 1, 2, 1, 2}, {3, 3, 0, 2, 3, 0}, {3, 2, 2, 1, 2, 1},
             {2, 1, 1, 1, 3, 0}, {3, 2, 0, 1, 4, 0},
             {2, 1, 3, 2, 0, 0},
             {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0},
@@ -302,7 +305,8 @@ final class CityConfig implements OptionSet {
         // ((15.6) Nor 15: the Prison Island.)
         // ((22.0) Nor 16: River City.)
         // ((22.9) Nor 17: Desert City.)
-        return preset == 2 || preset == 18 || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((25.0) Nor 18: Theme Park Island.)
+        return preset == 2 || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -315,6 +319,15 @@ final class CityConfig implements OptionSet {
     static final int DESERT = 17;
 
     boolean desert() { return v[OPT_PRESET] == DESERT; }
+
+    /**
+     * ((25.0) Theme Park Island: a resort island out in the sea, the theme park of rides in the middle of it, beach
+     * hotels round its shore, one bridge across the strait to the mainland (and the staff town there), and a ferry.
+     * Everything it changes in the building of a city is for this map alone, so every other map builds as before.)
+     */
+    static final int THEME_PARK = 18;
+
+    boolean themePark() { return v[OPT_PRESET] == THEME_PARK; }
 
     /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
     static final int TOWERS = 10;
@@ -347,7 +360,7 @@ final class CityConfig implements OptionSet {
         switch (v[OPT_PRESET]) {
             case 12: return W_LAKE;
             case 13: case PRISON_ISLAND: return W_HARBOUR;
-            case ISLANDS: case ARCHIPELAGO: return W_ISLANDS;
+            case ISLANDS: case ARCHIPELAGO: case THEME_PARK: return W_ISLANDS;
             case RIVER_CITY: return W_RIVER;
             default: return W_NONE;
         }
@@ -695,7 +708,7 @@ final class CityConfig implements OptionSet {
             {3, 4, 2, 4, 1, 1, 2, 0},   // Islands
             {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
             {1, 3, 1, 8, 2, 0, 1, 0},   // Desert City
-            {3, 3, 2, 3, 1, 1, 1, 0},
+            {4, 3, 0, 3, 0, 0, 2, 6},   // Theme Park Island
             {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
             {3, 4, 1, 3, 3, 0, 1, 1},   // Garrison State
             {3, 4, 2, 4, 1, 1, 2, 0},   // Archipelago

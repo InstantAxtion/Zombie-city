@@ -4457,7 +4457,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() == 250, "250 designs (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 273, "250 designs and Theme Park Island's 23 (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();
@@ -4574,6 +4574,41 @@ public final class GameTests {
                 }
                 City.slowSteps = false;
                 check(differ == 0, "collision short cut agrees with the full look (" + differ + " differ)");
+            }
+        });
+        test("25.0: Theme Park Island has its park of rides, the one bridge, the ferry and the staff town; no other map gets its rides", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.THEME_PARK;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MASSIVE;
+                c.seed = 2501;
+                City city = new City(c, 0.05f);
+                check(city.parkRect != null && city.ferry != null && city.causewayEnd != null, "the park, the ferry and the road to the mainland");
+                java.util.HashSet<String> rides = new java.util.HashSet<String>();
+                for (float[] d : city.decor) {
+                    Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                    if (ld != null && ld.districts == 0) rides.add(ld.name);
+                }
+                check(rides.contains("Thunder Mountain Coaster") && rides.contains("Ferris Wheel") && rides.size() >= 8, "the coaster, the wheel and its rides: " + rides);
+                boolean clinic = false;
+                for (City.Building b : city.buildings) if (Variants.get(b.variant) != null && "Staff Clinic".equals(Variants.get(b.variant).name)) clinic = city.island((int) (b.x0 / City.T), (int) (b.y0 / City.T)) == 1;
+                check(clinic, "the staff clinic, in the staff town on the mainland");
+                // One bridge: the bridge tiles are all in one run across the strait.
+                int cols = 0;
+                for (int x = 0; x < city.w; x++) {
+                    boolean any = false;
+                    for (int y = 0; y < city.h; y++) if (city.bridge[y * city.w + x]) any = true;
+                    if (any) cols++;
+                }
+                check(cols > 0 && cols <= 5, "one bridge to the mainland (" + cols + " columns of bridge)");
+                CityConfig o = new CityConfig();
+                o.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                o.seed = 2502;
+                City other = new City(o, 0.05f);
+                for (float[] d : other.decor) {
+                    Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                    check(ld == null || ld.districts != 0, "no theme park rides elsewhere: " + (ld == null ? "" : ld.name));
+                }
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {

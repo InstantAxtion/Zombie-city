@@ -1824,6 +1824,18 @@ final class Menu {
             if (i == CityConfig.ISLANDS || i == CityConfig.ARCHIPELAGO) {
                 c.drawCircle(ex - u * 1.2f, ey, u * 0.9f, fill);
                 c.drawCircle(ex + u * 1.1f, ey + u * 0.4f, u * 0.65f, fill);
+            } else if (i == CityConfig.THEME_PARK) {
+                // ((25.0) A Ferris wheel on its legs, gondolas round the rim.)
+                stroke.setColor((col & 0x00FFFFFF) | 0xCC000000);
+                stroke.setStrokeWidth(u * 0.22f);
+                c.drawCircle(ex, ey - u * 0.3f, u * 1.15f, stroke);
+                c.drawLine(ex, ey - u * 0.3f, ex - u * 0.8f, ey + u, stroke);
+                c.drawLine(ex, ey - u * 0.3f, ex + u * 0.8f, ey + u, stroke);
+                for (int j = 0; j < 8; j++) {
+                    double a = j * Math.PI / 4;
+                    c.drawCircle(ex + (float) Math.cos(a) * u * 1.15f, ey - u * 0.3f + (float) Math.sin(a) * u * 1.15f, u * 0.28f, fill);
+                }
+                c.drawCircle(ex, ey - u * 0.3f, u * 0.25f, fill);
             } else if (i == CityConfig.DESERT) {
                 // ((22.9) A sun over a saguaro.)
                 c.drawCircle(ex + u * 1.1f, ey - u * 0.9f, u * 0.75f, fill);
@@ -2070,7 +2082,7 @@ final class Menu {
 
     private static final int[] MAP_COLORS = {0xFF8BD450, 0xFF6F8EC8, 0xFFE0A050, 0xFF9A9A90, 0xFF4CAF50, 0xFFB07050,
             0xFFD8C050, 0xFF50A0C0, 0xFFC050C0, 0xFF90B060, 0xFF3A9AD8, 0xFF2F6EA8, 0xFF48B0B0, 0xFF6A8098, 0xFF30B8D0,
-            0xFFE8A040, 0xFF4E9A5A, 0xFFD89A48, 0xFFC8C8C8, 0xFF3AA8D0, 0xFFE05A6A, 0xFFB898D0};
+            0xFFE8A040, 0xFF4E9A5A, 0xFFD89A48, 0xFFE070B0, 0xFF3AA8D0, 0xFFE05A6A, 0xFFB898D0};
 
     private ArrayList<ArrayList<ArrayList<String>>> notesLines;
     private float notesW;
