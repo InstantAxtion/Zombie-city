@@ -1231,6 +1231,38 @@ final class GameView extends View implements Menu.Host {
 
     @Override
     protected void onDraw(Canvas c) {
+        // ((22.6) Whatever goes wrong in a frame - the sounds, the effects, the drawing - costs that frame, not the
+        // game: it used to be only the drawing that was guarded, and a crowd zoomed in on could close the app.)
+        int saves = c.getSaveCount();
+        try {
+            frame(c);
+        } catch (OutOfMemoryError oom) {
+            c.restoreToCount(saves);
+            trimMemory();
+            System.gc();
+            invalidate();
+        } catch (RuntimeException ex) {
+            c.restoreToCount(saves);
+            frameErrors++;
+            noteError("Frame", ex);
+            invalidate();
+        }
+    }
+
+    /** ((22.6) Frames that went wrong and were skipped. */
+    int frameErrors;
+
+    /** ((22.6) Something that went wrong and was got over: said on screen briefly, and in the log. */
+    private void noteError(String where, Throwable ex) {
+        System.err.println("Zombie City: " + where + " failed: " + ex);
+        if (loadFailed == null) {
+            StackTraceElement[] st = ex.getStackTrace();
+            loadFailed = where + " hiccup: " + ex.getClass().getSimpleName() + (st.length > 0 ? " at " + st[0].getMethodName() + ":" + st[0].getLineNumber() : "");
+            loadFailedTime = 4;
+        }
+    }
+
+    private void frame(Canvas c) {
         long now = System.nanoTime();
         float rawDt = (now - lastFrame) / 1e9f;
         float dt = Math.min(0.05f, rawDt);
@@ -2880,7 +2912,8 @@ final class GameView extends View implements Menu.Host {
         chunksOnScreen = new java.util.HashSet<Long>(chunksWanted);
         // Forget the ones furthest from view when there are too many.
         // (The finest close-ups are big: fewer of those are kept.)
-        int keep = res == 8 ? 18 : MAX_CHUNKS;
+        // ((22.6) Twelve of the finest, not eighteen: each is several megabytes.)
+        int keep = res == 8 ? 12 : MAX_CHUNKS;
         if (chunks.size() > keep)
             for (Long k : chunks.keySet()) {
                 if (chunks.size() <= keep) break;
@@ -9418,6 +9451,17 @@ final class GameView extends View implements Menu.Host {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        // ((22.6) A touch that goes wrong is ignored rather than closing the game.)
+        try {
+            return touch(ev);
+        } catch (RuntimeException ex) {
+            mode = MODE_NONE;
+            noteError("Touch", ex);
+            return true;
+        }
+    }
+
+    private boolean touch(MotionEvent ev) {
         // ((22.0) A finger on the screen: back to drawing at the screen's own rate, straight away.)
         lastInputNs = System.nanoTime();
         postInvalidateOnAnimation();

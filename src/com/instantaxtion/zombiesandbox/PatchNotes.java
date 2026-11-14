@@ -13,16 +13,17 @@ final class PatchNotes {
                     "Many more names, and officers and soldiers have ranks.",
                     "Far more colours for houses, shops, flats, cars and people's clothes, hair and skin; more street and place names.",
                     "Squad presets are only in the Squads button now, not repeated in the Cop and Soldier pickers.",
+                    "A problem in a frame (sound, effects, drawing) or a touch now costs that moment, not the game: no more closing when zoomed in on a crowd.",
             },
             {
                     "22.5  -  Population",
-                    "Each city size now has a set population, rising smoothly: 2,500 on Tiny up to 30,000 on Large (Default 25,000).",
-                    "The People option is a share of that; country presets have half. Missions and saved games are unchanged.",
+                    "Each map size now has a set population: Default 25,000, Big 28,000, Large 30,000.",
+                    "The People option is a share of that. Missions and saved games are unchanged.",
             },
             {
                     "22.4  -  Landmarks",
                     "50 one-of-a-kind landmarks, buildings and parks, each with its own detailed look.",
-                    "Every new city gets a mix of them; big cities get them all.",
+                    "Every new city gets dozens of them; Big and Large get every one.",
                     "Far fewer blocks of car park.",
                     "New Squads button on the tool bar: fire team, rifle squad, sniper team, engineers, response and tactical teams, riot line, K9 patrol, survivors or a horde in one tap.",
                     "River City: streets stop at a junction instead of running into the water, and the banks are smooth curves.",
@@ -31,7 +32,6 @@ final class PatchNotes {
                     "22.3  -  Tighter cities",
                     "New cities are a fifth smaller across with the same number of people.",
                     "Outbreaks run about 6% faster and new games load about 20% quicker.",
-                    "The smallest River City is no longer nearly all park.",
                     "Saved games and shared city codes keep their old size.",
             },
             {
