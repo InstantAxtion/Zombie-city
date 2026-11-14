@@ -2972,7 +2972,7 @@ final class World {
     String missionWhy;
 
     /** The city's police and soldiers (and anyone armed) round (x, y), from the grid, into gathered. */
-    private int gatherArmed(float x, float y, float r) {
+    int gatherArmed(float x, float y, float r) {
         int n = 0;
         int cx0 = Math.max(0, (int) ((x - r) / CELL)), cx1 = Math.min(gw - 1, (int) ((x + r) / CELL));
         int cy0 = Math.max(0, (int) ((y - r) / CELL)), cy1 = Math.min(gh - 1, (int) ((y + r) / CELL));
@@ -11963,6 +11963,13 @@ final class World {
                 return e.incident != null && !e.incident.resolved && !e.incident.ride ? new float[]{e.incident.x, e.incident.y} : null;
             case Dispatch.T_NONE:
                 if (e.role == Entity.ROLE_GUARD || onDuty(e)) return null;
+                // ((24.3) An officer with nothing on walks their beat; only hunting the dead far off do they drive.)
+                if (e.type == Entity.COP) {
+                    int czd = city.fieldAt(city.zombieDist, e.x, e.y);
+                    if (czd >= 200 || czd < 40 || e.fear > 0) return null;
+                    Dispatch.Incident cn = dispatch.neediest(e.x, e.y, null);
+                    return cn != null ? new float[]{cn.x, cn.y} : null;
+                }
                 if (e.fear > 0) return new float[]{e.threatX, e.threatY};
                 int zd = city.fieldAt(city.zombieDist, e.x, e.y);
                 if (zd < 200) {
@@ -11984,6 +11991,9 @@ final class World {
      * call, after the dead, or home to base - takes a truck: one from the base when they're on it, an empty one
      * near them, or one sent out to fetch them. Only with none of those to be had do they walk it.
      */
+    /** ((24.3) Further than this from where they're going, police and soldiers drive. */
+    static final float RIDE_FROM = 350;
+
     private void rideCheck(float dt) {
         rideTimer -= dt;
         if (rideTimer > 0) return;
@@ -11991,16 +12001,18 @@ final class World {
         rideGroups.clear();
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
-            if (e.dead || e.type != Entity.SOLDIER || e.rig != null || e == controlled || e.aloft || e.rideCd > time) continue;
-            if (e.role == Entity.ROLE_PILOT || e.task >= 32) continue;
+            // ((24.3) The police too: they walked to every call they weren't sent to by car, right across town.)
+            if (e.dead || (e.type != Entity.SOLDIER && e.type != Entity.COP) || e.rig != null || e == controlled || e.aloft || e.rideCd > time) continue;
+            if (e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_K9 || e.task >= 32) continue;
             float[] to = rideTarget(e);
-            if (to == null || World.hypot(to[0] - e.x, to[1] - e.y) < 500 || countZombiesNear(e.x, e.y, 120) > 0) continue;
+            // ((24.3) From a shorter walk than before (500).)
+            if (to == null || World.hypot(to[0] - e.x, to[1] - e.y) < RIDE_FROM || countZombiesNear(e.x, e.y, 120) > 0) continue;
             // ((21.4) Two lifts in a row that got them nowhere (a post the trucks can't reach, on an island map): they
             // walk it for a few minutes. Each lift took a truck out, and the trucks never stopped coming.)
             if (e.rideWasted >= 2 && time - e.rideAt < 240) continue;
             // (Grouped by what they're doing and where it is, not by squad: a squad gets split up, and a truck for
             // each one on their own soon used up every truck there was.)
-            int key = (e.task * 64 + (int) (to[0] / 400)) * 64 + (int) (to[1] / 400);
+            int key = ((e.type * 64 + e.task) * 64 + (int) (to[0] / 400)) * 64 + (int) (to[1] / 400);
             ArrayList<Entity> g = rideGroups.get(key);
             if (g == null) rideGroups.put(key, g = new ArrayList<Entity>());
             g.add(e);
@@ -12008,12 +12020,32 @@ final class World {
         for (ArrayList<Entity> g : rideGroups.values()) {
             Entity a = g.get(0);
             float[] to = rideTarget(a);
+            if (to == null) continue;
+            boolean cops = a.type == Entity.COP;
+            int seats = cops ? Fleet.SEATS : 10;
             ArrayList<Entity> group = new ArrayList<Entity>();
+            // ((24.3) Gathered from further round (350, from 250), so more of them go together in fewer vehicles.)
             for (Entity e : g) {
                 float[] t = e == a ? to : rideTarget(e);
-                if (group.size() < 10 && World.hypot(e.x - a.x, e.y - a.y) < 250 && World.hypot(t[0] - to[0], t[1] - to[1]) < 300
+                if (t == null) continue;
+                if (group.size() < seats && World.hypot(e.x - a.x, e.y - a.y) < 350 && World.hypot(t[0] - to[0], t[1] - to[1]) < 300
                         && e.zone == a.zone && e.incident == a.incident) group.add(e);
             }
+            // ((24.3) Seats to spare on the way to a call: those standing about near them with nothing on come along.)
+            if (a.task == Dispatch.T_RESPOND && a.incident != null && !a.incident.resolved && group.size() < seats)
+                for (int k = 0, m = gatherArmed(a.x, a.y, 160); k < m && group.size() < seats; k++) {
+                    Entity o = gathered[k];
+                    if (o.dead || o.type != a.type || o.task != Dispatch.T_NONE || o.rig != null || o == controlled || group.contains(o)
+                            || o.role == Entity.ROLE_GUARD || o.role == Entity.ROLE_PILOT || o.role == Entity.ROLE_SAR || o.role == Entity.ROLE_K9
+                            || onDuty(o) || o.ammo + o.reserve <= 0 || o.hp < o.maxHp * 0.5f || o.rideCd > time) continue;
+                    o.task = Dispatch.T_RESPOND;
+                    o.incident = a.incident;
+                    o.onScene = false;
+                    group.add(o);
+                }
+            // ((24.3) One soldier on their own isn't worth a truck to themselves for a few blocks: they walk it (or go
+            // with others heading the same way), and only take one for a long way.)
+            if (!cops && group.size() == 1 && World.hypot(to[0] - a.x, to[1] - a.y) < 900) continue;
             Dispatch.Incident inc, hunt = null;
             if (a.task == Dispatch.T_NONE && a.fear <= 0 && city.fieldAt(city.zombieDist, a.x, a.y) < 200) {
                 hunt = dispatch.neediest(a.x, a.y, null);
@@ -12032,9 +12064,9 @@ final class World {
                 inc.rideX = a.postX;
                 inc.rideY = a.postY;
             }
-            City.Facility base = city.nearestFacility(City.FACILITY_BASE, a.x, a.y);
+            City.Facility base = cops ? null : city.nearestFacility(City.FACILITY_BASE, a.x, a.y);
             boolean atBase = base != null && World.hypot(base.x - a.x, base.y - a.y) < Math.max(200, base.r * 2.5f);
-            boolean ok = (atBase && fleet.troopTruck(group, base, inc)) || fleet.mountUp(group, inc) || fleet.driveTo(group, inc);
+            boolean ok = cops ? fleet.driveTo(group, inc) : (atBase && fleet.troopTruck(group, base, inc)) || fleet.mountUp(group, inc) || fleet.driveTo(group, inc);
             for (Entity e : group) {
                 e.rideCd = time + (ok ? 25 : 8);
                 if (ok && inc.ride) e.rideFrom = inc;
@@ -12045,7 +12077,7 @@ final class World {
                     e.rideLeft = left;
                 }
             }
-            if (ok && time > squadRideSaidAt && inc.ride) {
+            if (ok && time > squadRideSaidAt && inc.ride && !cops) {
                 squadRideSaidAt = time + 25;
                 dispatch.chatter(Dispatch.WHO_MILITARY, a, Dispatch.SQUADS[Math.max(0, a.squad) % Dispatch.SQUADS.length] + " squad, mounting up for "
                         + inc.place + ".", a.x, a.y);

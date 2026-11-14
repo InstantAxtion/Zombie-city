@@ -6327,10 +6327,52 @@ final class Fleet {
     }
 
     /** Every so often a station puts another car on the streets if it has two officers free. */
+    /**
+     * ((24.3) A patrol car out on its own with one officer aboard (the other lost, or left at a scene) picks up a
+     * partner: an officer on foot nearby with nothing on. A fifth of the police cars about were going round alone.)
+     */
+    private void pairUp() {
+        for (int i = 0, m = vehicles.size(); i < m; i++) {
+            Vehicle v = vehicles.get(i);
+            if (v.type != CRUISER || !v.patrol || v.state != PATROL || v.crew.size() != 1 || v.kind == K_BIKE || v.incident != null
+                    || v.player != null || v.pickupFor != null || v.broken) continue;
+            Entity best = null;
+            float bd = 320;
+            for (int k = 0, n = w.gatherArmed(v.x, v.y, bd); k < n; k++) {
+                Entity e = w.gathered[k];
+                if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null || e == w.controlled || World.footPatrol(e)
+                        || e.role == Entity.ROLE_K9 || e.role == Entity.ROLE_MARKSMAN || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_PILOT
+                        || e.ammo + e.reserve <= 0) continue;
+                float d = (float) World.hypot(e.x - v.x, e.y - v.y);
+                if (d < bd) {
+                    bd = d;
+                    best = e;
+                }
+            }
+            if (best == null) continue;
+            float[] spot = city.nearestDrivable(best.x, best.y);
+            if (spot == null || !route(v, spot[0], spot[1])) continue;
+            v.state = DRIVE;
+            v.stuckTimer = 0;
+            v.pickup = true;
+            v.wasPatrol = true;
+            v.patrol = false;
+            v.pickupFor = null;
+            v.squad.clear();
+            v.squad.add(best);
+            v.passengerType = Entity.COP;
+            best.rig = v;
+            note(best);
+            best.task = Dispatch.T_BOARD;
+            return;
+        }
+    }
+
     private void staffPatrols(float dt) {
         staffCd -= dt;
         if (staffCd > 0) return;
         staffCd = 4;
+        pairUp();
         // ((11.4) In quiet times every officer who isn't on a foot beat gets a car; under attack, only up to the
         // target, the rest guarding the precinct.)
         if (w.alert >= 1 && patrolCount >= patrolTarget) return;
@@ -6924,6 +6966,23 @@ final class Fleet {
                         v.parked = true;
                         v.standby = true;
                         vehicles.add(v);
+                    }
+                }
+            }
+            if (v == null && type == Entity.COP) {
+                // ((24.3) Or a patrol car on its rounds nearby with seats to spare: it swings by for them and takes them
+                // all to the call, its own crew too. Officers far from their station walked to nearly every call.)
+                drv = null;
+                float best = 1500;
+                for (int i = 0, m = vehicles.size(); i < m; i++) {
+                    Vehicle o = vehicles.get(i);
+                    if (o.type != CRUISER || !o.patrol || o.state != PATROL || o.incident != null || o.crew.isEmpty() || o.crew.size() > 2
+                            || o.kind == K_BIKE || o.pickupFor != null || o.player != null || o.broken || o.burnt || o.removedFromFleet
+                            || o.block != null || o.zone != null || o.loop || o.leaving || o.shelter) continue;
+                    float d = (float) World.hypot(o.x - sx, o.y - sy);
+                    if (d < best && w.countZombiesNear(o.x, o.y, 80) == 0) {
+                        best = d;
+                        v = o;
                     }
                 }
             }
