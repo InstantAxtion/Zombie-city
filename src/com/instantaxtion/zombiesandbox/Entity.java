@@ -51,9 +51,12 @@ final class Entity {
     static final int ROLE_MOUNTED = 18, ROLE_TRAFFIC = 19;
     /** ((15.6) The guards at the island prison.) */
     static final int ROLE_PRISON_GUARD = 20;
+    /** ((26.0) The army's special forces: four to a team, suppressed rifles, flown in for the worst of it.) */
+    static final int ROLE_SF = 21;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
-            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard"};
+            "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard",
+            "Special forces"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -399,6 +402,7 @@ final class Entity {
                     case ROLE_GRENADIER: return "Rifle and grenade launcher";
                     case ROLE_MORTAR: return "Carbine and mortar";
                     case ROLE_COMMANDER: return "Pistol";
+                    case ROLE_SF: return "Suppressed rifle";
                     default: return "Assault rifle";
                 }
             }

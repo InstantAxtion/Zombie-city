@@ -112,6 +112,8 @@ final class World {
     final Fleet fleet;
     /** ((26.0) Convoy columns. */
     final Convoys convoys = new Convoys(this);
+    /** ((26.0) Police boats, the mobile command post and special forces. */
+    final Ops ops;
 
     // History for the stats screen: humans and zombies sampled every statStep seconds.
     static final int HISTORY = 240;
@@ -686,6 +688,7 @@ final class World {
         // ((17.0) No virus in a gang war or an invasion.)
         dispatch = new Dispatch(this, cfg.reinforcements());
         fleet = new Fleet(this);
+        ops = new Ops(this);
         burned = new boolean[city.w * city.h];
         gw = (int) Math.ceil(city.worldW() / CELL);
         gh = (int) Math.ceil(city.worldH() / CELL);
@@ -904,6 +907,7 @@ final class World {
         stationUnits();
         populateWilds(cops > 0);
         fleet.stationHelis();
+        ops.setupBoats();
         fleet.stockStations();
         // Out of town: highway patrol on the highway, and (in the USA) sheriff's deputies on the country roads.
         // (About one patrol car to every fifty tiles of highway, four at the least.)
@@ -1796,6 +1800,17 @@ final class World {
                 e.body = 0xFF434B2C;
                 e.head = 0xFF363D22;
                 break;
+            case Entity.ROLE_SF:
+                // ((26.0) Special forces: plate carriers and helmets in black, suppressed rifles, a couple of grenades.)
+                e.hp = e.maxHp = 170;
+                e.magSize = 30;
+                e.reserve = 270;
+                e.grenades = 2;
+                e.mass = 1.3f;
+                e.runSpeed *= 1.08f;
+                e.body = 0xFF22262A;
+                e.head = 0xFF121416;
+                break;
             case Entity.ROLE_GUNNER:
                 e.hp = e.maxHp = 130;
                 e.magSize = 100;
@@ -1967,6 +1982,7 @@ final class World {
             fleet.vehicles.remove(i);
         }
         fleet.stationHelis();
+        ops.setupBoats();
         fleet.stockStations();
         fleet.stockBases();
         fleet.ensureDozers();
@@ -2150,6 +2166,7 @@ final class World {
         }
         toolsStep(dt);
         eventsStep(dt);
+        ops.step(dt);
         dispatch.update(dt);
         if ((rosterCd -= dt) <= 0) {
             rosterCd = 5;
@@ -4070,6 +4087,8 @@ final class World {
     static float gunLoudness(Entity e) {
         if (e.role == Entity.ROLE_GUNNER) return 330;
         if (e.role == Entity.ROLE_SNIPER) return 340;
+        // ((26.0) A suppressed rifle: heard only close by.)
+        if (e.role == Entity.ROLE_SF && e.weapon == Entity.W_STD) return 90;
         switch (e.weapon) {
             case Entity.W_PISTOL:
             case Entity.W_REVOLVER: return 180;
@@ -12937,7 +12956,8 @@ final class World {
             }
             City.Facility base = cops ? null : city.nearestFacility(City.FACILITY_BASE, a.x, a.y);
             boolean atBase = base != null && World.hypot(base.x - a.x, base.y - a.y) < Math.max(200, base.r * 2.5f);
-            boolean ok = cops ? fleet.driveTo(group, inc) : (atBase && fleet.troopTruck(group, base, inc)) || fleet.mountUp(group, inc) || fleet.driveTo(group, inc);
+            // ((26.0) Police with water between them and the call, and no quick way round by road: a police boat.)
+            boolean ok = cops ? ops.boatLift(group, inc) || fleet.driveTo(group, inc) : (atBase && fleet.troopTruck(group, base, inc)) || fleet.mountUp(group, inc) || fleet.driveTo(group, inc);
             for (Entity e : group) {
                 e.rideCd = time + (ok ? 25 : 8);
                 if (ok && inc.ride) e.rideFrom = inc;
@@ -13060,7 +13080,7 @@ final class World {
                     // ((16.9) Each kind of police officer's nerve: see doctrine.)
                     float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : doctrine(e) != null ? doctrine(e)[5] : 4;
                     // ((10.59) A veteran stands longer.)
-                    nerve += rank(e) * 0.75f + (perk(e, P_NERVE) ? 2 : 0);
+                    nerve += rank(e) * 0.75f + (perk(e, P_NERVE) ? 2 : 0) + (ops.postUp && ops.boosts(e) ? 2 : 0);
                     if (odds >= nerve - (e.goal == A_FALLBACK ? 1.5f : 0))
                         armedScore[A_FALLBACK] = 0.6f + 0.05f * (odds - nerve) + (stock < 0.4f ? 0.15f : 0) + 0.15f * (caution(e) - 0.5f)
                                 + (e.kills > 10 ? -0.05f : 0);
@@ -15106,6 +15126,12 @@ final class World {
         } else if (soldier && e.role == Entity.ROLE_COMMANDER) {
             e.cooldown = 0.35f;
             dmg = 12;
+        } else if (soldier && e.role == Entity.ROLE_SF) {
+            // ((26.0) Special forces: quick, aimed pairs, nearly every one on target.)
+            e.burst++;
+            e.cooldown = e.burst % 2 == 0 ? 0.3f : 0.12f;
+            dmg = 20;
+            accuracy = 0.9f;
         } else if (soldier) {
             // Aimed single shots at range; short bursts only when they're close.
             // ((12.8) Quicker aimed shots (0.3 s, from 0.38) and three-round bursts at the rifle's real rate (0.07 s
@@ -15179,6 +15205,8 @@ final class World {
         }
         // Soldiers near their commander fight better.
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
+        // ((26.0) And police near the mobile command post.)
+        else if (!soldier && ops.postUp && ops.boosts(e)) accuracy += 0.1f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
         accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e) + (perk(e, P_STEADY) ? 0.08f : 0)) * (e.isArmed() && Perks.has(this, Perks.AIM) ? 1.08f : 1));
         if (e.ammo <= 0 && e.reserve > 0) {

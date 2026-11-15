@@ -4977,6 +4977,71 @@ public final class GameTests {
                     drawn = z.noiseTimer > 0 && World.hypot(z.noiseX - g[0], z.noiseY - g[1]) < 120;
                 }
                 check(drawn, "but a fight going on draws it in (noise " + z.noiseTimer + " at " + (int) World.hypot(z.noiseX - g[0], z.noiseY - g[1]) + ", memory " + z.memory + ", dead " + z.dead + ", away " + (int) World.hypot(z.x - g[0], z.y - g[1]) + ")");
+        test("26.0: police boats patrol and pick people off the shore; the command post sets up, steadies, resupplies and is overrun; special forces fly in; a Humvee's gun fires", new Check() {
+            @Override
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = 13;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 77;
+                World w = new World(c);
+                w.populate(c);
+                check(w.ops.boats.size() >= 2, "police boats moored on the water (" + w.ops.boats.size() + ")");
+                Fleet.Vehicle b = w.ops.boats.get(1);
+                float bx = b.x, by = b.y;
+                for (int f = 0; f < 30 * 12; f++) w.update(1 / 30f);
+                check(World.hypot(b.x - bx, b.y - by) > 50 && b.type == Fleet.BOAT, "and out on patrol (" + (int) World.hypot(b.x - bx, b.y - by) + ")");
+                // Someone cornered at the water's edge by one of the dead.
+                int[] s = null;
+                for (int k = 0; k < 6 && s == null; k++) s = w.ops.shoreNear(b.homeLandX + 300 - k * 120, b.homeLandY - 30, 30, true);
+                check(s != null, "a bit of shore");
+                float lx = (s[1] % w.city.w + 0.5f) * City.T, ly = (s[1] / w.city.w + 0.5f) * City.T;
+                Entity civ = w.spawn(Entity.CIVILIAN, lx, ly), z = w.spawn(Entity.ZOMBIE, lx + 70, ly);
+                for (int k = 0; k < 50 && w.ops.rescued == 0; k++) {
+                    civ.stun = z.stun = 5;
+                    for (int f = 0; f < 30; f++) w.update(1 / 30f);
+                }
+                check(w.ops.rescued >= 1 && !civ.dead && World.hypot(civ.x - lx, civ.y - ly) > 200, "a boat came in and took them round to safety (" + w.ops.rescued + ")");
+                z.dead = z.removed = true;
+                // The command post.
+                float[] p = w.city.randomStreetSpot(new java.util.Random(3));
+                Fleet.Vehicle cp = w.ops.placePost(p[0], p[1]);
+                check(cp != null && w.ops.postUp && cp.kind == Fleet.K_COMMAND, "a command post set up");
+                Entity cop = w.spawnCop(0, w.ops.postX + 40, w.ops.postY), far = w.spawnCop(0, w.ops.postX + 600, w.ops.postY);
+                check(w.ops.boosts(cop) && !w.ops.boosts(far), "it steadies the officers near it, not those far off");
+                cop.reserve = 0;
+                for (int f = 0; f < 45; f++) w.update(1 / 30f);
+                check(cop.reserve > 0 && w.ops.resupplied > 0, "and hands out ammunition (" + cop.reserve + ")");
+                cp.hp = 60;
+                for (int k = 0; k < 24; k++) w.spawn(Entity.ZOMBIE, w.ops.postX + (k % 6) * 4 - 10, w.ops.postY + (k / 6) * 4 - 10);
+                for (int f = 0; f < 30 * 15 && w.ops.post != null; f++) w.update(1 / 30f);
+                check(w.ops.postsLost == 1 && !w.ops.postUp && cp.broken, "the dead overrun it (" + w.ops.postsLost + ")");
+                // Special forces.
+                float[] q = w.city.randomStreetSpot(new java.util.Random(5));
+                java.util.ArrayList<Entity> team = w.ops.callIn(q[0], q[1], "a test", true);
+                check(team.size() == 4, "a special forces team on its way (" + team.size() + ")");
+                int down = 0;
+                for (int f = 0; f < 30 * 25 && down < 3; f++) {
+                    w.update(1 / 30f);
+                    if (f % 30 != 0) continue;
+                    int n = 0;
+                    for (Entity e : team) if (!e.dead && e.role == Entity.ROLE_SF && e.maxHp >= 150 && Dispatch.name(e).startsWith("Viper")) n++;
+                    down = Math.max(down, n);
+                }
+                check(down >= 3, "roped down on the spot (" + down + ")");
+                // A Humvee's mounted gun.
+                int shots = w.fleet.shotsFrom;
+                Fleet.Vehicle hv = w.fleet.startReconAt(q[0] + 300, q[1]);
+                for (int k = 0; k < 5; k++) w.spawn(Entity.ZOMBIE, hv.x + 60 + k * 5, hv.y + 10);
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                check(w.fleet.shotsFrom > shots, "a Humvee's gunner opens up (" + (w.fleet.shotsFrom - shots) + ")");
+                check(Fleet.mountedGun(cp) == false && Fleet.mountedGun(b), "a boat carries guns, the command post doesn't");
+                File f = File.createTempFile("zc26", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                check(l.ops.postsLost == 1 && l.ops.rescued == w.ops.rescued && l.ops.boats.size() == w.ops.boats.size(), "kept in a save");
             }
         });
         test("every screen draws", new Check() {

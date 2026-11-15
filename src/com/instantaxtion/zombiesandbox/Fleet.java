@@ -55,6 +55,8 @@ final class Fleet {
     /** ((26.0) Survivors' armed pickup: a gun bolted in the bed. A number well clear of the others' kinds.) */
     static final int K_PICKUP = 20;
     static final int PK_HOME = 0, PK_SORTIE = 1, PK_BACK = 2, PK_CONVOY = 3, PK_ROAM = 4;
+    /** ((26.0) A police patrol boat on the water (see Ops), and the police's mobile command post truck. */
+    static final int K_POLICE_BOAT = 14, K_COMMAND = 15;
 
     /** Kinds of everyday car (which ones are about depends on the country). */
     static final int M_SEDAN = 0, M_PICKUP = 1, M_SUV = 2, M_KEI = 3, M_HATCH = 4, M_VAN = 5, M_TAXI = 6, M_BUS = 7,
@@ -261,6 +263,17 @@ final class Fleet {
         int[] boatPath;
         int boatAt;
         float checkCd, quiet;
+        /**
+         * ((26.0) A police boat: what it's doing (Ops.J_*), its number, the landing it's making for (or last left from),
+         * its home landing, and the officers it's waiting to take across. And on anything: a roof gun of its own, with a
+         * gunner (see mountedGun) - set it on a vehicle that should have one.
+         */
+        transient int boatJob, boatNum;
+        transient float landX, landY, homeLandX, homeLandY, jobT;
+        transient Entity waitFor;
+        transient int[] boatPath2;
+        transient ArrayList<Entity> waiting;
+        boolean gunMount;
 
         /**
          * Whether anyone is inside for the dead to go after: a driver in moving traffic, the crew of an engine
@@ -381,12 +394,14 @@ final class Fleet {
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
                 if (v.kind == K_BEARCAT) return "Police BearCat";
                 if (v.kind == K_DOZER) return "Army engineers' bulldozer";
+                if (v.kind == K_COMMAND) return "Police mobile command post";
                 return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : v.ammoTruck ? "Army ammo truck  -  " + v.cargo + " rounds" : "Army truck";
             case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
             case TANK: return "Tank";
             case AMBULANCE: return "Ambulance";
             case TRAIN: return "Train";
             case JET: return "Jet";
+            case BOAT: return v.kind == K_POLICE_BOAT ? "Police boat  -  Marine " + v.boatNum : v.evacStop >= 0 ? "Evacuation boat" : "Landing craft";
             default:
                 return MODEL_NAMES[v.model] + (v.through ? "  -  through traffic" : v.fleeing ? "  -  leaving town" : "");
         }
@@ -395,6 +410,7 @@ final class Fleet {
     /** A short line about what a vehicle is doing, shown above it on the map. */
     String status(Vehicle v) {
         String where = v.place != null ? v.place : null;
+        if (v.kind == K_POLICE_BOAT || v.kind == K_COMMAND) return w.ops.status(v);
         switch (v.type) {
             case HELI:
                 if (v.state == IDLE) {
@@ -522,7 +538,7 @@ final class Fleet {
 
     /** (11.1) The army's (tanks, trucks, Humvees, its helicopters and boats) rather than the police's or anyone else's. */
     static boolean army(Vehicle v) {
-        if (v.type == TANK || v.type == JET || v.type == BOAT) return true;
+        if (v.type == TANK || v.type == JET || (v.type == BOAT && v.kind != K_POLICE_BOAT)) return true;
         if (v.type == HELI) return v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI;
         return v.type == TRUCK && !policeTruck(v);
     }
@@ -534,7 +550,7 @@ final class Fleet {
 
     /** (11.1) The police's trucks: SWAT vans, riot vans and BearCats. */
     static boolean policeTruck(Vehicle v) {
-        return v.type == TRUCK && (v.swat || v.kind == K_RIOT_VAN || v.kind == K_BEARCAT);
+        return v.type == TRUCK && (v.swat || v.kind == K_RIOT_VAN || v.kind == K_BEARCAT || v.kind == K_COMMAND);
     }
 
     /** (11.1) The lane a vehicle keeps to: on a call, the inside one, to get by. */
@@ -652,25 +668,92 @@ final class Fleet {
     void setKind(Vehicle v, int kind) {
         v.kind = kind;
         float hp = kind == K_APC ? 520 : kind == K_HUMVEE ? 220 : kind == K_RIOT_VAN ? 380 : kind == K_BIKE ? 70 : kind == K_BEARCAT ? 600
-                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : v.maxHp;
+                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : kind == K_COMMAND ? 900 : kind == K_POLICE_BOAT ? 300 : v.maxHp;
         v.hp = v.maxHp = hp;
     }
 
-    /** The roof gun of an APC or a Humvee: short bursts at the nearest of the dead in reach. */
-    private void turret(Vehicle v, float dt) {
-        if (v.broken || (v.kind != K_APC && v.kind != K_HUMVEE && v.kind != K_IFV && v.kind != K_GUNTRUCK)) return;
+    /**
+     * ((26.0) Whether a vehicle has a gun mounted on it with a gunner: the APC, IFV, gun truck and Humvee as before, and
+     * now the army's troop trucks, the police's BearCats and armoured riot vans, and the police boats (the officers aboard
+     * shooting from it). Anything else opts in with gunMount (a survivors' pickup: v.gunMount = true), or a kind added here.
+     */
+    static boolean mountedGun(Vehicle v) {
+        if (v.gunMount) return true;
+        switch (v.kind) {
+            case K_APC: case K_HUMVEE: case K_IFV: case K_GUNTRUCK: case K_BEARCAT: case K_RIOT_VAN: case K_POLICE_BOAT:
+                return true;
+            case 0:
+                return troopTruck(v);
+            default:
+                return false;
+        }
+    }
+
+    /** ((26.0) An army truck carrying a squad (not a supply or ammo truck, the SWAT van or one from outside with stock). */
+    static boolean troopTruck(Vehicle v) {
+        return v.type == TRUCK && v.kind == 0 && !v.swat && !v.restock && v.supply <= 0 && !v.ammoTruck;
+    }
+
+    /** ((26.0) A roof gun drawn on top of a vehicle that isn't built round one (see GameView.drawVehicle). */
+    static boolean addedGun(Vehicle v) {
+        return mountedGun(v) && v.kind != K_APC && v.kind != K_IFV && v.kind != K_GUNTRUCK && v.kind != K_HUMVEE && v.type != BOAT;
+    }
+
+    /**
+     * ((26.0) Someone up on the gun: always on the vehicles built round it (as before); on the others only out on a job
+     * with somebody aboard or at the scene - not parked at the station or base, sheltering people, or left in the road.
+     */
+    static boolean gunManned(Vehicle v) {
+        if (v.broken) return false;
+        if (v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK || v.kind == K_HUMVEE) return true;
+        if (v.parked || v.standby || v.shelter || v.state == ABANDONED || v.state == MUSTER || v.player != null) return false;
+        return v.type == BOAT || v.convoy != null || !v.crew.isEmpty() || v.driver != null || v.passengers > 0 || v.state == SCENE;
+    }
+
+    /** ((26.0) How far a vehicle's mounted gun reaches, and how hard each round hits. */
+    static float gunRange(Vehicle v) {
+        switch (v.kind) {
+            case K_IFV: return 240;
+            case K_GUNTRUCK: return 210;
+            case K_APC: return 170;
+            case K_BEARCAT: case K_POLICE_BOAT: return 160;
+            case K_HUMVEE: return 140;
+            case K_RIOT_VAN: return 130;
+            default: return 150;
+        }
+    }
+
+    static float gunDamage(Vehicle v) {
+        switch (v.kind) {
+            case K_IFV: return 40;
+            case K_GUNTRUCK: return 15;
+            case K_APC: return 24;
+            case K_BEARCAT: return 16;
+            case K_RIOT_VAN: return 12;
+            case K_POLICE_BOAT: return 11;
+            default: return 18;
+        }
+    }
+
+    /**
+     * The mounted gun of an APC, IFV, gun truck or Humvee - and ((26.0) of anything mountedGun says has one): short
+     * bursts at the nearest of the dead in reach, the turret turning to them.
+     */
+    void turret(Vehicle v, float dt) {
+        if (!mountedGun(v) || !gunManned(v)) return;
         v.gunCd -= dt;
         if (v.gunCd > 0) return;
-        float range = v.kind == K_IFV ? 240 : v.kind == K_GUNTRUCK ? 210 : v.kind == K_APC ? 170 : 140;
-        Entity z = w.nearestZombie(v.x, v.y, range);
+        Entity z = w.nearestZombie(v.x, v.y, gunRange(v));
         if (z == null) {
             v.gunCd = 0.6f;
+            // ((26.0) Nothing to shoot: the gun swings back round to the front.)
+            if (v.kind != K_APC && v.kind != K_IFV) v.turret = turnTo(v.turret, v.angle, 0.5f);
             return;
         }
         v.turret = (float) Math.atan2(z.y - v.y, z.x - v.x);
-        float dmg = v.kind == K_IFV ? 40 : v.kind == K_GUNTRUCK ? 15 : v.kind == K_APC ? 24 : 18;
-        if (w.turretShot(v.x, v.y, z, dmg)) {
+        if (w.turretShot(v.x, v.y, z, gunDamage(v))) {
             v.burst++;
+            shotsFrom++;
             if (v.kind == K_IFV) {
                 // ((14.6) Each round bursts: the dead round it are hit too. Three at a time, a breath between.)
                 w.cannonSplash(z.x, z.y, 16, 30);
@@ -678,6 +761,12 @@ final class Fleet {
             } else if (v.kind == K_GUNTRUCK) {
                 // ((14.6) Long bursts, very fast: twenty rounds, then a moment to let the barrels cool.)
                 v.gunCd = v.burst % 20 == 0 ? 1.6f : 0.05f;
+            } else if (v.kind == K_RIOT_VAN) {
+                // ((26.0) The riot van's gunner: aimed shots, a few at a time.)
+                v.gunCd = v.burst % 4 == 0 ? 1.2f : 0.3f;
+            } else if (v.kind == K_POLICE_BOAT) {
+                // ((26.0) The officers aboard, each with their own rifle: the more of them, the quicker the shots.)
+                v.gunCd = 0.9f / (2 + v.crew.size());
             } else v.gunCd = v.burst % 5 == 0 ? 1.1f : 0.14f;
         } else v.gunCd = 0.4f;
     }
@@ -933,6 +1022,8 @@ final class Fleet {
             }
         }
     }
+    /** ((26.0) Rounds fired from mounted guns, all told (for the tests). */
+    int shotsFrom;
 
     /** Ordinary traffic: cars driving around town between random spots on the roads. */
     void spawnTraffic(int n) {
@@ -1741,6 +1832,95 @@ final class Fleet {
         return v;
     }
 
+    // ------------------------------------------------------------------ (26.0) the command post and the police boats
+
+    /**
+     * ((26.0) The police's mobile command post truck, setting out from (sx, sy) for (tx, ty) with these officers aboard
+     * (it sets up there: see Ops). Null if there's no way there by road.
+     */
+    Vehicle commandPost(float sx, float sy, float tx, float ty, java.util.List<Entity> crew) {
+        float[] g = city.nearestDrivable(sx, sy);
+        if (g == null) return null;
+        Vehicle v = make(TRUCK);
+        setKind(v, K_COMMAND);
+        v.x = v.homeX = g[0];
+        v.y = v.homeY = g[1];
+        v.angle = (float) Math.atan2(ty - g[1], tx - g[0]);
+        v.number = ++unitCount;
+        v.place = city.placeName(tx, ty);
+        v.passengerType = Entity.COP;
+        if (World.hypot(tx - g[0], ty - g[1]) < 40) {
+            v.state = SCENE;
+            v.tx = g[0];
+            v.ty = g[1];
+        } else {
+            v.state = DRIVE;
+            if (!route(v, tx, ty)) return null;
+        }
+        if (crew != null) for (Entity e : crew) board(v, e);
+        vehicles.add(v);
+        return v;
+    }
+
+    /** ((26.0) The command post on its way out: driving there, then set up (Ops takes it from there). */
+    private boolean commandPostStep(Vehicle v, float dt) {
+        if (v.state == SCENE) {
+            v.speed = Math.max(0, v.speed - dt * 200);
+            return false;
+        }
+        v.stuckTimer += dt;
+        boolean moving = driveStep(v, dt, 90, carAhead(v) ? 0.5f : 1f);
+        if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
+        float d = (float) World.hypot(v.tx - v.x, v.ty - v.y);
+        if (d < 36 || (!moving && d < 160) || (v.stuckTimer > 20 && d < 320)) {
+            v.speed = 0;
+            v.stuckTimer = 0;
+            v.state = SCENE;
+            w.ops.postArrived(v);
+            return false;
+        }
+        if (moving && Math.abs(v.speed) > 12) v.stuckTimer = 0;
+        else if (v.stuckTimer > 6) {
+            // Held up, or lost its way: a new route there, or (with none) it sets up where it is.
+            v.stuckTimer = 0;
+            if (!route(v, v.tx, v.ty)) {
+                v.speed = 0;
+                v.state = SCENE;
+                w.ops.postArrived(v);
+            }
+        }
+        return false;
+    }
+
+    /** ((26.0) The command post packs up and drives on to (tx, ty). False if there's no way there. */
+    boolean movePost(Vehicle v, float tx, float ty) {
+        v.state = DRIVE;
+        v.stuckTimer = 0;
+        v.place = city.placeName(tx, ty);
+        if (route(v, tx, ty)) return true;
+        v.state = SCENE;
+        return false;
+    }
+
+    /** ((26.0) A police boat on the water at (x, y), based at the landing (lx, ly). */
+    Vehicle policeBoat(float x, float y, float lx, float ly, int number) {
+        Vehicle v = make(BOAT);
+        setKind(v, K_POLICE_BOAT);
+        v.x = v.homeX = x;
+        v.y = v.homeY = y;
+        v.homeLandX = v.landX = lx;
+        v.homeLandY = v.landY = ly;
+        v.angle = (float) Math.atan2(y - ly, x - lx);
+        v.turret = v.angle;
+        v.boatNum = number;
+        v.boatJob = Ops.J_IDLE;
+        v.jobT = number * 2;
+        v.state = WAIT;
+        v.passengerType = Entity.COP;
+        vehicles.add(v);
+        return v;
+    }
+
     private int reconNumber;
 
     private boolean reconDestination(Vehicle v) {
@@ -1993,6 +2173,7 @@ final class Fleet {
     }
 
     private boolean updateBoat(Vehicle v, float dt) {
+        if (v.kind == K_POLICE_BOAT) return w.ops.boatStep(v, dt);
         if (v.evacStop >= 0) return updateEvacBoat(v, dt);
         v.timer += dt;
         if (v.timer < 0) return false;
@@ -4554,6 +4735,7 @@ final class Fleet {
             return false;
         }
         if (v.recon) return reconStep(v, dt);
+        if (v.kind == K_COMMAND) return commandPostStep(v, dt);
         if (v.type == TRUCK) turret(v, dt);
         if (v.state == PICKUP) return pickupStep(v, dt);
         if (v.state == SCENE && v.type == CRUISER) {
@@ -6201,7 +6383,8 @@ final class Fleet {
                 continue;
             }
             // ((11.7) Waiting at the station for its crew to climb in: whoever gets in first drives.)
-            if (v.state == MUSTER) continue;
+            // ((26.0) Nor the command post set up at the scene: nobody needs to sit at its wheel.)
+            if (v.state == MUSTER || (v.kind == K_COMMAND && v.state == SCENE)) continue;
             // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
             if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
@@ -8253,7 +8436,9 @@ final class Fleet {
             if (first == null) first = e;
         }
         v.troops = 0;
-        if (first != null)
+        if (first != null && first.role == Entity.ROLE_SF)
+            w.dispatch.say(Dispatch.WHO_MILITARY, first, "Viper team is on the ground at " + (v.place != null ? v.place : "the LZ") + ". Moving in quiet.", v.x, v.y, true);
+        else if (first != null)
             w.dispatch.say(Dispatch.WHO_MILITARY, first, "Boots on the ground at " + (v.place != null ? v.place : "the LZ") + ". Moving up.", v.x, v.y);
     }
 

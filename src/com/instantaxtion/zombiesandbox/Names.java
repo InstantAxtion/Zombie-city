@@ -59,6 +59,8 @@ final class Names {
     static int soldierRankIndex(Entity e) {
         if (officer(e)) return Math.min(OFFICER_RANKS.length - 1, (e.role == Entity.ROLE_COMMANDER ? 2 : 1) + e.level / 2);
         int base = start(e.nameSeed, 0x85EBCA6B, new int[]{18, 32, 50, 66, 78, 88, 94, 97, 99});
+        // ((26.0) Special forces are all senior NCOs.)
+        if (e.role == Entity.ROLE_SF) base = Math.max(base, 5 + (e.nameSeed & 3));
         return Math.min(SOLDIER_RANKS.length - 1, base + e.level / 2);
     }
 

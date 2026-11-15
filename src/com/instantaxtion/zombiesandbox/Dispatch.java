@@ -373,6 +373,7 @@ final class Dispatch {
     static String name(Entity e) {
         if (e.type == Entity.SOLDIER && e.role == Entity.ROLE_COMMANDER) return "Command";
         if (e.type == Entity.SOLDIER && e.role == Entity.ROLE_SNIPER) return "Overwatch-" + (Math.max(0, e.squad) + 1);
+        if (e.type == Entity.SOLDIER && e.role == Entity.ROLE_SF) return "Viper-" + (e.member % 4 + 1);
         if (e.type == Entity.COP) {
             Country c = Country.current;
             if (e.agency == 1 && c != null) return c.hpShort + " " + e.callsign;
@@ -1097,6 +1098,8 @@ final class Dispatch {
     private int needAt(Incident inc) {
         int need = w.alert >= 2 ? Math.min(6, 2 + inc.zombiesNear / 3) : Math.min(4, 1 + inc.zombiesNear / 3);
         if (inc.backupNeed > 0) need = Math.max(need, Math.min(12, inc.backupNeed));
+        // ((26.0) Close to the mobile command post: it sends a unit more.)
+        if (w.ops.coordinates(inc)) need++;
         return need;
     }
 
@@ -1135,7 +1138,8 @@ final class Dispatch {
         java.util.Collections.sort(byNeed, new java.util.Comparator<Incident>() {
             @Override
             public int compare(Incident a, Incident b) {
-                return severity(b) - severity(a);
+                // ((26.0) Calls near the mobile command post are seen to first.)
+                return severity(b) + w.ops.priority(b) - severity(a) - w.ops.priority(a);
             }
         });
         rebalanceCd -= step;

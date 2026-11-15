@@ -52,7 +52,8 @@ final class GameView extends View implements Menu.Host {
         // ((25.0) Events back on the bar: the plane crash, prison break and riot, and the airstrike with its cooldown.)
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_BUILD || t == TOOL_ZONE;
     }
-    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier"};
+    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier",
+            "Command post", "Special forces", "Police boat"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
             "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde", "Plane crash", "Prison break", "Riot",
             "Supply convoy", "Evac convoy"};
@@ -145,7 +146,10 @@ final class GameView extends View implements Menu.Host {
             "Drag to lay coils: the dead tangle in it, slowed to a third and torn at, until it wears out",
             "Two machine gunners behind sandbags with a crate of ammunition: they hold the spot",
             "Parked with its doors open: a dozen people running from the dead can shelter inside. Drive it away with them",
-            "Drag to build: over twice as tough as a wooden barricade", "Drag to build: five times as tough as a wooden barricade"};
+            "Drag to build: over twice as tough as a wooden barricade", "Drag to build: five times as tough as a wooden barricade",
+            "The police's mobile HQ, set up where it's put: steadies officers near it, hands out ammo, runs the calls round it. One at a time",
+            "Four elite soldiers with suppressed rifles, roped down from a helicopter where you tap",
+            "A police launch on the nearest water: patrols, picks up people trapped at the shore, ferries officers across"};
     private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
             "An outbreak inside a building", "A crate on a parachute",
             "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten",
@@ -3258,6 +3262,7 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(m[0] - 2.2f, m[1] - 0.7f, m[0] + 2.2f, m[1] + 0.7f, fill);
         }
         if (!world.crashes.isEmpty()) drawCrashSites(c, vx0, vy0, vx1, vy1);
+        if (world.ops.postUp && world.ops.post != null) drawCommandPost(c, vx0, vy0, vx1, vy1);
 
         if (scale < 1.8f) drawDanger(c, vx0, vy0, vx1, vy1);
         // Zoomed out, a crowd is a heap of dots on top of each other: one dot per side in each little patch
@@ -5057,7 +5062,8 @@ final class GameView extends View implements Menu.Host {
             return;
         }
         if (v.type == Fleet.BOAT) {
-            drawLandingCraft(c, v);
+            if (v.kind == Fleet.K_POLICE_BOAT) drawPoliceBoat(c, v);
+            else drawLandingCraft(c, v);
             return;
         }
         if (v.kind == Fleet.K_BIKE) {
@@ -5081,6 +5087,9 @@ final class GameView extends View implements Menu.Host {
         } else if (v.kind == Fleet.K_IFV) {
             hl = 11.5f;
             hw = 6f;
+        } else if (v.kind == Fleet.K_COMMAND) {
+            hl = 11.5f;
+            hw = 5.4f;
         }
         int model = v.type == Fleet.CAR ? v.model : -1;
         if (model >= 0) {
@@ -5113,7 +5122,7 @@ final class GameView extends View implements Menu.Host {
         }
         boolean civ = v.type == Fleet.CAR;
         Country land0 = world.city.country;
-        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.recon ? 0xFF9C8A5E
+        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.recon ? 0xFF9C8A5E
                 : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
                 : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? 0xFFF2F2F2
                 : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
@@ -5263,6 +5272,23 @@ final class GameView extends View implements Menu.Host {
                 fill.setColor(blink ? 0xFF3A7BFF : 0xFFFF3A30);
                 c.drawRect(hl * 0.36f, 0, hl * 0.43f, hw - 1, fill);
             }
+        } else if (v.kind == Fleet.K_COMMAND) {
+            // ((26.0) The mobile command post: a big white box truck, a blue band, the cab, and the radio mast on its roof.)
+            fill.setColor(v.broken ? 0xFF5A5C60 : land0.cruiserBody == 0xFFF2F2F2 || land0.cruiserBody == 0xFFE8E8E8 ? 0xFF1E4AA8 : land0.cruiserBody);
+            c.drawRect(-hl + 1, -hw, hl * 0.4f, -hw + 1.2f, fill);
+            c.drawRect(-hl + 1, hw - 1.2f, hl * 0.4f, hw, fill);
+            fill.setColor(0xFFC8CCD2);
+            c.drawRect(-hl + 1.2f, -hw + 1.6f, hl * 0.38f, hw - 1.6f, fill);
+            fill.setColor(0xFF1E2A33);
+            c.drawRect(hl * 0.5f, -hw + 1, hl * 0.72f, hw - 1, fill);
+            fill.setColor(0xFF3A3F47);
+            c.drawCircle(-hl * 0.55f, 0, 1.8f, fill);
+            stroke.setColor(0xFF2A2C30);
+            stroke.setStrokeWidth(0.7f);
+            c.drawLine(-hl * 0.55f, 0, -hl * 0.1f, -hw * 0.6f, stroke);
+            fill.setColor(v.broken ? 0xFF5A1A18 : ((int) (world.time * 2)) % 2 == 0 ? 0xFFFF3A30 : 0xFF7A1A18);
+            c.drawCircle(-hl * 0.1f, -hw * 0.6f, 0.9f, fill);
+            if (!v.broken && v.state != Fleet.SCENE) lightBar(c, hl * 0.42f, hw, true, v.anim);
         } else if (truck && v.swat) {
             // The SWAT van: armoured black box body, a white band and a light bar.
             fill.setColor(v.broken ? 0xFF2A2A2A : 0xFF2C3036);
@@ -5372,6 +5398,8 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(hl * 0.35f, -hw - 1f, hl * 0.35f + 1.2f, -hw, fill);
             c.drawRect(hl * 0.35f, hw, hl * 0.35f + 1.2f, hw + 1f, fill);
         }
+        // ((26.0) A roof gun with its gunner on the trucks and vans that carry one now (and anything given one).)
+        if (!v.burnt && Fleet.addedGun(v)) drawRoofGun(c, v, v.kind == Fleet.K_BEARCAT ? -hl * 0.3f : v.type == Fleet.CAR ? -hl * 0.35f : hl * 0.1f, 2.3f, 6.5f, body);
         float dmg = 1 - Math.max(0, v.hp) / v.maxHp;
         if (dmg > 0.3f) {
             // Dents, scrapes and a cracked windscreen.
@@ -6117,6 +6145,132 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** The helicopter: its shadow on the ground (further off the higher it flies), body, tail and rotor. */
+    /** ((26.0) A police launch: a white hull with a blue band, the wheelhouse and its light bar, a wake behind it at speed. */
+    private void drawPoliceBoat(Canvas c, Fleet.Vehicle v) {
+        float hl = 10, hw = 4.2f;
+        c.save();
+        c.translate(v.x, v.y);
+        c.rotate((float) Math.toDegrees(v.angle));
+        if (v.speed > 5) {
+            // The wake: a V of white water spreading out behind, and the churn off the stern.
+            float sp = Math.min(1, v.speed / Ops.BOAT_SPEED);
+            fill.setColor(alpha(0xFFFFFFFF, 0.55f * sp));
+            for (int k = 1; k <= 4; k++) {
+                float back = -hl - k * 5.5f, spread = hw * 0.6f + k * 2.6f;
+                c.drawRect(back - 2.2f, -spread, back, -spread + 1.3f, fill);
+                c.drawRect(back - 2.2f, spread - 1.3f, back, spread, fill);
+            }
+            fill.setColor(alpha(0xFFFFFFFF, 0.4f * sp));
+            c.drawRect(-hl - 16 * sp, -1.8f, -hl, 1.8f, fill);
+            c.drawCircle(hl - 0.5f, 0, 2.2f * sp, fill);
+        }
+        fill.setColor(0x38000000);
+        oval.set(-hl + 1.5f, -hw + 2, hl + 1.5f, hw + 2);
+        c.drawRoundRect(oval, hw, hw, fill);
+        // The hull, pointed at the bow.
+        Path pa = carPath;
+        pa.reset();
+        pa.moveTo(-hl, -hw);
+        pa.lineTo(hl * 0.45f, -hw);
+        pa.lineTo(hl, 0);
+        pa.lineTo(hl * 0.45f, hw);
+        pa.lineTo(-hl, hw);
+        pa.close();
+        fill.setColor(0xFFF4F4F2);
+        c.drawPath(pa, fill);
+        fill.setColor(0xFF1E4AA8);
+        c.drawRect(-hl, -hw, hl * 0.4f, -hw + 1.1f, fill);
+        c.drawRect(-hl, hw - 1.1f, hl * 0.4f, hw, fill);
+        fill.setColor(0xFFD8DCE0);
+        c.drawRect(-hl + 1.2f, -hw + 1.4f, hl * 0.2f, hw - 1.4f, fill);
+        // The wheelhouse, its windscreen, and the light bar on top.
+        fill.setColor(0xFFFAFAFA);
+        c.drawRect(-hl * 0.35f, -hw * 0.62f, hl * 0.25f, hw * 0.62f, fill);
+        fill.setColor(0xFF1E2A33);
+        c.drawRect(hl * 0.15f, -hw * 0.55f, hl * 0.28f, hw * 0.55f, fill);
+        boolean job = v.boatJob != Ops.J_PATROL && v.boatJob != Ops.J_IDLE, blink = ((int) (v.anim * 8)) % 2 == 0;
+        fill.setColor(job && blink ? 0xFFFF3A30 : 0xFF6A2420);
+        c.drawRect(-hl * 0.1f, -hw * 0.5f, hl * 0.02f, 0, fill);
+        fill.setColor(job && !blink ? 0xFF3A7BFF : 0xFF1A2A6A);
+        c.drawRect(-hl * 0.1f, 0, hl * 0.02f, hw * 0.5f, fill);
+        // The officers in the stern, and anyone picked up.
+        fill.setColor(0xFF22304A);
+        int officers = 2 + v.crew.size();
+        for (int k = 0; k < Math.min(4, officers); k++) c.drawCircle(-hl + 2.2f + (k / 2) * 2.6f, k % 2 == 0 ? -1.6f : 1.6f, 1.05f, fill);
+        fill.setColor(0xFF8A5A3A);
+        for (int k = 0; k < Math.min(6, v.riders.size()); k++) c.drawCircle(-hl * 0.3f + (k / 2) * 2.4f - 2.4f, k % 2 == 0 ? -2.6f : 2.6f, 1f, fill);
+        if (scale > 1.4f) drawRoofGun(c, v, -hl * 0.55f, 1.3f, 4.5f, 0xFFF4F4F2);
+        c.restore();
+    }
+
+    /**
+     * ((26.0) The police's mobile command post, set up: a canopy tent beside the truck with its table of radios and maps,
+     * a tall radio mast with a light blinking on top, and a sign.
+     */
+    private void drawCommandPost(Canvas c, float vx0, float vy0, float vx1, float vy1) {
+        Ops ops = world.ops;
+        float x = ops.postX, y = ops.postY;
+        if (x < vx0 - 60 || x > vx1 + 60 || y < vy0 - 60 || y > vy1 + 60) return;
+        float a = ops.post.angle;
+        c.save();
+        c.translate(x, y);
+        c.rotate((float) Math.toDegrees(a));
+        float tw = 13, th = 9;
+        fill.setColor(0x40000000);
+        c.drawRect(-tw + 2, -th + 2.5f, tw + 2, th + 2.5f, fill);
+        // Blue and white canopy, its ridge, and the poles at the corners.
+        for (int k = 0; k < 6; k++) {
+            fill.setColor(k % 2 == 0 ? 0xFF2A55B8 : 0xFFF0F2F4);
+            float x0 = -tw + k * (tw * 2 / 6f);
+            c.drawRect(x0, -th, x0 + tw * 2 / 6f, th, fill);
+        }
+        stroke.setColor(0xFF1A2A55);
+        stroke.setStrokeWidth(0.7f);
+        c.drawLine(-tw, 0, tw, 0, stroke);
+        stroke.setColor(0x60000000);
+        c.drawRect(-tw, -th, tw, th, stroke);
+        if (scale > 1.2f) {
+            // The table under it with the radios and the map, seen at its open side.
+            fill.setColor(0xFF6A5A44);
+            c.drawRect(-6, th + 1, 6, th + 4, fill);
+            fill.setColor(0xFFE8E2C8);
+            c.drawRect(-4.5f, th + 1.4f, 0, th + 3.6f, fill);
+            fill.setColor(0xFF2A2C30);
+            c.drawRect(1.5f, th + 1.5f, 3.5f, th + 3.4f, fill);
+            c.drawRect(4, th + 1.8f, 5.4f, th + 3.2f, fill);
+        }
+        c.restore();
+        // The radio mast: guy lines, the pole, the light.
+        float mx = x + (float) Math.cos(a) * 18, my = y + (float) Math.sin(a) * 18;
+        stroke.setColor(0x80303030);
+        stroke.setStrokeWidth(0.4f);
+        for (int k = 0; k < 3; k++) {
+            double g = a + k * 2.094;
+            c.drawLine(mx, my - 14, mx + (float) Math.cos(g) * 6, my + (float) Math.sin(g) * 4, stroke);
+        }
+        stroke.setColor(0xFF4A4C50);
+        stroke.setStrokeWidth(1f);
+        c.drawLine(mx, my, mx, my - 16, stroke);
+        stroke.setStrokeWidth(0.6f);
+        c.drawLine(mx - 3, my - 13, mx + 3, my - 13, stroke);
+        c.drawLine(mx - 2, my - 10, mx + 2, my - 10, stroke);
+        boolean on = ((int) (world.time * 1.5f)) % 2 == 0;
+        fill.setColor(on ? 0xFFFF3A30 : 0xFF7A1A18);
+        c.drawCircle(mx, my - 16.5f, 1.2f, fill);
+        if (on) {
+            fill.setColor(0x40FF3A30);
+            c.drawCircle(mx, my - 16.5f, 3.2f, fill);
+        }
+        // The sign out front.
+        if (scale > 1.6f) {
+            float sx = x - (float) Math.cos(a) * 17, sy = y - (float) Math.sin(a) * 17;
+            fill.setColor(0xFF1E2A55);
+            c.drawRect(sx - 4.5f, sy - 2.2f, sx + 4.5f, sy + 2.2f, fill);
+            fill.setColor(0xFFF2F2F2);
+            c.drawRect(sx - 3.5f, sy - 0.5f, sx + 3.5f, sy + 0.5f, fill);
+        }
+    }
+
     /** A gun turret on a vehicle's roof at (x, 0) (in its own frame), turned to v.turret. */
     private void drawRoofGun(Canvas c, Fleet.Vehicle v, float x, float ring, float barrel, int body) {
         fill.setColor(City.darken(body, 0.6f));
@@ -6127,6 +6281,12 @@ final class GameView extends View implements Menu.Host {
         stroke.setColor(0xFF161616);
         stroke.setStrokeWidth(1.1f);
         c.drawLine(x, 0, x + (float) Math.cos(a) * barrel, (float) Math.sin(a) * barrel, stroke);
+        // ((26.0) The gunner behind it, when there's one up there: a helmet behind the gun.)
+        if (Fleet.gunManned(v)) {
+            boolean police = v.type == Fleet.CRUISER || Fleet.policeTruck(v) || v.type == Fleet.CAR;
+            fill.setColor(police ? 0xFF22262E : 0xFF4E5A34);
+            c.drawCircle(x - (float) Math.cos(a) * ring * 0.45f, -(float) Math.sin(a) * ring * 0.45f, ring * 0.45f, fill);
+        }
     }
 
     /** A police motorcycle: the bike, its officer in a white helmet, and lights front and back. */
@@ -6657,6 +6817,23 @@ final class GameView extends View implements Menu.Host {
             c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
             text.setColor(0xFFFFFFFF);
             c.drawText(label, sx, sy, text);
+        }
+        // ((26.0) The police's mobile command post.)
+        if (world.ops.postUp && world.ops.post != null) {
+            Ops ops = world.ops;
+            float sx = screenX(ops.postX), sy = screenY(ops.postY - 30) - 6 * dp;
+            if (sx > -100 * dp && sx < getWidth() + 100 * dp && sy > 0 && sy < barTop) {
+                Fleet.Vehicle cp = ops.post;
+                String label = "POLICE COMMAND POST  -  " + (int) (100 * cp.hp / cp.maxHp) + "%";
+                float tw = text.measureText(label);
+                oval.set(sx - tw / 2 - 8 * dp, sy - 14 * dp, sx + tw / 2 + 8 * dp, sy + 5 * dp);
+                if (claim(oval)) {
+                    fill.setColor(cp.hp < cp.maxHp * 0.35f ? 0xD08A2020 : 0xD0203A66);
+                    c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
+                    text.setColor(0xFFFFFFFF);
+                    c.drawText(label, sx, sy, text);
+                }
+            }
         }
         // 911 calls: a small tag, "911 12" (the dead there), and a blue dot with how many units are coming.
         // Zoomed out, only the big ones.
@@ -7393,7 +7570,12 @@ final class GameView extends View implements Menu.Host {
                     fill.setColor(0xFF0E0E0E);
                     c.drawRect(r * 1.1f, r * 0.05f, r * 1.8f, r * 0.2f, fill);
                 }
-                if (role == Entity.ROLE_GRENADIER) {
+                if (role == Entity.ROLE_SF) {
+                    // ((26.0) The suppressor on the end of the barrel, and the night-vision mount on the helmet.)
+                    fill.setColor(0xFF0C0C0C);
+                    c.drawRect(muzzle - r * 0.1f, r * 0.12f, muzzle + r * 0.7f, r * 0.48f, fill);
+                    c.drawRect(r * 0.35f, -r * 0.2f, r * 0.7f, r * 0.2f, fill);
+                } else if (role == Entity.ROLE_GRENADIER) {
                     // The launcher slung under the barrel.
                     fill.setColor(0xFF34362A);
                     c.drawRect(r * 0.9f, r * 0.45f, r * 1.9f, r * 0.85f, fill);
@@ -7494,7 +7676,17 @@ final class GameView extends View implements Menu.Host {
                 c.drawRect(-r * 0.2f, r * 0.55f, r * 0.45f, r * 0.8f, fill);
             }
             if (e.type == Entity.SOLDIER) {
-                fill.setColor(0xFF3E4829);
+                boolean sf = e.role == Entity.ROLE_SF;
+                if (sf) {
+                    // ((26.0) Special forces: a black plate carrier with its pouches.)
+                    fill.setColor(0xFF0E1012);
+                    oval.set(-r * 0.5f, -r * 0.68f, r * 0.42f, r * 0.68f);
+                    c.drawRoundRect(oval, r * 0.2f, r * 0.2f, fill);
+                    fill.setColor(0xFF3A3E44);
+                    c.drawRect(r * 0.05f, -r * 0.5f, r * 0.3f, -r * 0.2f, fill);
+                    c.drawRect(r * 0.05f, r * 0.2f, r * 0.3f, r * 0.5f, fill);
+                }
+                fill.setColor(sf ? 0xFF16181A : 0xFF3E4829);
                 oval.set(-r * 0.8f, -r * 0.5f, -r * 0.25f, r * 0.5f);
                 c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
             } else if (e.type == Entity.COP) {
@@ -8450,7 +8642,7 @@ final class GameView extends View implements Menu.Host {
         lines.add(st != null ? st : v.parked ? "Parked" : (Math.abs(v.speed) < 3 ? "Waiting" : "Driving") + (to != null ? ", on the way to " + to : ""));
         // (Against the size of a car: about 0.15 m a unit at the pace things move here.)
         int kmh = Math.round(Math.abs(v.speed) * 0.55f);
-        int aboard = v.crew.size() + v.riders.size() + v.passengers;
+        int aboard = v.crew.size() + v.riders.size() + v.passengers + (v.kind == Fleet.K_POLICE_BOAT ? 2 : 0);
         // ((11.3) A police car or army truck out with nobody else aboard has its own driver, by name.)
         String driver = v.driver != null ? (v.driver.type == Entity.COP ? Names.copRank(v.driver) + " " : v.driver.type == Entity.SOLDIER ? Names.soldierRank(v.driver) + " " : "")
                 + Names.person(v.driver.nameSeed) : null;
@@ -9906,8 +10098,28 @@ final class GameView extends View implements Menu.Host {
                 c.drawRect(cx - size * 0.12f, cy - size * 0.45f, cx + size * 0.12f, cy + size * 0.45f, fill);
                 c.drawRect(cx - size * 0.45f, cy - size * 0.12f, cx + size * 0.45f, cy + size * 0.12f, fill);
                 break;
+            case 15:
+                // ((26.0) Special forces: four in black, on the ropes from a helicopter's open door.)
+                fill.setColor(0xFF6A7480);
+                oval.set(cx - size, cy - size * 0.8f, cx + size, cy + size * 0.8f);
+                c.drawRoundRect(oval, size * 0.25f, size * 0.25f, fill);
+                fill.setColor(0xFF22262A);
+                for (int k = 0; k < 4; k++) c.drawCircle(cx + (k % 2 == 0 ? -0.4f : 0.4f) * size, cy + (k < 2 ? -0.35f : 0.35f) * size, size * 0.28f, fill);
+                fill.setColor(0xFF121416);
+                for (int k = 0; k < 4; k++) c.drawCircle(cx + (k % 2 == 0 ? -0.4f : 0.4f) * size, cy + (k < 2 ? -0.35f : 0.35f) * size, size * 0.15f, fill);
+                break;
+            case 16:
+                // ((26.0) A police launch on the water.)
+                fill.setColor(0xFF2E6A9A);
+                c.drawRect(cx - size, cy - size * 0.7f, cx + size, cy + size * 0.7f, fill);
+                fill.setColor(0xFFF2F2F2);
+                oval.set(cx - size * 0.85f, cy - size * 0.35f, cx + size * 0.85f, cy + size * 0.35f);
+                c.drawRoundRect(oval, size * 0.3f, size * 0.3f, fill);
+                fill.setColor(0xFF1E4AA8);
+                c.drawRect(cx - size * 0.7f, cy - size * 0.08f, cx + size * 0.6f, cy + size * 0.08f, fill);
+                break;
             default: {
-                int col = placeVariant == 0 ? 0xFF2E5FB0 : placeVariant == 1 || placeVariant == 6 ? 0xFF1C1D22 : placeVariant == 7 ? 0xFF9C8A5E : 0xFF55623A;
+                int col = placeVariant == 0 ? 0xFF2E5FB0 : placeVariant == 1 || placeVariant == 6 ? 0xFF1C1D22 : placeVariant == 7 ? 0xFF9C8A5E : placeVariant == 14 ? 0xFFE4E6EA : 0xFF55623A;
                 fill.setColor(col);
                 oval.set(cx - size, cy - size * 0.5f, cx + size, cy + size * 0.5f);
                 c.drawRoundRect(oval, size * 0.25f, size * 0.25f, fill);
@@ -10843,6 +11055,11 @@ final class GameView extends View implements Menu.Host {
                 case 11: made = world.fleet.placeShelterVan(wx, wy); break;
                 case 12: made = world.placeBarricade(wx, wy, 1); break;
                 case 13: made = world.placeBarricade(wx, wy, 2); break;
+                case 14: made = world.ops.placePost(wx, wy); break;
+                case 15:
+                    if (!world.ops.callIn(wx, wy, "", true).isEmpty()) made = Boolean.TRUE;
+                    break;
+                case 16: made = world.ops.placeBoat(wx, wy); break;
             }
         }
         if (made == null) {
@@ -10931,6 +11148,17 @@ final class GameView extends View implements Menu.Host {
             case 11: made = world.fleet.placeShelterVan(wx, wy); break;
             case 12: made = world.placeBarricade(wx, wy, 1); break;
             case 13: made = world.placeBarricade(wx, wy, 2); break;
+            case 14:
+                made = world.ops.placePost(wx, wy);
+                if (made == null) world.say("No road there for the command post");
+                break;
+            case 15:
+                if (world.ops.callIn(wx, wy, "", true).isEmpty()) world.say("No room for them");
+                break;
+            case 16:
+                made = world.ops.placeBoat(wx, wy);
+                if (made == null) world.say("Tap near open water for a police boat");
+                break;
             default: made = world.placeMedkit(wx, wy); break;
         }
         if (made != null) lastAction.add(made);

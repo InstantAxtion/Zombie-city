@@ -99,12 +99,14 @@ final class SaveGame {
                     all.add(e);
                 }
             for (Fleet.Vehicle v : w.fleet.vehicles) {
+                // ((26.0) Those aboard a police boat out on the water come ashore at its mooring.)
+                float[] at = v.kind == Fleet.K_POLICE_BOAT ? Ops.ashoreAt(v) : new float[]{v.x, v.y};
                 for (Entity e : v.riders) {
-                    moved.put(e, new float[]{v.x, v.y});
+                    moved.put(e, at);
                     all.add(e);
                 }
                 for (Entity e : v.crew) {
-                    moved.put(e, new float[]{v.x, v.y});
+                    moved.put(e, at);
                     all.add(e);
                 }
                 if (Fleet.airborne(v) || v.type == Fleet.TRAIN || v.passengers <= 0 || v.state > 1 || v.broken) continue;
@@ -485,6 +487,27 @@ final class SaveGame {
                 out.writeInt(b.ty1);
                 out.writeInt(b.room);
             }
+            // ((26.0) Version 73: the police's mobile command post (where it's set up, its tent, how damaged), and the
+            // tallies of the boats, the command post and the special forces. The boats themselves are back at their moorings.)
+            Ops ops = w.ops;
+            Fleet.Vehicle cp = ops.post;
+            boolean up = cp != null && ops.postUp && !cp.broken && !cp.removedFromFleet;
+            out.writeBoolean(up);
+            if (up) {
+                out.writeFloat(cp.x);
+                out.writeFloat(cp.y);
+                out.writeFloat(cp.angle);
+                out.writeFloat(ops.postX);
+                out.writeFloat(ops.postY);
+                out.writeFloat(cp.hp);
+            }
+            out.writeFloat(ops.postCd);
+            out.writeInt(ops.postsSetUp);
+            out.writeInt(ops.postsLost);
+            out.writeInt(ops.resupplied);
+            out.writeInt(ops.rescued);
+            out.writeInt(ops.ferried);
+            out.writeInt(ops.sfCalls);
         } finally {
             moved = null;
             homeIndex = null;
@@ -1136,6 +1159,20 @@ final class SaveGame {
                             w.restoreSettlement(bi, x0, y0, x1, y1, room);
                         }
                     }
+                }
+                if (version >= 73) {
+                    Ops ops = w.ops;
+                    if (in.readBoolean()) {
+                        float x = in.readFloat(), y = in.readFloat(), a = in.readFloat(), px = in.readFloat(), py = in.readFloat(), hp = in.readFloat();
+                        ops.restorePost(x, y, a, px, py, hp);
+                    }
+                    ops.postCd = in.readFloat();
+                    ops.postsSetUp = in.readInt();
+                    ops.postsLost = in.readInt();
+                    ops.resupplied = in.readInt();
+                    ops.rescued = in.readInt();
+                    ops.ferried = in.readInt();
+                    ops.sfCalls = in.readInt();
                 }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
