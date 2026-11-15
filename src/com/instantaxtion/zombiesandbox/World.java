@@ -2314,6 +2314,7 @@ final class World {
             float keep = (float) Math.pow(0.98, dt * 30);
             for (int i = 0; i < fightHeat.length; i++) fightHeat[i] *= keep;
         }
+        if (lodFrame % 30 == 15) coolBattle((float) Math.pow(0.97, dt * 30));
         updateTowers(dt);
         updateCordon(dt);
         rideCheck(dt);
@@ -3918,6 +3919,103 @@ final class World {
             }
     }
 
+    /** ((26.0) How much further gunfire and blasts carry to the dead than they did. */
+    static final float BATTLE_CARRY = 1.25f;
+    /**
+     * ((26.0) The sound of fighting, in squares this size: how loud it's been lately (dying away over a minute or so)
+     * and where in the square, on average, it came from. The dead with nothing to do within earshot of a square that's
+     * been loud for a while go to it (see battleDraw).
+     */
+    static final float BATTLE_CELL = 200;
+    /** ((26.0) How loud a square must have been to draw a lone zombie, and a horde. */
+    static final float BATTLE_DRAW = 6, BATTLE_DRAW_HORDE = 4;
+    float[] battleHeat, battleX, battleY;
+    int battleW;
+    private float battleMax, battleSaid = -999, battleDrawX, battleDrawY;
+    private int battleDrawn;
+
+    /** ((26.0) A gunshot or a blast: heard by the dead further off than other noise, and kept in the battle heat. */
+    void battleNoise(float x, float y, float radius) {
+        noise(x, y, radius * BATTLE_CARRY);
+        int bw = (int) Math.ceil(city.worldW() / BATTLE_CELL), bh = (int) Math.ceil(city.worldH() / BATTLE_CELL);
+        if (battleHeat == null || battleW != bw || battleHeat.length != bw * bh) {
+            battleW = bw;
+            battleHeat = new float[bw * bh];
+            battleX = new float[bw * bh];
+            battleY = new float[bw * bh];
+        }
+        int i = Math.min(bh - 1, Math.max(0, (int) (y / BATTLE_CELL))) * bw + Math.min(bw - 1, Math.max(0, (int) (x / BATTLE_CELL)));
+        float wt = radius / 200f;
+        battleHeat[i] += wt;
+        battleX[i] += x * wt;
+        battleY[i] += y * wt;
+        if (battleHeat[i] > battleMax) battleMax = battleHeat[i];
+    }
+
+    /** ((26.0) The battle heat dying away (every second or so: keep is what's left of it). */
+    private void coolBattle(float keep) {
+        if (battleHeat == null) return;
+        float max = 0;
+        for (int i = 0; i < battleHeat.length; i++) {
+            float h = battleHeat[i];
+            if (h <= 0) continue;
+            if (h < 0.05f) {
+                battleHeat[i] = battleX[i] = battleY[i] = 0;
+                continue;
+            }
+            battleHeat[i] = h * keep;
+            battleX[i] *= keep;
+            battleY[i] *= keep;
+            if (h > max) max = h;
+        }
+        battleMax = max * keep;
+        if (battleDrawn >= 10 && time - battleSaid > 75) {
+            battleSaid = time;
+            dispatch.say(Dispatch.WHO_INFO, null, "The fighting at " + city.placeName(battleDrawX, battleDrawY)
+                    + " can be heard for streets around. The dead are following the noise in - about " + (battleDrawn / 5 * 5) + " of them.", battleDrawX, battleDrawY);
+        }
+        battleDrawn = 0;
+    }
+
+    /**
+     * ((26.0) One of the dead with nothing to do (or a horde's leader) hears a fight that's been going on a while, not
+     * far off: it heads for the thick of it. Not from right across the map - a lone one from a few streets, a horde
+     * from a bit further.
+     */
+    private void battleDraw(Entity z) {
+        float reach = z.leadsHorde ? 1000 : 600, need = z.leadsHorde ? BATTLE_DRAW_HORDE : BATTLE_DRAW;
+        if (battleMax < need) return;
+        int bh = battleHeat.length / battleW;
+        int x0 = Math.max(0, (int) ((z.x - reach) / BATTLE_CELL)), x1 = Math.min(battleW - 1, (int) ((z.x + reach) / BATTLE_CELL));
+        int y0 = Math.max(0, (int) ((z.y - reach) / BATTLE_CELL)), y1 = Math.min(bh - 1, (int) ((z.y + reach) / BATTLE_CELL));
+        float best = 0;
+        int at = -1;
+        for (int cy = y0; cy <= y1; cy++)
+            for (int cx = x0; cx <= x1; cx++) {
+                int c = cy * battleW + cx;
+                float h = battleHeat[c];
+                if (h < need) continue;
+                // (From where in the square the shooting was.)
+                float px = battleX[c] / h - z.x, py = battleY[c] / h - z.y, d = (float) Math.sqrt(px * px + py * py);
+                if (d > reach) continue;
+                // (The louder the better, the nearer the better.)
+                float score = h / (1 + d / 400);
+                if (score > best) {
+                    best = score;
+                    at = cy * battleW + cx;
+                }
+            }
+        if (at < 0) return;
+        float h = battleHeat[at], tx = battleX[at] / h, ty = battleY[at] / h;
+        if ((tx - z.x) * (tx - z.x) + (ty - z.y) * (ty - z.y) < 70 * 70) return;
+        z.noiseX = tx + rnd.nextFloat() * 50 - 25;
+        z.noiseY = ty + rnd.nextFloat() * 50 - 25;
+        z.noiseTimer = 12;
+        battleDrawn += z.leadsHorde ? Math.max(1, z.hordeSize) : 1;
+        battleDrawX = tx;
+        battleDrawY = ty;
+    }
+
     void noise(float x, float y, float radius) {
         scareBirds(x, y, radius);
         // (10.32) How loud the fighting has been round here lately, for hordes further off to come to.
@@ -4440,6 +4538,14 @@ final class World {
         if (z.memory > 0) {
             float ddx = z.lastX - z.x, ddy = z.lastY - z.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
+            // ((26.0) They got into a car that's stopped there: at the car, not on past it along their trail.)
+            if (d < 60) {
+                Fleet.Vehicle car = carFor(z, 50);
+                if (car != null && Math.abs(car.speed) < CLAW_SPEED) {
+                    goForCar(z, car);
+                    return;
+                }
+            }
             City.Building hid = occupiedNear(z.lastX, z.lastY, 40);
             // ((17.1) Last seen going into a building (or in one): in after them.)
             if (WALK_IN && d >= 6 && (city.insideOf(z.lastX, z.lastY) != null || city.insideOf(z.x, z.y) != null)) {
@@ -4486,6 +4592,8 @@ final class World {
             if (z.noiseTimer <= 0) mischief(z);
             if (z.dead) return;
             thinkHorde(z);
+            // ((26.0) A fight that's been going on a while within earshot: off to it (a horde behind its leader).)
+            if (z.noiseTimer <= 0 && z.hordeLeader == null && battleHeat != null) battleDraw(z);
             // Stop to feed on a fresh body.
             if (z.feedTimer <= 0 && z.noiseTimer <= 0 && rnd.nextFloat() < 0.4f) {
                 Corpse c = freshCorpse(z.x, z.y, 45);
@@ -4505,6 +4613,13 @@ final class World {
                 z.angle = turn(z.angle, (float) Math.atan2(ddy, ddx), dt * 4);
                 if (gore && rnd.nextFloat() < dt * 1.5f) bloodBurst(z.threatX, z.threatY, 2, 0, 0);
             }
+            return;
+        }
+        // ((26.0) A car stopped with people in it close by: at the car, before any door. The dead used to walk past a
+        // stopped car full of people to a house further off, so in a street of occupied houses nothing clawed at one.)
+        Fleet.Vehicle car = carFor(z, 100);
+        if (car != null && Math.abs(car.speed) < CLAW_SPEED) {
+            goForCar(z, car);
             return;
         }
         // People barricaded indoors: batter the door down.
@@ -4596,24 +4711,9 @@ final class World {
             return;
         }
         // Cars: chase the ones driving past and claw at the ones that stop.
-        Fleet.Vehicle car = carFor(z, 100);
+        // ((26.0) The clawing itself, and the damage, is the vehicle's: see clawAt.)
         if (car != null) {
-            float ddx = car.x - z.x, ddy = car.y - z.y;
-            float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
-            if (d < car.length() * 0.7f + z.radius + 2) {
-                if (car.speed < 15) {
-                    steer(z, 0, 0, 0);
-                    // Armour takes a lot of clawing; a car much less.
-                    float dps = car.type == Fleet.TANK ? (z.type == Entity.GIANT ? 12 : z.type == Entity.BRUTE ? 3 : 0.6f)
-                            : (z.type == Entity.GIANT ? 45 : z.type == Entity.BRUTE ? 10 : 4);
-                    fleet.damage(car, dps * dt, false);
-                    if (rnd.nextFloat() < dt * 1.5f) emit(Sfx.THUD, car.x, car.y);
-                } else {
-                    steer(z, ddx / d, ddy / d, z.runSpeed);
-                }
-            } else {
-                steer(z, ddx / d, ddy / d, d < 60 ? z.runSpeed : z.speed * 1.2f);
-            }
+            goForCar(z, car);
             return;
         }
         if (z.noiseTimer > 0) {
@@ -5205,6 +5305,120 @@ final class World {
     private int carCount;
 
     /** A car worth going after: one driving by, or one with people in it. */
+    /** ((26.0) Below this speed the dead on a vehicle claw at it (see clawAt); faster, they're shaken off. */
+    static final float CLAW_SPEED = 15;
+    /** ((26.0) Below this they get a window in and drag someone out, after this much clawing (zombie-seconds, up to four at once). */
+    static final float BREAK_SPEED = 8, BREAK_IN = 7;
+    private float dragSaid = -999, clawSaid = -999;
+
+    /**
+     * Up to a car: running after one driving past, and pressed up against one that's stopped (the clawing and the
+     * damage are the vehicle's: see clawAt).
+     */
+    private void goForCar(Entity z, Fleet.Vehicle car) {
+        float ddx = car.x - z.x, ddy = car.y - z.y;
+        float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
+        if (d < car.length() * 0.7f + z.radius + 2) {
+            if (Math.abs(car.speed) < CLAW_SPEED) {
+                steer(z, 0, 0, 0);
+                z.angle = (float) Math.atan2(ddy, ddx);
+            } else steer(z, ddx / d, ddy / d, z.runSpeed);
+        } else steer(z, ddx / d, ddy / d, d < 60 ? z.runSpeed : z.speed * 1.2f);
+    }
+
+    /**
+     * ((26.0) The dead pressed up against a vehicle with people in it that's stopped or crawling - parked, at a light,
+     * waiting at a scene, on standby with someone aboard, abandoned with people still inside - claw at it: it wears
+     * down with how many are on it (brutes and giants far more), smokes, and breaks down or burns in the end. Worked
+     * out here, for the vehicle, from whoever is touching it - whatever each of them is thinking. Before, only an idle
+     * zombie with nothing better to do hurt one, so a car sat in a crowd of the dead for ever. Below a crawl they get
+     * a window in, now and then, and drag someone out to them; not out of anything armoured. Called by Fleet a few
+     * times a second for each vehicle, with the time since.
+     */
+    void clawAt(Fleet.Vehicle v, float dt) {
+        if (Fleet.offRoad(v) || v.burnt || hashSize < 0 || zombies <= 0) return;
+        if (Math.abs(v.speed) >= CLAW_SPEED || !v.occupied()) {
+            v.breakT = 0;
+            v.clawN = 0;
+            return;
+        }
+        float reach = v.length() * 0.7f + 6;
+        int cx0 = Math.max(0, (int) ((v.x - reach) / CELL)), cx1 = Math.min(gw - 1, (int) ((v.x + reach) / CELL));
+        int cy0 = Math.max(0, (int) ((v.y - reach) / CELL)), cy1 = Math.min(gh - 1, (int) ((v.y + reach) / CELL));
+        float weight = 0, bd = Float.MAX_VALUE;
+        int n = 0;
+        Entity first = null;
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * gw + cx;
+                for (int k = cellStart[c], end = cellStart[c] + zCount[c]; k < end; k++) {
+                    Entity o = sorted[k];
+                    if (o.dead || o.hp <= 0 || !o.isZombie() || o.stun > 0 || o.vaultT > 0 || o.charge > 0) continue;
+                    float ddx = o.x - v.x, ddy = o.y - v.y, d2 = ddx * ddx + ddy * ddy;
+                    if (d2 > reach * reach) continue;
+                    n++;
+                    weight += o.type == Entity.GIANT ? 11 : o.type == Entity.BRUTE ? 2.5f : o.type == Entity.BRUISER ? 1.7f
+                            : o.type == Entity.ZOMBIE_DOG ? 0.6f : 1;
+                    if (d2 < bd) {
+                        bd = d2;
+                        first = o;
+                    }
+                }
+            }
+        v.clawN = n;
+        if (n == 0) {
+            v.breakT = Math.max(0, v.breakT - dt);
+            return;
+        }
+        // (Only so many get their hands on it at once.)
+        weight = Math.min(weight, 16);
+        // Armour takes a lot of clawing (and the APC and riot van more again: see Fleet.damage); a car much less.
+        fleet.damage(v, 4 * weight * (v.type == Fleet.TANK ? 0.15f : 1) * dt, false);
+        if (rnd.nextFloat() < dt * (1 + n * 0.3f)) emit(rnd.nextFloat() < 0.5f ? Sfx.THUD : Sfx.POUND, v.x, v.y);
+        if (n >= 4 && time - clawSaid > 90 && v.occupied() && !v.broken) {
+            clawSaid = time;
+            dispatch.say(Dispatch.WHO_911, null, "\"I'm stuck in my car on " + city.placeName(v.x, v.y) + " and they're all over it! "
+                    + "They're beating on the glass!\"", v.x, v.y);
+        }
+        if (v.broken || Math.abs(v.speed) >= BREAK_SPEED || v.player != null || Fleet.armoured(v)) {
+            v.breakT = 0;
+            return;
+        }
+        v.breakT += dt * Math.min(4, weight);
+        if (v.breakT < BREAK_IN || first == null) return;
+        // The glass goes, and hands reach in.
+        v.breakT = BREAK_IN * 0.35f;
+        float ax = first.x - v.x, ay = first.y - v.y, al = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
+        float px = v.x + ax / al * 10, py = v.y + ay / al * 10;
+        emit(Sfx.GLASS, v.x, v.y);
+        for (int k = 0; k < 6; k++)
+            decal(px + rnd.nextFloat() * 8 - 4, py + rnd.nextFloat() * 8 - 4, 0.6f + rnd.nextFloat(), 0xCCCFE8F2, D_GLASS, rnd.nextFloat() * TAU);
+        for (int k = 0; k < 6; k++)
+            particle(px, py, rnd.nextFloat() * 50 - 25, rnd.nextFloat() * 50 - 25, 0.4f, 0.7f, 0xFFCFE8F2, P_DOT);
+        Entity e = fleet.dragOut(v, px, py);
+        if (e == null) return;
+        dragged++;
+        e.stun = Math.max(e.stun, 0.6f);
+        e.fleeTimer = 3;
+        e.threatX = first.x;
+        e.threatY = first.y;
+        first.memory = trait[TR_RELENTLESS] ? 20 : 10;
+        first.lastX = e.x;
+        first.lastY = e.y;
+        first.biteCd = 0;
+        float bx = e.x - first.x, by = e.y - first.y, bl = (float) Math.sqrt(bx * bx + by * by) + 0.001f;
+        bite(first, e, bx / bl, by / bl);
+        highlight("Dragged from the car!", e.x, e.y);
+        if (time - dragSaid > 45) {
+            dragSaid = time;
+            dispatch.say(Dispatch.WHO_911, null, "\"They smashed the window and pulled someone out of a car on " + city.placeName(v.x, v.y)
+                    + "! Oh God, they're on top of them!\"", v.x, v.y);
+        }
+    }
+
+    /** ((26.0) How many the dead have dragged out of vehicles this game. */
+    int dragged;
+
     private Fleet.Vehicle carFor(Entity z, float radius) {
         // (10.49) Looked up on a grid of the cars worth chasing, made once a moment, instead of going through
         // every vehicle on the map for each of the dead.
@@ -8589,7 +8803,9 @@ final class World {
             float ddx = b[0] - z.x, ddy = b[1] - z.y;
             float reach = z.type == Entity.GIANT ? 15 + GIANT_REACH : 15;
             if (ddx * ddx + ddy * ddy > reach * reach) continue;
-            b[2] -= (z.type == Entity.GIANT ? GIANT_SMASH : z.type == Entity.BRUTE ? 30 : 6) * dt;
+            // ((26.0) A crowd heaving at it together brings it down faster than each of them on its own would.)
+            float pile = z.type == Entity.GIANT ? 1 : 1 + (pileBonus(countZombiesNear(b[0], b[1], 24)) - 1) * 0.5f;
+            b[2] -= (z.type == Entity.GIANT ? GIANT_SMASH : z.type == Entity.BRUTE ? 30 : 6) * pile * dt;
             if (rnd.nextFloat() < dt * 1.5f) emit(Sfx.THUD, b[0], b[1]);
             if (b[2] <= 0) {
                 removeBarricade(b);
@@ -12589,6 +12805,12 @@ final class World {
             e.task = Dispatch.T_NONE;
             e.zone = null;
         }
+        // ((26.0) A perimeter post the infection zone has moved off (or that's no longer held) while they rode: not
+        // back to it. The dead drawn to the fighting move a zone more than they did.)
+        if (e.task == Dispatch.T_CORDON) {
+            InfectionZone z = zoneOfPost(e.postX, e.postY);
+            if (z == null || !z.critical) e.task = Dispatch.T_NONE;
+        }
         e.rideCd = time + 20;
     }
 
@@ -14966,7 +15188,7 @@ final class World {
         // (10.45) How far the shot carries depends on the gun: a pistol's crack, a shotgun's boom, a rifle's
         // report, a machine gun's chatter.
         float loud = gunLoudness(e);
-        if (rnd.nextFloat() < (e.role == Entity.ROLE_GUNNER ? 0.12f : 0.25f) * (0.6f + loud / 550f)) noise(e.x, e.y, loud);
+        if (rnd.nextFloat() < (e.role == Entity.ROLE_GUNNER ? 0.12f : 0.25f) * (0.6f + loud / 550f)) battleNoise(e.x, e.y, loud);
         if (e.alertCd <= 0) {
             e.alertCd = 1.2f;
             heardShot(e, t, loud * 1.12f);
@@ -15942,17 +16164,44 @@ final class World {
     private boolean zombieClimb(Entity z, float probe) {
         // ((25.0) A giant doesn't climb: it goes through.)
         if (z.type == Entity.GIANT) return false;
+        float was = z.climbPress;
         z.climbPress += stepDt * Math.max(1, z.lodStep);
-        if (z.climbPress < CLIMB_PRESS) return false;
+        // ((26.0) With a crowd of them pressed up against the same stretch, they climb up on each other's backs: over
+        // sooner, and quicker. How many there are is looked at a few times while it pushes, not every step.)
+        if (z.climbPress < CLIMB_PRESS * 0.3f) return false;
+        if (z.climbPress < CLIMB_PRESS && (int) (was * 5) == (int) (z.climbPress * 5)) return false;
+        int pile = countZombiesNear(z.x, z.y, PILE_REACH);
+        float bonus = pileBonus(pile);
+        if (z.climbPress < CLIMB_PRESS / bonus) return false;
         if (!tryVault(z, probe)) {
             z.climbPress = 0;
             return false;
         }
         z.climbPress = 0;
         float t = z.type == Entity.BRUTE ? CLIMB_BRUTE : z.type == Entity.RUNNER ? CLIMB_RUNNER : CLIMB_TIME;
-        z.vaultDur = z.vaultT = t * (0.85f + rnd.nextFloat() * 0.3f);
+        z.vaultDur = z.vaultT = t * (0.85f + rnd.nextFloat() * 0.3f) / (float) Math.sqrt(bonus);
         emit(Sfx.CLIMB, z.x, z.y);
+        if (pile >= PILE_SAY) pileUp(z.x, z.y, pile);
         return true;
+    }
+
+    /** ((26.0) How close together the dead at a wall have to be to climb on each other, and how many make news. */
+    static final float PILE_REACH = 20;
+    static final int PILE_SAY = 6;
+    private float pileSaid = -999;
+
+    /** ((26.0) How much faster a pile of n of the dead (counting the one climbing) gets over or through a wall. */
+    static float pileBonus(int n) {
+        return n < 3 ? 1 : Math.min(3, 1 + 0.3f * (n - 2));
+    }
+
+    /** ((26.0) A pile of the dead going over a wall: picked out on the screen, and now and then on the radio. */
+    private void pileUp(float x, float y, int n) {
+        highlight("Climbing over each other!", x, y);
+        if (time - pileSaid < 60) return;
+        pileSaid = time;
+        dispatch.say(Dispatch.WHO_INFO, null, "The dead are piling up against the wall on " + city.placeName(x, y)
+                + " - " + n + " of them in a heap, climbing over each other to get in!", x, y);
     }
 
     private boolean tryVault(Entity e, float probe) {
@@ -16116,6 +16365,8 @@ final class World {
                         // ((17.1) Indoors, in the doorways and between the desks, people squeeze past each other rather
                         // than jam solid (not past the dead).)
                         if (time - e.inT < 1 && time - o.inT < 1 && e.isZombie() == o.isZombie()) min *= 0.35f;
+                        // ((26.0) The dead pushing at a wall crush up together into a heap against it.)
+                        else if (e.climbPress > 0 && o.climbPress > 0) min *= 0.6f;
                         float d2 = ddx * ddx + ddy * ddy;
                         if (d2 >= min * min) continue;
                         float d = (float) Math.sqrt(d2);
@@ -16586,7 +16837,7 @@ final class World {
         particle(fx, fy, 0, 0, 0.06f, 3.4f, 0xFFFFE9A0, P_FLASH);
         emit(Sfx.MG, fx, fy);
         // ((10.45) A heavy machine gun is heard a long way off.)
-        if (rnd.nextFloat() < 0.2f) noise(fx, fy, 360);
+        if (rnd.nextFloat() < 0.2f) battleNoise(fx, fy, 360);
         return true;
     }
 
@@ -16670,7 +16921,7 @@ final class World {
                 if (t == City.PUMP) pendingBlasts.add(new float[]{cx, cy, 90, 380, 0.3f + rnd.nextFloat() * 0.5f});
                 else if (rnd.nextFloat() < 0.25f) pendingBlasts.add(new float[]{cx, cy, 45, 150, 1.5f + rnd.nextFloat() * 3});
             }
-        noise(x, y, 450);
+        battleNoise(x, y, 450);
         for (int i = 0; i < 40; i++) {
             float a = rnd.nextFloat() * TAU, s = 30 + rnd.nextFloat() * radius * 2.2f;
             particle(x, y, (float) Math.cos(a) * s, (float) Math.sin(a) * s, 0.3f + rnd.nextFloat() * 0.4f,
@@ -19435,17 +19686,21 @@ final class World {
         else steer(z, 0, 0, 0);
         z.angle = turn(z.angle, (float) Math.atan2(cy, cx), dt * 4);
         // ((13.4) Now and then one gets a grip and climbs over, slowly, instead of clawing the wall down.)
-        if (seg >= 0 && z.type != Entity.GIANT && d < City.T * 0.5f + z.radius + 6 && rnd.nextFloat() < dt * 0.06f) {
+        // ((26.0) Far more often, and quicker, with a crowd of them heaped up against the same stretch.)
+        int pile = countZombiesNear(z.x, z.y, PILE_REACH);
+        float bonus = pileBonus(pile);
+        if (seg >= 0 && z.type != Entity.GIANT && d < City.T * 0.5f + z.radius + 6 && rnd.nextFloat() < dt * 0.06f * bonus * bonus) {
             z.mx = cx;
             z.my = cy;
             if (tryVault(z, d + 3, true)) {
                 float t = z.type == Entity.BRUTE ? CLIMB_BRUTE : z.type == Entity.RUNNER ? CLIMB_RUNNER : CLIMB_TIME;
-                z.vaultDur = z.vaultT = t * 1.3f;
+                z.vaultDur = z.vaultT = t * 1.3f / (float) Math.sqrt(bonus);
                 emit(Sfx.CLIMB, z.x, z.y);
+                if (pile >= PILE_SAY) pileUp(z.x, z.y, pile);
                 return true;
             }
         }
-        dispatch.damageWall(zone, seg, (z.type == Entity.GIANT ? 45 : z.type == Entity.BRUTE ? 12 : z.type == Entity.BRUISER ? 7 : 4) * dt);
+        dispatch.damageWall(zone, seg, (z.type == Entity.GIANT ? 45 : z.type == Entity.BRUTE ? 12 : z.type == Entity.BRUISER ? 7 : 4) * (z.type == Entity.GIANT ? 1 : bonus) * dt);
         if (rnd.nextFloat() < dt * 0.8f) emit(Sfx.THUD, z.x, z.y);
         return true;
     }

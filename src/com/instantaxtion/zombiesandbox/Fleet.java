@@ -293,6 +293,10 @@ final class Fleet {
         }
         /** A parked car's alarm going off (seconds left) after zombies bumped into it. */
         float alarm;
+        /** ((26.0) The dead clawing at it (see World.clawAt): time since it was last looked at, how far they've got into
+         *  it, how many were on it. */
+        transient float clawAcc, breakT;
+        transient int clawN;
         /** ((22.0) Seconds until its engine next carries to the dead round about; its alarm has gone off already. */
         transient float engineCd;
         transient boolean alarmed;
@@ -521,6 +525,11 @@ final class Fleet {
         if (v.type == TANK || v.type == JET || v.type == BOAT) return true;
         if (v.type == HELI) return v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI;
         return v.type == TRUCK && !policeTruck(v);
+    }
+
+    /** ((26.0) Nobody gets into it through a window: tanks, APCs, IFVs, BearCats, SWAT and riot vans, the shelter van. */
+    static boolean armoured(Vehicle v) {
+        return v.type == TANK || v.kind == K_APC || v.kind == K_IFV || v.kind == K_BEARCAT || v.kind == K_RIOT_VAN || v.swat || v.shelter;
     }
 
     /** (11.1) The police's trucks: SWAT vans, riot vans and BearCats. */
@@ -3313,6 +3322,11 @@ final class Fleet {
                 v.engineCd = 1;
                 if (w.countZombiesNear(v.x, v.y, 14) > 0) tripAlarm(v, 0.2f);
             }
+            // ((26.0) The dead clawing at it, if it's stopped with people in it: four times a second.)
+            if ((v.clawAcc += vdt) >= 0.25f) {
+                if (w.zombies > 0) w.clawAt(v, v.clawAcc);
+                v.clawAcc = 0;
+            }
             if (v.alarm > 0) {
                 // Whoop, whoop: every zombie for streets around comes to see.
                 v.alarm -= vdt;
@@ -5988,6 +6002,74 @@ final class Fleet {
         }
         v.riders.clear();
         v.rescue = false;
+    }
+
+    /**
+     * ((26.0) The dead have a window in: one of those aboard - a rider (never you), one of the crew, one of the squad
+     * it's carrying, the driver - is dragged out at (x, y). Who it was, or null if there was nobody they could reach.
+     */
+    Entity dragOut(Vehicle v, float x, float y) {
+        for (int i = v.riders.size() - 1; i >= 0; i--) {
+            Entity e = v.riders.get(i);
+            if (e == v.player || e == w.controlled) continue;
+            if (!w.release(e, x, y)) return null;
+            v.riders.remove(i);
+            return e;
+        }
+        if (!v.crew.isEmpty()) {
+            Entity e = v.crew.get(v.crew.size() - 1);
+            if (!w.release(e, x, y)) return null;
+            v.crew.remove(v.crew.size() - 1);
+            // (Still its crew, on foot.)
+            e.rig = v;
+            note(e);
+            e.taskTimer = 0;
+            return e;
+        }
+        if (v.passengers > 0 && (v.type == CRUISER || v.type == TRUCK)) {
+            Entity e = w.spawn(v.passengerType, x, y);
+            if (e == null) return null;
+            v.passengers--;
+            if (v.swat || v.kind == K_BEARCAT) w.applyRole(e, Entity.ROLE_SWAT);
+            else if (v.guardUnit) w.applyRole(e, Entity.ROLE_GUARD);
+            else if (v.passengerType == Entity.COP && v.agency > 0) w.makeAgency(e, v.agency);
+            v.squad.add(e);
+            return e;
+        }
+        if (v.driver != null && (v.type == CRUISER || v.type == TRUCK)) {
+            Entity d = v.driver, e = d;
+            if (v.realDriver) {
+                if (!w.release(d, x, y)) return null;
+                v.realDriver = false;
+                d.rig = null;
+            } else {
+                if (w.city.cfg.mission >= 0) return null;
+                e = w.spawn(d.type, x, y);
+                if (e == null) return null;
+                e.nameSeed = d.nameSeed;
+                if (d.agency > 0) w.makeAgency(e, d.agency);
+                if (d.role == Entity.ROLE_GUARD) w.applyRole(e, Entity.ROLE_GUARD);
+            }
+            // (Left where it is with nobody in it, for someone to take back later: see reclaim.)
+            v.driver = null;
+            v.parked = true;
+            v.state = ABANDONED;
+            v.speed = 0;
+            v.field = null;
+            return e;
+        }
+        // The driver of an everyday car, stopped in traffic: the car's left where it is.
+        if (v.type == CAR && !v.parked && v.state == CRUISE && v.model != M_BUS) {
+            Entity e = w.spawn(Entity.CIVILIAN, x, y);
+            if (e == null) return null;
+            v.parked = true;
+            v.state = ABANDONED;
+            v.speed = 0;
+            v.field = null;
+            pullOver(v);
+            return e;
+        }
+        return null;
     }
 
     private void getOut(Vehicle v, boolean panic) {

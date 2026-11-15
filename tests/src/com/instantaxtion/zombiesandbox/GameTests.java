@@ -4836,6 +4836,121 @@ public final class GameTests {
                 check(l.freeAirstrike(ps[0], ps[1]), "ready again once the wait is over");
             }
         });
+        test("26.0: the dead claw a parked car down and drag out who's in it; a heap of them climbs a barricade faster; gunfire draws them from further", new Check() {
+            @Override
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.v[CityConfig.OPT_COPS] = 0;
+                c.v[CityConfig.OPT_MILITARY] = 0;
+                c.seed = 31;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                java.util.Random tr = new java.util.Random(26);
+                // A parked car with someone sheltering in it, and the dead all round it.
+                float[] s = w.city.randomStreetSpot(tr);
+                Fleet.Vehicle v = w.fleet.placeCar(s[0], s[1]);
+                v.parked = true;
+                v.state = Fleet.ABANDONED;
+                v.speed = 0;
+                v.field = null;
+                Entity p = w.spawn(Entity.CIVILIAN, v.x, v.y);
+                p.dead = p.removed = true;
+                v.riders.add(p);
+                for (int k = 0; k < 6; k++) w.spawn(Entity.ZOMBIE, v.x + (float) Math.cos(k) * 8, v.y + (float) Math.sin(k) * 8);
+                float hp0 = v.hp;
+                for (int f = 0; f < 30 * 8 && v.riders.contains(p); f++) {
+                    // (Nobody else about for them to go after instead.)
+                    for (Entity e : w.entities) if (!e.dead && !e.isZombie() && World.hypot(e.x - v.x, e.y - v.y) < 300) e.dead = e.removed = true;
+                    w.update(1 / 30f);
+                }
+                check(v.hp < hp0, "the dead on a parked car wear it down (" + (int) v.hp + "/" + (int) hp0 + ")");
+                check(!v.riders.contains(p) && w.dragged >= 1, "and drag out the one inside (broken " + v.broken + ", dragged " + w.dragged + ", riders " + v.riders.size() + ", breakT " + v.breakT + ", on it " + v.clawN + ", speed " + v.speed + ", occ " + v.occupied() + ")");
+                // A ring of barricades round someone: one of the dead alone climbs it at the usual pace, a heap of them faster.
+                boolean heaped = false;
+                String got = "";
+                for (int tries = 0; tries < 300 && !heaped; tries++) {
+                    float[] q = w.city.randomStreetSpot(tr);
+                    int tx = (int) (q[0] / City.T), ty = (int) (q[1] / City.T);
+                    float cx = (tx + 0.5f) * City.T, cy = (ty + 0.5f) * City.T;
+                    if (w.city.solid[ty * w.city.w + tx] || World.hypot(cx - v.x, cy - v.y) < 400) continue;
+                    java.util.ArrayList<float[]> ring = new java.util.ArrayList<float[]>();
+                    boolean ok = true;
+                    for (int dy = -1; dy <= 1 && ok; dy++)
+                        for (int dx = -1; dx <= 1 && ok; dx++) {
+                            if ((dx == 0 && dy == 0) || w.city.solid[(ty + dy) * w.city.w + tx + dx]) continue;
+                            float[] b = w.placeBarricade(cx + dx * City.T, cy + dy * City.T);
+                            if (b == null) ok = false;
+                            else ring.add(b);
+                        }
+                    Entity h = ok && ring.size() >= 5 ? w.spawn(Entity.CIVILIAN, cx, cy) : null;
+                    if (h == null) {
+                        for (float[] b : ring) w.removeBarricade(b);
+                        continue;
+                    }
+                    java.util.ArrayList<Entity> heap = new java.util.ArrayList<Entity>();
+                    for (int k = 0; k < 10; k++) {
+                        Entity z = w.spawn(Entity.ZOMBIE, cx + 45 + (k % 4) * 6, cy - 9 + (k / 4) * 6);
+                        if (z == null) continue;
+                        z.angle = (float) Math.PI;
+                        heap.add(z);
+                    }
+                    int climbs = 0;
+                    float dur = 0;
+                    boolean[] was = new boolean[heap.size()];
+                    for (int f = 0; f < 30 * 6; f++) {
+                        h.stun = 10;
+                        h.hp = h.maxHp;
+                        h.infected = false;
+                        h.x = cx;
+                        h.y = cy;
+                        w.update(1 / 30f);
+                        for (int k = 0; k < heap.size(); k++) {
+                            Entity z = heap.get(k);
+                            if (z.vaultT > 0 && !was[k]) {
+                                climbs++;
+                                dur += z.vaultDur;
+                            }
+                            was[k] = z.vaultT > 0;
+                        }
+                    }
+                    // (The quickest one of the ordinary dead ever gets over on its own is 0.85 of CLIMB_TIME.)
+                    heaped = climbs >= 3 && dur / climbs < World.CLIMB_TIME * 0.85f;
+                    got += " " + climbs + "/" + (climbs > 0 ? dur / climbs : 0);
+                    for (Entity z : heap) z.dead = z.removed = true;
+                    h.dead = h.removed = true;
+                    for (float[] b : ring) w.removeBarricade(b);
+                    if (got.length() > 60) break;
+                }
+                check(World.pileBonus(1) == 1 && World.pileBonus(8) > 2, "a heap of the dead gets over a wall faster than one");
+                check(heaped, "ten of them at a barricade climb over each other, quicker than one alone could (climbs/seconds each:" + got + ")");
+                // Gunfire: a rifle shot isn't heard from a few streets off, but sustained fire draws the dead in from there.
+                for (Entity e : w.entities) if (e.isZombie()) e.dead = e.removed = true;
+                Entity z = null;
+                float[] g = null;
+                for (int tries = 0; tries < 200 && z == null; tries++) {
+                    g = w.city.randomStreetSpot(tr);
+                    float a = tr.nextFloat() * 6.283f;
+                    float[] zp = w.city.findWalkable(g[0] + (float) Math.cos(a) * 470, g[1] + (float) Math.sin(a) * 470);
+                    if (zp == null || World.hypot(zp[0] - g[0], zp[1] - g[1]) < 430 || World.hypot(zp[0] - g[0], zp[1] - g[1]) > 520) continue;
+                    z = w.spawn(Entity.ZOMBIE, zp[0], zp[1]);
+                }
+                check(z != null, "one of the dead a few streets from a fight");
+                w.update(1 / 30f);
+                w.noise(g[0], g[1], 265 * World.BATTLE_CARRY);
+                check(z.noiseTimer <= 0, "a single shot doesn't carry that far");
+                boolean drawn = false;
+                for (int f = 0; f < 30 * 8 && !drawn; f++) {
+                    if (f % 15 == 0) w.battleNoise(g[0], g[1], 265);
+                    for (Entity e : w.entities) if (!e.dead && !e.isZombie() && World.hypot(e.x - z.x, e.y - z.y) < 250) e.dead = e.removed = true;
+                    w.update(1 / 30f);
+                    drawn = z.noiseTimer > 0 && World.hypot(z.noiseX - g[0], z.noiseY - g[1]) < 120;
+                }
+                check(drawn, "but a fight going on draws it in (noise " + z.noiseTimer + " at " + (int) World.hypot(z.noiseX - g[0], z.noiseY - g[1]) + ", memory " + z.memory + ", dead " + z.dead + ", away " + (int) World.hypot(z.x - g[0], z.y - g[1]) + ")");
+            }
+        });
         test("every screen draws", new Check() {
             public void run() throws Exception {
                 GameView v = new GameView(new android.app.Activity());
