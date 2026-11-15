@@ -494,6 +494,10 @@ final class Campaign {
             if (World.rank(e) < 1) continue;
             best.add(e);
         }
+        // ((26.4) And those in a car or truck: aboard, they aren't on the map.)
+        for (int i = 0, n = w.fleet.vehicles.size(); i < n; i++)
+            for (Entity e : w.fleet.vehicles.get(i).crew)
+                if (e.hp > 0 && (e.type == Entity.COP || e.type == Entity.SOLDIER) && World.rank(e) >= 1 && !best.contains(e)) best.add(e);
         java.util.Collections.sort(best, new java.util.Comparator<Entity>() {
             @Override
             public int compare(Entity a, Entity b) {

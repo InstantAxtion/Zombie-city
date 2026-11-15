@@ -2341,6 +2341,8 @@ public final class GameTests {
                 // Up on a horse they see the dead round them and mark them for the others.
                 for (Entity hh : horses) if (!hh.dead && !hh.removed && hh.ride == null) m = hh;
                 float[] p = w.city.findWalkable(m.x + 90, m.y);
+                // (Nobody else armed close by to shoot it first.)
+                for (Entity o : w.entities) if (o != m && !o.dead && (o.isArmed() || o.hasGun) && Math.hypot(o.x - p[0], o.y - p[1]) < 400) o.dead = o.removed = true;
                 Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
                 z.speed = z.runSpeed = 0;
                 boolean marked = false;
@@ -2351,7 +2353,7 @@ public final class GameTests {
                     w.evCount = 0;
                     marked = z.spottedUntil > w.time;
                 }
-                check(marked, "the dead nearby marked for the others");
+                check(marked, "the dead nearby marked for the others (" + m.task + " " + m.dead + " " + (int) Math.hypot(z.x - m.x, z.y - m.y) + " " + z.dead + ")");
                 // The dead come near: the traffic officers leave their junctions and join in.
                 java.util.List<Entity> near = new java.util.ArrayList<Entity>(), threatened = new java.util.ArrayList<Entity>();
                 for (Entity t : traffic) {
@@ -2570,7 +2572,10 @@ public final class GameTests {
                 check(office != null && office.kind == City.FACILITY_POLICE, "an FBI field office");
                 int agents = 0, cars = 0;
                 for (Entity e : w.entities) if (e.type == Entity.COP && e.agency == 4 && Math.hypot(e.x - office.x, e.y - office.y) < 400) agents++;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.agency == 4 && Math.hypot(v.x - office.x, v.y - office.y) < 500) cars++;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.agency == 4 && Math.hypot(v.x - office.x, v.y - office.y) < 500) {
+                    cars++;
+                    agents += v.crew.size();
+                }
                 check(agents >= 8 && cars >= 2, "agents (" + agents + ") and their cars (" + cars + ") at the office from the start");
                 // A small share of civilians carry a gun.
                 int civ = 0, armed = 0;
@@ -2825,7 +2830,10 @@ public final class GameTests {
                 Campaign.begin(w, "");
                 w.recount();
                 check(w.mission() == m0, "it's a mission");
-                check(w.counts[Entity.COP] <= m0.cops && w.counts[Entity.COP] >= m0.cops - 4, "the police cut to the mission's (" + w.counts[Entity.COP] + ")");
+                // (Counting those sitting in the cars parked at the stations.)
+                int police = w.counts[Entity.COP];
+                for (Fleet.Vehicle v : w.fleet.vehicles) for (Entity e : v.crew) if (e.type == Entity.COP) police++;
+                check(police <= m0.cops && police >= m0.cops - 4, "the police cut to the mission's (" + police + ")");
                 check(w.counts[Entity.SOLDIER] <= m0.soldiers, "and the soldiers (" + w.counts[Entity.SOLDIER] + ")");
                 check(w.dispatch.policeReserve == 0 && w.dispatch.squadReserve == 0, "no help from outside");
                 // The budget: start money, spent, earned.
@@ -2863,6 +2871,8 @@ public final class GameTests {
                 // Veterans: a ranked officer goes on the roster and comes back in the next mission.
                 Entity hero = null;
                 for (Entity e : w2.entities) if (!e.dead && e.type == Entity.COP) { hero = e; break; }
+                // (Or one sitting in a car.)
+                for (Fleet.Vehicle v : w2.fleet.vehicles) for (Entity e : v.crew) if (hero == null && e.type == Entity.COP) hero = e;
                 hero.kills = 20;
                 String roster = Campaign.veterans(w2);
                 check(Campaign.rosterSize(roster) >= 1 && roster.contains("," + hero.nameSeed + ";"), "a ranked officer's a veteran (" + roster + ")");
@@ -3882,6 +3892,9 @@ public final class GameTests {
                     gun.y = p[1];
                     Entity z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
                     z.hp = z.maxHp = 5000;
+                    // (Nobody else in the room, in the line of fire.)
+                    final City.Building rm = room;
+                    for (Entity o : w.entities) if (o != gun && o != z && !o.dead && w.city.insideOf(o.x, o.y) == rm) o.dead = o.removed = true;
                     int shots = w.shotsFired;
                     boolean aimed = false;
                     for (int f = 0; f < 150; f++) {
@@ -3895,7 +3908,7 @@ public final class GameTests {
                         aimed |= gun.aiming;
                     }
                     check(aimed && w.shotsFired - shots >= 4 && z.hp < z.maxHp, (who == 0 ? "a police officer" : "a soldier") + " indoors opens fire on one of the dead in the room ("
-                            + (w.shotsFired - shots) + " shots)");
+                            + (w.shotsFired - shots) + " shots, aimed " + aimed + ", task " + gun.task + ", ammo " + gun.ammo + "/" + gun.reserve + ", mag " + gun.magSize + ", role " + gun.role + ", melee " + gun.melee + ", dead " + gun.dead + ", rig " + (gun.rig != null) + ")");
                     z.hp = 0;
                     gun.removed = true;
                     gun.dead = true;
@@ -5039,12 +5052,12 @@ public final class GameTests {
                 // The command post: a truck parked at the police headquarters (and the army's at its base), sent out
                 // with real officers driving it.
                 for (int f = 0; f < 30 * 2; f++) w.update(1 / 30f);
-                check(w.ops.police.parked() && w.ops.police.truck.kind == Fleet.K_COMMAND, "a command truck parked at headquarters");
+                check(w.ops.police.parked() && w.ops.police.truck.kind == Fleet.K_COMMAND && w.ops.police.truck.crew.size() >= 2, "a command truck parked at headquarters, its crew waiting in it (" + w.ops.police.truck.crew.size() + ")");
                 check(w.city.mainBase() == null || w.ops.army.parked() && w.ops.army.truck.kind == Fleet.K_ARMY_POST, "and the army's at its base");
                 int cops0 = w.counts[Entity.COP];
                 float[] p = w.city.nearestDrivable(w.ops.police.truck.x + 700, w.ops.police.truck.y);
                 Fleet.Vehicle cp = w.ops.placePost(p[0], p[1]);
-                check(cp != null && cp.state == Fleet.MUSTER && w.counts[Entity.COP] == cops0, "sent out, crewed by officers already there (" + (cp != null ? cp.crewWanted : -1) + ")");
+                check(cp != null && (cp.state == Fleet.MUSTER || cp.state == Fleet.DRIVE && cp.crew.size() >= 2) && w.counts[Entity.COP] <= cops0, "sent out, crewed by officers already there (" + (cp != null ? cp.crew.size() : -1) + ")");
                 boolean drove = false;
                 for (int f = 0; f < 30 * 150 && !w.ops.police.up; f++) {
                     w.update(1 / 30f);

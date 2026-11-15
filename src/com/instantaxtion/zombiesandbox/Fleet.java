@@ -1909,9 +1909,8 @@ final class Fleet {
         return v;
     }
 
-    /** ((26.1) A command post truck back home: into a bay in the yard, its crew out and back on duty there. */
+    /** ((26.1) A command post truck back home: into a bay in the yard, ((26.3) its crew staying in it, waiting.) */
     void parkHome(Vehicle v, City.Facility f) {
-        crewOut(v, true);
         if (f != null) {
             float[] p = bay(new float[]{v.x, v.y}, f);
             if (p != null && World.hypot(p[0] - v.x, p[1] - v.y) < City.T * 8) {
@@ -1922,6 +1921,23 @@ final class Fleet {
         v.speed = 0;
         v.state = WAIT;
         v.place = f != null ? f.name : city.placeName(v.x, v.y);
+    }
+
+    /** ((26.3) A command post truck with its crew already in it drives off to (tx, ty). False if there's no way. */
+    boolean postGo(Vehicle v, float tx, float ty) {
+        v.tx = tx;
+        v.ty = ty;
+        v.place = city.placeName(tx, ty);
+        v.stuckTimer = 0;
+        v.state = DRIVE;
+        if (route(v, tx, ty)) return true;
+        v.state = WAIT;
+        return false;
+    }
+
+    /** ((26.3) Climbs into the parked command post truck, to wait there. */
+    void seat(Vehicle v, java.util.List<Entity> crew) {
+        for (Entity e : crew) board(v, e);
     }
 
     /** ((26.1) The crew walk over to the command post truck and climb in; then it drives them to (tx, ty). */
@@ -5126,8 +5142,11 @@ final class Fleet {
                     }
                 }
                 v.jamTries = 0;
-                // Home: anyone aboard gets out (off duty), and it parks up ready for the next call.
-                if (!v.crew.isEmpty()) crewOut(v, true);
+                // Home: anyone aboard gets out (off duty), and it parks up ready for the next call. ((26.3) Two officers
+                // who drove a police car back stay in it, waiting for the next call.)
+                boolean wait = v.type == CRUISER && v.crew.size() <= 2 && v.squad.isEmpty() && v.depot != null && v.depot.kind == City.FACILITY_POLICE;
+                for (int i = 0; i < v.crew.size() && wait; i++) if (v.crew.get(i).type != Entity.COP || v.crew.get(i).role != Entity.ROLE_RIFLE) wait = false;
+                if (!v.crew.isEmpty() && !wait) crewOut(v, true);
                 parkUp(v);
                 return false;
             }
@@ -5481,6 +5500,8 @@ final class Fleet {
             }
         }
         if (best == null) return null;
+        // ((26.3) Anyone sitting in it waiting gets out first: it's being taken for others.)
+        if (!best.crew.isEmpty()) crewOut(best, true);
         best.removedFromFleet = true;
         vehicles.remove(best);
         return new float[]{best.x, best.y};
@@ -7122,11 +7143,15 @@ final class Fleet {
         if (staffCd > 0) return;
         staffCd = 4;
         pairUp();
+        seatStandby(false);
         // ((11.4) In quiet times every officer who isn't on a foot beat gets a car; under attack, only up to the
         // target, the rest guarding the precinct.)
         if (w.alert >= 1 && patrolCount >= patrolTarget) return;
         for (City.Facility f : city.facilities) {
             if (f.kind != City.FACILITY_POLICE || w.countZombiesNear(f.x, f.y, 120) > 0) continue;
+            // ((26.3) A car waiting there with its officers already in it goes out on patrol first (two always kept back).)
+            Vehicle seated = seatedCar(f);
+            if (seated != null && parkedAt(f) > 2 && launch(seated, f, null)) return;
             boolean bike = city.cfg.nature() && (unitCount + 1) % 5 == 0;
             int want = bike ? 1 : 2;
             ArrayList<Entity> two = new ArrayList<Entity>();
@@ -7178,6 +7203,9 @@ final class Fleet {
         if (officers.isEmpty() || inc == null) return false;
         float[] p = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
         if (p == null || !canDrive(p[0], p[1], inc.x, inc.y)) return false;
+        // ((26.3) A car with its officers already in it, waiting: it goes, lights on, and these two stay at the station.)
+        Vehicle seated = seatedCar(f);
+        if (seated != null && launch(seated, f, inc)) return true;
         // ((11.7) One of the cars parked there, if there's one left: none appear out of nowhere.)
         p = takeStandby(CRUISER, f.x, f.y, f.r + 300);
         if (p == null) return false;
@@ -7199,6 +7227,76 @@ final class Fleet {
         }
         vehicles.add(v);
         return true;
+    }
+
+    /** ((26.3) Police cars parked at station f, ready. */
+    private int parkedAt(City.Facility f) {
+        int n = 0;
+        for (int i = 0, m = vehicles.size(); i < m; i++) {
+            Vehicle o = vehicles.get(i);
+            if (o.standby && o.type == CRUISER && !o.broken && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) n++;
+        }
+        return n;
+    }
+
+    /** ((26.3) A car parked at station f with its officers sitting in it, waiting for a call, or null. */
+    private Vehicle seatedCar(City.Facility f) {
+        for (int i = 0, n = vehicles.size(); i < n; i++) {
+            Vehicle o = vehicles.get(i);
+            if (o.standby && o.type == CRUISER && !o.broken && !o.crew.isEmpty() && o.squad.isEmpty()
+                    && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) return o;
+        }
+        return null;
+    }
+
+    /** ((26.3) A waiting car's officers drive it out: to the call (lights on), or with none, out on patrol. */
+    private boolean launch(Vehicle v, City.Facility f, Dispatch.Incident inc) {
+        v.standby = false;
+        v.parked = false;
+        v.patrol = true;
+        v.station = f;
+        if (f.fed) v.agency = 4;
+        if (v.number == 0) v.number = ++unitCount;
+        v.stuckTimer = 0;
+        if (inc != null ? respond(v, inc) : (v.state = PATROL) == PATROL && newDestination(v)) return true;
+        v.standby = true;
+        v.parked = true;
+        v.patrol = false;
+        v.state = IDLE;
+        v.incident = null;
+        return false;
+    }
+
+    /**
+     * ((26.3) The cars parked at each station have two officers sitting in them, waiting for a call - at the start (fill),
+     * free officers at the station, two always left on their feet; later, those who drove a car back - and they get out
+     * to fight if the dead come to the station.
+     */
+    private void seatStandby(boolean fill) {
+        for (City.Facility f : city.facilities) {
+            if (f.kind != City.FACILITY_POLICE || f.fallen) continue;
+            boolean danger = w.countZombiesNear(f.x, f.y, f.r + 200) > 0;
+            ArrayList<Vehicle> empty = new ArrayList<Vehicle>();
+            for (int i = 0, n = vehicles.size(); i < n; i++) {
+                Vehicle o = vehicles.get(i);
+                if (!o.standby || o.type != CRUISER || o.broken || !o.squad.isEmpty() || World.hypot(o.x - f.x, o.y - f.y) >= f.r + 300) continue;
+                if (danger && !o.crew.isEmpty()) crewOut(o, true);
+                else if (o.crew.isEmpty()) empty.add(o);
+            }
+            if (!fill || danger || empty.isEmpty()) continue;
+            ArrayList<Entity> free = new ArrayList<Entity>();
+            for (int i = 0, n = w.entities.size(); i < n; i++) {
+                Entity e = w.entities.get(i);
+                if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null || e.ride != null || e == w.controlled) continue;
+                if (e.role != Entity.ROLE_RIFLE || e.outsider || (e.agency == 4) != f.fed || World.footPatrol(e)) continue;
+                if (World.hypot(e.x - f.x, e.y - f.y) < 220) free.add(e);
+            }
+            for (int k = 0; k < empty.size() && free.size() >= 4; k++) {
+                Vehicle v = empty.get(k);
+                for (int j = 0; j < 2; j++) board(v, free.remove(free.size() - 1));
+                v.passengerType = Entity.COP;
+            }
+        }
     }
 
     /** The nearest patrol car free to answer a call. */
@@ -7650,6 +7748,8 @@ final class Fleet {
                 vehicles.add(v);
             }
         }
+        // ((26.3) And their officers in them, waiting.)
+        seatStandby(true);
     }
 
     /**

@@ -880,6 +880,13 @@ final class Ops {
 
     /** Sends the truck to (tx, ty) once its crew have walked over and climbed in. False with nobody to crew it. */
     private boolean send(Post p, float tx, float ty, boolean home) {
+        // ((26.3) Waiting at home with its crew already in it: off it goes.)
+        if (p.parked() && !p.truck.crew.isEmpty()) {
+            if (!w.fleet.postGo(p.truck, tx, ty)) return false;
+            p.returning = home;
+            p.farFor = p.quietFor = 0;
+            return true;
+        }
         ArrayList<Entity> crew = crewFor(p, p.home());
         if (crew.isEmpty()) return false;
         if (p.up) clearTent(p);
@@ -927,6 +934,10 @@ final class Ops {
             return;
         }
         if (p.parked()) {
+            // ((26.3) Its crew sit in it at home, waiting - and get out to fight if the dead come.)
+            if (w.countZombiesNear(v.x, v.y, 180) > 0) {
+                if (!v.crew.isEmpty()) w.fleet.crewOut(v, true);
+            } else if (v.crew.isEmpty() && home != null && World.hypot(v.x - home.x, v.y - home.y) < home.r + 400) w.fleet.seat(v, crewFor(p, home));
             if ((p.cd -= 1) > 0) return;
             p.cd = 10;
             if (!w.outbreak || w.city.cfg.mission >= 0 || w.alert < (p.army ? 2 : 1)) return;

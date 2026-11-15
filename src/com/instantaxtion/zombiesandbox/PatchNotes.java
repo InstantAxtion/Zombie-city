@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "26.3";
-    static final int VERSION_CODE = 263;
+    static final String VERSION = "26.4";
+    static final int VERSION_CODE = 264;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "26.4  -  Crews waiting",
+                    "Police cars parked at stations have two officers sitting in them, waiting; they drive straight out to calls and patrols. They get out to fight if the dead reach the station.",
+                    "Command trucks start with their 20 aboard and drive off as soon as they're needed.",
+                    "Shorter, up-to-date map descriptions.",
+            },
             {
                     "26.3  -  Out of the yard",
                     "Patrol cars no longer sit in the station yard with their officers inside: they pull out and go on patrol.",
