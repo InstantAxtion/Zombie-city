@@ -236,6 +236,8 @@ final class Dispatch {
         float x, y;
         /** Vehicles still waiting to come onto the map (10.20: a column comes on one at a time). */
         int pending;
+        /** ((26.0) One of Convoys' columns: it keeps this up to date and takes it off the list itself. */
+        boolean managed;
     }
 
     /** One vehicle of a column waiting at the edge of the map for the road in to be clear. */
@@ -2298,6 +2300,7 @@ final class Dispatch {
         for (int i = convoys.size() - 1; i >= 0; i--) {
             Convoy c = convoys.get(i);
             c.age += dt;
+            if (c.managed) continue;
             boolean moving = false;
             for (int k = 0; k < c.vehicles.size() && !moving; k++) {
                 Fleet.Vehicle v = c.vehicles.get(k);

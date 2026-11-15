@@ -542,8 +542,11 @@ final class CityConfig implements OptionSet {
     }
     /** How many of a city's residents (everyone its homes can house) are in the game. */
     int civilians(int residents) {
-        return Math.round(residents * RESIDENT_SHARE[v[OPT_CIVILIANS]]);
+        return Math.round(residents * RESIDENT_SHARE[v[OPT_CIVILIANS]] * POP_MORE);
     }
+
+    /** ((26.0) A tenth more people in every city. */
+    static final float POP_MORE = 1.1f;
 
     /** ((22.4) Map version 36: how many live in a sandbox city of each size, at "Most", on a city of middling density. */
     private static final int[] POP_TILES = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
@@ -573,7 +576,7 @@ final class CityConfig implements OptionSet {
                     break;
                 }
         float dens = density() == 0 ? 0.5f : 1f;
-        return Math.round(target * dens * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT]);
+        return Math.round(target * dens * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT] * POP_MORE);
     }
     /**
      * Police on duty when the game starts: about one officer for every sixteen residents (far more than a real city

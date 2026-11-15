@@ -170,6 +170,11 @@ final class Fleet {
         int number;
         /** ((26.0) An armed pickup's base (null if it roams), what it's doing, its timer, its load of rounds, and the base it's taking them to. */
         SurvivorBases.Base pbase, ptarget;
+        /** ((26.0) The convoy column it's part of, what it is in it (Convoys.V_*), whether it has its way planned, and when to try again. */
+        Convoys.Column convoy;
+        int convoyRole;
+        boolean convoyRouted;
+        float routeCd;
         int pmode;
         float pTimer, pCargo;
         /** Helicopter height (0 on the pad, 1 cruising) and how hard it is banking. */
@@ -706,6 +711,55 @@ final class Fleet {
         for (int i = 0; i < crew.size(); i++) board(v, crew.get(i));
         vehicles.add(v);
         return v;
+    }
+
+    // ------------------------------------------------------------------ (26.0) convoy columns (see Convoys)
+
+    /** One vehicle of a convoy column, at (x, y): an escort (a Humvee, or a BearCat for the police), a supply truck, a bus. */
+    Vehicle convoyVehicle(int role, float x, float y, float angle, Convoys.Column c) {
+        Vehicle v;
+        if (role == Convoys.V_BUS) {
+            v = make(CAR);
+            v.model = M_BUS;
+            v.color = 0xFFE8B030;
+            v.hp = v.maxHp = MAX_HP[CAR] * 2.5f;
+        } else if (role == Convoys.V_POLICE) {
+            v = make(CRUISER);
+            setKind(v, K_BEARCAT);
+        } else {
+            v = make(TRUCK);
+            if (role == Convoys.V_ESCORT) setKind(v, K_HUMVEE);
+        }
+        v.x = x;
+        v.y = y;
+        v.homeX = x;
+        v.homeY = y;
+        v.angle = angle;
+        v.fuel = 1;
+        v.state = DRIVE;
+        v.convoy = c;
+        v.convoyRole = role;
+        v.number = ++unitCount;
+        v.reinforcement = true;
+        v.place = c.place;
+        vehicles.add(v);
+        return v;
+    }
+
+    boolean routeTo(Vehicle v, float x, float y) {
+        return pickupRoute(v, x, y);
+    }
+
+    /** A convoy vehicle's drive: along its way at no more than max, through the dead in the road. */
+    boolean convoyDrive(Vehicle v, float dt, float max) {
+        boolean going = driveStep(v, dt, max, carAhead(v) ? 0.5f : 1f);
+        if (going) hit(v, w.runOver(v.x, v.y, 9, v.speed, v.angle));
+        return going;
+    }
+
+    /** A convoy's escort firing its mounted gun. */
+    void convoyGun(Vehicle v, float dt) {
+        if (v.convoyRole == Convoys.V_ESCORT || v.convoyRole == Convoys.V_POLICE) turret(v, dt);
     }
 
     /** Turns a parked car into a roaming crew's armed pickup. */
@@ -1403,7 +1457,7 @@ final class Fleet {
         int[] field = scratchField();
         // ((16.8) An everyday trip gives up on a search that's gone on far longer than a drive of its length takes:
         // it can always go somewhere else. See City.searchCap.)
-        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null;
+        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.convoy == null;
         city.searchCap = casual ? 15000 : 0;
         try {
             return routeOn(v, x, y, field);
@@ -1414,7 +1468,8 @@ final class Fleet {
 
     private boolean routeOn(Vehicle v, float x, float y, int[] field) {
         // (Everyday traffic and patrol cars keep to the roads; emergencies cut across whatever's paved.)
-        boolean strict = v.type == CAR || (v.patrol && v.state != DRIVE);
+        // ((26.0) Not a convoy's bus: it keeps to the roads, but a long way in can't be given up on like a trip to the shops.)
+        boolean strict = (v.type == CAR || (v.patrol && v.state != DRIVE)) && v.convoy == null;
         int from = city.tileIndex(v.x, v.y);
         // ((16.2) Not when it isn't on a road itself (pulled up on a lot or a pavement): a roads-only search never got
         // back to it, so it went right through every road on the map - up to 80 ms on the Big map - before trying the
@@ -3291,6 +3346,7 @@ final class Fleet {
             else if (v.type == TRAIN) done = updateTrain(v, vdt);
             else if (v.type == BOAT) done = updateBoat(v, vdt);
             else if (v.kind == K_PICKUP && !v.parked) done = updatePickup(v, vdt);
+            else if (v.convoy != null && !v.broken) done = w.convoys.step(v, vdt);
             else if (v.broken || v.parked) done = updateWreck(v, vdt);
             else if (v.type == TANK) done = updateTank(v, vdt);
             else if (v.type == CAR) done = v.evacStop >= 0 ? updateEvacBus(v, vdt) : updateTraffic(v, vdt);

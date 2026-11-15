@@ -54,7 +54,8 @@ final class GameView extends View implements Menu.Host {
     }
     private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier"};
     private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
-            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde", "Plane crash", "Prison break", "Riot"};
+            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde", "Plane crash", "Prison break", "Riot",
+            "Supply convoy", "Evac convoy"};
     private static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
@@ -9832,6 +9833,28 @@ final class GameView extends View implements Menu.Host {
                 c.drawRect(cx - size * 0.15f, cy + size * 0.05f, cx + size * 0.15f, cy + size * 0.5f, fill);
                 return true;
             }
+            case 15: {
+                // ((26.0) A supply convoy: a lorry with crates, a little one in front.)
+                fill.setColor(0xFF55623A);
+                c.drawRect(cx - size * 0.9f, cy - size * 0.35f, cx + size * 0.25f, cy + size * 0.35f, fill);
+                fill.setColor(0xFF6E7A48);
+                c.drawRect(cx + size * 0.25f, cy - size * 0.3f, cx + size * 0.6f, cy + size * 0.3f, fill);
+                fill.setColor(0xFFC8A060);
+                c.drawRect(cx - size * 0.75f, cy - size * 0.22f, cx - size * 0.35f, cy + size * 0.2f, fill);
+                c.drawRect(cx - size * 0.28f, cy - size * 0.22f, cx + size * 0.12f, cy + size * 0.2f, fill);
+                fill.setColor(0xFF3C4628);
+                c.drawRect(cx + size * 0.72f, cy - size * 0.2f, cx + size * 0.98f, cy + size * 0.2f, fill);
+                return true;
+            }
+            case 16: {
+                // ((26.0) An evacuation convoy: a yellow bus.)
+                fill.setColor(0xFFE8B030);
+                oval.set(cx - size * 0.95f, cy - size * 0.38f, cx + size * 0.95f, cy + size * 0.38f);
+                c.drawRoundRect(oval, size * 0.12f, size * 0.12f, fill);
+                fill.setColor(0xFF2A3640);
+                for (int k = 0; k < 5; k++) c.drawRect(cx - size * 0.75f + k * size * 0.32f, cy - size * 0.24f, cx - size * 0.55f + k * size * 0.32f, cy + size * 0.24f, fill);
+                return true;
+            }
             case 14: {
                 // A bottle with a burning rag.
                 c.save();
@@ -10936,6 +10959,13 @@ final class GameView extends View implements Menu.Host {
                 break;
             case 14:
                 if (!world.riot(wx, wy) && world.messageTime <= 0) world.say("Nobody here to riot");
+                break;
+            case 15:
+                // ((26.0) A supply convoy to the safe zone, survivor base or police station tapped.)
+                if (!world.convoys.supplyAt(wx, wy)) world.say("Tap a safe zone, survivor base or police station (or a convoy's already going there)");
+                break;
+            case 16:
+                if (!world.convoys.evacuateAt(wx, wy)) world.say("Tap a safe zone with people sheltering in it");
                 break;
             case 9: world.barrage(wx, wy); break;
             case 10: lastAction.addAll(world.airborne(wx, wy)); break;

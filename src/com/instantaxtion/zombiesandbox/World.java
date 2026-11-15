@@ -110,6 +110,8 @@ final class World {
     /** Tiles holding a burnt-out car or gas pump (saved with the game). */
     final boolean[] burned;
     final Fleet fleet;
+    /** ((26.0) Convoy columns. */
+    final Convoys convoys = new Convoys(this);
 
     // History for the stats screen: humans and zombies sampled every statStep seconds.
     static final int HISTORY = 240;
@@ -2293,6 +2295,7 @@ final class World {
         separate();
         stampedeNews(dt);
         fleet.update(dt);
+        convoys.update(dt);
         if (!policeDrones.isEmpty()) dronesStep(dt);
         updateBlasts(dt);
         updateFirebomb(dt);
@@ -13178,7 +13181,11 @@ final class World {
                 }
             }
             if (best == null) continue;
-            if (fleet.sendSupply(best, z, 500)) {
+            // ((26.0) A supply convoy, escorted, rather than a lone truck - or the truck, if no convoy can go now.)
+            if (convoys.supply(z, null, null, 600) != null) {
+                best.ammo -= 500;
+                z.supplyComing = true;
+            } else if (fleet.sendSupply(best, z, 500)) {
                 best.ammo -= 500;
                 z.supplyComing = true;
                 dispatch.say(Dispatch.WHO_MILITARY, null, "Military: " + z.place + " is running low. A supply truck is leaving "

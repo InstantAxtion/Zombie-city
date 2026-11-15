@@ -180,7 +180,7 @@ final class Campaign {
     /** Car, police car, tank, barricade, crate, medkit, BearCat, recon Humvee, police drone, ((21.0) razor wire, MG nest. */
     static final int[] PLACE_COST = {-1, 30, 250, 4, 10, 10, 120, 40, 45, 6, 90, 60, 8, 15};
     /** Horde, panic, outbreak, supply drop, airstrike, city alarm, infect, ((20.0) flare, mines, ((21.0) barrage, airborne squad, mega horde, ((25.0) plane crash, prison break, riot. */
-    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, 80, 140, -1, -1, -1, -1};
+    static final int[] EVENT_COST = {-1, -1, -1, 25, 150, 0, -1, 12, 35, 80, 140, -1, -1, -1, -1, -1, -1};
 
     /** ((21.0) What things cost this commander: the Quartermaster and Fire support perks take some off. */
     static int[] placeCost(World w) {

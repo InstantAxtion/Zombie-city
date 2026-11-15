@@ -4200,9 +4200,10 @@ public final class GameTests {
                 w.update(1 / 30f);
                 float[] p = w.city.findWalkable(w.city.worldW() / 2, w.city.worldH() / 2);
                 // An engine going by: the dead within earshot turn to it.
+                // (No armed civilian about to settle it with one shot before the engine goes by.)
+                for (Entity o : w.entities)
+                    if (o.type == Entity.CIVILIAN && Math.hypot(o.x - p[0], o.y - p[1]) < 400) o.ammo = o.reserve = 0;
                 Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
-                // (Sturdy: an armed hunter about shouldn't settle it before the engine goes by.)
-                z.hp = z.maxHp = 1e5f;
                 w.recount();
                 w.update(1 / 30f);
                 z.memory = 0;
