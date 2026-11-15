@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "26.4";
-    static final int VERSION_CODE = 264;
+    static final String VERSION = "26.5";
+    static final int VERSION_CODE = 265;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "26.5  -  The Bureau",
+                    "The FBI field office has a look of its own: a charcoal roof, a glass atrium, a mast and dishes, and FBI in big gold letters.",
+                    "Every building's roof fades at the same zoom. Shops with people in them used to lose theirs much sooner.",
+            },
             {
                     "26.4  -  Crews waiting",
                     "Police cars parked at stations have two officers sitting in them, waiting; they drive straight out to calls and patrols. They get out to fight if the dead reach the station.",

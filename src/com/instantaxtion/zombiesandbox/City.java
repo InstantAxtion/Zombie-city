@@ -6134,12 +6134,15 @@ final class City {
         facilities.add(station);
     }
 
+    /** ((16.9) The FBI field office's roof colour, which also tells it apart when its roof is painted.) */
+    static final int FED_ROOF = 0xFF3A3F47;
+
     private void addFacilityLot(int x, int y, int lw, int lh, int kind, int floors) {
         fill(x, y, lw, lh, BUILDING);
         int roof, wall;
         if (kind == STATION && fedLot) {
             // ((16.9) The FBI field office: dark grey and glass.)
-            roof = 0xFF3A3F47;
+            roof = FED_ROOF;
             wall = 0xFF9AA3AD;
         } else if (kind == STATION) {
             roof = 0xFF2F4F86;
@@ -12909,6 +12912,42 @@ final class City {
                 }
                 drawSolar(c, p, px0, py0, px1, py1);
             }
+            return;
+        }
+        if (kind == STATION && roof == FED_ROOF) {
+            // ((26.5) The FBI field office, nothing like a precinct from above: a charcoal roof inside a pale parapet,
+            // a long glass atrium across it, a mast and dishes in one corner, and the letters painted big in gold.)
+            p.setColor(0xFF7A828E);
+            c.drawRect(x0, y0, x1, y1, p);
+            p.setColor(0xFF2A2E35);
+            c.drawRect(x0 + 2, y0 + 2, x1 - 2, y1 - 2, p);
+            boolean wide = bw >= bh;
+            // (Along the long side's edge, so the letters have the rest.)
+            float gx0 = wide ? x0 + 4 : x1 - 4 - Math.min(9, bw * 0.18f), gx1 = x1 - 4;
+            float gy0 = wide ? y1 - 4 - Math.min(9, bh * 0.18f) : y0 + 4, gy1 = y1 - 4;
+            p.setColor(0xFF35577A);
+            c.drawRect(gx0, gy0, gx1, gy1, p);
+            p.setColor(0xFF6E9CC4);
+            if (wide) for (float gx = gx0 + 4; gx < gx1; gx += 6) c.drawRect(gx, gy0, gx + 0.8f, gy1, p);
+            else for (float gy = gy0 + 4; gy < gy1; gy += 6) c.drawRect(gx0, gy, gx1, gy + 0.8f, p);
+            // The mast and two dishes, top left.
+            float dx = x0 + Math.min(10, bw * 0.15f), dy = y0 + Math.min(10, bh * 0.15f);
+            p.setColor(0xFF9AA2AC);
+            c.drawRect(dx - 1, dy - 1, dx + 1, dy + 9, p);
+            p.setColor(0xFFE8EBEF);
+            c.drawCircle(dx + 7, dy + 2, 3.2f, p);
+            c.drawCircle(dx + 5, dy + 9, 2.4f, p);
+            p.setColor(0xFF5A626C);
+            c.drawCircle(dx + 7, dy + 2, 0.9f, p);
+            c.drawCircle(dx + 5, dy + 9, 0.7f, p);
+            // The red warning light on the mast.
+            p.setColor(0xFFE0402E);
+            c.drawCircle(dx, dy - 1.5f, 1.2f, p);
+            String word = Dispatch.federal(country).equals("FBI") ? "FBI" : "POLICE";
+            float roomW = (wide ? x1 : gx0) - x0 - 6, roomH = (wide ? gy0 : y1) - y0 - 6;
+            float size = Math.min(Math.min(word.length() > 3 ? 14f : 26f, roomH * 0.6f), roomW / (word.length() * 0.72f + 0.3f));
+            float tx = (x0 + (wide ? x1 : gx0)) / 2, ty = (y0 + (wide ? gy0 : y1)) / 2 + size * 0.36f;
+            label(word, tx, ty, size, 0xFFE8C547);
             return;
         }
         if (kind == STATION) {

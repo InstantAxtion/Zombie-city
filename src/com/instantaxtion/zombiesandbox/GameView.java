@@ -3827,29 +3827,21 @@ final class GameView extends View implements Menu.Host {
     }
 
     /**
-     * (17.1) How see-through a building's roof and walls are: all buildings zoomed right in (as before), and any
-     * building people are in from a middling zoom, so you can watch them inside.
+     * (17.1) How see-through a building's roof and walls are: all buildings alike as you zoom right in. ((26.5) No
+     * longer any building with people in it from a middling zoom: shops, nearly always with someone in, lost their roofs
+     * long before the buildings round them.)
      */
     private float seeOf(City.Building b, float zoomSee) {
-        if (b.inside <= 0 || zoomSee >= 0.85f || b.enter != 1) return zoomSee;
-        return Math.max(zoomSee, 0.85f * Math.max(0, Math.min(1, (scale / dp - 1.1f) / 0.6f)));
+        return zoomSee;
     }
 
     private void drawInsides(Canvas c, float vx0, float vy0, float vx1, float vy1) {
         float zoomSee = Math.max(0, Math.min(1, (scale / dp - 2.2f) / 1.3f));
-        if (zoomSee <= 0 && world.occupied.isEmpty()) return;
-        if (zoomSee > 0) {
-            for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
-                City.Building b = world.city.buildings.get(i);
-                if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
-                drawInterior(c, b, 1);
-            }
-            return;
-        }
-        for (int i = 0, n = world.occupied.size(); i < n; i++) {
-            City.Building b = world.occupied.get(i);
+        if (zoomSee <= 0) return;
+        for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
+            City.Building b = world.city.buildings.get(i);
             if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
-            if (seeOf(b, 0) > 0) drawInterior(c, b, 1);
+            drawInterior(c, b, 1);
         }
     }
 
