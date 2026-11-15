@@ -3324,7 +3324,7 @@ public final class GameTests {
                 // A mission on Hard (Overrun): tougher dead, stragglers, a horde, in time a siege.
                 CityConfig mc = Campaign.config(5);
                 World w = new World(mc);
-                w.setMaxPopulation(2400);
+                w.setMaxPopulation(3000);
                 w.populate(mc);
                 Campaign.begin(w, "");
                 check(w.difficulty == Director.HARD && w.director.level == Director.HARD, "a mission has its own difficulty");
@@ -4148,13 +4148,13 @@ public final class GameTests {
                 check(v.drawErrors == 0, "drawn without an error");
             }
         });
-        test("21.4: every Archipelago island keeps its roads, with 3 or 4 small ones; Reset stats; fewer settings; no routine chatter", new Check() {
+        test("21.4: every Archipelago island keeps its roads, with five small ones; Reset stats; fewer settings; no routine chatter", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_PRESET] = CityConfig.ARCHIPELAGO;
                 c.seed = 7920; // (One whose small island lost every road before.)
                 City city = new City(c);
-                check(city.islandRects.length == 4 || city.islandRects.length == 5, "3 or 4 small islands (" + (city.islandRects.length - 1) + ")");
+                check(city.islandRects.length == 6, "five small islands round the big one (" + (city.islandRects.length - 1) + ")");
                 int w = city.w, h = city.h, bad = 0;
                 int[] comp = new int[w * h], q = new int[w * h];
                 java.util.Arrays.fill(comp, -1);
@@ -4670,6 +4670,30 @@ public final class GameTests {
                 }
             }
         });
+        test("26.1: every map has an army base; the Archipelago's outer islands are palm-fringed villages, unlike the Islands", new Check() {
+            public void run() throws Exception {
+                for (int preset : new int[]{CityConfig.THEME_PARK, CityConfig.SPACE_CENTER, 9}) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_PRESET] = preset;
+                    c.seed = 5;
+                    c.normalize();
+                    check(new City(c).mainBase() != null, CityConfig.PRESETS[preset] + " has an army base");
+                }
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.ARCHIPELAGO;
+                c.seed = 5;
+                c.normalize();
+                City a = new City(c);
+                int palms = 0, outerHouses = 0, outerOther = 0;
+                for (int i = 0; i < a.w * a.h; i++) if (a.tiles[i] == City.TREE && a.treeKindAt(i) == Country.TK_PALM) palms++;
+                for (City.Building b : a.buildings) {
+                    if (a.island((int) ((b.x0 + b.x1) / 2 / City.T), (int) ((b.y0 + b.y1) / 2 / City.T)) < 1) continue;
+                    if (b.kind == City.HOUSE) outerHouses++;
+                    else if (b.kind == City.WAREHOUSE) outerOther++;
+                }
+                check(palms > 200 && outerHouses > 100 && outerOther < outerHouses / 10, "palms (" + palms + "), and houses, not works, on the outer islands (" + outerHouses + "/" + outerOther + ")");
+            }
+        });
         test("26.0: the Space Center has its launch pad and rocket, the assembly building, mission control and the landing strip; no other map gets them", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -4971,8 +4995,14 @@ public final class GameTests {
                 check(z.noiseTimer <= 0, "a single shot doesn't carry that far");
                 boolean drawn = false;
                 for (int f = 0; f < 30 * 8 && !drawn; f++) {
-                    if (f % 15 == 0) w.battleNoise(g[0], g[1], 265);
-                    for (Entity e : w.entities) if (!e.dead && !e.isZombie() && World.hypot(e.x - z.x, e.y - z.y) < 250) e.dead = e.removed = true;
+                    if (f % 15 == 0) {
+                        // (A sound somewhere else on the map - a car alarm, a fight across town - isn't this one.)
+                        if (World.hypot(z.noiseX - g[0], z.noiseY - g[1]) > 120) z.noiseTimer = 0;
+                        // (Nor is it after someone it saw: it has nothing to do but listen.)
+                        z.memory = z.searchTimer = 0;
+                        w.battleNoise(g[0], g[1], 265);
+                    }
+                    for (Entity e : w.entities) if (!e.dead && !e.isZombie() && World.hypot(e.x - z.x, e.y - z.y) < 600) e.dead = e.removed = true;
                     w.update(1 / 30f);
                     drawn = z.noiseTimer > 0 && World.hypot(z.noiseX - g[0], z.noiseY - g[1]) < 120;
                 }

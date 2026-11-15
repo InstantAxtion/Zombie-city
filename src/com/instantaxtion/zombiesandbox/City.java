@@ -398,6 +398,8 @@ final class City {
                 d.type = t;
                 // ((25.0) The staff town: homes.)
                 if (themePark && k == 1) d.type = DT_SUBURB;
+                // ((26.1) Each island its own kind of place.)
+                if (islandRects != null && !themePark && cfg.distinctIslands()) d.type = islandDistrict(island((int) d.x, (int) d.y), d.type);
             }
             usedUnique[d.type] = true;
             String wd = words.get(word++ % words.size());
@@ -3343,7 +3345,7 @@ final class City {
             }
 
         if (desert) desertify();
-        if (themePark) tropics();
+        if (themePark || (cfg.archipelago() && cfg.distinctIslands())) tropics();
         // Street lamps on the pavement corners at junctions.
         for (int y = 1; y < h - 1; y++)
             for (int x = 1; x < w - 1; x++) {
@@ -4257,6 +4259,23 @@ final class City {
     /** Where the causeway to the mainland reaches the edge of the map {x, y} (convoys come in over it). */
     float[] causewayEnd;
 
+    /**
+     * ((26.1) What a district on island il is (map version 39). The Islands: the first the city (downtown and midtown),
+     * the second the suburbs, the third the port and its works, the fourth the old town. The Archipelago: the big island
+     * as it was, the islands round it villages of houses among the palms.
+     */
+    private int islandDistrict(int il, int was) {
+        if (il < 0) return was;
+        float roll = new Random(cfg.seed * 7919L + districts.size() * 31L).nextFloat();
+        if (cfg.archipelago()) return il == 0 ? was : roll < 0.7f ? DT_SUBURB : DT_PARKSIDE;
+        switch (il) {
+            case 0: return roll < 0.45f ? DT_DOWNTOWN : DT_MIDTOWN;
+            case 1: return roll < 0.75f ? DT_SUBURB : DT_PARKSIDE;
+            case 2: return roll < 0.7f ? DT_INDUSTRIAL : DT_MIDTOWN;
+            default: return roll < 0.6f ? DT_OLDTOWN : roll < 0.8f ? DT_CAMPUS : DT_MIDTOWN;
+        }
+    }
+
     /** Where the three islands are: two across the top, one below between them, a little different each time. */
     private void islandLayout() {
         Random r = new Random(cfg.seed * 41L + 3);
@@ -4309,6 +4328,8 @@ final class City {
      */
     private void archipelagoLayout(Random r, int j) {
         int extra = cfg.moreIslands() ? 3 + new Random(cfg.seed * 73L + 9).nextInt(2) : 2 + new Random(cfg.seed * 73L + 9).nextInt(4);
+        // ((26.1) A longer chain: all five round the big one.)
+        if (cfg.distinctIslands()) extra = 5;
         float[][] all = {
                 {0.27f, 0.26f, 0.73f, 0.72f},     // the big island
                 {0.32f, 0.775f, 0.66f, 0.95f},    // south
@@ -10158,7 +10179,7 @@ final class City {
                     if (!regionOnly) {
                         // ((22.9) Palms along the desert's streets.)
                         // ((25.0) And on Theme Park Island.)
-                        boolean palm = desert || (themePark && island(x, y) == 0);
+                        boolean palm = desert || (themePark && island(x, y) == 0) || (cfg.archipelago() && cfg.distinctIslands() && island(x, y) >= 1);
                         if (palm) trees.add(new float[]{cx, cy, r, Country.TK_PALM});
                         else trees.add(new float[]{cx, cy, r});
                         if (canopies()) canopy(c, p, cx, cy, r, palm ? Country.TK_PALM : Country.TK_BROAD);
@@ -16016,11 +16037,14 @@ final class City {
         for (int i = 0; i < w * h; i++) {
             if (tiles[i] != TREE) continue;
             int x = i % w, y = i / w;
-            if (island(x, y) == 0 || (y < mainShore && dist[i] < 14) || dist[i] < 4) setTreeKind(i, Country.TK_PALM);
+            // ((26.1) The Archipelago: palms all over the outer islands, and along the big one's shore.)
+            boolean palm = themePark ? island(x, y) == 0 || (y < mainShore && dist[i] < 14) || dist[i] < 4 : island(x, y) >= 1 || dist[i] < 10;
+            if (palm) setTreeKind(i, Country.TK_PALM);
         }
+        int shoreY = themePark ? mainShore : h;
         // Along the island's beaches: umbrellas on the sand near the water, a lifeguard tower now and then.
         int guard = 0;
-        for (int y = 4; y < mainShore - 4; y++)
+        for (int y = 4; y < shoreY - 4; y++)
             for (int x = 4; x < w - 4; x++) {
                 int i = y * w + x;
                 if (tiles[i] != SAND || ((x * 5 + y * 3) % 11) != 0) continue;

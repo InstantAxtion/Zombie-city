@@ -12,6 +12,8 @@ final class PatchNotes {
                     "Mobile command posts are real trucks now: one parked at police headquarters, and the army has its own at its base. Officers or soldiers walk out, drive it to the fighting, set up, and drive it home when it's quiet.",
                     "Outside help sends a proper army reserve on every map.",
                     "Riot vans no longer have a mounted gun.",
+                    "Every map has an army base now (new games).",
+                    "Islands and Archipelago look different: on Islands each island is its own kind of town (city, suburbs, port, old town); the Archipelago is a tropical chain of five palm-fringed village islands round its city.",
             },
             {
                     "26.0  -  Lifelines",
