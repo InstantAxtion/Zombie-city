@@ -210,8 +210,7 @@ final class Menu {
     /** A city code typed in by the player. */
     void cityCodeEntered(String text) {
         boolean ok = config.applyCode(text);
-        note = ok ? "City " + config.code() + " (" + CityConfig.PRESETS[config.v[CityConfig.OPT_PRESET]]
-                + "). Press Start to play it." : "That isn't a city code. Codes look like 12-483920.";
+        note = ok ? "City " + config.code() + (config.mapLabel() != null ? " (" + config.mapLabel() + ")" : "") + ". Press Start to play it." : "That isn't a city code. Codes look like 12-483920.";
         noteTime = 4;
     }
 

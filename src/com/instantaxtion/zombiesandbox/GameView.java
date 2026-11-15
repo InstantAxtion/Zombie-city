@@ -640,7 +640,8 @@ final class GameView extends View implements Menu.Host {
             SaveGame.save(world, slotFile(slot));
             // A short description to show in the slot list without loading the whole game.
             int t = (int) world.time;
-            String info = world.city.name + " (" + CityConfig.PRESETS[world.city.cfg.v[CityConfig.OPT_PRESET]] + ")\n"
+            String label = world.city.cfg.mapLabel();
+            String info = world.city.name + (label != null ? " (" + label + ")" : "") + "\n"
                     + World.clock(t) + " played, " + World.count(world.humans, "person", "people") + ", " + World.count(world.zombies, "zombie", "zombies") + "\n"
                     + new java.text.SimpleDateFormat("d MMM HH:mm").format(new java.util.Date());
             java.io.FileOutputStream out = new java.io.FileOutputStream(slotFile(slot).getPath() + ".info");

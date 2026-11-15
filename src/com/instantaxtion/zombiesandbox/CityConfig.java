@@ -206,6 +206,17 @@ final class CityConfig implements OptionSet {
      * Town, Small Town and Harbour), the three smallest map sizes and seven of the countries. Cities from older
      * saves and shared codes that use them still build as they were.
      */
+    /**
+     * ((26.1) What to call this city's map where the player sees it: the map's name if it's one on offer, the mission's
+     * title in the campaign (some missions are on maps no longer offered), else nothing.)
+     */
+    String mapLabel() {
+        Campaign.Mission m = Campaign.get(mission);
+        if (m != null) return m.title;
+        int p = v[OPT_PRESET];
+        return retired(OPT_PRESET, p) ? null : PRESETS[p];
+    }
+
     static boolean retired(int option, int value) {
         // (The real cities went in 10.28.)
         // (Downtown, Village and Lakeside went in 10.50.)

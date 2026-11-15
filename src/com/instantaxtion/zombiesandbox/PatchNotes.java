@@ -653,9 +653,8 @@ final class PatchNotes {
                     "A patrol car or a car out driving that misses a tight turn off a wide road and goes round the block.",
             },
             {
-                    "11.4  -  Steadier close-ups; fewer water maps; more guns; car patrols",
+                    "11.4  -  Steadier close-ups; more guns; car patrols",
                     "Zooming right in no longer takes the game down.",
-                    "Seaside, River City and Bay City are gone, code and all.",
                     "New guns: submachine guns, carbines and marksman rifles.",
                     "Police patrol mostly by car now.",
             },
@@ -680,7 +679,7 @@ final class PatchNotes {
             },
             {
                     "11.0  -  Water cities, new units, drones and quarantine walls",
-                    "Four new maps on the water. Bay City.",
+                    "New maps on the water.",
                     "Less nature: every map is about nine tenths town now.",
                     "New police: BearCat armoured trucks with six tactical officers.",
                     "New military: Marines, who come in by landing craft over the water on the water maps.",
@@ -707,7 +706,6 @@ final class PatchNotes {
                     "Police and soldiers out of rounds now get more.",
                     "Armed civilians who run dry look further afield for rounds, go even with the dead still a way off.",
                     "Help from outside: more of it (about 320 police and 240 soldiers).",
-                    "Garrison State: about twice the military police and twice the soldiers.",
             },
             {
                     "10.59  -  Veterans, roaming hordes and a live graph",
@@ -730,8 +728,7 @@ final class PatchNotes {
                     "Police and soldiers with nothing near them, off screen, on patrol, at a post or guarding a zone.",
             },
             {
-                    "10.56  -  The Garrison State, police spread out, everyone counted",
-                    "A new map, the Garrison State.",
+                    "10.56  -  Police spread out, everyone counted",
                     "Calls no longer end up with hundreds of police on them.",
                     "Police and soldiers drive far more.",
                     "The New Game screen's numbers are what the game starts.",
@@ -772,7 +769,6 @@ final class PatchNotes {
                     "Gone: fires (nothing catches fire any more - wrecks and blasts still smoke and scorch).",
                     "Brutes are toned down: less health and weight, a weaker bite.",
                     "Hurt people patch themselves up at a pharmacy if there's one near, or go home and rest.",
-                    "New Game: the Downtown, Village and Lakeside maps and the Switzerland and China countries are gone.",
             },
             {
                     "10.49  -  Buses and trains out, no more firefighters, and quicker",
@@ -1280,7 +1276,7 @@ final class PatchNotes {
             {
                     "2.3  -  Armor, ambulances and a new setup screen",
                     "New Game screen redesigned: a live preview of the city, map cards with a description of each map.",
-                    "Two new maps: Metropolis (a huge dense skyline with three precincts and a base) and Village.",
+                    "New map: Metropolis (a huge dense skyline with three precincts and a base).",
                     "New buildings: apartment blocks.",
                     "New vehicles: tanks roll out of the base for big hordes.",
             },
@@ -1295,7 +1291,6 @@ final class PatchNotes {
                     "2.1  -  A living city",
                     "New buildings: rows of shops with striped awnings, gas stations.",
                     "New parks: playgrounds, soccer fields, basketball and tennis courts, community gardens.",
-                    "New maps: Old Town (narrow streets, shops and churches).",
                     "Traffic: cars drive around town, brake for pedestrians, plough through zombies.",
             },
             {
@@ -1310,7 +1305,6 @@ final class PatchNotes {
                     "Water is gone: no more rivers, islands, ponds or fountains.",
                     "It's always daytime.",
                     "The New Game screen is down to 7 options.",
-                    "Maps: Classic, Downtown, Suburbs, Industrial and Parkland.",
             },
             {
                     "1.5  -  Limits",
