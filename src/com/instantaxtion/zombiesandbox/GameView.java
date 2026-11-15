@@ -156,7 +156,9 @@ final class GameView extends View implements Menu.Host {
             "Hundreds of the dead come in from the edge of town, heading for the spot",
             "An airliner comes down on the spot: fire, wreckage, survivors - and some infected aboard",
             "Every inmate breaks out of the prison at once (maps with a prison); the police round them up",
-            "The crowd here riots for a couple of minutes: looting, cars set alight, riot police called in"};
+            "The crowd here riots for a couple of minutes: looting, cars set alight, riot police called in",
+            "Tap a safe zone, survivor base or police station: an escorted column of trucks brings it ammunition",
+            "Tap a safe zone: escorted buses come and take the people sheltering there out of the city"};
     private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_CLEAR = 3, BTN_MENU = 4, BTN_TOP = 5;
     /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
     private static final int TOP_BUTTONS = 6;
