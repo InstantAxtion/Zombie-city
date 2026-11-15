@@ -3262,7 +3262,7 @@ final class GameView extends View implements Menu.Host {
             c.drawRect(m[0] - 2.2f, m[1] - 0.7f, m[0] + 2.2f, m[1] + 0.7f, fill);
         }
         if (!world.crashes.isEmpty()) drawCrashSites(c, vx0, vy0, vx1, vy1);
-        if (world.ops.postUp && world.ops.post != null) drawCommandPost(c, vx0, vy0, vx1, vy1);
+        for (Ops.Post p : world.ops.posts) if (p.up && p.truck != null) drawCommandPost(c, p, vx0, vy0, vx1, vy1);
 
         if (scale < 1.8f) drawDanger(c, vx0, vy0, vx1, vy1);
         // Zoomed out, a crowd is a heap of dots on top of each other: one dot per side in each little patch
@@ -5087,7 +5087,7 @@ final class GameView extends View implements Menu.Host {
         } else if (v.kind == Fleet.K_IFV) {
             hl = 11.5f;
             hw = 6f;
-        } else if (v.kind == Fleet.K_COMMAND) {
+        } else if (Fleet.isPost(v)) {
             hl = 11.5f;
             hw = 5.4f;
         }
@@ -5122,7 +5122,7 @@ final class GameView extends View implements Menu.Host {
         }
         boolean civ = v.type == Fleet.CAR;
         Country land0 = world.city.country;
-        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.recon ? 0xFF9C8A5E
+        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.kind == Fleet.K_ARMY_POST ? 0xFF4F5A33 : v.recon ? 0xFF9C8A5E
                 : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
                 : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? 0xFFF2F2F2
                 : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
@@ -5272,12 +5272,14 @@ final class GameView extends View implements Menu.Host {
                 fill.setColor(blink ? 0xFF3A7BFF : 0xFFFF3A30);
                 c.drawRect(hl * 0.36f, 0, hl * 0.43f, hw - 1, fill);
             }
-        } else if (v.kind == Fleet.K_COMMAND) {
-            // ((26.0) The mobile command post: a big white box truck, a blue band, the cab, and the radio mast on its roof.)
-            fill.setColor(v.broken ? 0xFF5A5C60 : land0.cruiserBody == 0xFFF2F2F2 || land0.cruiserBody == 0xFFE8E8E8 ? 0xFF1E4AA8 : land0.cruiserBody);
+        } else if (Fleet.isPost(v)) {
+            // ((26.0) The mobile command post: a big white box truck, a blue band, the cab, and the radio mast on its roof.
+            // ((26.1) The army's: olive drab, a tan band.))
+            boolean armyPost = v.kind == Fleet.K_ARMY_POST;
+            fill.setColor(v.broken ? 0xFF5A5C60 : armyPost ? 0xFFB8A878 : land0.cruiserBody == 0xFFF2F2F2 || land0.cruiserBody == 0xFFE8E8E8 ? 0xFF1E4AA8 : land0.cruiserBody);
             c.drawRect(-hl + 1, -hw, hl * 0.4f, -hw + 1.2f, fill);
             c.drawRect(-hl + 1, hw - 1.2f, hl * 0.4f, hw, fill);
-            fill.setColor(0xFFC8CCD2);
+            fill.setColor(armyPost ? 0xFF5E6A3E : 0xFFC8CCD2);
             c.drawRect(-hl + 1.2f, -hw + 1.6f, hl * 0.38f, hw - 1.6f, fill);
             fill.setColor(0xFF1E2A33);
             c.drawRect(hl * 0.5f, -hw + 1, hl * 0.72f, hw - 1, fill);
@@ -6207,11 +6209,10 @@ final class GameView extends View implements Menu.Host {
      * ((26.0) The police's mobile command post, set up: a canopy tent beside the truck with its table of radios and maps,
      * a tall radio mast with a light blinking on top, and a sign.
      */
-    private void drawCommandPost(Canvas c, float vx0, float vy0, float vx1, float vy1) {
-        Ops ops = world.ops;
-        float x = ops.postX, y = ops.postY;
+    private void drawCommandPost(Canvas c, Ops.Post post, float vx0, float vy0, float vx1, float vy1) {
+        float x = post.x, y = post.y;
         if (x < vx0 - 60 || x > vx1 + 60 || y < vy0 - 60 || y > vy1 + 60) return;
-        float a = ops.post.angle;
+        float a = post.truck.angle;
         c.save();
         c.translate(x, y);
         c.rotate((float) Math.toDegrees(a));
@@ -6220,7 +6221,7 @@ final class GameView extends View implements Menu.Host {
         c.drawRect(-tw + 2, -th + 2.5f, tw + 2, th + 2.5f, fill);
         // Blue and white canopy, its ridge, and the poles at the corners.
         for (int k = 0; k < 6; k++) {
-            fill.setColor(k % 2 == 0 ? 0xFF2A55B8 : 0xFFF0F2F4);
+            fill.setColor(post.army ? (k % 2 == 0 ? 0xFF55603A : 0xFF6E7A4A) : k % 2 == 0 ? 0xFF2A55B8 : 0xFFF0F2F4);
             float x0 = -tw + k * (tw * 2 / 6f);
             c.drawRect(x0, -th, x0 + tw * 2 / 6f, th, fill);
         }
@@ -6819,16 +6820,16 @@ final class GameView extends View implements Menu.Host {
             c.drawText(label, sx, sy, text);
         }
         // ((26.0) The police's mobile command post.)
-        if (world.ops.postUp && world.ops.post != null) {
-            Ops ops = world.ops;
-            float sx = screenX(ops.postX), sy = screenY(ops.postY - 30) - 6 * dp;
+        for (Ops.Post post : world.ops.posts) {
+            if (!post.up || post.truck == null) continue;
+            float sx = screenX(post.x), sy = screenY(post.y - 30) - 6 * dp;
             if (sx > -100 * dp && sx < getWidth() + 100 * dp && sy > 0 && sy < barTop) {
-                Fleet.Vehicle cp = ops.post;
-                String label = "POLICE COMMAND POST  -  " + (int) (100 * cp.hp / cp.maxHp) + "%";
+                Fleet.Vehicle cp = post.truck;
+                String label = (post.army ? "ARMY" : "POLICE") + " COMMAND POST  -  " + (int) (100 * cp.hp / cp.maxHp) + "%";
                 float tw = text.measureText(label);
                 oval.set(sx - tw / 2 - 8 * dp, sy - 14 * dp, sx + tw / 2 + 8 * dp, sy + 5 * dp);
                 if (claim(oval)) {
-                    fill.setColor(cp.hp < cp.maxHp * 0.35f ? 0xD08A2020 : 0xD0203A66);
+                    fill.setColor(cp.hp < cp.maxHp * 0.35f ? 0xD08A2020 : post.army ? 0xD03E4A26 : 0xD0203A66);
                     c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
                     text.setColor(0xFFFFFFFF);
                     c.drawText(label, sx, sy, text);
@@ -11150,7 +11151,7 @@ final class GameView extends View implements Menu.Host {
             case 13: made = world.placeBarricade(wx, wy, 2); break;
             case 14:
                 made = world.ops.placePost(wx, wy);
-                if (made == null) world.say("No road there for the command post");
+                if (made == null) world.say("The command post can't go there (no road, no truck, or nobody to drive it)");
                 break;
             case 15:
                 if (world.ops.callIn(wx, wy, "", true).isEmpty()) world.say("No room for them");

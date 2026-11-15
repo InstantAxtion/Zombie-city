@@ -57,6 +57,13 @@ final class Fleet {
     static final int PK_HOME = 0, PK_SORTIE = 1, PK_BACK = 2, PK_CONVOY = 3, PK_ROAM = 4;
     /** ((26.0) A police patrol boat on the water (see Ops), and the police's mobile command post truck. */
     static final int K_POLICE_BOAT = 14, K_COMMAND = 15;
+    /** ((26.1) The army's mobile command post truck, kept at its base.) */
+    static final int K_ARMY_POST = 16;
+
+    /** ((26.1) A mobile command post truck, the police's or the army's. */
+    static boolean isPost(Vehicle v) {
+        return v.kind == K_COMMAND || v.kind == K_ARMY_POST;
+    }
 
     /** Kinds of everyday car (which ones are about depends on the country). */
     static final int M_SEDAN = 0, M_PICKUP = 1, M_SUV = 2, M_KEI = 3, M_HATCH = 4, M_VAN = 5, M_TAXI = 6, M_BUS = 7,
@@ -395,6 +402,7 @@ final class Fleet {
                 if (v.kind == K_BEARCAT) return "Police BearCat";
                 if (v.kind == K_DOZER) return "Army engineers' bulldozer";
                 if (v.kind == K_COMMAND) return "Police mobile command post";
+                if (v.kind == K_ARMY_POST) return "Army mobile command post";
                 return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : v.ammoTruck ? "Army ammo truck  -  " + v.cargo + " rounds" : "Army truck";
             case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
             case TANK: return "Tank";
@@ -410,7 +418,7 @@ final class Fleet {
     /** A short line about what a vehicle is doing, shown above it on the map. */
     String status(Vehicle v) {
         String where = v.place != null ? v.place : null;
-        if (v.kind == K_POLICE_BOAT || v.kind == K_COMMAND) return w.ops.status(v);
+        if (v.kind == K_POLICE_BOAT || isPost(v)) return w.ops.status(v);
         switch (v.type) {
             case HELI:
                 if (v.state == IDLE) {
@@ -668,19 +676,20 @@ final class Fleet {
     void setKind(Vehicle v, int kind) {
         v.kind = kind;
         float hp = kind == K_APC ? 520 : kind == K_HUMVEE ? 220 : kind == K_RIOT_VAN ? 380 : kind == K_BIKE ? 70 : kind == K_BEARCAT ? 600
-                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : kind == K_COMMAND ? 900 : kind == K_POLICE_BOAT ? 300 : v.maxHp;
+                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : kind == K_COMMAND || kind == K_ARMY_POST ? 900 : kind == K_POLICE_BOAT ? 300 : v.maxHp;
         v.hp = v.maxHp = hp;
     }
 
     /**
      * ((26.0) Whether a vehicle has a gun mounted on it with a gunner: the APC, IFV, gun truck and Humvee as before, and
-     * now the army's troop trucks, the police's BearCats and armoured riot vans, and the police boats (the officers aboard
+     * now the army's troop trucks, the police's BearCats, and the police boats (the officers aboard
      * shooting from it). Anything else opts in with gunMount (a survivors' pickup: v.gunMount = true), or a kind added here.
      */
     static boolean mountedGun(Vehicle v) {
         if (v.gunMount) return true;
         switch (v.kind) {
-            case K_APC: case K_HUMVEE: case K_IFV: case K_GUNTRUCK: case K_BEARCAT: case K_RIOT_VAN: case K_POLICE_BOAT:
+            // ((26.1) Not riot vans: no gun on their roof.)
+            case K_APC: case K_HUMVEE: case K_IFV: case K_GUNTRUCK: case K_BEARCAT: case K_POLICE_BOAT:
                 return true;
             case 0:
                 return troopTruck(v);
@@ -1838,17 +1847,17 @@ final class Fleet {
      * ((26.0) The police's mobile command post truck, setting out from (sx, sy) for (tx, ty) with these officers aboard
      * (it sets up there: see Ops). Null if there's no way there by road.
      */
-    Vehicle commandPost(float sx, float sy, float tx, float ty, java.util.List<Entity> crew) {
+    Vehicle commandPost(float sx, float sy, float tx, float ty, java.util.List<Entity> crew, int kind) {
         float[] g = city.nearestDrivable(sx, sy);
         if (g == null) return null;
         Vehicle v = make(TRUCK);
-        setKind(v, K_COMMAND);
+        setKind(v, kind);
         v.x = v.homeX = g[0];
         v.y = v.homeY = g[1];
         v.angle = (float) Math.atan2(ty - g[1], tx - g[0]);
         v.number = ++unitCount;
         v.place = city.placeName(tx, ty);
-        v.passengerType = Entity.COP;
+        v.passengerType = kind == K_ARMY_POST ? Entity.SOLDIER : Entity.COP;
         if (World.hypot(tx - g[0], ty - g[1]) < 40) {
             v.state = SCENE;
             v.tx = g[0];
@@ -1862,8 +1871,91 @@ final class Fleet {
         return v;
     }
 
-    /** ((26.0) The command post on its way out: driving there, then set up (Ops takes it from there). */
+    /**
+     * ((26.1) A command post truck parked in the yard at the station or base f, waiting to be needed (see Ops). Null if
+     * there's no road by it.
+     */
+    Vehicle parkPost(City.Facility f, int kind) {
+        float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
+        if (g == null) return null;
+        float[] p = bay(g, f);
+        if (p == null) p = g;
+        Vehicle v = make(TRUCK);
+        setKind(v, kind);
+        v.x = p[0];
+        v.y = p[1];
+        v.homeX = g[0];
+        v.homeY = g[1];
+        v.angle = (float) Math.atan2(g[1] - p[1], g[0] - p[0]);
+        v.number = ++unitCount;
+        v.place = f.name;
+        v.passengerType = kind == K_ARMY_POST ? Entity.SOLDIER : Entity.COP;
+        v.state = WAIT;
+        vehicles.add(v);
+        return v;
+    }
+
+    /** ((26.1) A command post truck back home: into a bay in the yard, its crew out and back on duty there. */
+    void parkHome(Vehicle v, City.Facility f) {
+        crewOut(v, true);
+        if (f != null) {
+            float[] p = bay(new float[]{v.x, v.y}, f);
+            if (p != null && World.hypot(p[0] - v.x, p[1] - v.y) < City.T * 8) {
+                v.x = p[0];
+                v.y = p[1];
+            }
+        }
+        v.speed = 0;
+        v.state = WAIT;
+        v.place = f != null ? f.name : city.placeName(v.x, v.y);
+    }
+
+    /** ((26.1) The crew walk over to the command post truck and climb in; then it drives them to (tx, ty). */
+    void musterPost(Vehicle v, java.util.List<Entity> crew, float tx, float ty) {
+        v.state = MUSTER;
+        v.timer = 0;
+        v.coming = -1;
+        v.speed = 0;
+        v.crewWanted = crew.size();
+        v.tx = tx;
+        v.ty = ty;
+        v.place = city.placeName(tx, ty);
+        for (Entity e : crew) {
+            e.rig = v;
+            note(e);
+            e.task = Dispatch.T_BOARD;
+        }
+    }
+
+    /** ((26.0) The command post: parked, its crew climbing in, driving there, then set up (Ops takes it from there). */
     private boolean commandPostStep(Vehicle v, float dt) {
+        if (v.state == WAIT) {
+            v.speed = 0;
+            return false;
+        }
+        if (v.state == MUSTER) {
+            v.speed = 0;
+            float was = v.timer;
+            v.timer += dt;
+            if (v.coming < 0 || (int) v.timer != (int) was) v.coming = comingTo(v);
+            boolean ready = v.crew.size() >= v.crewWanted || (!v.crew.isEmpty() && v.coming == 0) || (v.timer > 60 && !v.crew.isEmpty());
+            if (ready) {
+                dropCrew(v);
+                v.stuckTimer = 0;
+                v.state = DRIVE;
+                if (!route(v, v.tx, v.ty)) {
+                    // (No way there: they get out again.)
+                    crewOut(v, true);
+                    v.state = WAIT;
+                    w.ops.postUnmanned(v);
+                }
+            } else if (v.timer > 90 || (v.timer > 3 && v.coming == 0 && v.crew.isEmpty())) {
+                dropCrew(v);
+                v.state = WAIT;
+                w.ops.postUnmanned(v);
+            }
+            return false;
+        }
         if (v.state == SCENE) {
             v.speed = Math.max(0, v.speed - dt * 200);
             return false;
@@ -4735,7 +4827,7 @@ final class Fleet {
             return false;
         }
         if (v.recon) return reconStep(v, dt);
-        if (v.kind == K_COMMAND) return commandPostStep(v, dt);
+        if (isPost(v)) return commandPostStep(v, dt);
         if (v.type == TRUCK) turret(v, dt);
         if (v.state == PICKUP) return pickupStep(v, dt);
         if (v.state == SCENE && v.type == CRUISER) {
@@ -6384,7 +6476,8 @@ final class Fleet {
             }
             // ((11.7) Waiting at the station for its crew to climb in: whoever gets in first drives.)
             // ((26.0) Nor the command post set up at the scene: nobody needs to sit at its wheel.)
-            if (v.state == MUSTER || (v.kind == K_COMMAND && v.state == SCENE)) continue;
+            // ((26.1) Nor one parked in the yard at home.)
+            if (v.state == MUSTER || (isPost(v) && (v.state == SCENE || v.state == WAIT))) continue;
             // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
             if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {

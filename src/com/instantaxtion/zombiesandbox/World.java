@@ -1066,7 +1066,10 @@ final class World {
         // ((13.3) Help from outside: three quarters as many again as the police and soldiers the city starts with.)
         if (dispatch.policeReserve > 0 || dispatch.squadReserve > 0) {
             dispatch.policeReserve = Math.round(counts[Entity.COP] * Dispatch.OUTSIDE_SHARE);
-            dispatch.squadReserve = Math.round(counts[Entity.SOLDIER] * Dispatch.OUTSIDE_SHARE);
+            // ((26.1) Never next to none: a map with no base of its own (the Space Center, Theme Park Island) had three
+            // soldiers coming from outside, or none. The army sends a proper force wherever the city is.)
+            int floor = Math.max(150, Math.round(counts[Entity.COP] * 0.25f));
+            dispatch.squadReserve = Math.max(floor, Math.round(counts[Entity.SOLDIER] * Dispatch.OUTSIDE_SHARE));
         }
     }
 
@@ -13080,7 +13083,7 @@ final class World {
                     // ((16.9) Each kind of police officer's nerve: see doctrine.)
                     float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : doctrine(e) != null ? doctrine(e)[5] : 4;
                     // ((10.59) A veteran stands longer.)
-                    nerve += rank(e) * 0.75f + (perk(e, P_NERVE) ? 2 : 0) + (ops.postUp && ops.boosts(e) ? 2 : 0);
+                    nerve += rank(e) * 0.75f + (perk(e, P_NERVE) ? 2 : 0) + (ops.boosts(e) ? 2 : 0);
                     if (odds >= nerve - (e.goal == A_FALLBACK ? 1.5f : 0))
                         armedScore[A_FALLBACK] = 0.6f + 0.05f * (odds - nerve) + (stock < 0.4f ? 0.15f : 0) + 0.15f * (caution(e) - 0.5f)
                                 + (e.kills > 10 ? -0.05f : 0);
@@ -15205,8 +15208,8 @@ final class World {
         }
         // Soldiers near their commander fight better.
         if (soldier && e.role != Entity.ROLE_COMMANDER && !commanders.isEmpty() && commanded(e)) accuracy += 0.12f;
-        // ((26.0) And police near the mobile command post.)
-        else if (!soldier && ops.postUp && ops.boosts(e)) accuracy += 0.1f;
+        // ((26.0) And police (or, (26.1), soldiers) near their side's mobile command post.)
+        else if (ops.boosts(e)) accuracy += 0.1f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
         accuracy = Math.min(0.99f, accuracy * (1 + aimBonus(e) + 0.05f * rank(e) + (perk(e, P_STEADY) ? 0.08f : 0)) * (e.isArmed() && Perks.has(this, Perks.AIM) ? 1.08f : 1));
         if (e.ammo <= 0 && e.reserve > 0) {

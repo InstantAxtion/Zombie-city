@@ -6,7 +6,7 @@ import java.util.BitSet;
 
 /**
  * (26.0) Special operations: the police's patrol boats on the water (patrolling, picking people up who are cornered at
- * the water's edge, taking officers across to calls they can't drive to), the police's mobile command post (out to the
+ * the water's edge, taking officers across to calls they can't drive to), the police's and the army's mobile command posts (out to the
  * worst of an outbreak, where it steadies and resupplies the officers round it and gets the calls near it seen to first,
  * until the dead overrun it), and the army's special forces (a team of four flown in to the hardest calls).
  */
@@ -728,30 +728,81 @@ final class Ops {
         return new float[]{v.homeLandX, v.homeLandY};
     }
 
-    // ------------------------------------------------------------------ the mobile command post
+    // ------------------------------------------------------------------ the mobile command posts
 
-    /** The command post truck (one to a city), whether it's set up, and its tent. */
-    Fleet.Vehicle post;
-    boolean postUp;
-    float postX, postY;
-    /** Until another may set out; times it's been set up and overrun. */
-    float postCd = 20;
-    int postsSetUp, postsLost, resupplied;
-    private float postHitSaidAt = -99, postFarFor, supplySaidAt = -99;
+    /**
+     * ((26.1) A mobile command post: one truck to a side, parked in the yard at home (the police headquarters, or the
+     * army's base) until it's needed. Two of that side's own walk out to it, climb in and drive it to the fighting, set
+     * up the tent there, and pack it up and drive it on - or home - when it's done. Nobody is made up from nothing: with
+     * no one free to crew it, it waits. Overrun, it's a wreck, and after a while a new one turns up at home.
+     */
+    final class Post {
+        final boolean army;
+        /** The truck (parked at home, out, or set up), whether it's set up, and its tent. */
+        Fleet.Vehicle truck;
+        boolean up, returning;
+        float x, y;
+        /** Until it may set out again (or until a new truck after one was lost); times set up and overrun. */
+        float cd = 20;
+        int setUp, lost, resupplied;
+        private float hitSaidAt = -99, farFor, supplySaidAt = -99, quietFor, newCd;
+
+        Post(boolean army) {
+            this.army = army;
+        }
+
+        int type() {
+            return army ? Entity.SOLDIER : Entity.COP;
+        }
+
+        int who() {
+            return army ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE;
+        }
+
+        String side() {
+            return army ? "Army" : "Police";
+        }
+
+        String hq() {
+            return army ? "Army Command" : "Police Command";
+        }
+
+        /** Where its truck is kept: the police headquarters (the first station), or the town's army base. */
+        City.Facility home() {
+            if (army) {
+                City.Facility b = w.city.mainBase();
+                return b != null && !b.fallen ? b : null;
+            }
+            for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_POLICE && !f.fallen) return f;
+            return null;
+        }
+
+        boolean out() {
+            return truck != null && !truck.removedFromFleet && !truck.broken && truck.state != Fleet.WAIT;
+        }
+
+        boolean parked() {
+            return truck != null && !truck.removedFromFleet && !truck.broken && truck.state == Fleet.WAIT;
+        }
+    }
+
+    final Post police = new Post(false), army = new Post(true);
+    final Post[] posts = {police, army};
     static final float POST_BOOST = 200, POST_COORD = 400, POST_SUPPLY = 90;
 
-    /** A police officer close enough to the command post set up to be steadied by it (a better shot, slower to break). */
+    /** One of the police or soldiers close enough to their side's command post, set up, to be steadied by it. */
     boolean boosts(Entity e) {
-        if (!postUp || e.type != Entity.COP) return false;
-        float dx = e.x - postX, dy = e.y - postY;
+        Post p = e.type == Entity.COP ? police : e.type == Entity.SOLDIER ? army : null;
+        if (p == null || !p.up) return false;
+        float dx = e.x - p.x, dy = e.y - p.y;
         return dx * dx + dy * dy < POST_BOOST * POST_BOOST;
     }
 
-    /** A call close enough to the command post for it to run: units sent there first, and one more of them. */
+    /** A call close enough to the police command post for it to run: units sent there first, and one more of them. */
     boolean coordinates(Dispatch.Incident inc) {
         // (Real calls only: not a post on an infection zone's cordon, nor a lift.)
-        if (!postUp || inc.cordonPost >= 0 || inc.ride) return false;
-        float dx = inc.x - postX, dy = inc.y - postY;
+        if (!police.up || inc.cordonPost >= 0 || inc.ride) return false;
+        float dx = inc.x - police.x, dy = inc.y - police.y;
         return dx * dx + dy * dy < POST_COORD * POST_COORD;
     }
 
@@ -759,18 +810,23 @@ final class Ops {
         return coordinates(inc) ? 8 : 0;
     }
 
-    /** The worst call going (the most of the dead at it), or null. */
-    private Dispatch.Incident worst() {
+    /** The worst call going (the most of the dead at it) at least `away` from (ax, ay), or null. */
+    private Dispatch.Incident worst(float ax, float ay, float away) {
         Dispatch.Incident best = null;
         for (int i = 0; i < w.dispatch.incidents.size(); i++) {
             Dispatch.Incident inc = w.dispatch.incidents.get(i);
             if (inc.resolved || inc.ride || inc.cordonPost >= 0) continue;
+            if (away > 0 && World.hypot(inc.x - ax, inc.y - ay) < away) continue;
             if (best == null || inc.zombiesNear > best.zombiesNear) best = inc;
         }
         return best;
     }
 
-    /** A spot on the road a little back from (x, y) towards (fx, fy), clear of the dead, for the command post. */
+    private Dispatch.Incident worst() {
+        return worst(0, 0, 0);
+    }
+
+    /** A spot on the road a little back from (x, y) towards (fx, fy), clear of the dead, for a command post. */
     private float[] postSpot(float x, float y, float fx, float fy) {
         City c = w.city;
         float d = (float) World.hypot(fx - x, fy - y) + 0.001f;
@@ -784,72 +840,119 @@ final class Ops {
         return c.nearestDrivable(x + ux * Math.min(d, 300), y + uy * Math.min(d, 300));
     }
 
-    /** Once a second: the command post sent out in an outbreak, set up, hit, resupplying, moving on - or lost. */
+    /**
+     * Up to two of the side's own to crew the truck: those on their posts at home first, then any not busy close to the
+     * truck (the ones at the tent, when it's packing up). Never anyone made up for it.
+     */
+    private ArrayList<Entity> crewFor(Post p, City.Facility home) {
+        ArrayList<Entity> crew = new ArrayList<Entity>();
+        Fleet.Vehicle v = p.truck;
+        if (p.up) {
+            for (int i = 0, m = w.entities.size(); i < m && crew.size() < 2; i++) {
+                Entity e = w.entities.get(i);
+                if (!e.dead && e.type == p.type() && e.task == Dispatch.T_POST && e.ride == null && e != w.controlled
+                        && World.hypot(e.postX - p.x, e.postY - p.y) < 30) crew.add(e);
+            }
+        } else if (home != null) crew.addAll(w.fleet.standby(home, p.type(), 0, 2));
+        for (int i = 0, m = w.entities.size(); i < m && crew.size() < 2; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.type != p.type() || e.ride != null || e.rig != null || e == w.controlled || e.role != 0 || e.outsider) continue;
+            if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_POST && e.task != Dispatch.T_PATROL) continue;
+            if (crew.contains(e) || World.hypot(e.x - v.x, e.y - v.y) > 420) continue;
+            crew.add(e);
+        }
+        return crew;
+    }
+
+    /** Sends the truck to (tx, ty) once its crew have walked over and climbed in. False with nobody to crew it. */
+    private boolean send(Post p, float tx, float ty, boolean home) {
+        ArrayList<Entity> crew = crewFor(p, p.home());
+        if (crew.isEmpty()) return false;
+        if (p.up) clearTent(p);
+        p.up = false;
+        p.returning = home;
+        p.farFor = p.quietFor = 0;
+        w.fleet.musterPost(p.truck, crew, tx, ty);
+        return true;
+    }
+
+    /** Those on watch at the tent stood down. */
+    private void clearTent(Post p) {
+        for (int i = 0, m = w.entities.size(); i < m; i++) {
+            Entity e = w.entities.get(i);
+            if (!e.dead && e.type == p.type() && e.task == Dispatch.T_POST && World.hypot(e.postX - p.x, e.postY - p.y) < 30) e.task = Dispatch.T_NONE;
+        }
+    }
+
+    /** Once a second: each side's command post. */
     private void postTick() {
-        Fleet.Vehicle v = post;
+        for (Post p : posts) postTick(p);
+    }
+
+    private void postTick(Post p) {
+        Fleet.Vehicle v = p.truck;
         if (v != null && v.removedFromFleet) {
-            post = null;
-            postUp = false;
-            return;
+            p.truck = null;
+            p.up = false;
+            v = null;
         }
         if (v != null && v.broken) {
-            lose();
+            lose(p);
             return;
         }
+        City.Facility home = p.home();
         if (v == null) {
-            if ((postCd -= 1) > 0) return;
-            postCd = 10;
-            if (!w.outbreak || w.alert < 1 || w.city.cfg.mission >= 0) return;
-            Dispatch.Incident bad = worst();
-            if (bad == null || bad.zombiesNear < 6) return;
-            City.Facility st = null;
-            float bd = 5000;
-            for (City.Facility f : w.city.facilities) {
-                if (f.kind != City.FACILITY_POLICE || f.fallen) continue;
-                float d = (float) World.hypot(f.x - bad.x, f.y - bad.y);
-                if (d < bd && w.countZombiesNear(f.gateX, f.gateY, 100) == 0) {
-                    bd = d;
-                    st = f;
-                }
-            }
-            if (st == null) return;
-            float[] spot = postSpot(bad.x, bad.y, st.gateX, st.gateY);
-            if (spot == null) return;
-            java.util.List<Entity> crew = w.fleet.standby(st, Entity.COP, 0, 2);
-            ArrayList<Entity> aboard = new ArrayList<Entity>(crew);
-            while (aboard.size() < 2) aboard.add(w.create(Entity.COP, st.gateX, st.gateY));
-            Fleet.Vehicle cp = w.fleet.commandPost(st.gateX, st.gateY, spot[0], spot[1], aboard);
-            if (cp == null) {
-                postCd = 40;
+            // A new truck at home (the first at the start, or one to replace a truck that was lost).
+            if ((p.newCd -= 1) > 0 || home == null) return;
+            v = p.truck = w.fleet.parkPost(home, p.army ? Fleet.K_ARMY_POST : Fleet.K_COMMAND);
+            if (v == null) {
+                p.newCd = 30;
                 return;
             }
-            post = cp;
-            postUp = false;
-            w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: The mobile command post is on its way from " + st.name + " to set up near "
-                    + bad.place + ".", st.gateX, st.gateY, true);
+            if (p.lost > 0) w.dispatch.say(p.who(), null, p.hq() + ": A new mobile command truck is in the yard at " + home.name + ".", v.x, v.y);
             return;
         }
-        if (!postUp) return;
+        if (p.parked()) {
+            if ((p.cd -= 1) > 0) return;
+            p.cd = 10;
+            if (!w.outbreak || w.city.cfg.mission >= 0 || w.alert < (p.army ? 2 : 1)) return;
+            if (p.army && w.counts[Entity.SOLDIER] < 4) return;
+            // (The army's goes to a fight the police's isn't at.)
+            Dispatch.Incident bad = p.army && police.truck != null && police.out() ? worst(police.truck.tx, police.truck.ty, 700)
+                    : !p.army && army.truck != null && army.out() ? worst(army.truck.tx, army.truck.ty, 700) : worst();
+            if (bad == null || bad.zombiesNear < (p.army ? 8 : 6)) return;
+            if (w.countZombiesNear(v.x, v.y, 100) > 0) return;
+            float[] spot = postSpot(bad.x, bad.y, v.x, v.y);
+            if (spot == null) return;
+            if (!send(p, spot[0], spot[1], false)) {
+                p.cd = 15;
+                return;
+            }
+            w.dispatch.say(p.who(), null, p.hq() + ": Crew to the mobile command truck at " + (home != null ? home.name : v.place)
+                    + ". It's going out to set up near " + bad.place + ".", v.x, v.y, true);
+            return;
+        }
+        if (!p.up) return;
         // The dead at the tent or the truck: they tear into it.
-        int n = w.countZombiesNear(postX, postY, 34) + w.countZombiesNear(v.x, v.y, 22);
+        int n = w.countZombiesNear(p.x, p.y, 34) + w.countZombiesNear(v.x, v.y, 22);
         if (n > 0) {
             w.fleet.damage(v, n * 7, false);
-            if (w.time - postHitSaidAt > 30) {
-                postHitSaidAt = w.time;
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Command post: The dead are on us at " + v.place + "! All units nearby, to the command post!", postX, postY, true);
-                w.dispatch.sighting(postX, postY, null);
+            if (w.time - p.hitSaidAt > 30) {
+                p.hitSaidAt = w.time;
+                w.dispatch.say(p.who(), null, p.side() + " command post: The dead are on us at " + v.place + "! All units nearby, to the command post!", p.x, p.y, true);
+                w.dispatch.sighting(p.x, p.y, null);
             }
             if (v.broken) {
-                lose();
+                lose(p);
                 return;
             }
-        } else if (v.hp < v.maxHp && w.countZombiesNear(postX, postY, 140) == 0) v.hp = Math.min(v.maxHp, v.hp + 3);
-        // Ammunition for the officers who come by.
+        } else if (v.hp < v.maxHp && w.countZombiesNear(p.x, p.y, 140) == 0) v.hp = Math.min(v.maxHp, v.hp + 3);
+        // Ammunition for their own who come by.
         int got = 0;
-        for (int k = 0, m = w.gatherArmed(postX, postY, POST_SUPPLY); k < m; k++) {
+        for (int k = 0, m = w.gatherArmed(p.x, p.y, POST_SUPPLY); k < m; k++) {
             Entity e = w.gathered[k];
-            if (e.dead || e.type != Entity.COP || e.magSize <= 0) continue;
-            if (World.hypot(e.x - postX, e.y - postY) > POST_SUPPLY) continue;
+            if (e.dead || e.type != p.type() || e.magSize <= 0) continue;
+            if (World.hypot(e.x - p.x, e.y - p.y) > POST_SUPPLY) continue;
             int full = e.magSize * 5;
             if (e.reserve >= full) continue;
             e.reserve = Math.min(full, e.reserve + e.magSize * 2);
@@ -859,40 +962,60 @@ final class Ops {
             got++;
         }
         if (got > 0) {
-            resupplied += got;
-            if (w.time - supplySaidAt > 60) {
-                supplySaidAt = w.time;
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Command post: Handing out magazines at " + v.place + ". " + World.count(got, "officer", "officers") + " topped up.", postX, postY);
+            p.resupplied += got;
+            if (w.time - p.supplySaidAt > 60) {
+                p.supplySaidAt = w.time;
+                w.dispatch.say(p.who(), null, p.side() + " command post: Handing out magazines at " + v.place + ". "
+                        + World.count(got, p.army ? "soldier" : "officer", p.army ? "soldiers" : "officers") + " topped up.", p.x, p.y);
             }
         }
-        // The fighting's moved off a long way: it packs up and follows it.
+        // The fighting's moved off a long way: it packs up and follows it. All over: it goes home.
         Dispatch.Incident bad = worst();
-        boolean near = false;
+        boolean near = false, any = false;
         for (int i = 0; i < w.dispatch.incidents.size() && !near; i++) {
             Dispatch.Incident inc = w.dispatch.incidents.get(i);
-            if (!inc.resolved && inc.zombiesNear > 0 && World.hypot(inc.x - postX, inc.y - postY) < 650) near = true;
+            if (inc.resolved || inc.zombiesNear <= 0) continue;
+            any = true;
+            if (World.hypot(inc.x - p.x, inc.y - p.y) < 650) near = true;
         }
-        postFarFor = near ? 0 : postFarFor + 1;
-        if (postFarFor > 75 && bad != null && bad.zombiesNear >= 8 && World.hypot(bad.x - postX, bad.y - postY) > 800) {
-            float[] spot = postSpot(bad.x, bad.y, postX, postY);
-            if (spot != null && w.fleet.movePost(v, spot[0], spot[1])) {
-                postUp = false;
-                postFarFor = 0;
-                for (int i = 0, m = w.entities.size(); i < m; i++) {
-                    Entity e = w.entities.get(i);
-                    if (!e.dead && e.type == Entity.COP && e.task == Dispatch.T_POST && World.hypot(e.postX - postX, e.postY - postY) < 30) e.task = Dispatch.T_NONE;
-                }
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Command post packing up and moving to " + bad.place + ".", postX, postY);
-            } else postFarFor = 40;
+        p.farFor = near ? 0 : p.farFor + 1;
+        p.quietFor = any || w.countZombiesNear(p.x, p.y, 500) > 0 ? 0 : p.quietFor + 1;
+        if (p.farFor > 75 && bad != null && bad.zombiesNear >= 8 && World.hypot(bad.x - p.x, bad.y - p.y) > 800) {
+            float[] spot = postSpot(bad.x, bad.y, p.x, p.y);
+            String was = v.place;
+            if (spot != null && send(p, spot[0], spot[1], false))
+                w.dispatch.say(p.who(), null, p.hq() + ": Command post on " + was + " packing up and moving to " + bad.place + ".", p.x, p.y);
+            else p.farFor = 40;
+        } else if (p.quietFor > 120 && home != null) {
+            float[] g = w.city.nearestDrivable(home.gateX > 0 ? home.gateX : home.x, home.gateY > 0 ? home.gateY : home.y);
+            if (g != null && send(p, g[0], g[1], true))
+                w.dispatch.say(p.who(), null, p.hq() + ": All quiet. Command post packing up and coming home to " + home.name + ".", p.x, p.y);
+            else p.quietFor = 60;
         }
     }
 
-    /** (From Fleet.) The command post has got where it was going: it sets up - the tent out, its officers on watch by it. */
+    private Post postOf(Fleet.Vehicle v) {
+        for (Post p : posts) if (p.truck == v) return p;
+        return v.kind == Fleet.K_ARMY_POST ? army : police;
+    }
+
+    /**
+     * (From Fleet.) A command truck has got where it was going: home again, it parks in the yard and its crew get out;
+     * out at the fighting, it sets up - the tent out, its crew on watch by it.
+     */
     void postArrived(Fleet.Vehicle v) {
-        if (v != post && post != null && !post.removedFromFleet) return;
-        post = v;
-        postUp = true;
-        postFarFor = 0;
+        Post p = postOf(v);
+        if (v != p.truck && p.truck != null && !p.truck.removedFromFleet) return;
+        p.truck = v;
+        if (p.returning) {
+            p.returning = false;
+            p.up = false;
+            w.fleet.parkHome(v, p.home());
+            p.cd = 30;
+            return;
+        }
+        p.up = true;
+        p.farFor = p.quietFor = 0;
         // The tent: beside the truck where there's room for all of it (not into a building), else behind or in front.
         float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
         float[][] tries = {{-sa * 17, ca * 17}, {sa * 17, -ca * 17}, {-ca * 26, -sa * 26}, {ca * 26, sa * 26}};
@@ -906,8 +1029,8 @@ final class Ops {
             if (clear) q = new float[]{px, py};
         }
         if (q == null) q = new float[]{v.x - ca * 26, v.y - sa * 26};
-        postX = q[0];
-        postY = q[1];
+        p.x = q[0];
+        p.y = q[1];
         v.place = w.city.placeName(v.x, v.y);
         ArrayList<Entity> crew = new ArrayList<Entity>(v.crew);
         w.fleet.crewOut(v, true);
@@ -916,63 +1039,84 @@ final class Ops {
             if (e.removed) continue;
             e.rig = null;
             e.task = Dispatch.T_POST;
-            float[] p = w.city.findWalkable(postX + (i == 0 ? -12 : 12), postY + 8);
-            e.postX = p != null ? p[0] : postX;
-            e.postY = p != null ? p[1] : postY;
+            float[] s = w.city.findWalkable(p.x + (i == 0 ? -12 : 12), p.y + 8);
+            e.postX = s != null ? s[0] : p.x;
+            e.postY = s != null ? s[1] : p.y;
         }
-        postsSetUp++;
-        w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Mobile command post is set up on " + v.place
-                + ". Units in the area, check in for orders and ammo.", postX, postY, true);
-        w.timeline("The police set up a mobile command post on " + v.place, postX, postY);
+        p.setUp++;
+        w.dispatch.say(p.who(), null, p.hq() + ": Mobile command post is set up on " + v.place
+                + ". Units in the area, check in for orders and ammo.", p.x, p.y, true);
+        w.timeline("The " + (p.army ? "army" : "police") + " set up a mobile command post on " + v.place, p.x, p.y);
     }
 
-    /** The command post is overrun: lost, and the radio says so. */
-    private void lose() {
-        Fleet.Vehicle v = post;
-        String where = v != null && v.place != null ? v.place : w.city.placeName(postX, postY);
+    /** (From Fleet.) Nobody came to crew the truck: it stays where it is (set up again, out at the fighting). */
+    void postUnmanned(Fleet.Vehicle v) {
+        Post p = postOf(v);
+        p.cd = 20;
+        if (p.returning || World.hypot(v.x - v.homeX, v.y - v.homeY) > 120) {
+            p.returning = false;
+            postArrived(v);
+        }
+    }
+
+    /** A command post is overrun (or its truck wrecked): lost, and the radio says so. */
+    private void lose(Post p) {
+        Fleet.Vehicle v = p.truck;
+        boolean wasUp = p.up;
+        String where = v != null && v.place != null ? v.place : w.city.placeName(p.x, p.y);
         if (v != null && !v.broken) w.fleet.damage(v, v.maxHp * 2, false);
-        for (int i = 0, m = w.entities.size(); i < m; i++) {
-            Entity e = w.entities.get(i);
-            if (!e.dead && e.type == Entity.COP && e.task == Dispatch.T_POST && World.hypot(e.postX - postX, e.postY - postY) < 30) e.task = Dispatch.T_NONE;
-        }
-        post = null;
-        postUp = false;
-        postCd = 180;
-        postsLost++;
-        w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: We've lost the command post on " + where + ". It's overrun. All units, you're on your own out there.", postX, postY, true);
-        w.timeline("The police command post on " + where + " was overrun", postX, postY);
+        if (wasUp) clearTent(p);
+        p.truck = null;
+        p.up = p.returning = false;
+        p.newCd = 180;
+        p.cd = 30;
+        p.lost++;
+        float lx = wasUp ? p.x : v != null ? v.x : p.x, ly = wasUp ? p.y : v != null ? v.y : p.y;
+        w.dispatch.say(p.who(), null, p.hq() + ": We've lost the mobile command post on " + where + "." + (wasUp ? " It's overrun. All units, you're on your own out there." : ""), lx, ly, true);
+        w.timeline("The " + (p.army ? "army" : "police") + " command post on " + where + " was lost", lx, ly);
     }
 
-    /** ((26.0) The Place tool's command post: set up where it's put (or, with one out already, it moves there). */
+    /**
+     * ((26.1) The Place tool's command post: the police's truck is sent there from headquarters (or, out already, it
+     * moves there). Null with no truck, no road there, or nobody to drive it.
+     */
     Fleet.Vehicle placePost(float x, float y) {
         float[] q = w.city.nearestDrivable(x, y);
         if (q == null) return null;
-        if (post != null && !post.removedFromFleet && !post.broken) {
-            if (!w.fleet.movePost(post, q[0], q[1])) return null;
-            postUp = false;
-            w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Command post packing up and moving to " + w.city.placeName(q[0], q[1]) + ".", q[0], q[1]);
-            return post;
+        Post p = police;
+        if (p.truck == null || p.truck.removedFromFleet || p.truck.broken) {
+            City.Facility home = p.home();
+            if (home == null) return null;
+            p.truck = w.fleet.parkPost(home, Fleet.K_COMMAND);
+            if (p.truck == null) return null;
         }
-        ArrayList<Entity> crew = new ArrayList<Entity>();
-        for (int k = 0; k < 2; k++) crew.add(w.create(Entity.COP, q[0], q[1]));
-        Fleet.Vehicle v = w.fleet.commandPost(q[0], q[1], q[0], q[1], crew);
-        if (v == null) return null;
-        post = v;
-        postArrived(v);
-        return v;
+        if (p.truck.state == Fleet.MUSTER || (p.truck.state == Fleet.DRIVE && !p.up)) {
+            if (!w.fleet.movePost(p.truck, q[0], q[1])) return null;
+            p.returning = false;
+        } else if (!send(p, q[0], q[1], false)) return null;
+        w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Mobile command post on its way to " + w.city.placeName(q[0], q[1]) + ".", q[0], q[1]);
+        return p.truck;
     }
 
     /** ((26.0) A command post set up in a saved game, put back. */
-    void restorePost(float x, float y, float angle, float tentX, float tentY, float hp) {
-        Fleet.Vehicle v = w.fleet.commandPost(x, y, x, y, null);
+    void restorePost(Post p, float x, float y, float angle, float tentX, float tentY, float hp) {
+        Fleet.Vehicle v = w.fleet.commandPost(x, y, x, y, null, p.army ? Fleet.K_ARMY_POST : Fleet.K_COMMAND);
         if (v == null) return;
+        City.Facility home = p.home();
+        if (home != null) {
+            float[] g = w.city.nearestDrivable(home.gateX > 0 ? home.gateX : home.x, home.gateY > 0 ? home.gateY : home.y);
+            if (g != null) {
+                v.homeX = g[0];
+                v.homeY = g[1];
+            }
+        }
         v.angle = angle;
         v.hp = Math.max(1, Math.min(v.maxHp, hp));
         v.place = w.city.placeName(x, y);
-        post = v;
-        postUp = true;
-        postX = tentX;
-        postY = tentY;
+        p.truck = v;
+        p.up = true;
+        p.x = tentX;
+        p.y = tentY;
     }
 
     // ------------------------------------------------------------------ special forces
@@ -1050,14 +1194,18 @@ final class Ops {
 
     /** A police boat's or the command post's line on the map and its card. */
     String status(Fleet.Vehicle v) {
-        if (v.kind == Fleet.K_COMMAND) {
-            if (v.broken) return "Command post: Overrun";
-            if (v.state != Fleet.SCENE) return "Command post: On the way to set up" + (v.place != null ? " near " + v.place : "");
-            if (v != post || !postUp) return "Command post: Packed up";
+        if (Fleet.isPost(v)) {
+            Post p = postOf(v);
+            String name = p.side() + " command post";
+            if (v.broken) return name + ": Wrecked";
+            if (v.state == Fleet.WAIT) return name + ": Parked" + (p.home() != null ? " at " + p.home().name : "");
+            if (v.state == Fleet.MUSTER) return name + ": Crew climbing aboard (" + v.crew.size() + "/" + v.crewWanted + ")";
+            if (v.state != Fleet.SCENE) return name + ": " + (p.returning ? "Driving home" : "On the way to set up" + (v.place != null ? " near " + v.place : ""));
+            if (v != p.truck || !p.up) return name + ": Packed up";
             int calls = 0;
-            for (int i = 0; i < w.dispatch.incidents.size(); i++) if (!w.dispatch.incidents.get(i).resolved && coordinates(w.dispatch.incidents.get(i))) calls++;
-            return "Command post: Set up on " + v.place + "  -  " + (int) (100 * v.hp / v.maxHp) + "%  -  running " + World.count(calls, "call", "calls")
-                    + (resupplied > 0 ? ", " + resupplied + " resupplied" : "");
+            if (!p.army) for (int i = 0; i < w.dispatch.incidents.size(); i++) if (!w.dispatch.incidents.get(i).resolved && coordinates(w.dispatch.incidents.get(i))) calls++;
+            return name + ": Set up on " + v.place + "  -  " + (int) (100 * v.hp / v.maxHp) + "%" + (p.army ? "" : "  -  running " + World.count(calls, "call", "calls"))
+                    + (p.resupplied > 0 ? ", " + p.resupplied + " resupplied" : "");
         }
         String who = "Marine " + v.boatNum;
         int aboard = 2 + v.crew.size();

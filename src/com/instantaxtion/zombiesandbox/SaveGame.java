@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 75;
+    private static final int VERSION = 76;
 
     private SaveGame() {
     }
@@ -489,25 +489,14 @@ final class SaveGame {
             }
             // ((26.0) Version 73: the police's mobile command post (where it's set up, its tent, how damaged), and the
             // tallies of the boats, the command post and the special forces. The boats themselves are back at their moorings.)
+            // ((26.1) Version 76: the army's command post after them, the same way. A truck parked at home, or out on the
+            // road, isn't kept: a new one is parked at home.)
             Ops ops = w.ops;
-            Fleet.Vehicle cp = ops.post;
-            boolean up = cp != null && ops.postUp && !cp.broken && !cp.removedFromFleet;
-            out.writeBoolean(up);
-            if (up) {
-                out.writeFloat(cp.x);
-                out.writeFloat(cp.y);
-                out.writeFloat(cp.angle);
-                out.writeFloat(ops.postX);
-                out.writeFloat(ops.postY);
-                out.writeFloat(cp.hp);
-            }
-            out.writeFloat(ops.postCd);
-            out.writeInt(ops.postsSetUp);
-            out.writeInt(ops.postsLost);
-            out.writeInt(ops.resupplied);
+            writePost(out, ops.police);
             out.writeInt(ops.rescued);
             out.writeInt(ops.ferried);
             out.writeInt(ops.sfCalls);
+            writePost(out, ops.army);
         } finally {
             moved = null;
             homeIndex = null;
@@ -1162,17 +1151,11 @@ final class SaveGame {
                 }
                 if (version >= 73) {
                     Ops ops = w.ops;
-                    if (in.readBoolean()) {
-                        float x = in.readFloat(), y = in.readFloat(), a = in.readFloat(), px = in.readFloat(), py = in.readFloat(), hp = in.readFloat();
-                        ops.restorePost(x, y, a, px, py, hp);
-                    }
-                    ops.postCd = in.readFloat();
-                    ops.postsSetUp = in.readInt();
-                    ops.postsLost = in.readInt();
-                    ops.resupplied = in.readInt();
+                    readPost(in, ops, ops.police);
                     ops.rescued = in.readInt();
                     ops.ferried = in.readInt();
                     ops.sfCalls = in.readInt();
+                    if (version >= 76) readPost(in, ops, ops.army);
                 }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
@@ -1272,5 +1255,35 @@ final class SaveGame {
         }
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
+    }
+
+    /** ((26.1) A command post: set up where (its truck, tent and damage), and its tallies. */
+    private static void writePost(DataOutputStream out, Ops.Post p) throws IOException {
+        Fleet.Vehicle cp = p.truck;
+        boolean up = cp != null && p.up && !cp.broken && !cp.removedFromFleet;
+        out.writeBoolean(up);
+        if (up) {
+            out.writeFloat(cp.x);
+            out.writeFloat(cp.y);
+            out.writeFloat(cp.angle);
+            out.writeFloat(p.x);
+            out.writeFloat(p.y);
+            out.writeFloat(cp.hp);
+        }
+        out.writeFloat(p.cd);
+        out.writeInt(p.setUp);
+        out.writeInt(p.lost);
+        out.writeInt(p.resupplied);
+    }
+
+    private static void readPost(DataInputStream in, Ops ops, Ops.Post p) throws IOException {
+        if (in.readBoolean()) {
+            float x = in.readFloat(), y = in.readFloat(), a = in.readFloat(), px = in.readFloat(), py = in.readFloat(), hp = in.readFloat();
+            ops.restorePost(p, x, y, a, px, py, hp);
+        }
+        p.cd = in.readFloat();
+        p.setUp = in.readInt();
+        p.lost = in.readInt();
+        p.resupplied = in.readInt();
     }
 }

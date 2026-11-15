@@ -5006,19 +5006,30 @@ public final class GameTests {
                 }
                 check(w.ops.rescued >= 1 && !civ.dead && World.hypot(civ.x - lx, civ.y - ly) > 200, "a boat came in and took them round to safety (" + w.ops.rescued + ")");
                 z.dead = z.removed = true;
-                // The command post.
-                float[] p = w.city.randomStreetSpot(new java.util.Random(3));
+                // The command post: a truck parked at the police headquarters (and the army's at its base), sent out
+                // with real officers driving it.
+                for (int f = 0; f < 30 * 2; f++) w.update(1 / 30f);
+                check(w.ops.police.parked() && w.ops.police.truck.kind == Fleet.K_COMMAND, "a command truck parked at headquarters");
+                check(w.city.mainBase() == null || w.ops.army.parked() && w.ops.army.truck.kind == Fleet.K_ARMY_POST, "and the army's at its base");
+                int cops0 = w.counts[Entity.COP];
+                float[] p = w.city.nearestDrivable(w.ops.police.truck.x + 700, w.ops.police.truck.y);
                 Fleet.Vehicle cp = w.ops.placePost(p[0], p[1]);
-                check(cp != null && w.ops.postUp && cp.kind == Fleet.K_COMMAND, "a command post set up");
-                Entity cop = w.spawnCop(0, w.ops.postX + 40, w.ops.postY), far = w.spawnCop(0, w.ops.postX + 600, w.ops.postY);
+                check(cp != null && cp.state == Fleet.MUSTER && w.counts[Entity.COP] == cops0, "sent out, crewed by officers already there (" + (cp != null ? cp.crewWanted : -1) + ")");
+                boolean drove = false;
+                for (int f = 0; f < 30 * 150 && !w.ops.police.up; f++) {
+                    w.update(1 / 30f);
+                    if (cp.state == Fleet.DRIVE && !cp.crew.isEmpty()) drove = true;
+                }
+                check(drove && w.ops.police.up, "they drove it there and set it up (" + cp.state + ")");
+                Entity cop = w.spawnCop(0, w.ops.police.x + 40, w.ops.police.y), far = w.spawnCop(0, w.ops.police.x + 600, w.ops.police.y);
                 check(w.ops.boosts(cop) && !w.ops.boosts(far), "it steadies the officers near it, not those far off");
                 cop.reserve = 0;
                 for (int f = 0; f < 45; f++) w.update(1 / 30f);
-                check(cop.reserve > 0 && w.ops.resupplied > 0, "and hands out ammunition (" + cop.reserve + ")");
+                check(cop.reserve > 0 && w.ops.police.resupplied > 0, "and hands out ammunition (" + cop.reserve + ")");
                 cp.hp = 60;
-                for (int k = 0; k < 24; k++) w.spawn(Entity.ZOMBIE, w.ops.postX + (k % 6) * 4 - 10, w.ops.postY + (k / 6) * 4 - 10);
-                for (int f = 0; f < 30 * 15 && w.ops.post != null; f++) w.update(1 / 30f);
-                check(w.ops.postsLost == 1 && !w.ops.postUp && cp.broken, "the dead overrun it (" + w.ops.postsLost + ")");
+                for (int k = 0; k < 24; k++) w.spawn(Entity.ZOMBIE, w.ops.police.x + (k % 6) * 4 - 10, w.ops.police.y + (k / 6) * 4 - 10);
+                for (int f = 0; f < 30 * 15 && w.ops.police.truck != null; f++) w.update(1 / 30f);
+                check(w.ops.police.lost == 1 && !w.ops.police.up && cp.broken, "the dead overrun it (" + w.ops.police.lost + ")");
                 // Special forces.
                 float[] q = w.city.randomStreetSpot(new java.util.Random(5));
                 java.util.ArrayList<Entity> team = w.ops.callIn(q[0], q[1], "a test", true);
@@ -5043,7 +5054,7 @@ public final class GameTests {
                 SaveGame.save(w, f);
                 World l = SaveGame.load(f);
                 f.delete();
-                check(l.ops.postsLost == 1 && l.ops.rescued == w.ops.rescued && l.ops.boats.size() == w.ops.boats.size(), "kept in a save");
+                check(l.ops.police.lost == 1 && l.ops.rescued == w.ops.rescued && l.ops.boats.size() == w.ops.boats.size(), "kept in a save");
             }
         });
         test("every screen draws", new Check() {
