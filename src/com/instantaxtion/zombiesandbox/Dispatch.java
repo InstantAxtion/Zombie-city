@@ -69,7 +69,7 @@ final class Dispatch {
         String place;
         int guards, sheltered, wantGuards, capacity;
         /** ((24.0) How many are on their way to it (counted each second). */
-        transient int heading;
+        transient int heading, engineers;
         /** Ammunition the zone has on hand for its guards, and whether a supply truck is on its way. */
         int ammo = 300;
         boolean supplyComing;
@@ -2481,7 +2481,7 @@ final class Dispatch {
                     else policeZoneCd = 45;
                     continue;
                 }
-                z.built += step * Math.min(8, z.onSite) * 26f / Math.max(40, z.wall.length) / (z.military ? 26f : 30f);
+                z.built += step * Math.min(8, z.onSite) * 26f / Math.max(40, z.wall.length) / (z.military ? 26f : 30f) * (1 + 0.2f * Math.min(4, z.engineers));
                 raiseWall(z);
                 if (z.built >= 1) {
                     z.built = 1;

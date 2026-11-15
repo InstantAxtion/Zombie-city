@@ -413,6 +413,7 @@ final class CityConfig implements OptionSet {
         c.seed = seed;
         c.outskirts = outskirts;
         c.exodus = exodus;
+        c.force = force;
         c.difficulty = difficulty;
         c.mission = mission;
         c.civic = civic;
@@ -582,8 +583,14 @@ final class CityConfig implements OptionSet {
         // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
         // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
         // ((13.0) Up to 800 now, for the bigger cities: 480 before.)
-        return Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8));
+        return Math.round(Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8)) * FORCE_SCALE[force]);
     }
+
+    /** ((26.0) Police/army strength (a New Game choice, not one of the eight in v): Weak, Normal, Strong. */
+    static final int OPT_FORCE = 10;
+    private static final String[] FORCES = {"Weak", "Normal", "Strong"};
+    static final float[] FORCE_SCALE = {0.55f, 1f, 1.6f};
+    int force = 1;
 
     /** Soldiers at the base (if the map has one): a garrison that grows with the city. */
     int soldiers(int residents) {
@@ -593,7 +600,7 @@ final class CityConfig implements OptionSet {
         // ((13.0) Up to 300 with the more bases: 160 before.)
         int n = Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
         // ((15.5) The Military Town's great base: three times the garrison, and never fewer than 450.)
-        return militaryTown() ? Math.min(700, Math.max(450, n * 3)) : n;
+        return Math.round((militaryTown() ? Math.min(700, Math.max(450, n * 3)) : n) * FORCE_SCALE[force]);
     }
 
 
@@ -766,10 +773,10 @@ final class CityConfig implements OptionSet {
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
     @Override public String[] values(int i) {
-        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : VALUES[i];
+        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_FORCE ? FORCES : VALUES[i];
     }
     @Override public int get(int i) {
-        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : v[i];
+        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_FORCE ? force : v[i];
     }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
@@ -778,6 +785,10 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_EXODUS) {
             exodus = value;
+            return;
+        }
+        if (i == OPT_FORCE) {
+            force = Math.max(0, Math.min(2, value));
             return;
         }
         v[i] = value;

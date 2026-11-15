@@ -5503,7 +5503,20 @@ final class GameView extends View implements Menu.Host {
                 c.drawRect(-hl + 1.0f, -hw + 1.0f, -hl * 0.2f, hw - 1.0f, fill);
                 fill.setColor(City.darken(body, 0.42f));
                 for (float x = -hl + 2.2f; x < -hl * 0.25f; x += 2.2f) c.drawRect(x, -hw + 1.2f, x + 0.35f, hw - 1.2f, fill);
-                if ((v.number & 1) == 0) {
+                if (v.kind == Fleet.K_PICKUP) {
+                    // ((26.0) A survivors' armed pickup: a gun on a post in the bed, a gunner behind it, turning to its target.)
+                    float gx = -hl * 0.55f, rel = v.turret - v.angle;
+                    float ca = (float) Math.cos(rel), sa = (float) Math.sin(rel);
+                    if (!v.crew.isEmpty() && v.crew.size() >= 2) {
+                        fill.setColor(0xFF6A5A44);
+                        c.drawCircle(gx - ca * 1.6f, -sa * 1.6f, 1.5f, fill);
+                    }
+                    stroke.setColor(0xFF222428);
+                    stroke.setStrokeWidth(1.0f);
+                    c.drawLine(gx, 0, gx + ca * 5.5f, sa * 5.5f, stroke);
+                    fill.setColor(0xFF34373C);
+                    c.drawCircle(gx, 0, 1.1f, fill);
+                } else if ((v.number & 1) == 0) {
                     fill.setColor(0xFF8A6A48);
                     c.drawRect(-hl * 0.8f, -hw * 0.45f, -hl * 0.42f, hw * 0.35f, fill);
                 }
@@ -8307,6 +8320,9 @@ final class GameView extends View implements Menu.Host {
                 + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
         else if (e.type == Entity.SOLDIER) title = Names.soldierRank(e) + " " + Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
         else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
+        // ((26.0) A survivor hero, and what someone did before.)
+        else if (e.hero()) title = Names.hero(e.nameSeed) + "  -  Survivor hero" + (e.trade() != Entity.TR_NONE ? ", " + Entity.TRADE_NAMES[e.trade()].toLowerCase(java.util.Locale.ROOT) : "");
+        else if (e.trade() != Entity.TR_NONE) title = Names.person(e.nameSeed) + "  -  " + Entity.TRADE_NAMES[e.trade()];
         else title = Names.person(e.nameSeed) + "  -  " + Entity.NAMES[e.type];
         lines.add(doing(e));
         String life = world.jobTitle(e);

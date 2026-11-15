@@ -71,6 +71,18 @@ final class Names {
         return e.type == Entity.COP ? copRank(e) : e.type == Entity.SOLDIER ? soldierRank(e) : null;
     }
 
+    // ((26.0) A survivor hero is known by a name the others gave them.)
+    static final String[] NICKS = {"Hawkeye", "Doc", "Lucky", "Iron", "Ghost", "Bulldog", "Sparrow", "Tank", "Ace", "Red",
+            "Steady", "Bones", "Wolf", "Preacher", "Hammer", "Sarge", "Blaze", "Kid", "Slick", "Tex"};
+
+    /** "First 'Nick' Last". */
+    static String hero(int seed) {
+        String n = person(seed);
+        int sp = n.indexOf(' ');
+        String nick = NICKS[((seed * 0x2545F491) >>> 8) % NICKS.length];
+        return sp < 0 ? n + " '" + nick + "'" : n.substring(0, sp) + " '" + nick + "'" + n.substring(sp);
+    }
+
     static String dog(int seed) {
         Country c = here();
         return c.dogs[(seed & 0x7FFFFFFF) % c.dogs.length];

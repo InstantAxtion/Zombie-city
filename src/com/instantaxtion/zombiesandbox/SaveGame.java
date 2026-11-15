@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 72;
+    private static final int VERSION = 75;
 
     private SaveGame() {
     }
@@ -40,7 +40,8 @@ final class SaveGame {
             out.writeInt(cfg.civic);
             // ((17.0) Version 57: the game mode.)
             // (The game mode until 19.6. From version 65 (20.0): the difficulty, in bits 8 to 11.)
-            out.writeInt(cfg.difficulty << 8);
+            // ((26.0) And the police/army strength in bits 12 and 13.)
+            out.writeInt(cfg.difficulty << 8 | cfg.force << 12);
 
             out.writeFloat(w.time);
             out.writeInt(w.turned);
@@ -471,6 +472,19 @@ final class SaveGame {
             }
             out.writeInt(w.basesFounded);
             out.writeInt(w.basesLost);
+            // ((26.0) Version 75 (at the very end): settlements, laid out over their own ground.)
+            int st = 0;
+            for (SurvivorBases.Base b : w.bases) if (b.settlement) st++;
+            out.writeInt(st);
+            for (SurvivorBases.Base b : w.bases) {
+                if (!b.settlement) continue;
+                out.writeInt(w.city.buildings.indexOf(b.b));
+                out.writeInt(b.tx0);
+                out.writeInt(b.ty0);
+                out.writeInt(b.tx1);
+                out.writeInt(b.ty1);
+                out.writeInt(b.room);
+            }
         } finally {
             moved = null;
             homeIndex = null;
@@ -609,6 +623,7 @@ final class SaveGame {
                 int packed = in.readInt();
                 // ((20.0) From version 65 the old game mode's place holds the difficulty.)
                 if (version >= 65) cfg.difficulty = Math.min(3, packed >> 8 & 15);
+                cfg.force = version >= 75 ? Math.min(2, packed >> 12 & 3) : 1;
             }
             // (Cities saved before 10.4 were built without their government quarter.)
             cfg.civic = version >= 48 ? 27 : version >= 47 ? 26 : version >= 46 ? 25 : version >= 45 ? 24 : version >= 44 ? 23 : version >= 43 ? 22 : version >= 42 ? 21 : version >= 40 ? 20 : version >= 39 ? 19 : version >= 38 ? 18 : version >= 37 ? 17 : version >= 36 ? 16 : version >= 35 ? 15 : version >= 34 ? 14 : version >= 33 ? 13 : version >= 32 ? 12 : version >= 31 ? 11 : version >= 30 ? 11 : version >= 29 ? 10 : version >= 28 ? 9 : version >= 27 ? 8 : version >= 26 ? 7 : version >= 25 ? 6 : version >= 24 ? 5 : version >= 23 ? 4 : version >= 22 ? 3 : version >= 20 ? 2 : version >= 19 ? 1 : 0;
@@ -1114,6 +1129,13 @@ final class SaveGame {
                     }
                     w.basesFounded = in.readInt();
                     w.basesLost = in.readInt();
+                    if (version >= 75) {
+                        int sn = in.readInt();
+                        for (int k = 0; k < sn; k++) {
+                            int bi = in.readInt(), x0 = in.readInt(), y0 = in.readInt(), x1 = in.readInt(), y1 = in.readInt(), room = in.readInt();
+                            w.restoreSettlement(bi, x0, y0, x1, y1, room);
+                        }
+                    }
                 }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)

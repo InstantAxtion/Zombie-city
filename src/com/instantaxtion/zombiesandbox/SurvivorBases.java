@@ -43,10 +43,12 @@ final class SurvivorBases {
         float age, quietFor, emptyFor, saidCd;
         int said;
         /** Counted each second: everyone who belongs, those with guns on the posts, and the dead inside the walls. */
-        transient int members, guards, inside;
+        transient int members, guards, inside, engineers;
         /** How many it has room for. */
         int room = 30;
         boolean fallen;
+        /** ((26.0) Two bases joined into one walled settlement. */
+        boolean settlement;
 
         float cx() {
             return (tx0 + tx1 + 1) * City.T / 2f;
@@ -75,12 +77,18 @@ final class SurvivorBases {
         float T = City.T;
         int bx0 = City.fl(b.x0 / T), by0 = City.fl(b.y0 / T), bx1 = City.fl((b.x1 - 1) / T), by1 = City.fl((b.y1 - 1) / T);
         if (bx1 - bx0 > 12 || by1 - by0 > 12) return null;
+        return planRect(city, b, bx0 - 3, by0 - 3, bx1 + 3, by1 + 3, 90);
+    }
+
+    /** ((26.0) The same over any ground (tiles, inclusive): a settlement of two bases joined, too. */
+    static Base planRect(City city, City.Building b, int tx0, int ty0, int tx1, int ty1, int maxRing) {
+        float T = City.T;
         Base s = new Base();
         s.b = b;
-        s.tx0 = bx0 - 3;
-        s.ty0 = by0 - 3;
-        s.tx1 = bx1 + 3;
-        s.ty1 = by1 + 3;
+        s.tx0 = tx0;
+        s.ty0 = ty0;
+        s.tx1 = tx1;
+        s.ty1 = ty1;
         if (s.tx0 < 2 || s.ty0 < 2 || s.tx1 >= city.w - 2 || s.ty1 >= city.h - 2) return null;
         // The ring, clockwise from the top left corner.
         ArrayList<Integer> ring = new ArrayList<Integer>();
@@ -98,13 +106,18 @@ final class SurvivorBases {
             if (city.solid[t] && k != City.FENCE) continue;
             open.add(t);
         }
-        if (open.size() < 8 || open.size() > 90) return null;
+        if (open.size() < 8 || open.size() > maxRing) return null;
         s.ring = new int[open.size()];
         s.fails = new int[open.size()];
         for (int i = 0; i < s.ring.length; i++) s.ring[i] = open.get(i);
         // The gate: the ring tile nearest the building's door, and a second on the far side of a big ring.
         int g0 = nearestRing(s, city, b.doorX, b.doorY);
-        if (s.ring.length > 40) {
+        if (s.ring.length > 120) {
+            // (A settlement: a gate on each side.)
+            float cx = s.cx(), cy = s.cy(), hw = (s.tx1 - s.tx0) * City.T / 2f, hh = (s.ty1 - s.ty0) * City.T / 2f;
+            int a = nearestRing(s, city, cx - hw, cy), bb = nearestRing(s, city, cx + hw, cy), c = nearestRing(s, city, cx, cy - hh), d = nearestRing(s, city, cx, cy + hh);
+            s.gates = new int[]{a, bb, c, d};
+        } else if (s.ring.length > 40) {
             int g1 = nearestRing(s, city, 2 * s.cx() - b.doorX, 2 * s.cy() - b.doorY);
             s.gates = g1 != g0 ? new int[]{g0, g1} : new int[]{g0};
         } else s.gates = new int[]{g0};

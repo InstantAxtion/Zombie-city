@@ -361,10 +361,28 @@ final class Entity {
     static final int W_STD = 0, W_PISTOL = 1, W_SHOTGUN = 2, W_RIFLE = 3, W_HUNTING = 4, W_REVOLVER = 5;
     /** (11.4) A submachine gun (SWAT, the feds), a carbine (troopers, recon, some patrol officers), a marksman rifle. */
     static final int W_SMG = 6, W_CARBINE = 7, W_DMR = 8;
+    /** (26.0) A crossbow: one bolt at a time, hits hard, and hardly a sound - the dead don't hear it. */
+    static final int W_CROSSBOW = 9;
     static final int M_NONE = 0, M_BAT = 1, M_AXE = 2, M_MACHETE = 3, M_CROWBAR = 4;
     static final String[] WEAPON_NAMES = {"", "Pistol", "Shotgun", "Rifle", "Hunting rifle", "Revolver", "Submachine gun", "Carbine",
-            "Marksman rifle"};
+            "Marksman rifle", "Crossbow"};
     static final String[] MELEE_NAMES = {"", "Bat", "Axe", "Machete", "Crowbar"};
+
+    /** (26.0) What some civilians did before: hunters and ex-soldiers start armed and shoot well, engineers build faster. */
+    static final int TR_NONE = 0, TR_HUNTER = 1, TR_VETERAN = 2, TR_ENGINEER = 3;
+    static final String[] TRADE_NAMES = {"", "Hunter", "Ex-soldier", "Engineer"};
+
+    /** Their trade, the same every time (from their seed): about 2% hunters, 1.5% ex-soldiers, 3% engineers. */
+    int trade() {
+        if (type != CIVILIAN || inmate) return TR_NONE;
+        int h = ((nameSeed * 0x27D4EB2F) >>> 8) % 1000;
+        return h < 20 ? TR_HUNTER : h < 35 ? TR_VETERAN : h < 65 ? TR_ENGINEER : TR_NONE;
+    }
+
+    /** (26.0) A civilian who's got good enough at this (level 6 or more) to be a name people know: a hero. */
+    boolean hero() {
+        return type == CIVILIAN && level >= 5;
+    }
 
     /** The kind of gun in their hands. */
     int gunKind() {

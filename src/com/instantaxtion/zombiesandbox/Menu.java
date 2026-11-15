@@ -2018,6 +2018,18 @@ final class Menu {
             y += 16 * dp;
         }
         y += 10 * dp;
+        // ((26.0) How strong the police and army are: fewer or more of them than the city would have.)
+        y = segRow(c, CityConfig.OPT_FORCE, "Police & army strength", lx, y, lw);
+        plain.setTextSize(12.5f * dp);
+        plain.setColor(MUTED);
+        y -= 6 * dp;
+        String[] forceInfo = {"Weak: about half the police and soldiers the city would have.", "Normal: as many as the city would have.",
+                "Strong: over half as many again."};
+        for (String line : wrap(forceInfo[Math.max(0, Math.min(2, config.force))], lw - 4 * dp, plain)) {
+            c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
+            y += 16 * dp;
+        }
+        y += 12 * dp;
         y = segRow(c, CityConfig.OPT_RESERVES, "Reinforcements", lx, y, lw);
         plain.setTextSize(12.5f * dp);
         plain.setColor(MUTED);

@@ -1418,6 +1418,10 @@ final class World {
                 e.runSpeed = 36 + rnd.nextFloat() * 10;
                 e.body = shirts()[rnd.nextInt(shirts().length)];
                 e.head = hair()[rnd.nextInt(hair().length)];
+                // ((26.0) Hunters keep a rifle or a crossbow; ex-soldiers kept their service rifle.)
+                int tr = e.trade();
+                if (tr == Entity.TR_HUNTER) setGun(e, (e.nameSeed & 1) == 0 ? Entity.W_HUNTING : Entity.W_CROSSBOW, 21);
+                else if (tr == Entity.TR_VETERAN) setGun(e, Entity.W_RIFLE, 90);
                 break;
             case Entity.COP:
                 e.hp = 60;
@@ -3974,6 +3978,7 @@ final class World {
             case Entity.W_SMG: return 200;
             case Entity.W_CARBINE: return 240;
             case Entity.W_DMR: return 290;
+            case Entity.W_CROSSBOW: return 30;
             default: return e.type == Entity.SOLDIER ? 255 : e.type == Entity.COP ? 205 : 190;
         }
     }
@@ -4039,6 +4044,7 @@ final class World {
         if (e == null || e.dead || e.isUndead() || e.type == Entity.DOG) return;
         e.xp += amount;
         String rankWas = Names.rank(e);
+        boolean heroWas = e.hero();
         while (e.level + 1 < LEVEL_XP.length && e.xp >= LEVEL_XP[e.level + 1]) {
             e.level++;
             int[] order = e.role == Entity.ROLE_CORPSMAN ? PERKS_MEDIC : e.type == Entity.SOLDIER ? PERKS_SOLDIER
@@ -4057,6 +4063,12 @@ final class World {
             }
             if (e.level >= 2 && (e.type == Entity.COP || e.type == Entity.SOLDIER || e.canShoot()))
                 highlight(Names.person(e.nameSeed) + " reached level " + (e.level + 1) + ": " + perkName(p), e.x, e.y);
+        }
+        // ((26.0) A civilian good enough at it becomes a name the survivors know.)
+        if (heroWas != e.hero() && e.hero()) {
+            highlight(Names.hero(e.nameSeed) + " is a survivor hero", e.x, e.y);
+            dispatch.say(Dispatch.WHO_INFO, null, "News: Survivors are talking about " + Names.hero(e.nameSeed) + ", who has saved "
+                    + e.saved + (e.saved == 1 ? " life" : " lives") + " and put down " + e.kills + " of the dead.", e.x, e.y);
         }
         // ((25.0) And up a rank for it: announced, and on the radio.)
         String rankNow = Names.rank(e);
@@ -4102,17 +4114,18 @@ final class World {
         }
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity l = entities.get(i);
-            if (l.dead || l.removed || l == controlled || l.lodZ > 25 || l.bandN >= 4) continue;
+            int cap = l.hero() ? 8 : 4;
+            if (l.dead || l.removed || l == controlled || l.lodZ > 25 || l.bandN >= cap) continue;
             boolean civ = l.type == Entity.CIVILIAN && l.canShoot() && l.leader == null;
             boolean officer = (l.type == Entity.COP || l.type == Entity.SOLDIER) && (l.task == Dispatch.T_NONE || l.task == Dispatch.T_PATROL)
                     && !l.aiming && l.rig == null;
             if (!civ && !officer) continue;
             int cx0 = Math.max(0, (int) ((l.x - 70) / CELL)), cx1 = Math.min(gw - 1, (int) ((l.x + 70) / CELL));
             int cy0 = Math.max(0, (int) ((l.y - 70) / CELL)), cy1 = Math.min(gh - 1, (int) ((l.y + 70) / CELL));
-            for (int cy = cy0; cy <= cy1 && l.bandN < 4; cy++)
-                for (int cx = cx0; cx <= cx1 && l.bandN < 4; cx++) {
+            for (int cy = cy0; cy <= cy1 && l.bandN < cap; cy++)
+                for (int cx = cx0; cx <= cx1 && l.bandN < cap; cx++) {
                     int c = cy * gw + cx;
-                    for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end && l.bandN < 4; k++) {
+                    for (int k = cellStart[c] + zCount[c], end = cellStart[c] + cellCount[c]; k < end && l.bandN < cap; k++) {
                         Entity o = sorted[k];
                         if (o == l || o.dead || o.removed || o.type != Entity.CIVILIAN || o.leader != null || o.canShoot() || o.infected || o.base != null
                                 || o == controlled || o.bandN > 0 || o.task != Dispatch.T_NONE || o.fleeTimer <= 0) continue;
@@ -4191,7 +4204,9 @@ final class World {
     static float aimBonus(Entity e) {
         int h = e.nameSeed * 0x9E3779B1;
         h ^= h >>> 15;
-        return ((h & 0x7FFFFFFF) % 1000) / 1000f * 0.15f;
+        // ((26.0) Hunters and ex-soldiers shoot like they've done it before.)
+        int tr = e.trade();
+        return ((h & 0x7FFFFFFF) % 1000) / 1000f * 0.15f + (tr == Entity.TR_HUNTER || tr == Entity.TR_VETERAN ? 0.2f : 0) + (e.hero() ? 0.1f : 0);
     }
 
     /**
@@ -5373,6 +5388,7 @@ final class World {
             case Entity.W_HUNTING: return 5;
             case Entity.W_REVOLVER: return 6;
             case Entity.W_DMR: return 20;
+            case Entity.W_CROSSBOW: return 1;
             default: return 12;
         }
     }
@@ -5384,6 +5400,7 @@ final class World {
             case Entity.W_SMG: case Entity.W_CARBINE: return 120;
             case Entity.W_DMR: return 80;
             case Entity.W_HUNTING: return 25;
+            case Entity.W_CROSSBOW: return 20;
             default: return -1;
         }
     }
@@ -6450,9 +6467,11 @@ final class World {
     /** ((24.0) How many are making for each zone, so the next to set out can pick one with places left for them. */
     private void countHeading() {
         if (dispatch.zones.isEmpty()) return;
-        for (int i = 0; i < dispatch.zones.size(); i++) dispatch.zones.get(i).heading = 0;
+        for (int i = 0; i < dispatch.zones.size(); i++) dispatch.zones.get(i).heading = dispatch.zones.get(i).engineers = 0;
         for (int i = 0, n = entities.size(); i < n; i++) {
             Entity e = entities.get(i);
+            // ((26.0) Engineers sheltering in a zone lend a hand with its wall.)
+            if (!e.dead && e.task == Dispatch.T_SHELTER && e.zone != null && e.trade() == Entity.TR_ENGINEER) e.zone.engineers++;
             if (e.dead || e.task != Dispatch.T_SEEK || e.seekZone == null || e.seekZone.removed) continue;
             e.seekZone.heading++;
         }
@@ -11444,6 +11463,7 @@ final class World {
             case Entity.W_SMG: range = Math.min(range, 170); break;
             case Entity.W_CARBINE: range = Math.max(range, 220); break;
             case Entity.W_HUNTING: range = Math.max(range, 280); break;
+            case Entity.W_CROSSBOW: range = Math.max(range, 200); break;
             case Entity.W_DMR: range = Math.max(range, 300); break;
         }
         if (e.role == Entity.ROLE_COMMANDER && soldier) command(e, dt);
@@ -13444,6 +13464,31 @@ final class World {
         return s;
     }
 
+    /** ((26.0) For loading a save: a settlement laid out over its ground again, in place of the base round its building. */
+    void restoreSettlement(int bi, int x0, int y0, int x1, int y1, int room) {
+        if (bi < 0 || bi >= city.buildings.size()) return;
+        City.Building b = city.buildings.get(bi);
+        for (int i = 0; i < bases.size(); i++) {
+            SurvivorBases.Base old = bases.get(i);
+            if (old.b != b) continue;
+            SurvivorBases.Base m = SurvivorBases.planRect(city, b, x0, y0, x1, y1, 240);
+            if (m == null) return;
+            m.settlement = true;
+            m.name = old.name;
+            m.tier = old.tier;
+            m.work = old.work;
+            m.walled = old.walled;
+            m.towersUp = old.towersUp;
+            m.stash = old.stash;
+            m.workshop = old.workshop;
+            m.age = old.age;
+            m.said = old.said;
+            m.room = room;
+            bases.set(i, m);
+            return;
+        }
+    }
+
     /** (For loading a save: the base laid out round its building again, without the checks a new one has.) */
     SurvivorBases.Base restoreBase(City.Building b) {
         SurvivorBases.Base s = SurvivorBases.plan(city, b);
@@ -13455,6 +13500,8 @@ final class World {
     private void updateBases() {
         // (Armed bands with people to protect found bases of their own.)
         if (outbreak && ((int) time) % 5 == 2 && bases.size() < SurvivorBases.MAX_BASES) bandBases();
+        if (outbreak && ((int) time) % 5 == 4) roamingPickups();
+        if (((int) time) % 10 == 7) joinBases();
         for (int i = bases.size() - 1; i >= 0; i--) {
             SurvivorBases.Base s = bases.get(i);
             s.age += 1;
@@ -13462,13 +13509,14 @@ final class World {
             float cx = s.cx(), cy = s.cy();
             float half = Math.max(s.tx1 - s.tx0, s.ty1 - s.ty0) * City.T / 2f;
             // Who's here.
-            s.members = s.guards = s.inside = 0;
+            s.members = s.guards = s.inside = s.engineers = 0;
             // (Everyone who belongs, wherever they are - on the way in counts too.)
             for (int k = 0, n = entities.size(); k < n; k++) {
                 Entity e = entities.get(k);
                 if (e.base != s || e.dead) continue;
                 s.members++;
                 if (e.militia) s.guards++;
+                if (e.trade() == Entity.TR_ENGINEER) s.engineers++;
             }
             for (int k = 0, n = gatherZ(cx, cy, half + 8); k < n; k++) if (s.contains(gathered[k].x, gathered[k].y, -1)) s.inside++;
             boolean quiet = !zombieWithin(cx, cy, half + 90);
@@ -13481,6 +13529,7 @@ final class World {
             }
             recruitToBase(s, quiet);
             buildBase(s, quiet);
+            if (((int) time) % 5 == 1) basePickup(s);
             if (((int) time) % 3 == 0) manBase(s);
             baseGates(s);
             baseWorkshop(s);
@@ -13567,7 +13616,8 @@ final class World {
     /** The wall going up, section by section while it's quiet; then sandbags, then concrete; damage made good. */
     private void buildBase(SurvivorBases.Base s, boolean quiet) {
         if (!quiet || s.members == 0) return;
-        s.work += 0.2f + Math.min(10, s.members) * 0.05f;
+        // ((26.0) Engineers among them build a good deal faster.)
+        s.work += 0.2f + Math.min(10, s.members) * 0.05f + Math.min(4, s.engineers) * 0.15f;
         // A section down (or not yet up) first.
         while (s.work >= SurvivorBases.SECTION_WORK) {
             int ni = SurvivorBases.nextSection(city, s, -1);
@@ -13657,6 +13707,128 @@ final class World {
                 e.onTower = false;
             }
         }
+    }
+
+    /** ((26.0) A walled base with rounds to spare and guards enough fits out an armed pickup, two of its guards aboard. */
+    private void basePickup(SurvivorBases.Base s) {
+        if (!s.walled || s.stash < 80 || s.guards < 4 || fleet.pickupsOf(s) > 0 || fleet.pickups() >= 6 || s.gates.length == 0) return;
+        int g = s.gates[0];
+        float gx = (g % city.w + 0.5f) * City.T, gy = (g / city.w + 0.5f) * City.T;
+        float dx = gx - s.cx(), dy = gy - s.cy(), l = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        float[] spot = city.nearestDrivable(gx + dx / l * City.T * 2.5f, gy + dy / l * City.T * 2.5f);
+        if (spot == null || s.contains(spot[0], spot[1], 0) || vehicleAt(spot[0], spot[1]) != null) return;
+        ArrayList<Entity> crew = new ArrayList<Entity>();
+        for (int k = 0, n = entities.size(); k < n && crew.size() < 2; k++) {
+            Entity e = entities.get(k);
+            if (!e.dead && e.base == s && e.militia && e.ammo + e.reserve >= 10 && e != controlled) crew.add(e);
+        }
+        if (crew.size() < 2) return;
+        for (Entity e : crew) {
+            e.militia = false;
+            e.onTower = false;
+        }
+        s.stash -= 60;
+        Fleet.Vehicle v = fleet.makePickup(spot[0], spot[1], (float) Math.atan2(dy, dx), s, crew);
+        crew.get(1).reserve += 40;
+        dispatch.say(Dispatch.WHO_INFO, null, "News: " + s.name + " has bolted a gun on a pickup. It's out hunting the dead round their walls.", v.x, v.y);
+    }
+
+    /** ((26.0) Armed survivors on the move with no base take a parked car and bolt a gun in the back. */
+    private void roamingPickups() {
+        if (fleet.pickups() >= 6) return;
+        for (int i = 0, n = entities.size(); i < n; i++) {
+            Entity l = entities.get(i);
+            if (l.dead || l.type != Entity.CIVILIAN || !l.canShoot() || l.base != null || l.militia || l.raider || l == controlled
+                    || l.ammo + l.reserve < 12 || l.leader != null || zombieWithin(l.x, l.y, 90)) continue;
+            Entity mate = null;
+            for (int k = 0, m = gatherLiving(l.x, l.y, 50); k < m && mate == null; k++) {
+                Entity o = gathered[k];
+                if (o != l && !o.dead && o.type == Entity.CIVILIAN && o.base == null && !o.militia && o != controlled && !o.infected
+                        && (o.leader == l || o.canShoot())) mate = o;
+            }
+            if (mate == null) continue;
+            Fleet.Vehicle car = null;
+            for (int k = 0, m = fleet.gather(l.x, l.y, 70); k < m && car == null; k++) {
+                Fleet.Vehicle v = fleet.found[k];
+                if (v.type == Fleet.CAR && v.parked && !v.broken && !v.burnt && v.kind == 0 && v.riders.isEmpty() && v.player == null
+                        && v.evacStop < 0) car = v;
+            }
+            if (car == null) continue;
+            ArrayList<Entity> crew = new ArrayList<Entity>();
+            crew.add(mate);
+            crew.add(l);
+            mate.leader = null;
+            fleet.takeAsPickup(car, crew);
+            dispatch.say(Dispatch.WHO_INFO, null, "911: \"Some guys just bolted a rifle on a pickup and drove off shooting at those things!\"", car.x, car.y);
+            return;
+        }
+    }
+
+    /**
+     * ((26.0) Two walled bases close together join up: one wall round the both of them - a settlement - the walls between
+     * them taken down, their people and stores put together.
+     */
+    private void joinBases() {
+        for (int i = 0; i < bases.size(); i++)
+            for (int j = i + 1; j < bases.size(); j++) {
+                SurvivorBases.Base a = bases.get(i), b = bases.get(j);
+                if (!a.walled || !b.walled || a.settlement || b.settlement) continue;
+                int gapX = Math.max(0, Math.max(a.tx0, b.tx0) - Math.min(a.tx1, b.tx1)), gapY = Math.max(0, Math.max(a.ty0, b.ty0) - Math.min(a.ty1, b.ty1));
+                if (gapX > 18 || gapY > 18) continue;
+                int x0 = Math.min(a.tx0, b.tx0), y0 = Math.min(a.ty0, b.ty0), x1 = Math.max(a.tx1, b.tx1), y1 = Math.max(a.ty1, b.ty1);
+                if (x1 - x0 > 46 || y1 - y0 > 46) continue;
+                SurvivorBases.Base big = a.members >= b.members ? a : b, small = big == a ? b : a;
+                SurvivorBases.Base m = SurvivorBases.planRect(city, big.b, x0, y0, x1, y1, 240);
+                if (m == null) continue;
+                // No zone in the way.
+                boolean clash = false;
+                for (int k = 0; k < dispatch.zones.size() && !clash; k++) {
+                    Dispatch.SafeZone z = dispatch.zones.get(k);
+                    clash = !z.removed && z.right() > x0 * City.T && z.left() < (x1 + 1) * City.T && z.bottom() > y0 * City.T && z.top() < (y1 + 1) * City.T;
+                }
+                if (clash) continue;
+                joinInto(m, a, b);
+                m.room = Math.min(60, a.room + b.room);
+                String place = city.placeName(m.cx(), m.cy());
+                int amp = place.indexOf(" & ");
+                if (amp > 0) place = place.substring(0, amp);
+                dispatch.say(Dispatch.WHO_INFO, null, "News: " + big.name + " and " + small.name + " have joined up. They're walling in the "
+                        + place + " Settlement together.", m.cx(), m.cy());
+                m.name = place + " Settlement";
+                return;
+            }
+    }
+
+    /** The settlement m takes the place of bases a and b. */
+    void joinInto(SurvivorBases.Base m, SurvivorBases.Base a, SurvivorBases.Base b) {
+        m.settlement = true;
+        m.tier = Math.min(a.tier, b.tier);
+        m.stash = a.stash + b.stash;
+        m.age = Math.max(a.age, b.age);
+        m.said = 1;
+        // The old walls inside it come down (those on its own edge stay).
+        java.util.HashSet<Integer> edge = new java.util.HashSet<Integer>();
+        for (int t : m.ring) edge.add(t);
+        SurvivorBases.Base[] old = {a, b};
+        for (SurvivorBases.Base o : old)
+            for (int t : o.ring) {
+                if (edge.contains(t)) continue;
+                float[] bar = SurvivorBases.barrierAt(this, t);
+                if (bar != null) removeBarricade(bar);
+            }
+        bases.remove(a);
+        bases.remove(b);
+        bases.add(m);
+        for (int k = 0, n = entities.size(); k < n; k++) {
+            Entity e = entities.get(k);
+            if (e.base == a || e.base == b) e.base = m;
+        }
+        for (int k = 0; k < fleet.vehicles.size(); k++) {
+            Fleet.Vehicle v = fleet.vehicles.get(k);
+            if (v.pbase == a || v.pbase == b) v.pbase = m;
+            if (v.ptarget == a || v.ptarget == b) v.ptarget = null;
+        }
+        a.fallen = b.fallen = true;
     }
 
     /** Shut when the dead come near (with nobody in the gateway), open again once they've been gone a while. */
@@ -14743,6 +14915,11 @@ final class World {
             e.cooldown = 1.3f;
             dmg = 55;
             accuracy = 0.85f;
+        } else if (e.weapon == Entity.W_CROSSBOW) {
+            // ((26.0) A bolt: slow to load, hits hard, and quiet.)
+            e.cooldown = 0.9f;
+            dmg = 48;
+            accuracy = 0.88f;
         } else if (e.weapon == Entity.W_REVOLVER) {
             e.cooldown = 0.55f;
             dmg = 18;
@@ -14864,6 +15041,8 @@ final class World {
             else if (!hitWall) impactPuff(ex, ey, 0xFF8E8676);
             tracer(mx, my, ex, ey);
         }
+        // ((26.0) A crossbow makes no flash and no bang.)
+        if (e.weapon == Entity.W_CROSSBOW) return;
         particle(mx, my, 0, 0, 0.06f, soldier ? 3.2f : 2.6f, 0xFFFFE9A0, P_FLASH);
         int gunSound = e.weapon == Entity.W_SHOTGUN ? Sfx.SHOTGUN : e.weapon == Entity.W_HUNTING ? Sfx.HUNTING : e.weapon == Entity.W_REVOLVER ? Sfx.REVOLVER
                 : e.weapon == Entity.W_SMG ? Sfx.SMG : e.weapon == Entity.W_CARBINE ? Sfx.CARBINE : e.weapon == Entity.W_DMR ? Sfx.DMR : -1;

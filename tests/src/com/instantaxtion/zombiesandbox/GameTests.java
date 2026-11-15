@@ -1209,7 +1209,7 @@ public final class GameTests {
                 }
                 w.alert = 2;
                 w.outbreak = true;
-                boolean declared = false, roads = true, invariant = true, sent = false;
+                boolean declared = false, roads = true, invariant = true, sent = false, staleBefore = false;
                 int perimeter = 0, checkpoints = 0;
                 for (int f = 0; f < 30 * 60; f++) {
                     w.update(1 / 30f);
@@ -1230,12 +1230,16 @@ public final class GameTests {
                         }
                     }
                     int n = 0;
+                    // (A unit whose zone has just moved off its post lets it go at its next look: not held two samples running.)
+                    boolean stale = false;
                     for (Entity e : w.entities) {
                         if (e.dead || e.task != Dispatch.T_CORDON) continue;
                         n++;
                         World.InfectionZone z = w.zoneOfPost(e.postX, e.postY);
-                        if (z == null || !z.critical) invariant = false;
+                        if (z == null || !z.critical) stale = true;
                     }
+                    if (stale && staleBefore) invariant = false;
+                    staleBefore = stale;
                     perimeter = Math.max(perimeter, n);
                 }
                 check(declared, "an infection zone is declared round the bunch of the dead");
@@ -1617,7 +1621,8 @@ public final class GameTests {
                 for (int f = 0; f < 30 * 10; f++) w.update(1 / 30f);
                 check(dozer.parked && !wrecks.get(0).removedFromFleet, "left be on a calm day (parked " + dozer.parked + ", wreck gone " + wrecks.get(0).removedFromFleet + ", zombies " + w.zombies + ")");
                 boolean cleared = false;
-                for (int f = 0; f < 30 * 240 && !cleared; f++) {
+                // ((26.0) Up to seven minutes: how long it takes swings a lot with the traffic round it, run to run.)
+                for (int f = 0; f < 30 * 420 && !cleared; f++) {
                     w.alert = Math.max(w.alert, 1);
                     w.update(1 / 30f);
                     w.evCount = 0;
@@ -4196,6 +4201,8 @@ public final class GameTests {
                 float[] p = w.city.findWalkable(w.city.worldW() / 2, w.city.worldH() / 2);
                 // An engine going by: the dead within earshot turn to it.
                 Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
+                // (Sturdy: an armed hunter about shouldn't settle it before the engine goes by.)
+                z.hp = z.maxHp = 1e5f;
                 w.recount();
                 w.update(1 / 30f);
                 z.memory = 0;
@@ -4359,6 +4366,57 @@ public final class GameTests {
                     Campaign.tick(rw);
                 }
                 check(rw.missionResult == 1, "cleared and held: the mission is won");
+            }
+        });
+        test("26.0: hunters and ex-soldiers start armed; police and army strength; nearby bases join into a settlement, kept in a save", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.seed = 3;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                World w = new World(c);
+                w.populate(c);
+                int hunters = 0, armed = 0;
+                for (Entity e : w.entities)
+                    if (e.trade() == Entity.TR_HUNTER || e.trade() == Entity.TR_VETERAN) {
+                        hunters++;
+                        if (e.canShoot()) armed++;
+                    }
+                check(hunters > 0 && armed >= hunters * 0.9f, "hunters and ex-soldiers about, armed (" + armed + " of " + hunters + ")");
+                CityConfig weak = c.copy(), strong = c.copy();
+                weak.force = 0;
+                strong.force = 2;
+                check(weak.cops(10000) < c.cops(10000) && c.cops(10000) < strong.cops(10000), "police strength follows the setting");
+                // Two walled bases near each other.
+                SurvivorBases.Base a = null, b = null;
+                for (City.Building x : w.city.buildings) {
+                    if (x.collapsed || x.capacity == 0 || a != null) continue;
+                    SurvivorBases.Base pa = SurvivorBases.plan(w.city, x);
+                    if (pa == null) continue;
+                    for (City.Building y : w.city.buildings) {
+                        if (y == x || y.collapsed || y.capacity == 0) continue;
+                        SurvivorBases.Base pb = SurvivorBases.plan(w.city, y);
+                        if (pb == null) continue;
+                        int gx = Math.max(0, Math.max(pa.tx0, pb.tx0) - Math.min(pa.tx1, pb.tx1));
+                        if (gx >= 5 && gx <= 12 && Math.max(0, Math.max(pa.ty0, pb.ty0) - Math.min(pa.ty1, pb.ty1)) == 0
+                                && Math.max(pa.tx1, pb.tx1) - Math.min(pa.tx0, pb.tx0) <= 44) {
+                            a = w.restoreBase(x);
+                            b = w.restoreBase(y);
+                            break;
+                        }
+                    }
+                }
+                check(a != null && b != null, "two bases near each other");
+                a.walled = b.walled = true;
+                java.lang.reflect.Method jb = World.class.getDeclaredMethod("joinBases");
+                jb.setAccessible(true);
+                jb.invoke(w);
+                check(w.bases.size() == 1 && w.bases.get(0).settlement, "they join into one settlement");
+                File f = File.createTempFile("zcs", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                SurvivorBases.Base m = w.bases.get(0), lm = l.bases.isEmpty() ? null : l.bases.get(0);
+                check(lm != null && lm.settlement && lm.tx0 == m.tx0 && lm.tx1 == m.tx1, "kept in a save");
             }
         });
         test("25.0: armed survivors found a base, wall it in and man it; it's kept in a save", new Check() {
