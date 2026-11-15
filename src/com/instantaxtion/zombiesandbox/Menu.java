@@ -1836,6 +1836,24 @@ final class Menu {
                     c.drawCircle(ex + (float) Math.cos(a) * u * 1.15f, ey - u * 0.3f + (float) Math.sin(a) * u * 1.15f, u * 0.28f, fill);
                 }
                 c.drawCircle(ex, ey - u * 0.3f, u * 0.25f, fill);
+            } else if (i == CityConfig.SPACE_CENTER) {
+                // ((26.0) A rocket on its pad: the body and nose, the fins, the flame trench's pad under it.)
+                c.drawRect(ex - u * 0.4f, ey - u * 1.2f, ex + u * 0.4f, ey + u * 0.7f, fill);
+                android.graphics.Path nose = new android.graphics.Path();
+                nose.moveTo(ex - u * 0.4f, ey - u * 1.2f);
+                nose.lineTo(ex, ey - u * 2.1f);
+                nose.lineTo(ex + u * 0.4f, ey - u * 1.2f);
+                nose.close();
+                c.drawPath(nose, fill);
+                android.graphics.Path fins = new android.graphics.Path();
+                fins.moveTo(ex - u * 0.4f, ey);
+                fins.lineTo(ex - u * 1.0f, ey + u * 0.9f);
+                fins.lineTo(ex + u * 1.0f, ey + u * 0.9f);
+                fins.lineTo(ex + u * 0.4f, ey);
+                fins.close();
+                c.drawPath(fins, fill);
+                c.drawRect(ex - u * 1.8f, ey + u * 1.0f, ex + u * 1.8f, ey + u * 1.3f, fill);
+                c.drawRect(ex + u * 1.1f, ey - u * 1.6f, ex + u * 1.5f, ey + u * 1.0f, fill);
             } else if (i == CityConfig.DESERT) {
                 // ((22.9) A sun over a saguaro.)
                 c.drawCircle(ex + u * 1.1f, ey - u * 0.9f, u * 0.75f, fill);
@@ -2094,7 +2112,7 @@ final class Menu {
 
     private static final int[] MAP_COLORS = {0xFF8BD450, 0xFF6F8EC8, 0xFFE0A050, 0xFF9A9A90, 0xFF4CAF50, 0xFFB07050,
             0xFFD8C050, 0xFF50A0C0, 0xFFC050C0, 0xFF90B060, 0xFF3A9AD8, 0xFF2F6EA8, 0xFF48B0B0, 0xFF6A8098, 0xFF30B8D0,
-            0xFFE8A040, 0xFF4E9A5A, 0xFFD89A48, 0xFFE070B0, 0xFF3AA8D0, 0xFFE05A6A, 0xFFB898D0};
+            0xFFE8A040, 0xFF4E9A5A, 0xFFD89A48, 0xFFE070B0, 0xFF5A78D8, 0xFFE05A6A, 0xFFB898D0};
 
     private ArrayList<ArrayList<ArrayList<String>>> notesLines;
     private float notesW;

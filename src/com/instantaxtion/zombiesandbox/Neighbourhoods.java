@@ -238,6 +238,10 @@ final class Neighbourhoods {
             assignResort(city, r);
             return;
         }
+        if (city.cfg.spaceCenter()) {
+            assignSpace(city, r);
+            return;
+        }
         boolean[] used = new boolean[THEMES.length];
         for (City.District d : city.districts) {
             int bit = 1 << d.type;
@@ -301,6 +305,61 @@ final class Neighbourhoods {
             else if (k == 1) pick = last;
             if (pick < 0) pick = last - 1;
             d.theme = RESORT_THEMES[pick];
+            if (d.theme.named) {
+                used[pick] = true;
+                d.name = d.theme.name;
+            }
+        }
+    }
+
+    /**
+     * ((26.0) The Space Center's own: the space center itself, and round it the staff town - the homes of the rocket
+     * engineers along Astronaut Row, the main street of Rocket Town, the contractors' offices and works, and the plain
+     * pastel homes of the space coast everywhere else. Only that map uses them (and every district gets one).
+     */
+    static final Theme[] SPACE_THEMES = {
+            new Theme("Space Center", b(City.DT_DOWNTOWN, City.DT_MIDTOWN, City.DT_OLDTOWN, City.DT_SUBURB, City.DT_INDUSTRIAL,
+                    City.DT_CAMPUS, City.DT_PARKSIDE), true,
+                    c(0xFFD8D6D0, 0xFFB8B6B0, 0xFF8A8C90), c(0xFFF2F2EE, 0xFFE0E0DA),
+                    c(0xFF1E3C82, 0xFFB8B6B0), c(0xFFF2F2EE, 0xFFE0E0DA),
+                    c(0xFFF2F2EE, 0xFFD8DCE0), 0xFFC8C4BA, 0),
+            new Theme("Astronaut Row", b(City.DT_SUBURB, City.DT_PARKSIDE, City.DT_MIDTOWN), true,
+                    c(0xFF5A6A7A, 0xFF8A6A4A, 0xFF6A7A6A, 0xFFB8A888), c(0xFFF4F0E6, 0xFFE8EEF2, 0xFFF0E4CC, 0xFFDCE8E0),
+                    c(0xFF3E5A7A, 0xFFB86A4A), c(0xFFF4F0E6, 0xFFE8EEF2),
+                    c(0xFFF4F0E6, 0xFFE8EEF2, 0xFFDCE8E0), 0, 0),
+            new Theme("Rocket Town", b(City.DT_MIDTOWN, City.DT_DOWNTOWN, City.DT_OLDTOWN), true,
+                    c(0xFF3E4E6E, 0xFFB83A2E, 0xFF5A6A7A, 0xFFE8E4DC), c(0xFFF2EEE4, 0xFFE0E8F0, 0xFFF0DCC0, 0xFFE8D8D8),
+                    c(0xFF1E3C82, 0xFFC8382E, 0xFF3E4E6E, 0xFFE8C040), c(0xFFF4F2EC, 0xFFE0E8F0, 0xFFF8E0A0, 0xFFF0B8A8),
+                    c(0xFFF2EEE4, 0xFFE0E8F0, 0xFFD8DCE0), 0xFFD0CCC2, 3),
+            new Theme("Contractor Park", b(City.DT_INDUSTRIAL, City.DT_CAMPUS, City.DT_MIDTOWN), true,
+                    c(0xFF6A6E74, 0xFF8A8C90, 0xFF5A6A7A), c(0xFFE0E0DA, 0xFFD0D4D8, 0xFFE8E4DC),
+                    c(0xFF5A6A7A, 0xFF6A6E74), c(0xFFE0E0DA, 0xFFD0D4D8),
+                    c(0xFFD8DCE0, 0xFF9AB0C4, 0xFFC8D0D8, 0xFFE0E0DA), 0xFFC8C8C4, 0),
+            new Theme("Space Coast Homes", b(City.DT_SUBURB, City.DT_PARKSIDE, City.DT_MIDTOWN, City.DT_DOWNTOWN, City.DT_OLDTOWN,
+                    City.DT_INDUSTRIAL, City.DT_CAMPUS), false,
+                    c(0xFF8A7A6A, 0xFF5A6A7A, 0xFFB8A888, 0xFF6A8A8A), c(0xFFF6F2E8, 0xFFE4EEF0, 0xFFF4E6D0, 0xFFE8F0E0, 0xFFF0E0E0),
+                    c(0xFF5A6A7A, 0xFF8A7A6A), c(0xFFF6F2E8, 0xFFE4EEF0),
+                    c(0xFFF6F2E8, 0xFFE4EEF0, 0xFFE8F0E0), 0, 0),
+    };
+
+    /**
+     * ((26.0) The Space Center: the first district the space center itself, every other one a theme of the staff town
+     * that suits it (the space coast's homes for the rest).
+     */
+    private static void assignSpace(City city, Random r) {
+        int last = SPACE_THEMES.length - 1;
+        boolean[] used = new boolean[SPACE_THEMES.length];
+        for (int k = 0; k < city.districts.size(); k++) {
+            City.District d = city.districts.get(k);
+            int bit = 1 << d.type, n = 0, pick = -1;
+            for (int t = 1; t < last; t++) {
+                Theme th = SPACE_THEMES[t];
+                if ((th.types & bit) == 0 || used[t] || !d.labelled()) continue;
+                if (r.nextInt(++n) == 0) pick = t;
+            }
+            if (k == 0) pick = 0;
+            if (pick < 0) pick = last;
+            d.theme = SPACE_THEMES[pick];
             if (d.theme.named) {
                 used[pick] = true;
                 d.name = d.theme.name;

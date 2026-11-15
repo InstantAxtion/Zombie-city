@@ -4516,7 +4516,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() == 273, "250 designs and Theme Park Island's 23 (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 287, "250 designs, Theme Park Island's 23 and the Space Center's 14 (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();
@@ -4667,6 +4667,34 @@ public final class GameTests {
                 for (float[] d : other.decor) {
                     Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
                     check(ld == null || ld.districts != 0, "no theme park rides elsewhere: " + (ld == null ? "" : ld.name));
+                }
+            }
+        });
+        test("26.0: the Space Center has its launch pad and rocket, the assembly building, mission control and the landing strip; no other map gets them", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.SPACE_CENTER;
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MASSIVE;
+                c.seed = 2601;
+                City city = new City(c, 0.05f);
+                java.util.HashSet<String> ours = new java.util.HashSet<String>();
+                for (float[] d : city.decor) {
+                    Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                    if (ld != null && ld.districts == 0) ours.add(ld.name);
+                }
+                for (String n : new String[]{"Launch Pad A", "Vehicle Assembly Building", "Crawlerway", "Mission Control", "Landing Strip"})
+                    check(ours.contains(n), n + " is there: " + ours);
+                boolean hangar = false;
+                for (City.Building b : city.buildings)
+                    if (Variants.get(b.variant) != null && "Vehicle Assembly Building".equals(Variants.get(b.variant).name)) hangar = b.capacity >= 150 && b.doorX > 0;
+                check(hangar, "the assembly building takes people in");
+                CityConfig o = new CityConfig();
+                o.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                o.seed = 2602;
+                City other = new City(o, 0.05f);
+                for (float[] d : other.decor) {
+                    Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                    check(ld == null || !ours.contains(ld.name), "none of the space center's on Metropolis: " + (ld == null ? "" : ld.name));
                 }
             }
         });

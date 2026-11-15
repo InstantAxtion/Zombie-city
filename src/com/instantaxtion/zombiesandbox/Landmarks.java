@@ -79,6 +79,8 @@ final class Landmarks {
             LandmarkArt12.register(l);
             // ((25.0) Theme Park Island's own, after all the rest so their ids stay as they were.)
             LandmarkArt13.register(l);
+            // ((26.0) The Space Center's own, after those.)
+            LandmarkArt14.register(l);
             for (int i = 0; i < l.size(); i++) l.get(i).id = i;
             all = l;
         }
