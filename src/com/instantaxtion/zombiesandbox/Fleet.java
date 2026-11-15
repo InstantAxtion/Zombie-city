@@ -1486,6 +1486,9 @@ final class Fleet {
         // ((16.8) On the bigger maps, picked within reach to begin with (see randomRoadNear).)
         float reach = city.w >= 900 ? 1800 : 2400;
         boolean local = (v.type == CAR || v.patrol) && city.w >= 600;
+        // ((26.2) Parked off the road (a station's yard, facing in): the way out is behind it, so anywhere will do. It
+        // only ever looked on ahead - into the yard - and the patrol cars sat there with their officers in them.)
+        boolean offRoad = offTheRoad(v);
         for (int tries = 0; tries < 12; tries++) {
             float[] d = local && tries < 10 ? randomRoadNear(v.x, v.y, tries < 6 ? 400 : 160, reach, false) : randomRoad();
             if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
@@ -1494,9 +1497,9 @@ final class Fleet {
             if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > (city.w >= 900 ? 1800 : 2400)) continue;
             // Somewhere on ahead, as a rule: a car doesn't spin round in the road for its next trip.
             float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
-            if (tries < 8 && (d[0] - v.x) * hx + (d[1] - v.y) * hy < 0) continue;
+            if (!offRoad && tries < 8 && (d[0] - v.x) * hx + (d[1] - v.y) * hy < 0) continue;
             if (route(v, d[0], d[1])) {
-                if (tries >= 5 || (v.type != CAR && !v.patrol) || routes >= 3) return true;
+                if (offRoad || tries >= 5 || (v.type != CAR && !v.patrol) || routes >= 3) return true;
                 // And the way there starts ahead too (not a U-turn across the lanes, as a patrol car
                 // turning round for every new beat would): no step back the way it came in the first few.
                 int t = city.tileIndex(v.x, v.y);
@@ -1569,12 +1572,21 @@ final class Fleet {
         // ((16.8) An everyday trip gives up on a search that's gone on far longer than a drive of its length takes:
         // it can always go somewhere else. See City.searchCap.)
         boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.convoy == null;
+        // ((26.2) Not from off the road - a station's yard, a lot: the search has to cross every paved tile to get back to
+        // it, gave up every time, and patrol cars sat in the yard with their officers in them for the whole game.)
+        if (casual && offTheRoad(v)) casual = false;
         city.searchCap = casual ? 15000 : 0;
         try {
             return routeOn(v, x, y, field);
         } finally {
             city.searchCap = 0;
         }
+    }
+
+    /** ((26.2) Standing on something that isn't a road or a lane - a lot, a station's yard, the pavement. */
+    private boolean offTheRoad(Vehicle v) {
+        int i = city.tileIndex(v.x, v.y);
+        return i >= 0 && city.tiles[i] != City.ROAD && city.tiles[i] != City.DIRT;
     }
 
     private boolean routeOn(Vehicle v, float x, float y, int[] field) {

@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "26.2";
-    static final int VERSION_CODE = 262;
+    static final String VERSION = "26.3";
+    static final int VERSION_CODE = 263;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "26.3  -  Out of the yard",
+                    "Patrol cars no longer sit in the station yard with their officers inside: they pull out and go on patrol.",
+            },
             {
                     "26.2  -  Command posts on the move",
                     "Command posts set up well back from the fighting and move to a new spot every minute or so, or as soon as the dead get close. Their reach is wider to match.",
