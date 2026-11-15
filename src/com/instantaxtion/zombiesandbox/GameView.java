@@ -1146,10 +1146,10 @@ final class GameView extends View implements Menu.Host {
         float lh = 17 * dp;
         if (portrait) {
             float top = 10 * dp + th + 8 * dp;
-            statsRect.set(10 * dp, top, 10 * dp + Math.min(260 * dp, w - 20 * dp), top + lh * 13 + 12 * dp + GRAPH_H * dp);
+            statsRect.set(10 * dp, top, 10 * dp + Math.min(260 * dp, w - 20 * dp), top + lh * 12 + 12 * dp + GRAPH_H * dp);
             feedRect.set(10 * dp, statsRect.bottom + 8 * dp, w - 10 * dp, statsRect.bottom + 8 * dp + 4 * 24 * dp);
         } else {
-            statsRect.set(10 * dp, 10 * dp, 200 * dp, 10 * dp + lh * 16 + 12 * dp + GRAPH_H * dp);
+            statsRect.set(10 * dp, 10 * dp, 200 * dp, 10 * dp + lh * 15 + 12 * dp + GRAPH_H * dp);
             feedRect.set(topRects[0].left, topRects[0].bottom + 8 * dp, w - 10 * dp, topRects[0].bottom + 8 * dp + 4 * 24 * dp);
         }
         if (oldw == 0) {
@@ -8190,11 +8190,9 @@ final class GameView extends View implements Menu.Host {
                     + (world.recruits + world.refused > 0 ? "   Recruits " + world.recruits : ""), lineRoom), pad + 12 * dp, y, text);
             text.setTextSize(11.5f * dp);
             y += lh;
-            c.drawText(shrinkToFit("911 calls " + d.calls + "   Safe zones " + d.zones.size(), lineRoom), pad + 12 * dp, y, text);
-            text.setTextSize(11.5f * dp);
-            y += lh;
-            c.drawText(shrinkToFit("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding, lineRoom),
-                    pad + 12 * dp, y, text);
+            // ((26.1) Only what's in use: no Hiding line (nobody hides out of sight any more), people aboard only when there are some.)
+            c.drawText(shrinkToFit("911 calls " + d.calls + "   Safe zones " + d.zones.size() + "   Sheltered " + d.sheltered
+                    + (world.riding > 0 ? "   In vehicles " + world.riding : ""), lineRoom), pad + 12 * dp, y, text);
             text.setTextSize(11.5f * dp);
             y += lh;
             // ((12.0) Cut to the panel: on a narrow screen it ran off the edge.)

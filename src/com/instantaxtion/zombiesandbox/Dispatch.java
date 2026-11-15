@@ -337,7 +337,7 @@ final class Dispatch {
             v.agency = q.agency;
             if (q.vkind != 0) {
                 w.fleet.setKind(v, q.vkind);
-                if (q.vkind == Fleet.K_HUMVEE) v.passengers = Math.min(v.passengers, 4);
+                if (q.vkind == Fleet.K_HUMVEE) v.passengers = Math.min(v.passengers, Fleet.HUMVEE_SEATS);
             }
             if (q.swat) {
                 v.swat = true;
@@ -742,7 +742,7 @@ final class Dispatch {
                 }
             }
             if (close != null && w.alert >= 1) {
-                ArrayList<Entity> qrf = nearestOf(free, close.x, close.y, 3);
+                ArrayList<Entity> qrf = nearestOf(free, close.x, close.y, Fleet.HUMVEE_SEATS);
                 if (w.fleet.troopTruck(qrf, base, close, Fleet.K_HUMVEE)) {
                     close.militaryRequested = true;
                     say(WHO_MILITARY, null, base.name + ": Quick reaction force rolling out to " + close.place + ".", close.x, close.y);

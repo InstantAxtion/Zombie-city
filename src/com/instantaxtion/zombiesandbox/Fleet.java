@@ -34,6 +34,8 @@ final class Fleet {
     private static final float[] MAX_HP = {160, 260, 220, 100, 240, 700, 160, 1, 1, 1};
     /** Most people a car will squeeze in. */
     static final int SEATS = 4;
+    /** ((26.1) A Humvee carries six.) */
+    static final int HUMVEE_SEATS = 6;
     /**
      * What a truck, police car or helicopter is beyond its basic type (since 10.10): an armoured personnel
      * carrier, a Humvee, a riot police van, a police motorcycle, the police helicopter.
@@ -7279,7 +7281,7 @@ final class Fleet {
             // ((14.6) The worst of it gets the IFV; a big pack out on the roads, the gun truck.)
             kind = inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && onRoad(inc.x, inc.y) ? K_GUNTRUCK
                     : inc.zombiesNear >= 10 || (base.baseType == City.BT_ARMOUR && inc.zombiesNear >= 5) ? K_APC
-                    : far > 900 && squad.size() <= 4 ? K_HUMVEE : 0;
+                    : far > 900 && squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0;
             if (forceKind >= 0) kind = forceKind;
         }
         musterTruck(squad, p, inc, kind);
@@ -7305,7 +7307,7 @@ final class Fleet {
         if (p == null) p = city.takeParkedTruck(sx, sy, 600);
         if (p == null) return false;
         int kind = city.cfg.nature() ? (inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && onRoad(inc.x, inc.y) ? K_GUNTRUCK
-                : inc.zombiesNear >= 10 ? K_APC : squad.size() <= 4 ? K_HUMVEE : 0) : 0;
+                : inc.zombiesNear >= 10 ? K_APC : squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0) : 0;
         musterTruck(squad, p, inc, kind);
         return true;
     }

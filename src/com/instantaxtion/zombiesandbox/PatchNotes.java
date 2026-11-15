@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "26.1";
-    static final int VERSION_CODE = 261;
+    static final String VERSION = "26.2";
+    static final int VERSION_CODE = 262;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "26.2  -  Command posts on the move",
+                    "Command posts set up well back from the fighting and move to a new spot every minute or so, or as soon as the dead get close. Their reach is wider to match.",
+                    "Command trucks carry up to 20: two stay at the tent, the rest join the fight.",
+                    "Humvees carry 6.",
+                    "The stats panel drops the Hiding count; people in vehicles show only when there are some.",
+            },
             {
                     "26.1  -  Command trucks",
                     "Mobile command posts are real trucks now: one parked at police headquarters, and the army has its own at its base. Officers or soldiers walk out, drive it to the fighting, set up, and drive it home when it's quiet.",

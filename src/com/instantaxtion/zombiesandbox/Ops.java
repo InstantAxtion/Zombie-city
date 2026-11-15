@@ -745,6 +745,8 @@ final class Ops {
         /** Until it may set out again (or until a new truck after one was lost); times set up and overrun. */
         float cd = 20;
         int setUp, lost, resupplied;
+        /** ((26.1) Seconds set up where it is. */
+        float stayed;
         private float hitSaidAt = -99, farFor, supplySaidAt = -99, quietFor, newCd;
 
         Post(boolean army) {
@@ -788,7 +790,11 @@ final class Ops {
 
     final Post police = new Post(false), army = new Post(true);
     final Post[] posts = {police, army};
-    static final float POST_BOOST = 200, POST_COORD = 400, POST_SUPPLY = 90;
+    /** ((26.1) Further back from the fighting now, so its reach is wider: steadying, running calls, handing out ammo.) */
+    static final float POST_BOOST = 480, POST_COORD = 800, POST_SUPPLY = 90;
+    /** ((26.1) How many the truck carries out (two of them stay with the tent), and how long it stays in one place. */
+    static final int POST_SEATS = 20;
+    static final float POST_STAY = 70;
 
     /** One of the police or soldiers close enough to their side's command post, set up, to be steadied by it. */
     boolean boosts(Entity e) {
@@ -831,32 +837,40 @@ final class Ops {
         City c = w.city;
         float d = (float) World.hypot(fx - x, fy - y) + 0.001f;
         float ux = (fx - x) / d, uy = (fy - y) / d;
-        for (float back : new float[]{240, 320, 180, 400, 480}) {
+        // ((26.1) Well back from it: 450 to 800 (it sat right on top of the fighting).)
+        for (float back : new float[]{520, 620, 450, 720, 800}) {
             if (back > d) continue;
             float[] q = c.nearestDrivable(x + ux * back, y + uy * back);
             if (q == null || c.junctionIdAt(q[0], q[1]) >= 0) continue;
-            if (w.countZombiesNear(q[0], q[1], 130) <= 1) return q;
+            if (w.countZombiesNear(q[0], q[1], 250) == 0) return q;
         }
-        return c.nearestDrivable(x + ux * Math.min(d, 300), y + uy * Math.min(d, 300));
+        return c.nearestDrivable(x + ux * Math.min(d, 550), y + uy * Math.min(d, 550));
     }
 
     /**
-     * Up to two of the side's own to crew the truck: those on their posts at home first, then any not busy close to the
+     * ((26.1) Up to twenty) of the side's own to ride in the truck: those on their posts at home first, then any not busy close to the
      * truck (the ones at the tent, when it's packing up). Never anyone made up for it.
      */
     private ArrayList<Entity> crewFor(Post p, City.Facility home) {
         ArrayList<Entity> crew = new ArrayList<Entity>();
         Fleet.Vehicle v = p.truck;
         if (p.up) {
-            for (int i = 0, m = w.entities.size(); i < m && crew.size() < 2; i++) {
+            for (int i = 0, m = w.entities.size(); i < m && crew.size() < POST_SEATS; i++) {
                 Entity e = w.entities.get(i);
                 if (!e.dead && e.type == p.type() && e.task == Dispatch.T_POST && e.ride == null && e != w.controlled
                         && World.hypot(e.postX - p.x, e.postY - p.y) < 30) crew.add(e);
             }
-        } else if (home != null) crew.addAll(w.fleet.standby(home, p.type(), 0, 2));
-        for (int i = 0, m = w.entities.size(); i < m && crew.size() < 2; i++) {
+        } else if (home != null) {
+            // (Those on their posts at home, all but two left to mind it.)
+            java.util.List<Entity> st = w.fleet.standby(home, p.type(), 0, POST_SEATS + 2);
+            int take = Math.min(POST_SEATS, st.size() > 2 ? st.size() - 2 : st.size());
+            for (int i = 0; i < take; i++) crew.add(st.get(i));
+        }
+        for (int i = 0, m = w.entities.size(); i < m && crew.size() < POST_SEATS; i++) {
             Entity e = w.entities.get(i);
-            if (e.dead || e.type != p.type() || e.ride != null || e.rig != null || e == w.controlled || e.role != 0 || e.outsider) continue;
+            // ((26.1) Any of them free, whatever their job in a squad - not a pilot, a commander or special forces.)
+            if (e.dead || e.type != p.type() || e.ride != null || e.rig != null || e == w.controlled || e.outsider) continue;
+            if (e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_SF || e.role == Entity.ROLE_K9 || e.role == Entity.ROLE_SAR) continue;
             if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_POST && e.task != Dispatch.T_PATROL) continue;
             if (crew.contains(e) || World.hypot(e.x - v.x, e.y - v.y) > 420) continue;
             crew.add(e);
@@ -980,12 +994,23 @@ final class Ops {
         }
         p.farFor = near ? 0 : p.farFor + 1;
         p.quietFor = any || w.countZombiesNear(p.x, p.y, 500) > 0 ? 0 : p.quietFor + 1;
-        if (p.farFor > 75 && bad != null && bad.zombiesNear >= 8 && World.hypot(bad.x - p.x, bad.y - p.y) > 800) {
-            float[] spot = postSpot(bad.x, bad.y, p.x, p.y);
+        p.stayed += 1;
+        // ((26.1) Never long in one place: every minute or so it packs up and sets up again, well back from wherever the
+        // worst of it is now - and at once if the dead get close.)
+        boolean close = w.countZombiesNear(p.x, p.y, 220) > 0;
+        if (bad != null && bad.zombiesNear >= 3 && (p.stayed > POST_STAY || close || (p.farFor > 30 && World.hypot(bad.x - p.x, bad.y - p.y) > 900))) {
+            // (Round the fight to another side of it, a quarter to a third of the way round, so it never sits still.)
+            float ang = (float) Math.atan2(p.y - bad.y, p.x - bad.x), turn = (0.9f + w.rnd.nextFloat() * 0.6f) * (w.rnd.nextBoolean() ? 1 : -1);
+            float[] spot = null;
+            for (int k = 0; k < 4 && spot == null; k++) {
+                float aa = ang + turn * (k % 2 == 0 ? 1 : -1) * (1 + k / 2 * 0.5f);
+                float[] q = postSpot(bad.x, bad.y, bad.x + (float) Math.cos(aa) * 900, bad.y + (float) Math.sin(aa) * 900);
+                if (q != null && World.hypot(q[0] - v.x, q[1] - v.y) > 200) spot = q;
+            }
             String was = v.place;
             if (spot != null && send(p, spot[0], spot[1], false))
-                w.dispatch.say(p.who(), null, p.hq() + ": Command post on " + was + " packing up and moving to " + bad.place + ".", p.x, p.y);
-            else p.farFor = 40;
+                w.dispatch.say(p.who(), null, p.hq() + ": Command post on " + was + " moving to " + w.city.placeName(spot[0], spot[1]) + ".", p.x, p.y);
+            else p.stayed = POST_STAY - 15;
         } else if (p.quietFor > 120 && home != null) {
             float[] g = w.city.nearestDrivable(home.gateX > 0 ? home.gateX : home.x, home.gateY > 0 ? home.gateY : home.y);
             if (g != null && send(p, g[0], g[1], true))
@@ -1015,7 +1040,7 @@ final class Ops {
             return;
         }
         p.up = true;
-        p.farFor = p.quietFor = 0;
+        p.farFor = p.quietFor = p.stayed = 0;
         // The tent: beside the truck where there's room for all of it (not into a building), else behind or in front.
         float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
         float[][] tries = {{-sa * 17, ca * 17}, {sa * 17, -ca * 17}, {-ca * 26, -sa * 26}, {ca * 26, sa * 26}};
@@ -1034,12 +1059,18 @@ final class Ops {
         v.place = w.city.placeName(v.x, v.y);
         ArrayList<Entity> crew = new ArrayList<Entity>(v.crew);
         w.fleet.crewOut(v, true);
-        for (int i = 0; i < crew.size(); i++) {
+        for (int i = 0, guards = 0; i < crew.size(); i++) {
             Entity e = crew.get(i);
             if (e.removed) continue;
             e.rig = null;
+            // ((26.1) Two stay on watch at the tent; the rest it brought go on to the fighting.)
+            if (guards >= 2) {
+                e.task = Dispatch.T_NONE;
+                continue;
+            }
             e.task = Dispatch.T_POST;
-            float[] s = w.city.findWalkable(p.x + (i == 0 ? -12 : 12), p.y + 8);
+            guards++;
+            float[] s = w.city.findWalkable(p.x + (guards == 1 ? -12 : 12), p.y + 8);
             e.postX = s != null ? s[0] : p.x;
             e.postY = s != null ? s[1] : p.y;
         }

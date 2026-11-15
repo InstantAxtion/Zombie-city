@@ -10793,7 +10793,7 @@ final class World {
             // (A Humvee leads the convoy.)
             if (city.cfg.nature() && i == before) {
                 fleet.setKind(v, Fleet.K_HUMVEE);
-                v.passengers = 4;
+                v.passengers = Fleet.HUMVEE_SEATS;
             }
         }
         String[] g = Country.guard();
