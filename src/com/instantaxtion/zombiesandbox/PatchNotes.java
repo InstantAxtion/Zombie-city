@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "25.1";
-    static final int VERSION_CODE = 251;
+    static final String VERSION = "26.0";
+    static final int VERSION_CODE = 260;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "26.0  -  Lifelines",
+                    "Convoys overhauled: escorted columns that keep together, halt and fight when the dead get in among them, then push on. Supply convoys bring ammo to safe zones, survivor bases and police stations; evacuation convoys take people out of the city. Call them from Events.",
+                    "Hunters, ex-soldiers and engineers among the people; crossbows; civilians who level up become survivor heroes.",
+                    "Survivor bases build armed pickups, run supplies to each other and join into settlements.",
+                    "Police boats, a mobile command post, special forces, and mounted guns on Humvees, army trucks, BearCats and riot vans.",
+                    "The dead damage stopped vehicles and drag people out of them, follow the sound of fighting, and climb walls over each other.",
+                    "New Game: police and army strength. 10% more people in every city.",
+                    "New map: Space Center.",
+            },
             {
                     "25.1  -  Base fixes",
                     "Tap a survivor base to see its card: people, guards, wall, towers, gates and workshop.",

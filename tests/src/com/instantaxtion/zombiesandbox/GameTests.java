@@ -4977,6 +4977,8 @@ public final class GameTests {
                     drawn = z.noiseTimer > 0 && World.hypot(z.noiseX - g[0], z.noiseY - g[1]) < 120;
                 }
                 check(drawn, "but a fight going on draws it in (noise " + z.noiseTimer + " at " + (int) World.hypot(z.noiseX - g[0], z.noiseY - g[1]) + ", memory " + z.memory + ", dead " + z.dead + ", away " + (int) World.hypot(z.x - g[0], z.y - g[1]) + ")");
+            }
+        });
         test("26.0: police boats patrol and pick people off the shore; the command post sets up, steadies, resupplies and is overrun; special forces fly in; a Humvee's gun fires", new Check() {
             @Override
             public void run() throws Exception {
