@@ -93,6 +93,12 @@ final class Entity {
     /** ((25.0) The survivor base they belong to, whether they're up a watchtower, and where in it they're making for. */
     transient SurvivorBases.Base base;
     transient boolean onTower;
+    /**
+     * ((27.0) Rooftop overwatch: the building a marksman or sniper has taken the roof of (onTower once they're up), where
+     * on the roof they are, where at the foot of its wall they stand, and until they look for another roof.)
+     */
+    transient City.Building roof;
+    transient float roofX, roofY, roofGX, roofGY, roofCd;
     transient float baseSpotX, baseSpotY, baseSpotT;
     /** (11.1) Police and soldiers with nothing on: where their beat or duty takes them next, and how long they wait there. */
     float dutyX, dutyY, dutyWait, dutyFor;

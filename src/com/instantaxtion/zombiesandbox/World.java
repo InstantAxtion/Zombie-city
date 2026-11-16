@@ -2779,6 +2779,8 @@ final class World {
                     Entity o = sorted[k];
                     // ((12.0) Not one already finished off this moment, waiting to be cleared away.)
                     if (o.dead || o.hp <= 0 || o.isZombie() != wantZombie || o == from) continue;
+                    // ((27.0) Up on a roof: out of the dead's reach, and their sight.)
+                    if (!wantZombie && o.roof != null && o.onTower && from.isZombie()) continue;
                     float ddx = o.x - from.x, ddy = o.y - from.y, d2 = ddx * ddx + ddy * ddy;
                     if (d2 >= best) continue;
                     if (needLos) {
@@ -3427,12 +3429,167 @@ final class World {
     /** A mortar barrage: eight shells walked across the spot over a few seconds. */
     void barrage(float x, float y) {
         barrages++;
+        shells(x, y, 0);
+        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Fire mission on " + city.placeName(x, y) + ". Rounds on the way - keep clear!", x, y);
+    }
+
+    /** The barrage's eight shells, the first after delay + 2.2 seconds. */
+    private void shells(float x, float y, float delay) {
         for (int k = 0; k < 8; k++) {
             double a = rnd.nextFloat() * Math.PI * 2;
             float r = (float) Math.sqrt(rnd.nextFloat()) * 62;
-            blastLater(x + (float) Math.cos(a) * r, y + (float) Math.sin(a) * r, 46, 210, 2.2f + k * 0.45f + rnd.nextFloat() * 0.2f);
+            blastLater(x + (float) Math.cos(a) * r, y + (float) Math.sin(a) * r, 46, 210, delay + 2.2f + k * 0.45f + rnd.nextFloat() * 0.2f);
         }
-        dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Fire mission on " + city.placeName(x, y) + ". Rounds on the way - keep clear!", x, y);
+    }
+
+    /** ((27.0) How long after it's called a command post's fire mission starts landing, and how long the shells take. */
+    static final float FIRE_DELAY = 3, FIRE_LASTS = 6.5f;
+    /** ((27.0) Fire missions called by the command posts so far. */
+    int fireMissions;
+
+    /**
+     * ((27.0) A command post's fire mission: the mortars at the army's base shell a big pack of the dead the post has
+     * spotted - 25 or more together within reach of it, nobody living within 120 of them, not in a safe zone or a
+     * survivors' base. The spot {x, y, how many}, or null with no base standing with soldiers at it, or nothing to shell.
+     */
+    float[] fireMission(float px, float py, float reach, String caller, int who) {
+        City.Facility base = city.mainBase();
+        if (base == null || base.fallen || zombies < 25) return null;
+        boolean manned = false;
+        float rad = Math.max(260, base.r * 2.5f);
+        for (int i = 0, n = entities.size(); i < n && !manned; i++) {
+            Entity e = entities.get(i);
+            manned = !e.dead && e.type == Entity.SOLDIER && Math.abs(e.x - base.x) < rad && Math.abs(e.y - base.y) < rad;
+        }
+        if (!manned) return null;
+        int best = 24;
+        float bx = 0, by = 0;
+        for (int i = 0, n = entities.size(), seen = 0; i < n; i++) {
+            Entity z = entities.get(i);
+            if (z.dead || !z.isZombie()) continue;
+            // (Every fourth of them: a pack of 25 has a few looked at.)
+            if ((seen++ & 3) != 0 || World.hypot(z.x - px, z.y - py) > reach) continue;
+            int c = countZombiesNear(z.x, z.y, 80);
+            if (c <= best) continue;
+            if (armedNear(z.x, z.y, 120) > 0 || countCiviliansNear(z.x, z.y, 120) > 0) continue;
+            boolean kept = false;
+            for (int k = 0; k < dispatch.zones.size() && !kept; k++) kept = !dispatch.zones.get(k).removed && dispatch.zones.get(k).contains(z.x, z.y, 60);
+            for (int k = 0; k < bases.size() && !kept; k++) kept = bases.get(k).contains(z.x, z.y, 3);
+            if (kept) continue;
+            best = c;
+            bx = z.x;
+            by = z.y;
+        }
+        if (best < 25) return null;
+        shells(bx, by, FIRE_DELAY);
+        fireMissions++;
+        String place = city.placeName(bx, by);
+        dispatch.say(who, null, caller + ": Fire mission, " + best + " of the dead in the open on " + place + ". Requesting mortars.", px, py, true);
+        dispatch.say(Dispatch.WHO_MILITARY, null, base.name + ": Fire mission on " + place + ". Rounds on the way - keep clear!", bx, by);
+        timeline("A command post called mortars down on " + place, bx, by);
+        return new float[]{bx, by, best};
+    }
+
+    // ------------------------------------------------------------------ ((27.0) rooftop overwatch
+
+    /** Those up on a roof now (for the picture). */
+    final ArrayList<Entity> overwatch = new ArrayList<Entity>();
+    /** How near a call a roof has to be, and how tall the building (three floors). */
+    static final float ROOF_FIND = 150, ROOF_HEIGHT = City.FLOOR * 3 - 0.5f;
+    int roofsTaken;
+
+    /** Down off the roof (or giving up on the way to it). */
+    void comeDown(Entity e) {
+        e.roof = null;
+        e.onTower = false;
+        e.roofCd = 12;
+        overwatch.remove(e);
+    }
+
+    /** A building with a roof worth taking by a call at (x, y): three floors or more, standing, within reach. */
+    private City.Building roofBy(float x, float y) {
+        City.Building best = null;
+        float bd = ROOF_FIND;
+        int tx = (int) (x / City.T), ty = (int) (y / City.T), r = (int) (ROOF_FIND / City.T) + 1;
+        City.Building last = null;
+        for (int j = Math.max(0, ty - r); j <= Math.min(city.h - 1, ty + r); j += 2)
+            for (int i = Math.max(0, tx - r); i <= Math.min(city.w - 1, tx + r); i += 2) {
+                int bi = city.buildingAt.get(j * city.w + i);
+                if (bi < 0 || bi >= city.buildings.size()) continue;
+                City.Building b = city.buildings.get(bi);
+                if (b == last || b.collapsed || b.height < ROOF_HEIGHT || (b.maxHp > 0 && b.hp < b.maxHp * 0.4f)) continue;
+                last = b;
+                float cx = Math.max(b.x0, Math.min(b.x1, x)), cy = Math.max(b.y0, Math.min(b.y1, y));
+                float d = (float) World.hypot(cx - x, cy - y);
+                // (Not the one the fight is inside, or right up against.)
+                if (d < 18 || d >= bd) continue;
+                bd = d;
+                best = b;
+            }
+        return best;
+    }
+
+    /**
+     * A police marksman or an army sniper sent to a call takes the roof of a tall building beside it: up at the foot
+     * of its wall nearest the fight, then on the roof (onTower, as up a base's watchtower) - seeing and shooting half
+     * as far again, out of the dead's reach - until the call's over, the building's coming down, or they're hurt or
+     * out of rounds. True while it has them busy.
+     */
+    private boolean overwatchStep(Entity e, float range, float dt) {
+        if (e.roofCd > 0) e.roofCd -= dt;
+        Dispatch.Incident inc = e.incident;
+        boolean call = e.task == Dispatch.T_RESPOND && inc != null && !inc.resolved;
+        if (e.roof == null) {
+            if (!call || e.roofCd > 0 || e.ride != null || e.rig != null || e.infected) return false;
+            e.roofCd = 4;
+            if (World.hypot(inc.x - e.x, inc.y - e.y) > 330) return false;
+            City.Building b = roofBy(inc.x, inc.y);
+            if (b == null) return false;
+            float cx = Math.max(b.x0, Math.min(b.x1, inc.x)), cy = Math.max(b.y0, Math.min(b.y1, inc.y));
+            float ox = inc.x - cx, oy = inc.y - cy, ol = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
+            float[] g = city.findWalkable(cx + ox / ol * 9, cy + oy / ol * 9);
+            if (g == null || World.hypot(g[0] - cx, g[1] - cy) > 40) return false;
+            e.roof = b;
+            e.roofGX = g[0];
+            e.roofGY = g[1];
+            // (On the roof: a little in from the edge that looks down on the fight, each a step along from the last.)
+            float in = 5 + (e.nameSeed & 3) * 3, along = ((e.nameSeed >> 2 & 3) - 1.5f) * 5;
+            e.roofX = Math.max(b.x0 + 4, Math.min(b.x1 - 4, cx - ox / ol * in + oy / ol * along));
+            e.roofY = Math.max(b.y0 + 4, Math.min(b.y1 - 4, cy - oy / ol * in - ox / ol * along));
+        }
+        City.Building b = e.roof;
+        // (Taken somewhere else since - a lift, an order: no longer up there.)
+        if (e.onTower && World.hypot(e.x - e.roofGX, e.y - e.roofGY) > 34) call = false;
+        if (!call || b.collapsed || (b.maxHp > 0 && b.hp < b.maxHp * 0.4f) || e.infected || e.hp < e.maxHp * 0.35f
+                || (e.ammo <= 0 && e.reserve <= 0) || World.hypot(inc.x - e.roofGX, inc.y - e.roofGY) > ROOF_FIND + 80) {
+            comeDown(e);
+            return false;
+        }
+        if (!e.onTower) {
+            // (The dead on them before they're up: that first.)
+            if (nearest(e, 45, true, false) != null) return false;
+            float d = (float) World.hypot(e.roofGX - e.x, e.roofGY - e.y);
+            if (d > 9 && !(e.blocked && d < 26)) {
+                e.aiming = false;
+                walkToSpot(e, e.roofGX, e.roofGY, e.runSpeed);
+                return true;
+            }
+            e.onTower = true;
+            e.onScene = true;
+            if (!overwatch.contains(e)) overwatch.add(e);
+            roofsTaken++;
+            dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                    "On the roof at " + inc.place + ". I have overwatch.", e.x, e.y);
+        }
+        steer(e, 0, 0, 0);
+        e.fear = 5;
+        Entity t = pickTarget(e, range * 1.5f);
+        if (t != null) aimAndFire(e, t, (float) World.hypot(t.x - e.x, t.y - e.y), range * 1.5f, dt);
+        else {
+            e.aiming = false;
+            e.angle = (float) Math.atan2(inc.y - e.y, inc.x - e.x);
+        }
+        return true;
     }
 
     /** An airborne squad dropped on the spot: six soldiers, a machine gunner among them, who hold it. */
@@ -11173,6 +11330,9 @@ final class World {
      * out good as new. True while busy with it.
      */
     private boolean hospitalStep(Entity e, float dt) {
+        // ((27.0) Their own side's command post, set up and nearer, is an aid station too.)
+        Ops.Post aid = e.hp < e.maxHp * 0.35f || e.task == Dispatch.T_HEAL ? ops.aidFor(e, this.hospitalX, this.hospitalY) : null;
+        float hospitalX = aid != null ? aid.x : this.hospitalX, hospitalY = aid != null ? aid.y : this.hospitalY;
         if (Float.isNaN(hospitalX) || e.infected || e == controlled || e.rig != null) {
             if (e.task == Dispatch.T_HEAL) e.task = Dispatch.T_NONE;
             return false;
@@ -11183,7 +11343,8 @@ final class World {
             dispatch.releaseForResupply(e);
             e.task = Dispatch.T_HEAL;
             e.hospitalT = 0;
-            dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "I'm hit bad. Falling back to the field hospital.", e.x, e.y);
+            dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                    aid != null ? "I'm hit bad. Falling back to the command post." : "I'm hit bad. Falling back to the field hospital.", e.x, e.y);
         }
         if (nearest(e, 50, true, false) != null) return false;
         // (Patched up on the way by a medic: back to it.)
@@ -11204,6 +11365,7 @@ final class World {
             e.task = Dispatch.T_NONE;
             e.hospitalT = 0;
             treated++;
+            if (aid != null) aid.treated++;
         }
         return true;
     }
@@ -11807,6 +11969,10 @@ final class World {
         maybeCallBackup(e);
         // ((14.5) Badly hurt and out of the fight: to the field hospital.)
         if (hospitalStep(e, dt)) return;
+        // ((27.0) A marksman or sniper at a call: up on a roof beside it.)
+        if ((e.role == Entity.ROLE_MARKSMAN && !soldier || e.role == Entity.ROLE_SNIPER && soldier) && e != controlled) {
+            if (overwatchStep(e, range, dt)) return;
+        } else if (e.roof != null) comeDown(e);
         // ((14.0) A mortar team shells a pack of the dead a few streets off.)
         if (soldier && e.role == Entity.ROLE_MORTAR && e != controlled && mortarStep(e, dt)) return;
         // ((15.0) Traffic officers on their junctions; mounted officers looking round and riding the parks.)

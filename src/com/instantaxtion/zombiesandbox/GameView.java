@@ -3266,6 +3266,20 @@ final class GameView extends View implements Menu.Host {
         }
         if (!world.crashes.isEmpty()) drawCrashSites(c, vx0, vy0, vx1, vy1);
         for (Ops.Post p : world.ops.posts) if (p.up && p.truck != null) drawCommandPost(c, p, vx0, vy0, vx1, vy1);
+        // ((27.0) A command post's fire mission on its way in: a red ring round where the shells will land, closing.
+        for (Ops.Post p : world.ops.posts) {
+            if (world.time >= p.fireUntil || p.fireX < vx0 - 90 || p.fireX > vx1 + 90 || p.fireY < vy0 - 90 || p.fireY > vy1 + 90) continue;
+            float left = p.fireUntil - world.time, k = Math.max(0, Math.min(1, (left - World.FIRE_LASTS) / World.FIRE_DELAY));
+            float pulse = 0.6f + 0.4f * (float) Math.sin(world.time * 9);
+            fill.setColor(alpha(0xFFE0362A, 0.10f + 0.06f * pulse));
+            c.drawCircle(p.fireX, p.fireY, 66, fill);
+            stroke.setColor(alpha(0xFFFF4A3A, 0.55f + 0.35f * pulse));
+            stroke.setStrokeWidth(Math.max(1.6f, 2.2f / scale));
+            c.drawCircle(p.fireX, p.fireY, 66, stroke);
+            c.drawCircle(p.fireX, p.fireY, 14 + 52 * k, stroke);
+            c.drawLine(p.fireX - 10, p.fireY, p.fireX + 10, p.fireY, stroke);
+            c.drawLine(p.fireX, p.fireY - 10, p.fireX, p.fireY + 10, stroke);
+        }
 
         if (scale < 1.8f) drawDanger(c, vx0, vy0, vx1, vy1);
         // Zoomed out, a crowd is a heap of dots on top of each other: one dot per side in each little patch
@@ -3308,6 +3322,8 @@ final class GameView extends View implements Menu.Host {
                 fill.setColor(0xFFE83A2A);
                 c.drawCircle(fx, fy, 1.1f, fill);
             }
+            // ((27.0) Up on a roof: drawn there, over the building (drawOverwatch).)
+            if (e.roof != null && e.onTower) continue;
             if (detailed) {
                 drawEntity(c, e, settings.healthBars());
                 if (e.type == Entity.COP && e.role == Entity.ROLE_TRAFFIC) drawTrafficKit(c, e);
@@ -3589,6 +3605,7 @@ final class GameView extends View implements Menu.Host {
         }
 
         drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
+        if (!world.overwatch.isEmpty()) drawOverwatch(c, vx0, vy0, vx1, vy1, detailed);
         drawHaze(c, vx0, vy0, vx1, vy1);
         // ((19.5) Light, shockwaves, smoke, sparks and debris over it all.)
         vfx.drawAbove(c, vx0, vy0, vx1, vy1);
@@ -3864,6 +3881,43 @@ final class GameView extends View implements Menu.Host {
      * so anything tall leans away from the centre and you see the walls that face the camera.
      */
     private final Path pinePath = new Path();
+
+    /**
+     * ((27.0) Marksmen and snipers up on roofs: drawn on the roof (leaning out with it, as the buildings do), over the
+     * building, with a little scope mark over them. A dot when zoomed out, like everyone else.
+     */
+    private void drawOverwatch(Canvas c, float vx0, float vy0, float vx1, float vy1, boolean detailed) {
+        float cx = camX + getWidth() / scale / 2, cy = camY + getHeight() / scale / 2;
+        float camH = Math.max(Math.max(getWidth(), getHeight()) / scale * 0.9f, Math.max(260f, world.city.maxHeight * 1.7f));
+        boolean in3d = settings.buildings3d();
+        for (int i = 0, n = world.overwatch.size(); i < n; i++) {
+            Entity e = world.overwatch.get(i);
+            City.Building b = e.roof;
+            if (b == null || !e.onTower || e.dead || e.removed) continue;
+            float s = in3d ? camH / (camH - b.height) : 1;
+            float px = cx + (e.roofX - cx) * s, py = cy + (e.roofY - cy) * s;
+            if (px < vx0 - 20 || px > vx1 + 20 || py < vy0 - 20 || py > vy1 + 20) continue;
+            if (detailed) {
+                c.save();
+                c.translate(px - e.x, py - e.y);
+                drawEntity(c, e, settings.healthBars());
+                c.restore();
+            } else {
+                float r = Math.max(2.2f, 3.2f / scale);
+                fill.setColor(0xFF101114);
+                c.drawCircle(px, py, r + 0.8f / scale, fill);
+                fill.setColor(ROW_COLORS[e.type == Entity.COP ? 1 : 2]);
+                c.drawCircle(px, py, r, fill);
+            }
+            // The mark: a small scope ring with a tick, over them.
+            float mr = Math.max(2.4f, 3 / scale), my = py - Math.max(9, 11 / scale);
+            stroke.setColor(0xF0FFE27A);
+            stroke.setStrokeWidth(Math.max(0.7f, 1 / scale));
+            c.drawCircle(px, my, mr, stroke);
+            c.drawLine(px - mr * 1.5f, my, px + mr * 1.5f, my, stroke);
+            c.drawLine(px, my - mr * 1.5f, px, my + mr * 1.5f, stroke);
+        }
+    }
 
     private void drawBuildings(Canvas c, float vx0, float vy0, float vx1, float vy1, boolean detailed) {
         float cx = camX + getWidth() / scale / 2, cy = camY + getHeight() / scale / 2;

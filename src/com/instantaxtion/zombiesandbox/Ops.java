@@ -747,6 +747,12 @@ final class Ops {
         int setUp, lost, resupplied;
         /** ((26.1) Seconds set up where it is.) ((26.6) Until it may turn off again for the dead on the road.) */
         float stayed, blockedUntil;
+        /**
+         * ((27.0) Fire missions: until it may call another, where the last is landing and until when, and how many it's
+         * called. And the wounded of its own side patched up at it.)
+         */
+        float fireCd = 8, fireX, fireY, fireUntil = -1;
+        int missions, treated;
         private float hitSaidAt = -99, farFor, supplySaidAt = -99, quietFor, newCd;
 
         Post(boolean army) {
@@ -908,6 +914,15 @@ final class Ops {
     /** Once a second: each side's command post. */
     private void postTick() {
         for (Post p : posts) postTick(p);
+        // ((27.0) Those up on roofs who've died, or left in a car: off the list.)
+        for (int i = w.overwatch.size() - 1; i >= 0; i--) {
+            Entity e = w.overwatch.get(i);
+            if (e.dead || e.removed || e.roof == null || !e.onTower) {
+                e.roof = null;
+                e.onTower = false;
+                w.overwatch.remove(i);
+            }
+        }
     }
 
     private void postTick(Post p) {
@@ -994,6 +1009,28 @@ final class Ops {
                         + World.count(got, p.army ? "soldier" : "officer", p.army ? "soldiers" : "officers") + " topped up.", p.x, p.y);
             }
         }
+        // ((27.0) An aid station: its own side's wounded near it are patched up as they stand (never the bitten).
+        for (int k = 0, m = w.gatherArmed(p.x, p.y, POST_SUPPLY); k < m; k++) {
+            Entity e = w.gathered[k];
+            if (e.dead || e.type != p.type() || e.infected || e.hp >= e.maxHp || World.hypot(e.x - p.x, e.y - p.y) > POST_SUPPLY) continue;
+            e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.07f);
+            if (e.hp >= e.maxHp) {
+                p.treated++;
+                if (e.task == Dispatch.T_HEAL) e.task = Dispatch.T_NONE;
+            }
+        }
+        // ((27.0) Fire missions: a big pack of the dead out in the open within sight of it, and the base's mortars.
+        if ((p.fireCd -= 1) <= 0) {
+            p.fireCd = 4;
+            float[] hit = w.fireMission(p.x, p.y, POST_FIRE, p.side() + " command post", p.who());
+            if (hit != null) {
+                p.fireCd = FIRE_EVERY;
+                p.fireX = hit[0];
+                p.fireY = hit[1];
+                p.fireUntil = w.time + World.FIRE_DELAY + World.FIRE_LASTS;
+                p.missions++;
+            }
+        }
         // The fighting's moved off a long way: it packs up and follows it. All over: it goes home.
         Dispatch.Incident bad = worst();
         boolean near = false, any = false;
@@ -1058,6 +1095,21 @@ final class Ops {
             }
         }
         return false;
+    }
+
+    /** ((27.0) How far a command post sees a pack of the dead to shell, and how long between its fire missions. */
+    static final float POST_FIRE = 900, FIRE_EVERY = 60;
+
+    /**
+     * ((27.0) The aid station for one of the wounded: their own side's command post, set up, in reach, and nearer than
+     * the field hospital at (hx, hy) (NaN with none). Null otherwise.
+     */
+    Post aidFor(Entity e, float hx, float hy) {
+        Post p = e.type == Entity.COP ? police : e.type == Entity.SOLDIER ? army : null;
+        if (p == null || !p.up) return null;
+        float d = (float) World.hypot(p.x - e.x, p.y - e.y);
+        if (d > World.HOSPITAL_REACH || w.countZombiesNear(p.x, p.y, 120) > 0) return null;
+        return Float.isNaN(hx) || d < World.hypot(hx - e.x, hy - e.y) ? p : null;
     }
 
     private Post postOf(Fleet.Vehicle v) {
@@ -1277,7 +1329,8 @@ final class Ops {
             int calls = 0;
             if (!p.army) for (int i = 0; i < w.dispatch.incidents.size(); i++) if (!w.dispatch.incidents.get(i).resolved && coordinates(w.dispatch.incidents.get(i))) calls++;
             return name + ": Set up on " + v.place + "  -  " + (int) (100 * v.hp / v.maxHp) + "%" + (p.army ? "" : "  -  running " + World.count(calls, "call", "calls"))
-                    + (p.resupplied > 0 ? ", " + p.resupplied + " resupplied" : "");
+                    + (p.resupplied > 0 ? ", " + p.resupplied + " resupplied" : "") + (p.treated > 0 ? ", " + p.treated + " treated" : "")
+                    + (p.missions > 0 ? ", " + World.count(p.missions, "fire mission", "fire missions") : "");
         }
         String who = "Marine " + v.boatNum;
         int aboard = 2 + v.crew.size();

@@ -5095,6 +5095,115 @@ public final class GameTests {
                 check(drawn, "but a fight going on draws it in (noise " + z.noiseTimer + " at " + (int) World.hypot(z.noiseX - g[0], z.noiseY - g[1]) + ", memory " + z.memory + ", dead " + z.dead + ", away " + (int) World.hypot(z.x - g[0], z.y - g[1]) + ")");
             }
         });
+        test("27.0: fire missions, aid stations and rooftop overwatch", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 27;
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 45; f++) w.update(1 / 30f);
+                check(w.city.mainBase() != null, "an army base for the mortars");
+                // A police command post set up on a street well away from the base and its own headquarters.
+                java.util.Random r = new java.util.Random(4);
+                float[] at = null;
+                for (int k = 0; k < 200 && at == null; k++) {
+                    float[] q = w.city.randomStreetSpot(r);
+                    q = q == null ? null : w.city.nearestDrivable(q[0], q[1]);
+                    if (q == null || World.hypot(q[0] - w.city.mainBase().x, q[1] - w.city.mainBase().y) < 900) continue;
+                    if (w.city.findWalkable(q[0] + 420, q[1]) == null) continue;
+                    at = q;
+                }
+                check(at != null, "a street for the post");
+                Ops.Post p = w.ops.police;
+                if (p.truck != null) w.fleet.discard(p.truck);
+                w.ops.restorePost(p, at[0], at[1], 0, at[0], at[1] + 17, 900);
+                check(p.up && p.truck != null, "a command post set up");
+                // The aid station: a wounded officer by the tent is patched up; one hurt badly further off makes for it.
+                Entity hurt = w.spawnCop(0, p.x + 20, p.y), far = w.spawnCop(0, p.x + 200, p.y);
+                hurt.hp = hurt.maxHp * 0.5f;
+                hurt.task = Dispatch.T_POST;
+                hurt.postX = hurt.x;
+                hurt.postY = hurt.y;
+                far.hp = far.maxHp * 0.2f;
+                check(w.ops.aidFor(far, Float.NaN, Float.NaN) == p && w.ops.aidFor(far, far.x + 10, far.y) == null,
+                        "the post is the aid station when it's nearer than the field hospital");
+                // The fire mission: forty of the dead in the open 420 off, nobody living near them.
+                float[] pack = w.city.findWalkable(at[0] + 420, at[1]);
+                java.util.List<Entity> dead = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 40; k++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, pack[0] + (k % 8) * 5 - 18, pack[1] + (k / 8) * 5 - 10);
+                    if (z == null) continue;
+                    z.speed = z.runSpeed = 0;
+                    dead.add(z);
+                }
+                p.fireCd = 0;
+                int shells = w.fireMissions;
+                boolean marked = false;
+                for (int f = 0; f < 30 * 16; f++) {
+                    for (Entity o : w.entities)
+                        if (!o.dead && !o.isZombie() && o != hurt && o != far && Math.hypot(o.x - pack[0], o.y - pack[1]) < 320) o.dead = o.removed = true;
+                    far.hp = Math.min(far.hp, far.maxHp * 0.3f);
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    marked |= p.fireUntil > w.time && Math.hypot(p.fireX - pack[0], p.fireY - pack[1]) < 80;
+                }
+                int left = 0;
+                for (Entity z : dead) if (!z.dead) left++;
+                check(p.missions == 1 && w.fireMissions == shells + 1 && marked, "the post called one fire mission on them, marked while inbound (" + p.missions + ")");
+                check(left < dead.size() - 10, "and the shells landed among them (" + left + " of " + dead.size() + " left)");
+                check(hurt.hp >= hurt.maxHp && p.treated >= 1, "a wounded officer at the tent was patched up (" + p.treated + ", " + hurt.hp + "/" + hurt.maxHp + ", " + (int) Math.hypot(hurt.x - p.x, hurt.y - p.y) + " off, up " + p.up + ")");
+                check(w.fleet.status(p.truck).contains("treated") && w.fleet.status(p.truck).contains("fire mission"), "both on its status line: " + w.fleet.status(p.truck));
+                // Overwatch: a marksman sent to a call beside a tall building takes its roof.
+                City.Building tall = null;
+                float[] call = null;
+                for (City.Building b : w.city.buildings) {
+                    if (b.collapsed || b.height < World.ROOF_HEIGHT + 6) continue;
+                    float[] q = w.city.findWalkable(b.x1 + 60, (b.y0 + b.y1) / 2);
+                    if (q == null || q[0] < b.x1 + 35 || q[0] > b.x1 + 90 || Math.abs(q[1] - (b.y0 + b.y1) / 2) > 30) continue;
+                    if (Math.hypot(q[0] - at[0], q[1] - at[1]) < 700 || w.city.findWalkable(b.x1 + 9, q[1]) == null) continue;
+                    tall = b;
+                    call = q;
+                    break;
+                }
+                check(tall != null, "a tall building by a street");
+                for (Entity o : w.entities) if (!o.dead && Math.hypot(o.x - call[0], o.y - call[1]) < 500) o.dead = o.removed = true;
+                Dispatch.Incident inc = w.dispatch.sighting(call[0], call[1], null);
+                Entity z = w.spawn(Entity.ZOMBIE, call[0], call[1]);
+                z.speed = z.runSpeed = 0;
+                Entity m = w.spawnCop(Entity.ROLE_MARKSMAN, call[0] + 30, call[1] + 10);
+                boolean up = false;
+                for (int f = 0; f < 30 * 20 && !up; f++) {
+                    z.hp = z.maxHp = 100000;
+                    inc.resolved = false;
+                    m.task = Dispatch.T_RESPOND;
+                    m.incident = inc;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    up = m.onTower && m.roof != null;
+                }
+                check(up && w.overwatch.contains(m) && m.roofX > m.roof.x0 && m.roofX < m.roof.x1 && m.roofY > m.roof.y0 && m.roofY < m.roof.y1,
+                        "the marksman is up on the roof (" + m.onTower + ", " + (m.roof != null) + ")");
+                // One of the dead at the foot of the wall can't get at them.
+                Entity z2 = w.spawn(Entity.ZOMBIE, m.x + 12, m.y);
+                z2.hp = z2.maxHp = 100000;
+                float hp = m.hp;
+                for (int f = 0; f < 30 * 4; f++) {
+                    z.hp = z2.hp = 100000;
+                    inc.resolved = false;
+                    m.task = Dispatch.T_RESPOND;
+                    m.incident = inc;
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(m.hp >= hp && !m.infected && m.onTower, "out of the dead's reach up there (" + m.hp + " of " + hp + ")");
+                // The call over: down again.
+                z.dead = z.removed = z2.dead = z2.removed = true;
+                inc.resolved = true;
+                for (int f = 0; f < 45; f++) w.update(1 / 30f);
+                check(m.roof == null && !m.onTower && !w.overwatch.contains(m), "and down again once the call is over");
+            }
+        });
         test("26.0: police boats patrol and pick people off the shore; the command post sets up, steadies, resupplies and is overrun; special forces fly in; a Humvee's gun fires", new Check() {
             @Override
             public void run() throws Exception {
