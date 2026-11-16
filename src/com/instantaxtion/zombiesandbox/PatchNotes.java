@@ -2,14 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "27.0";
-    static final int VERSION_CODE = 270;
+    static final String VERSION = "27.1";
+    static final int VERSION_CODE = 271;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
             {
+                    "27.1  -  One map fewer",
+                    "The map added in 27.0 has been taken out again.",
+            },
+            {
                     "27.0  -  Escalation",
-                    "New map: Refinery Bay, an oil port whose storage tanks and tanker go up in chain explosions when hit.",
                     "Screamers: fragile zombies whose shriek brings the dead from streets around. Kill them first.",
                     "Armoured dead: police and soldiers who turn keep their armour, and a helmet that stops the first headshot.",
                     "Fire missions: a command post calls mortars from the army base onto big packs of the dead in the open.",

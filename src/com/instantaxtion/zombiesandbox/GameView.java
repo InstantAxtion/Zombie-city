@@ -3606,7 +3606,6 @@ final class GameView extends View implements Menu.Host {
 
         drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
         if (!world.overwatch.isEmpty()) drawOverwatch(c, vx0, vy0, vx1, vy1, detailed);
-        if (!world.city.flares.isEmpty()) drawFlares(c, vx0, vy0, vx1, vy1);
         drawHaze(c, vx0, vy0, vx1, vy1);
         // ((19.5) Light, shockwaves, smoke, sparks and debris over it all.)
         vfx.drawAbove(c, vx0, vy0, vx1, vy1);
@@ -3920,65 +3919,6 @@ final class GameView extends View implements Menu.Host {
         }
     }
 
-    /**
-     * ((27.0) A storage tank standing up: its shell from the ground to the rim (a stack of rings, the lit side lighter),
-     * then its roof as the map paints it, at its height.
-     */
-    private void drawTank(Canvas c, City.Building b, float s, float cx, float cy) {
-        float bx = (b.x0 + b.x1) / 2, by = (b.y0 + b.y1) / 2, r0 = (b.x1 - b.x0) / 2 - 0.5f;
-        float tx = cx + (bx - cx) * s, ty = cy + (by - cy) * s, r1 = r0 * s;
-        int col = LandmarkArt15.tankCol(b.look);
-        for (int k = 0; k <= 6; k++) {
-            float t = k / 6f, x = bx + (tx - bx) * t, y = by + (ty - by) * t, r = r0 + (r1 - r0) * t;
-            fill.setColor(City.darken(col, 0.58f + 0.2f * t));
-            c.drawCircle(x, y, r, fill);
-        }
-        // (A band round it near the top, and the lit side.)
-        fill.setColor(City.darken(col, 0.9f));
-        c.drawCircle(bx + (tx - bx) * 0.93f, by + (ty - by) * 0.93f, r0 + (r1 - r0) * 0.93f, fill);
-        LandmarkArt15.tankTop(c, fill, oval, tx, ty, r1, b.look);
-        fill.setStyle(Paint.Style.FILL);
-        if (b.flash > 0) drawGunGlow(c, b, b.x0, b.y0, b.x1, b.y1);
-    }
-
-    /**
-     * ((27.0) Refinery Bay's flare stacks: the stack standing up from its base, and the flame burning at the top of it,
-     * flickering, a glow round it.
-     */
-    private void drawFlares(Canvas c, float vx0, float vy0, float vx1, float vy1) {
-        float cx = camX + getWidth() / scale / 2, cy = camY + getHeight() / scale / 2;
-        float camH = Math.max(Math.max(getWidth(), getHeight()) / scale * 0.9f, Math.max(260f, world.city.maxHeight * 1.7f));
-        float s = settings.buildings3d() ? camH / (camH - 70) : 1;
-        for (int i = 0; i < world.city.flares.size(); i++) {
-            float[] f = world.city.flares.get(i);
-            if (f[0] < vx0 - 200 || f[0] > vx1 + 200 || f[1] < vy0 - 200 || f[1] > vy1 + 200) continue;
-            float tx = cx + (f[0] - cx) * s, ty = cy + (f[1] - cy) * s;
-            stroke.setStrokeWidth(5);
-            stroke.setColor(0xFF4A4E54);
-            c.drawLine(f[0], f[1], tx, ty, stroke);
-            stroke.setStrokeWidth(2);
-            stroke.setColor(0xFF8A8E94);
-            c.drawLine(f[0] - 1, f[1] - 1, tx - 1, ty - 1, stroke);
-            fill.setColor(0xFF2A2C30);
-            c.drawCircle(tx, ty, 4.5f, fill);
-            double t = world.time * 9 + i * 1.7;
-            float fl = 0.75f + 0.25f * (float) Math.sin(t) + 0.12f * (float) Math.sin(t * 2.7), lean = 5 * (float) Math.sin(world.time * 1.3 + i);
-            fill.setColor(0x30FF9A30);
-            c.drawCircle(tx, ty - 6, 30 * fl, fill);
-            fill.setColor(0x50FF8A20);
-            c.drawCircle(tx, ty - 5, 17 * fl, fill);
-            fill.setColor(0xFFE8501A);
-            c.drawCircle(tx + lean * 0.3f, ty - 5 * fl, 9 * fl, fill);
-            fill.setColor(0xFFFF9A20);
-            c.drawCircle(tx + lean * 0.6f, ty - 11 * fl, 6.5f * fl, fill);
-            fill.setColor(0xFFFFE08A);
-            c.drawCircle(tx + lean * 0.2f, ty - 4 * fl, 4 * fl, fill);
-            fill.setColor(0x40201C1A);
-            c.drawCircle(tx + lean * 1.6f + 6, ty - 26 * fl, 9, fill);
-            c.drawCircle(tx + lean * 2.4f + 14, ty - 42 * fl, 12, fill);
-        }
-    }
-
     private void drawBuildings(Canvas c, float vx0, float vy0, float vx1, float vy1, boolean detailed) {
         float cx = camX + getWidth() / scale / 2, cy = camY + getHeight() / scale / 2;
         // Camera height grows with the visible area so the lean looks the same at every zoom level.
@@ -4090,11 +4030,6 @@ final class GameView extends View implements Menu.Host {
             float s = camH / (camH - b.height);
             float rx0 = cx + (b.x0 - cx) * s, rx1 = cx + (b.x1 - cx) * s;
             float ry0 = cy + (b.y0 - cy) * s, ry1 = cy + (b.y1 - cy) * s;
-            // ((27.0) Refinery Bay's storage tanks: cylinders, not boxes, and never see-through.)
-            if (b.tank == 1) {
-                drawTank(c, b, s, cx, cy);
-                continue;
-            }
             // ((17.1) Its inside was drawn under everyone (drawInsides); see-through by the building.)
             float sb = seeOf(b, see);
             wallFade = 1 - 0.55f * sb;

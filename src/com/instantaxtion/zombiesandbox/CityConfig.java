@@ -17,9 +17,7 @@ final class CityConfig implements OptionSet {
             // ((25.0) Theme Park Island, in the old New York's place.)
             "Theme Park Island",
             // ((26.0) Space Center, in the old Sydney's place.)
-            "Space Center",
-            // ((27.0) Refinery Bay, in the old Tokyo's place.)
-            "Refinery Bay", "",
+            "Space Center", "", "",
             "",
             // (10.60)
             "Archipelago", "",
@@ -46,8 +44,7 @@ final class CityConfig implements OptionSet {
             "A desert town with a casino strip, oases and an army test range.",
             "A resort island with a theme park, beach hotels and a ferry, and the staff town across the strait.",
             "A rocket on its pad, the assembly building, mission control and a landing strip, beside a small town.",
-            "An oil port of tank farms and a tanker jetty, with a workers' town behind. The tanks explode.",
-            "",
+            "", "",
             "",
             "A tropical island city ringed by five palm-fringed village islands, all joined by bridges.",
             "",
@@ -124,7 +121,7 @@ final class CityConfig implements OptionSet {
             {STYLE_HOUSES, 1, 0, 1, 1, 1, 2, 1},      // ((22.9) Desert City, in the old Seattle's place)
             {STYLE_MIXED, 1, 2, 3, 1, 1, 1, 0},       // ((25.0) Theme Park Island, in the old New York's place)
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 1, 0},      // ((26.0) Space Center, in the old Sydney's place)
-            {STYLE_MIXED, 1, 1, 1, 1, 1, 2, 1},       // ((27.0) Refinery Bay, in the old Tokyo's place)
+            {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // Tokyo
             {STYLE_MIXED, 2, 1, 2, 2, 0, 3, 1},       // Paris
             {STYLE_MIXED, 1, 2, 1, 2, 1, 2, 1},       // Garrison State
             {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // Archipelago
@@ -157,8 +154,7 @@ final class CityConfig implements OptionSet {
             {1, 1, 1, 1, 3, 1, 30},   // Desert City
             {1, 0, 1, 1, 1, 0, 35},   // Theme Park Island
             {1, 1, 1, 1, 1, 0, 30},   // Space Center
-            {1, 1, 1, 1, 2, 1, 30},   // Refinery Bay
-            {3, 2, 2, 2, 1, 1, 55},
+            {2, 2, 2, 2, 1, 1, 50}, {3, 2, 2, 2, 1, 1, 55},
             {1, 1, 1, 1, 2, 1, 25},   // Garrison State
             {2, 2, 2, 2, 2, 1, 35},   // Archipelago
             {2, 1, 1, 1, 2, 1, 30},   // Mountain Valley
@@ -171,7 +167,7 @@ final class CityConfig implements OptionSet {
     private static final int[][] BUILDING_MIX = {
             {15, 6, 5}, {15, 15, 5}, {20, 0, 6}, {5, 8, 2}, {15, 3, 6}, {10, 0, 8}, {10, 2, 8}, {20, 5, 6},
             {25, 15, 4}, {0, 0, 10}, {30, 18, 4}, {20, 8, 5}, {15, 2, 6}, {10, 6, 3}, {20, 8, 5},
-            {20, 12, 5}, {20, 6, 5}, {8, 4, 6}, {35, 0, 5}, {20, 0, 5}, {22, 4, 6}, {35, 4, 6},
+            {20, 12, 5}, {20, 6, 5}, {8, 4, 6}, {35, 0, 5}, {20, 0, 5}, {35, 12, 5}, {35, 4, 6},
             {30, 8, 4},
             {20, 8, 5}, {12, 3, 6},
             {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 6, 6},
@@ -326,8 +322,7 @@ final class CityConfig implements OptionSet {
         // ((22.9) Nor 17: Desert City.)
         // ((25.0) Nor 18: Theme Park Island.)
         // ((26.0) Nor 19: the Space Center.)
-        // ((27.0) Nor 20: Refinery Bay.)
-        return preset == 2 || preset == 25 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        return preset == 2 || preset == 25 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -360,17 +355,6 @@ final class CityConfig implements OptionSet {
 
     boolean spaceCenter() { return v[OPT_PRESET] == SPACE_CENTER; }
 
-    /**
-     * ((27.0) Refinery Bay: an oil port. The sea along the bottom of the map; along the waterfront the refinery - fields
-     * of round storage tanks, the cracking plant with its towers, pipe racks and flare stack, pipelines down to the
-     * tanker jetty and the tanker moored at it, the loading racks on their rail siding - and the workers' town on the
-     * rest. The tanks and the tanker go up when they're hit (World.tankGoesUp). Everything it changes in the building of
-     * a city is for this map alone, so every other map builds as before.)
-     */
-    static final int REFINERY = 20;
-
-    boolean refinery() { return v[OPT_PRESET] == REFINERY; }
-
     /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
     static final int TOWERS = 10;
 
@@ -401,7 +385,7 @@ final class CityConfig implements OptionSet {
     int water() {
         switch (v[OPT_PRESET]) {
             case 12: return W_LAKE;
-            case 13: case PRISON_ISLAND: case REFINERY: return W_HARBOUR;
+            case 13: case PRISON_ISLAND: return W_HARBOUR;
             case ISLANDS: case ARCHIPELAGO: case THEME_PARK: return W_ISLANDS;
             case RIVER_CITY: return W_RIVER;
             default: return W_NONE;
@@ -769,8 +753,7 @@ final class CityConfig implements OptionSet {
             {1, 3, 1, 8, 2, 0, 1, 0},   // Desert City
             {4, 3, 0, 3, 0, 0, 2, 6},   // Theme Park Island
             {0, 3, 0, 6, 1, 1, 2, 1},   // Space Center
-            {1, 4, 1, 5, 2, 0, 1, 1},   // Refinery Bay
-            {3, 3, 2, 3, 1, 1, 1, 0},
+            {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
             {3, 4, 1, 3, 3, 0, 1, 1},   // Garrison State
             {3, 4, 2, 4, 1, 1, 2, 0},   // Archipelago
             {1, 2, 3, 5, 1, 0, 3, 2},   // Mountain Valley

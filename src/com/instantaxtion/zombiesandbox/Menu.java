@@ -1835,18 +1835,6 @@ final class Menu {
                     c.drawCircle(ex + (float) Math.cos(a) * u * 1.15f, ey - u * 0.3f + (float) Math.sin(a) * u * 1.15f, u * 0.28f, fill);
                 }
                 c.drawCircle(ex, ey - u * 0.3f, u * 0.25f, fill);
-            } else if (i == CityConfig.REFINERY) {
-                // ((27.0) Two storage tanks and the flare stack burning beside them.)
-                c.drawRect(ex - u * 1.9f, ey - u * 0.5f, ex - u * 0.5f, ey + u * 1.1f, fill);
-                c.drawRect(ex - u * 0.2f, ey - u * 0.1f, ex + u * 0.9f, ey + u * 1.1f, fill);
-                tmp.set(ex - u * 1.9f, ey - u * 0.85f, ex - u * 0.5f, ey - u * 0.15f);
-                c.drawOval(tmp, fill);
-                tmp.set(ex - u * 0.2f, ey - u * 0.4f, ex + u * 0.9f, ey + u * 0.2f);
-                c.drawOval(tmp, fill);
-                c.drawRect(ex + u * 1.4f, ey - u * 1.1f, ex + u * 1.65f, ey + u * 1.1f, fill);
-                c.drawCircle(ex + u * 1.52f, ey - u * 1.6f, u * 0.42f, fill);
-                c.drawCircle(ex + u * 1.75f, ey - u * 2.05f, u * 0.26f, fill);
-                c.drawRect(ex - u * 2.1f, ey + u * 1.1f, ex + u * 2f, ey + u * 1.3f, fill);
             } else if (i == CityConfig.SPACE_CENTER) {
                 // ((26.0) A rocket on its pad: the body and nose, the fins, the flame trench's pad under it.)
                 c.drawRect(ex - u * 0.4f, ey - u * 1.2f, ex + u * 0.4f, ey + u * 0.7f, fill);
