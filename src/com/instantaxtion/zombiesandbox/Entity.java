@@ -3,7 +3,10 @@ package com.instantaxtion.zombiesandbox;
 /** Someone in the city: a civilian, a cop, a soldier, a medic, a dog or one of the zombie kinds. */
 final class Entity {
     static final int CIVILIAN = 0, COP = 1, SOLDIER = 2, MEDIC = 3, DOG = 4, RAIDER = 5, ZOMBIE = 6, RUNNER = 7,
-            BRUTE = 8, /** ((25.0) In the old crawler's place: the giant, only ever put down by hand. */ GIANT = 9, SCREAMER = 10, ZOMBIE_DOG = 11, /** ((22.6) In the old spitter's place. */ BRUISER = 12, BLOATER = 13,
+            BRUTE = 8, /** ((25.0) In the old crawler's place: the giant, only ever put down by hand. */ GIANT = 9,
+            /** ((27.0) Back, and new: it shrieks at the sight of the living, and the dead for streets round come to it. */ SCREAMER = 10,
+            ZOMBIE_DOG = 11, /** ((22.6) In the old spitter's place. */ BRUISER = 12,
+            /** ((27.0) In the old bloater's place: a police officer or soldier come back still in armour and helmet. */ ARMOURED = 13,
             /** (Firefighters went in 10.49: any in an old save load as civilians.) */
             FIREFIGHTER = 14,
             /** (The other game modes' gang members and enemy soldiers went in 19.6: any in an old save load as zombies.) */
@@ -12,18 +15,17 @@ final class Entity {
 
     /**
      * (10.50) The kind someone of kind t is now: the kinds taken out of the game (bloaters, spitters and screamers
-     * come back as ordinary zombies - and crawlers, in saves from before 25.0: see SaveGame.type; firefighters, medics and raiders are ordinary people).
+     * come back as ordinary zombies - and crawlers, in saves from before 25.0, and (the old ones) from before 27.0: see SaveGame.type; firefighters, medics and raiders are ordinary people).
      */
     static int current(int t) {
         switch (t) {
-            case BLOATER: case SCREAMER: return ZOMBIE;
             case FIREFIGHTER: case MEDIC: case RAIDER: return CIVILIAN;
             case GANGSTER: case INVADER: return ZOMBIE;
             default: return t;
         }
     }
     static final String[] NAMES = {"Civilian", "Cop", "Soldier", "Medic", "Dog", "Raider", "Zombie", "Runner", "Brute",
-            "Giant", "Screamer", "Zombie dog", "Bruiser", "Bloater", "Firefighter", "Gang member", "Enemy soldier"};
+            "Giant", "Screamer", "Zombie dog", "Bruiser", "Armoured zombie", "Firefighter", "Gang member", "Enemy soldier"};
 
     /** Soldiers' jobs: rifleman, the commander, snipers and machine gunners. */
     static final int ROLE_RIFLE = 0, ROLE_COMMANDER = 1, ROLE_SNIPER = 2, ROLE_GUNNER = 3;
@@ -119,6 +121,9 @@ final class Entity {
 
     // Zombies: where a noise came from, and the screamer's cooldown.
     float noiseX, noiseY, screamCd;
+    /** ((27.0) A screamer standing and shrieking (seconds left); an armoured zombie's helmet, good for one shot to the head. */
+    transient float shriek;
+    transient boolean helmet;
 
     // Dispatch: current job (task, at the top), radio callsign and speech icons.
     Dispatch.Incident incident;
@@ -468,16 +473,16 @@ final class Entity {
 
     /** One of the dead: who the police and the army fight, and who everyone else runs from. */
     boolean isZombie() {
-        return type >= ZOMBIE && type <= BLOATER;
+        return type >= ZOMBIE && type <= ARMOURED;
     }
 
     static boolean isZombieType(int type) {
-        return type >= ZOMBIE && type <= BLOATER;
+        return type >= ZOMBIE && type <= ARMOURED;
     }
 
     /** ((17.0) One of the dead themselves: they bite, rot, shamble, climb, get back up. */
     boolean isUndead() {
-        return type >= ZOMBIE && type <= BLOATER;
+        return type >= ZOMBIE && type <= ARMOURED;
     }
 
     boolean isArmed() {

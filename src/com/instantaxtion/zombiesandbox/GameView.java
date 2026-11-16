@@ -65,7 +65,7 @@ final class GameView extends View implements Menu.Host {
             "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
-    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT};
+    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT, Entity.SCREAMER, Entity.ARMOURED};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
             Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
@@ -138,7 +138,9 @@ final class GameView extends View implements Menu.Host {
 
     private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile",
             "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside",
-            "Huge and slow: smashes barricades, throws cars aside; takes a squad, a tank or explosives"};
+            "Huge and slow: smashes barricades, throws cars aside; takes a squad, a tank or explosives",
+            "Frail, but its shriek brings the dead from streets around: kill it first",
+            "A dead officer or soldier still in armour: the helmet stops the first shot to the head"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
@@ -3374,6 +3376,18 @@ final class GameView extends View implements Menu.Host {
             if (r[0] + rad < vx0 || r[0] - rad > vx1 || r[1] + rad < vy0 || r[1] - rad > vy1) continue;
             stroke.setColor(alpha(0xFFFFE8B0, 0.35f * (1 - t)));
             c.drawCircle(r[0], r[1], rad, stroke);
+        }
+        // ((27.0) A screamer's shriek: red rings racing out from it.)
+        for (int i = 0, n = world.shriekRings.size(); i < n; i++) {
+            float[] r = world.shriekRings.get(i);
+            for (int k = 0; k < 3; k++) {
+                float t = r[2] / World.SHRIEK_TIME - k * 0.18f;
+                if (t <= 0 || t >= 1) continue;
+                float rad = World.SHRIEK_REACH * 0.5f * t;
+                if (r[0] + rad < vx0 || r[0] - rad > vx1 || r[1] + rad < vy0 || r[1] - rad > vy1) continue;
+                stroke.setColor(alpha(0xFFFF5A48, 0.6f * (1 - t)));
+                c.drawCircle(r[0], r[1], rad, stroke);
+            }
         }
         if (!Float.isNaN(world.hospitalX) && world.hospitalX > vx0 - 30 && world.hospitalX < vx1 + 30 && world.hospitalY > vy0 - 30 && world.hospitalY < vy1 + 30) {
             // ((14.5) The field hospital: a big white tent with a red cross on the roof.)
@@ -7733,7 +7747,26 @@ final class GameView extends View implements Menu.Host {
 
             fill.setColor(e.head);
             if (e.type == Entity.GIANT) drawGiantHead(c, e, r);
-            else c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
+            else c.drawCircle(r * 0.08f, 0, r * (e.type == Entity.SCREAMER ? 0.5f : 0.56f), fill);
+            if (e.type == Entity.ARMOURED && e.helmet) {
+                // ((27.0) The helmet: a pale rim round it and a dull shine on top.)
+                stroke.setColor(City.darken(e.head, 0.6f));
+                stroke.setStrokeWidth(r * 0.12f);
+                c.drawCircle(r * 0.08f, 0, r * 0.6f, stroke);
+                fill.setColor(0x50FFFFFF);
+                c.drawCircle(-r * 0.05f, -r * 0.16f, r * 0.14f, fill);
+            } else if (e.type == Entity.SCREAMER) {
+                // ((27.0) A screamer: a wide black mouth - wider still, with rings round it, while it shrieks.)
+                boolean cry = e.shriek > 0;
+                fill.setColor(0xFF1A0606);
+                c.drawCircle(r * (cry ? 0.42f : 0.36f), 0, r * (cry ? 0.3f : 0.17f), fill);
+                if (cry) {
+                    float ph = (world.time * 3) % 1;
+                    stroke.setStrokeWidth(r * 0.14f);
+                    stroke.setColor(alpha(0xFFFF6A5A, 0.8f * (1 - ph)));
+                    c.drawCircle(0, 0, r * (1.3f + ph * 2.2f), stroke);
+                }
+            }
             if (scale > 1.9f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
                     || e.type == Entity.RUNNER)) drawHair(c, e, r);
             if (e.raider) {
@@ -8522,6 +8555,9 @@ final class GameView extends View implements Menu.Host {
         lines.add(health);
         // ((25.0) The giant; an escaped inmate; a rioter.)
         if (e.type == Entity.GIANT) lines.add("A giant: shrugs off rifle fire and smashes through barricades - bring a squad, a tank or explosives");
+        // ((27.0) The screamer and the armoured dead.)
+        if (e.type == Entity.SCREAMER) lines.add("A screamer: its shriek brings the dead from streets around" + (e.shriek > 0 ? " - SHRIEKING" : ""));
+        if (e.type == Entity.ARMOURED) lines.add("Armoured: body armour, and " + (e.helmet ? "a helmet that stops the first shot to the head" : "its helmet shot off"));
         if (e.escapee) lines.add("Escaped inmate: on the run from the police");
         if (e.riotUntil > world.time) lines.add("Rioting");
         if (!e.canShoot() && e.melee > 0 && !e.isUndead()) lines.add("Carrying " + (e.melee == Entity.M_AXE ? "an axe" : "a " + Entity.MELEE_NAMES[e.melee].toLowerCase()));
@@ -9685,7 +9721,8 @@ final class GameView extends View implements Menu.Host {
      * commander, a scope for the sniper), the dead's green skin and red eyes, a runner's speed lines, a brute's bulk.
      */
     private void drawPersonBadge(Canvas c, int type, Entity e, float cx, float cy, float size) {
-        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE || type == Entity.BRUISER || type == Entity.GIANT;
+        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE || type == Entity.BRUISER || type == Entity.GIANT
+                || type == Entity.SCREAMER || type == Entity.ARMOURED;
         boolean giant = type == Entity.GIANT;
         int disc = zombie ? 0xFF2E4A22 : type == Entity.COP ? 0xFF1E3366 : type == Entity.SOLDIER ? 0xFF3A4328 : 0xFF5A4022;
         float r = size * 1.18f;
@@ -9698,7 +9735,8 @@ final class GameView extends View implements Menu.Host {
         c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.95f);
         float bulk = giant ? 1.75f : type == Entity.BRUTE ? 1.35f : type == Entity.BRUISER ? 1.17f : 1f;
         // Shoulders.
-        int shirt = type == Entity.COP ? e.body : type == Entity.SOLDIER ? e.body : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
+        int shirt = type == Entity.COP ? e.body : type == Entity.SOLDIER ? e.body : type == Entity.ARMOURED ? 0xFF2A3F78 : type == Entity.SCREAMER ? 0xFF8E8A7C
+                : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
         fill.setColor(shirt);
         oval.set(cx - r * 0.78f * bulk, cy + r * 0.28f, cx + r * 0.78f * bulk, cy + r * 1.5f);
         c.drawOval(oval, fill);
@@ -9743,9 +9781,16 @@ final class GameView extends View implements Menu.Host {
         c.drawCircle(cx - hr * 0.38f, hy + hr * 0.05f, hr * 0.13f, fill);
         c.drawCircle(cx + hr * 0.38f, hy + hr * 0.05f, hr * 0.13f, fill);
         if (zombie) {
-            // A gaping mouth.
+            // A gaping mouth. ((27.0) A screamer's: wide open.)
             fill.setColor(0xFF3A0808);
-            oval.set(cx - hr * 0.3f, hy + hr * 0.4f, cx + hr * 0.3f, hy + hr * 0.75f);
+            if (type == Entity.SCREAMER) oval.set(cx - hr * 0.42f, hy + hr * 0.28f, cx + hr * 0.42f, hy + hr * 0.95f);
+            else oval.set(cx - hr * 0.3f, hy + hr * 0.4f, cx + hr * 0.3f, hy + hr * 0.75f);
+            c.drawOval(oval, fill);
+        }
+        if (type == Entity.ARMOURED) {
+            // ((27.0) Still in its helmet.)
+            fill.setColor(0xFF15203F);
+            oval.set(cx - hr * 1.1f, hy - hr * 1.2f, cx + hr * 1.1f, hy - hr * 0.1f);
             c.drawOval(oval, fill);
         }
         if (type == Entity.COP) {

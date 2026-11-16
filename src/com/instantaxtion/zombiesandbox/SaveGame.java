@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 76;
+    private static final int VERSION = 77;
 
     private SaveGame() {
     }
@@ -516,6 +516,9 @@ final class SaveGame {
         if (version < 68 && t == Entity.BRUISER) t = Entity.ZOMBIE;
         // ((25.0) Type 9 was the crawler (back as a zombie); it's the giant from version 70.)
         if (version < 70 && t == Entity.GIANT) t = Entity.ZOMBIE;
+        // ((27.0) Types 10 and 13 were the old screamer and the bloater (back as zombies); they're the new screamer and
+        // the armoured dead from version 77.)
+        if (version < 77 && (t == Entity.SCREAMER || t == Entity.ARMOURED)) t = Entity.ZOMBIE;
         // (Kinds no longer in the game load as what they'd be now: see Entity.current.)
         return Entity.current(t);
     }
@@ -1186,6 +1189,8 @@ final class SaveGame {
         e.body = in.readInt();
         e.head = in.readInt();
         e.skin = in.readInt();
+        // ((27.0) An armoured zombie's helmet isn't kept as such: it has it while its head is still the helmet's colour.)
+        e.helmet = e.type == Entity.ARMOURED && e.head != e.skin;
         e.origin = in.readInt();
         if (e.origin >= 0) e.origin = type(e.origin, version);
         e.infected = in.readBoolean();

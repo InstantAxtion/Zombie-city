@@ -644,6 +644,8 @@ final class World {
                 case Entity.BRUTE: zs += 4; break;
                 case Entity.BRUISER: zs += 2.2f; break;
                 case Entity.GIANT: zs += 14; break;
+                case Entity.SCREAMER: zs += 1.5f; break;
+                case Entity.ARMOURED: zs += 2.5f; break;
             }
             if (e.infected) zs += 0.8f;
         }
@@ -1345,7 +1347,7 @@ final class World {
 
     int zombieCount() {
         return counts[Entity.ZOMBIE] + counts[Entity.RUNNER] + counts[Entity.BRUTE] + counts[Entity.ZOMBIE_DOG] + counts[Entity.BRUISER]
-                + counts[Entity.GIANT];
+                + counts[Entity.GIANT] + counts[Entity.SCREAMER] + counts[Entity.ARMOURED];
     }
 
     int humanCount() {
@@ -1501,6 +1503,27 @@ final class World {
                 e.skin = 0xFF829858;
                 e.mass = 1.9f;
                 break;
+            case Entity.SCREAMER:
+                // ((27.0) Thin and frail, no faster than the rest: all it does is shriek, and that's enough.)
+                e.hp = 40;
+                e.radius = 3.3f;
+                e.speed = 12 + rnd.nextFloat() * 4;
+                e.runSpeed = 24 + rnd.nextFloat() * 5;
+                e.skin = 0xFFC2CCA6;
+                e.mass = 0.8f;
+                break;
+            case Entity.ARMOURED:
+                // ((27.0) A police officer or soldier come back in what they wore: body armour (most of a body shot
+                // stopped) and a helmet that takes the first shot to the head.)
+                e.hp = 150;
+                e.radius = 4.0f;
+                e.speed = 11 + rnd.nextFloat() * 3;
+                e.runSpeed = 22 + rnd.nextFloat() * 4;
+                e.skin = rnd.nextBoolean() ? 0xFF7C9A5E : 0xFF8FA173;
+                e.mass = 1.5f;
+                e.armored = true;
+                e.helmet = true;
+                break;
             case Entity.GIANT:
                 // ((25.0) Only ever put down by hand: huge, slow, and it takes a squad's sustained fire, a tank or
                 // explosives to bring down (no lucky shot to the head does it).)
@@ -1524,12 +1547,17 @@ final class World {
         if (e.isUndead()) {
             int base = originBody != 0 ? originBody
                     : type == Entity.BRUTE ? 0xFF4D3F4F : type == Entity.GIANT ? 0xFF3A3036 : type == Entity.BRUISER ? 0xFF6A3A34 : type == Entity.ZOMBIE_DOG ? DOGS[rnd.nextInt(DOGS.length)]
+                    // ((27.0) The armoured dead: police blue or army olive. A screamer: a pale rag.)
+                    : type == Entity.ARMOURED ? (origin == Entity.SOLDIER || (origin != Entity.COP && rnd.nextBoolean()) ? 0xFF55623A : 0xFF23408E)
+                    : type == Entity.SCREAMER ? 0xFFB9B4A6
                     : shirts()[rnd.nextInt(shirts().length)];
-            e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE || type == Entity.BRUISER || type == Entity.GIANT ? 0.2f : 0.45f);
+            e.body = mix(base, 0xFF2F3A26, type == Entity.BRUTE || type == Entity.BRUISER || type == Entity.GIANT || type == Entity.ARMOURED ? 0.2f : 0.45f);
             // ((12.4) This strain's own look.)
             int tint = strainTint();
             if (tint != 0 && type != Entity.ZOMBIE_DOG) e.skin = mix(e.skin, tint, 0.45f);
             e.head = type == Entity.ZOMBIE_DOG ? City.darken(e.body, 0.8f) : e.skin;
+            // ((27.0) The helmet, until it's shot off.)
+            if (type == Entity.ARMOURED) e.head = City.darken(e.body, 0.62f);
             // The longer the outbreak goes on, the tougher new zombies get.
             if (mutation > 0) {
                 e.hp *= 1 + 0.12f * mutation;
@@ -2326,6 +2354,11 @@ final class World {
             float[] r = noiseRings.get(i);
             r[3] += dt;
             if (r[3] > 1.4f) noiseRings.remove(i);
+        }
+        for (int i = shriekRings.size() - 1; i >= 0; i--) {
+            float[] r = shriekRings.get(i);
+            r[2] += dt;
+            if (r[2] > SHRIEK_TIME) shriekRings.remove(i);
         }
         updateWildlife(dt);
         if (lodFrame % 15 == 0) checkpointGuards();
@@ -4436,6 +4469,13 @@ final class World {
     }
 
     private void thinkZombie(Entity z, float dt) {
+        // ((27.0) A screamer in full cry stands where it is.)
+        if (z.shriek > 0) {
+            z.shriek -= dt;
+            z.screamCd -= dt;
+            steer(z, (float) Math.cos(z.angle), (float) Math.sin(z.angle), 0);
+            return;
+        }
         if (z.type == Entity.GIANT) giantStep(z, dt);
         else if (z.blocked && !barriers.isEmpty()) bashBarrier(z, dt);
         z.chargeCd -= dt;
@@ -4464,6 +4504,11 @@ final class World {
             if (d > near && facing < 0.1f && t.want < t.runSpeed * 0.9f) t = null;
         }
         if (t != null) {
+            // ((27.0) A screamer that sees the living stops and shrieks.)
+            if (z.type == Entity.SCREAMER && z.screamCd <= 0 && city.los(z.x, z.y, t.x, t.y)) {
+                shriek(z, t);
+                return;
+            }
             if (rnd.nextFloat() < 0.2f) z.frenzy = countZombiesNear(t.x, t.y, 35) >= 3;
             // A brute lowers its head and charges.
             // ((22.6) A bruiser lunges: shorter and more often.)
@@ -8882,6 +8927,35 @@ final class World {
 
     int megaHordes;
 
+    /** ((27.0) How far a screamer's shriek carries, how long it stands shrieking, and how long before it can again. */
+    static final float SHRIEK_REACH = 700, SHRIEK_TIME = 1.6f, SHRIEK_CD = 12;
+    /** Shrieks so far; and those in the air now, for the map: {x, y, age}. */
+    int shrieks;
+    final ArrayList<float[]> shriekRings = new ArrayList<float[]>();
+
+    /**
+     * ((27.0) A screamer has seen one of the living: it stops and shrieks, and every one of the dead within earshot -
+     * whole hordes with them - turns and comes to where it stands. Shoot it first.
+     */
+    void shriek(Entity z, Entity prey) {
+        z.screamCd = SHRIEK_CD;
+        z.shriek = SHRIEK_TIME;
+        z.angle = (float) Math.atan2(prey.y - z.y, prey.x - z.x);
+        z.memory = Math.max(z.memory, 10);
+        z.lastX = prey.x;
+        z.lastY = prey.y;
+        shrieks++;
+        emit(Sfx.SHRIEK, z.x, z.y);
+        noise(z.x, z.y, SHRIEK_REACH);
+        // (Not itself: it stays on what it saw.)
+        z.noiseTimer = 0;
+        if (shriekRings.size() < 12) shriekRings.add(new float[]{z.x, z.y, 0});
+        if (shrieks == 1) {
+            dispatch.say(Dispatch.WHO_INFO, null, "A screamer on " + city.placeName(z.x, z.y) + ": its shriek brings the dead from streets around. Kill it first.", z.x, z.y, true);
+            timeline("A screamer's shriek called the dead in", z.x, z.y);
+        }
+    }
+
     /** ((20.0) A horde of n (25 to 40 if n is negative) in from the nearest edge, heading for (x, y); said on the radio or not. */
     ArrayList<Entity> hordeFrom(float x, float y, int count, boolean announce) {
         ArrayList<Entity> out = new ArrayList<Entity>();
@@ -8894,7 +8968,8 @@ final class World {
         for (int i = 0; i < n; i++) {
             float roll = rnd.nextFloat();
             int type = roll < 0.12f ? Entity.RUNNER : roll < 0.14f ? Entity.BRUTE : roll < 0.2f ? Entity.ZOMBIE_DOG
-                    : roll < 0.25f ? Entity.BRUISER : Entity.ZOMBIE;
+                    // ((27.0) And a screamer or two.)
+                    : roll < 0.25f ? Entity.BRUISER : roll < 0.275f ? Entity.SCREAMER : Entity.ZOMBIE;
             Entity z = spawn(type, edge[0] + rnd.nextFloat() * spread - spread / 2, edge[1] + rnd.nextFloat() * spread - spread / 2);
             if (z == null) continue;
             out.add(z);
@@ -15251,6 +15326,11 @@ final class World {
                 // ((25.0) A shot to a giant's head hurts it, and no more.)
                 t.hp -= dmg * GUN_DAMAGE * 8;
                 if (wasUp && t.hp <= 0) t.bodyShot = true;
+            } else if (headshot && t.helmet) {
+                // ((27.0) The helmet takes it, and comes off.)
+                loseHelmet(t);
+                t.hp -= dmg * GUN_DAMAGE * 0.5f;
+                if (wasUp && t.hp <= 0) t.bodyShot = true;
             } else if (headshot) {
                 t.hp = 0;
                 t.gibbed = rnd.nextFloat() < 0.3f;
@@ -16496,6 +16576,10 @@ final class World {
         }
         c.rise = turns ? (2.5f + rnd.nextFloat() * 3f) * (trait[TR_QUICK_RISE] ? 0.35f : trait[TR_SLOW_RISE] ? 3f : 1f) : -1;
         c.riseType = e.type == Entity.DOG ? Entity.ZOMBIE_DOG : turnType(e.type);
+        // ((27.0) Police and soldiers come back in their armour: soldiers, riot police and the tactical teams always,
+        // an ordinary officer about half the time (which half goes by who they were, not by chance).)
+        if (c.riseType == Entity.ZOMBIE && (e.type == Entity.SOLDIER || (e.type == Entity.COP
+                && (e.role == Entity.ROLE_RIOT || e.role == Entity.ROLE_SWAT || (e.nameSeed & 1) == 0)))) c.riseType = Entity.ARMOURED;
         // ((12.1) Only the head stops them for good: one dropped by body shots alone may well get up again.)
         if (e.isUndead() && e.bodyShot && !e.gibbed && rnd.nextFloat() < GET_UP) {
             c.rise = 7 + rnd.nextFloat() * 8;
@@ -16536,6 +16620,13 @@ final class World {
         return Entity.ZOMBIE;
     }
 
+    /** ((27.0) An armoured zombie's helmet shot off: the next one to the head counts. */
+    void loseHelmet(Entity t) {
+        t.helmet = false;
+        t.head = t.skin;
+        for (int k = 0; k < 4; k++) particle(t.x, t.y, rnd.nextFloat() * 60 - 30, rnd.nextFloat() * 60 - 30, 0.35f, 1f, 0xFFD8D8C8, P_DOT);
+    }
+
     /** (10.59) How long a body that won't get up stays where it fell, in seconds. */
     static final float CORPSE_LIFE = 60;
 
@@ -16573,7 +16664,9 @@ final class World {
                         Entity z = make(c.riseType, c.x, c.y, c.origin, 0);
                         z.body = c.body;
                         z.head = c.head;
-                        z.armored = (c.origin == Entity.COP || c.origin == Entity.SOLDIER) && rnd.nextFloat() < 0.75f;
+                        z.armored = ((c.origin == Entity.COP || c.origin == Entity.SOLDIER) && rnd.nextFloat() < 0.75f) || z.type == Entity.ARMOURED;
+                        // ((27.0) Its helmet only if it still had it when it fell.)
+                        z.helmet = z.type == Entity.ARMOURED && c.head == City.darken(c.body, 0.62f);
                         z.angle = c.angle;
                         z.nameSeed = c.nameSeed;
                         z.hp = z.maxHp * 0.6f;
@@ -16585,7 +16678,7 @@ final class World {
                     Entity z = make(c.riseType, c.x, c.y, c.origin, c.body);
                     z.angle = c.angle;
                     // (10.32) A police officer or soldier comes back still in their body armour (and helmet).
-                    z.armored = (c.origin == Entity.COP || c.origin == Entity.SOLDIER) && rnd.nextFloat() < 0.75f;
+                    z.armored = ((c.origin == Entity.COP || c.origin == Entity.SOLDIER) && rnd.nextFloat() < 0.75f) || z.type == Entity.ARMOURED;
                     // Same person, now one of them: who bit them gets the credit.
                     z.nameSeed = c.nameSeed;
                     Integer by = bitBy.get(c.nameSeed);
