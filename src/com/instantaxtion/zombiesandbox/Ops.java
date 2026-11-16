@@ -745,8 +745,8 @@ final class Ops {
         /** Until it may set out again (or until a new truck after one was lost); times set up and overrun. */
         float cd = 20;
         int setUp, lost, resupplied;
-        /** ((26.1) Seconds set up where it is. */
-        float stayed;
+        /** ((26.1) Seconds set up where it is.) ((26.6) Until it may turn off again for the dead on the road.) */
+        float stayed, blockedUntil;
         private float hitSaidAt = -99, farFor, supplySaidAt = -99, quietFor, newCd;
 
         Post(boolean army) {
@@ -1028,6 +1028,36 @@ final class Ops {
                 w.dispatch.say(p.who(), null, p.hq() + ": All quiet. Command post packing up and coming home to " + home.name + ".", p.x, p.y);
             else p.quietFor = 60;
         }
+    }
+
+    /**
+     * ((26.6) From Fleet: the dead on the road ahead of a command truck on the move (at about (ax, ay)), or round where
+     * it was going. It turns off for the clear spot nearest to the way it was going but away from them, and sets up
+     * there (home can wait). False if there's nowhere clear it can get to: it drives on.
+     */
+    boolean postBlocked(Fleet.Vehicle v, float ax, float ay) {
+        Post p = postOf(v);
+        if (w.time < p.blockedUntil) return false;
+        p.blockedUntil = w.time + 3;
+        float dx = v.x - ax, dy = v.y - ay, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
+        float away = (float) Math.atan2(dy / d, dx / d);
+        float[] turns = {0.9f, -0.9f, 1.6f, -1.6f, 0.4f, -0.4f, 0};
+        for (float dist : new float[]{420, 600}) {
+            for (float t : turns) {
+                float a = away + t;
+                float[] q = w.city.nearestDrivable(v.x + (float) Math.cos(a) * dist, v.y + (float) Math.sin(a) * dist);
+                if (q == null || w.countZombiesNear(q[0], q[1], 260) > 0) continue;
+                if (World.hypot(q[0] - v.tx, q[1] - v.ty) < 120) continue;
+                if (!w.fleet.movePost(v, q[0], q[1])) {
+                    v.state = Fleet.DRIVE;
+                    continue;
+                }
+                p.returning = false;
+                w.dispatch.say(p.who(), null, p.side() + " command post: The dead are on the road ahead. Turning off for " + v.place + ".", v.x, v.y);
+                return true;
+            }
+        }
+        return false;
     }
 
     private Post postOf(Fleet.Vehicle v) {

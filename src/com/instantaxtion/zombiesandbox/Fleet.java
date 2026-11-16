@@ -1991,6 +1991,17 @@ final class Fleet {
             return false;
         }
         v.stuckTimer += dt;
+        // ((26.6) Eyes on the road: the dead on the road ahead, round the truck, or where it's going - it turns off for
+        // somewhere clear instead of driving on into them (it drove straight through a crowd of them and was torn apart).)
+        v.checkCd -= dt;
+        if (v.checkCd <= 0) {
+            v.checkCd = 0.4f;
+            float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
+            int ahead = w.countZombiesNear(v.x + hx * 70, v.y + hy * 70, 70) + w.countZombiesNear(v.x + hx * 150, v.y + hy * 150, 60)
+                    + w.countZombiesNear(v.x, v.y, 45);
+            boolean there = World.hypot(v.tx - v.x, v.ty - v.y) < 500 && w.countZombiesNear(v.tx, v.ty, 160) >= 2;
+            if ((ahead >= 2 || there) && w.ops.postBlocked(v, v.x + hx * 100, v.y + hy * 100)) return false;
+        }
         boolean moving = driveStep(v, dt, 90, carAhead(v) ? 0.5f : 1f);
         if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
         float d = (float) World.hypot(v.tx - v.x, v.ty - v.y);
