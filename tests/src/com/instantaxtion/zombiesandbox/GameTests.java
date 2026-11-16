@@ -4529,7 +4529,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() == 287, "250 designs, Theme Park Island's 23 and the Space Center's 14 (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 294, "250 designs, Theme Park Island's 23, the Space Center's 14 and Refinery Bay's 7 (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();
@@ -4778,6 +4778,67 @@ public final class GameTests {
                     else if (b.kind == City.WAREHOUSE) outerOther++;
                 }
                 check(palms > 200 && outerHouses > 100 && outerOther < outerHouses / 10, "palms (" + palms + "), and houses, not works, on the outer islands (" + outerHouses + "/" + outerOther + ")");
+            }
+        });
+        test("27.0: Refinery Bay has its tank farms, cracking plant and tanker; a tank that's hit goes up and sets off its neighbours, and stays burnt in a save", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_PRESET] = CityConfig.REFINERY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 5;
+                c.normalize();
+                check(!CityConfig.retired(CityConfig.OPT_PRESET, CityConfig.REFINERY) && CityConfig.PRESETS[CityConfig.REFINERY].equals("Refinery Bay"), "on the New Game screen");
+                World w = new World(c);
+                w.populate(c);
+                City city = w.city;
+                java.util.List<City.Building> tanks = new java.util.ArrayList<City.Building>();
+                City.Building ship = null;
+                boolean plant = false;
+                for (City.Building b : city.buildings) {
+                    if (b.tank == 1) tanks.add(b);
+                    else if (b.tank == 2) ship = b;
+                    Variants.V v = Variants.get(b.variant);
+                    if (v != null && v.name.equals("Cracking Plant")) plant = true;
+                }
+                check(city.refinery && tanks.size() >= 40 && ship != null && plant && !city.flares.isEmpty(),
+                        "storage tanks (" + tanks.size() + "), the tanker, the cracking plant and its flare stack");
+                check(city.tiles[city.tileIndex(ship.x1 + 40, (ship.y0 + ship.y1) / 2)] == City.WATER && tanks.get(0).capacity == 0 && !city.enterable(tanks.get(0)),
+                        "the tanker lies in the water; nobody goes into a tank");
+                int police = 0;
+                for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE) police++;
+                check(city.mainBase() != null && police >= 1 && w.counts[Entity.COP] > 20 && w.counts[Entity.SOLDIER] > 20 && city.totalResidents > 3000,
+                        "an army base, police and a town of people (" + w.counts[Entity.COP] + ", " + w.counts[Entity.SOLDIER] + ", " + city.totalResidents + ")");
+                // Nothing goes up by itself.
+                for (int f = 0; f < 30 * 4; f++) w.update(1 / 30f);
+                check(w.tanksBlown == 0, "nothing explodes on its own");
+                // A blast beside one: it goes up, and so do the tanks next to it, one after another.
+                City.Building t = tanks.get(0);
+                float tx = (t.x0 + t.x1) / 2, ty = (t.y0 + t.y1) / 2;
+                Entity z = w.spawn(Entity.ZOMBIE, t.x1 + 30, ty);
+                w.explode(tx, t.y0 - 12, 60, 300);
+                for (int f = 0; f < 30 * 8; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                City.Building far = tanks.get(tanks.size() - 1);
+                check(t.collapsed && w.tanksBlown >= 3 && z.dead, "the tank blew, set off its neighbours and killed what stood by it (" + w.tanksBlown + ")");
+                check(!far.collapsed && !ship.collapsed, "the farms across the refinery are untouched");
+                // Kept in a save: burnt out is burnt out.
+                File file = File.createTempFile("zc27", ".dat");
+                SaveGame.save(w, file);
+                World l = SaveGame.load(file);
+                file.delete();
+                City.Building lt = l.city.buildings.get(city.buildings.indexOf(t)), lf = l.city.buildings.get(city.buildings.indexOf(far));
+                check(lt.tank == 1 && lt.collapsed && lf.tank == 1 && !lf.collapsed, "a burnt-out tank stays burnt out in a save");
+                // No other map has them.
+                CityConfig o = new CityConfig();
+                o.v[CityConfig.OPT_PRESET] = CityConfig.SPACE_CENTER;
+                o.seed = 5;
+                o.normalize();
+                City other = new City(o);
+                boolean any = other.refinery || !other.flares.isEmpty();
+                for (City.Building b : other.buildings) any |= b.tank != 0;
+                check(!any, "no tanks on any other map");
             }
         });
         test("26.0: the Space Center has its launch pad and rocket, the assembly building, mission control and the landing strip; no other map gets them", new Check() {

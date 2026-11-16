@@ -129,6 +129,12 @@ final class City {
         final List<Entity> occupants = new ArrayList<Entity>();
         /** Blast damage: a building knocked down to 0 collapses into rubble. */
         float hp, maxHp;
+        /** ((27.0) Refinery Bay: 1 a storage tank, 2 the tanker (they explode: World.tankGoesUp); else 0. */
+        byte tank;
+        /** ((27.0) Seconds until a tank that's been set off goes up (0: it hasn't been). */
+        transient float fuse;
+        /** ((27.0) A tank's look (its colour, which way round it stands): the first int from its seed, as its roof is painted. */
+        int look;
         boolean collapsed;
         /** Churches, schools and supermarkets have names (they can become safe zones). */
         String name;
@@ -238,6 +244,16 @@ final class City {
     int[] scRect;
     private int[] scTown;
     private int scSide, scFar = -1;
+    /**
+     * ((27.0) Refinery Bay (CityConfig.refinery): everything it changes in building and drawing the map is for it alone.
+     * It's laid out with the Space Center's frame (scRect: the refinery along the seafront; scTown: the workers' town).
+     * Its flare stacks' flames, in world units, for the view to animate; and where the tanker lies off its jetty
+     * ({x0, y0, x1, y1} in tiles).
+     */
+    final boolean refinery;
+    final List<float[]> flares = new ArrayList<float[]>();
+    private int[] tankerAt, jettyAt;
+    private int jettyX = -1;
     private final List<int[]> scParcels = new ArrayList<int[]>();
     private final List<String> scNames = new ArrayList<String>();
     /** Where the city is: its look and its names. */
@@ -331,7 +347,8 @@ final class City {
                 bestY = (r0[1] + r0[3]) / 2f;
             }
             // By the sea, the second district is the waterfront: the beach, or the docks.
-            boolean front = k == 1 && seaY > 0;
+            // ((27.0) Not on Refinery Bay: its waterfront is the refinery.)
+            boolean front = k == 1 && seaY > 0 && !refinery;
             if (front) {
                 bestX = w * (0.35f + r.nextFloat() * 0.3f);
                 bestY = seaY - Math.max(14, w / 14f);
@@ -340,15 +357,15 @@ final class City {
                 int[] ir = islandRects[1];
                 bestX = (ir[0] + ir[2]) / 2f;
                 bestY = (ir[1] + ir[3]) / 2f;
-            } else if (spaceCenter && k == 0) {
-                // ((26.0) The first district the space center itself.)
+            } else if ((spaceCenter || refinery) && k == 0) {
+                // ((26.0) The first district the space center itself.) ((27.0) Or the refinery.)
                 bestX = (scRect[0] + scRect[2]) / 2f;
                 bestY = (scRect[1] + scRect[3]) / 2f;
             } else if (k > 0) {
                 float bestScore = -1;
                 for (int tries = 0; tries < 30; tries++) {
                     float x = m + ox + 6 + r.nextFloat() * (w - 2 * m - 12), y = m + oy + 6 + r.nextFloat() * (landH - 2 * m - 12);
-                    if (spaceCenter) {
+                    if (spaceCenter || refinery) {
                         // ((26.0) The rest in the staff town.)
                         int[] st = scTown;
                         x = st[0] + 4 + r.nextFloat() * Math.max(1, st[2] - st[0] - 8);
@@ -405,6 +422,12 @@ final class City {
             String wd = words.get(word++ % words.size());
             if (spaceCenter && k == 0) {
                 d.name = "Space Center";
+                districts.add(d);
+                continue;
+            }
+            if (refinery && k == 0) {
+                d.type = DT_INDUSTRIAL;
+                d.name = "The Refinery";
                 districts.add(d);
                 continue;
             }
@@ -490,6 +513,8 @@ final class City {
                     }
                 }
                 prevBest = best;
+                // ((27.0) Refinery Bay: all of the refinery is the one district, whatever's nearest.)
+                if (refinery && x >= scRect[0] && x < scRect[2] && y >= scRect[1] && y < scRect[3] + 3) best = 0;
                 districtAt.set(y * w + x, (byte) (best));
                 if (y >= landH || (islandRects != null && island(x, y) < 0)) continue;
                 sx[best] += x;
@@ -668,6 +693,7 @@ final class City {
         this.desert = cfg.desert();
         this.themePark = cfg.themePark();
         this.spaceCenter = cfg.spaceCenter();
+        this.refinery = cfg.refinery();
         this.detail = detail;
         w = h = cfg.tiles();
         rnd = new Random(cfg.seed);
@@ -721,6 +747,24 @@ final class City {
                     b.variant = -1;
                     b.capacity = 0;
                 }
+        // ((27.0) Refinery Bay's storage tanks and its tanker: nobody goes in, and they go up when they're hit hard
+        // enough (World.tankGoesUp).
+        if (refinery)
+            for (Building b : buildings) {
+                Variants.V vv = Variants.get(b.variant);
+                if (vv == null) continue;
+                boolean ship = "Oil Tanker".equals(vv.name);
+                if (!ship && !"Tank Farm".equals(vv.name)) continue;
+                b.tank = (byte) (ship ? 2 : 1);
+                b.look = new Random(b.seed).nextInt();
+                b.name = ship ? "Oil tanker" : "Storage tank";
+                totalResidents -= b.residents;
+                b.residents = 0;
+                b.capacity = 0;
+                b.enter = 2;
+                b.maxHp = b.hp = ship ? 260 : 90;
+                if (ship) b.height = 9;
+            }
         // ((26.0) The Vehicle Assembly Building takes in as many as a mall.)
         if (spaceCenter)
             for (Building b : buildings) {
@@ -884,7 +928,7 @@ final class City {
             if (k != OFFICE && k != APARTMENT && k != HOUSE && k != WAREHOUSE) continue;
             if (lotNames.containsKey(l)) continue;
             // ((26.0) The Space Center's landmarks keep their shapes.)
-            if (spaceCenter && l.length > 10 && l[10] >= 0) continue;
+            if ((spaceCenter || refinery) && l.length > 10 && l[10] >= 0) continue;
             int x0 = l[0], y0 = l[1], lw = l[2], lh = l[3];
             int min = k == HOUSE ? 4 : 6;
             if (lw < min || lh < min) continue;
@@ -2837,8 +2881,20 @@ final class City {
         townY1 = by1;
         // ((26.0) The Space Center: which side of town the space center takes, before the districts are laid out.)
         if (spaceCenter) spaceCenterSplit(bx0, by0, bx1, by1);
+        // ((27.0) Refinery Bay: the refinery along the seafront, inside the ring of streets; the town on the rest.)
+        if (refinery) {
+            int depth = Math.max(40, Math.round((by1 - by0) * 0.42f));
+            scSide = 3;
+            scRect = new int[]{bx0 + 3, by1 - 3 - depth, bx1 - 3, by1 - 3};
+            scTown = new int[]{bx0 + 3, by0 + 3, bx1 - 3, by1 - 3 - depth};
+        }
         makeDistricts();
         if (cfg.neighbourhoods()) Neighbourhoods.assign(this, cfg.seed);
+        // ((27.0) The refinery is nobody's neighbourhood.)
+        if (refinery) {
+            districts.get(0).theme = null;
+            districts.get(0).name = "The Refinery";
+        }
         if (m > 0) fill(0, 0, w, h, GRASS);
         // A ring road around the edge of town (a village just has its lanes).
         boolean village = cfg.density() == 0 && cfg.style() == CityConfig.STYLE_HOUSES;
@@ -2889,6 +2945,8 @@ final class City {
         } else if (spaceCenter) {
             // ((26.0) The space center's roads along one side, the staff town's streets on the rest.)
             spaceCenterTown();
+        } else if (refinery) {
+            refineryTown();
         } else {
             splitTop(bx0 + in, by0 + in, bx1 - in, by1 - in);
         }
@@ -2976,6 +3034,7 @@ final class City {
         if (themePark) themeParkPlaces(used);
         // ((26.0) The Space Center: the pads, the assembly building, the crawlerway, mission control and the rest.)
         if (spaceCenter) spaceCenterPlaces();
+        if (refinery) refineryPlaces();
         // ((15.5) The Military Town's great base, in the middle where the streets were kept clear of it.)
         if (bigBase != null) {
             militaryBase(bigBase[0] + 1, bigBase[1] + 1, bigBase[2] - bigBase[0] - 2, bigBase[3] - bigBase[1] - 2);
@@ -4814,8 +4873,19 @@ final class City {
             int quay = 4;
             fill(0, shore, w, quay, LOT);
             int qy = shore + quay;
+            // ((27.0) Refinery Bay: the tanker jetty out from the middle of the quay, the tanker moored alongside it (put
+            // there in refineryPlaces); the docks keep clear of it.)
+            int jx = -100;
+            if (refinery) {
+                jx = jettyX >= 0 ? jettyX : (scRect[0] + scRect[2]) / 2 - 1;
+                int sea = h - qy, sl = Math.max(14, Math.min(34, sea - 8)), jl = Math.min(sea - 3, sl + 3);
+                fill(jx, qy, 3, jl, LOT);
+                jettyAt = new int[]{jx, shore, jx + 3, qy + jl};
+                tankerAt = new int[]{jx + 4, qy + 2, jx + 4 + Math.max(5, Math.min(8, sl / 4)), qy + 2 + sl};
+            }
             for (int x = 14 + rnd.nextInt(10); x < w - 20; x += 34 + rnd.nextInt(12)) {
                 int len = Math.min(h - qy - 6, 12 + rnd.nextInt(6));
+                if (Math.abs(x + 3 - jx) < 26) continue;
                 fill(x, qy, 7, len, LOT);
                 // Cranes on the dock, containers stacked, and a ship alongside.
                 addDecor(D_CRANE, (x + 1) * T, (qy + 2) * T, (x + 6) * T, (qy + 5) * T, 0);
@@ -9627,6 +9697,10 @@ final class City {
     private void drawRubble(Canvas c, Building b) {
         Paint p = new Paint();
         p.setAntiAlias(true);
+        if (b.tank != 0) {
+            LandmarkArt15.burnt(c, p, b);
+            return;
+        }
         Random r = new Random(b.seed * 31L + 7);
         p.setColor(0xFF6E6860);
         c.drawRect(b.x0, b.y0, b.x1, b.y1, p);
@@ -16341,5 +16415,79 @@ final class City {
                 if (busy[i] || (t != GRASS && t != TREE && t != WATER)) return false;
             }
         return true;
+    }
+
+    // ------------------------------------------------------------------ ((27.0) Refinery Bay)
+
+    /**
+     * The refinery's streets and where its places go (put up in refineryPlaces): the avenue along the workers' town, a
+     * road down to the seafront between each column of parcels and one or more across between the rows; the cracking
+     * plant in the middle with the tanker terminal on the waterfront below it, the loading racks and the depot at the
+     * ends of the row by the avenue, and a tank farm on every other parcel. The workers' town's streets on the rest.
+     */
+    private void refineryTown() {
+        int[] q = scRect;
+        fill(q[0], q[1], q[2] - q[0], q[3] - q[1], SIDEWALK);
+        int LA = scLA(), LC = scLC();
+        scRoad(0, 0, LA, 3, true);
+        split(scTown[0], scTown[1], scTown[2], scTown[3], 0, -1, -1);
+        int nCol = clampI(Math.round(LA / 78f), 3, 12), nRow = clampI(Math.round((LC - 3) / 52f), 2, 5);
+        int cw = (LA - 3 * (nCol - 1)) / nCol, rh = (LC - 3 - 3 * (nRow - 1)) / nRow;
+        for (int k = 1; k < nCol; k++) scRoad(k * (cw + 3) - 3, 3, k * (cw + 3), LC, false);
+        for (int j = 1; j < nRow; j++) scRoad(0, 3 + j * (rh + 3) - 3, LA, 3 + j * (rh + 3), false);
+        int mid = nCol / 2;
+        for (int j = 0; j < nRow; j++)
+            for (int k = 0; k < nCol; k++) {
+                int a0 = k * (cw + 3), a1 = k == nCol - 1 ? LA : a0 + cw, c0 = 3 + j * (rh + 3), c1 = j == nRow - 1 ? LC : c0 + rh;
+                String name = "Tank Farm";
+                if (k == mid && j == nRow - 1) {
+                    name = "Tanker Terminal";
+                    // (The jetty straight out from the middle of it, its trunk lines running on down it.)
+                    jettyX = scRect[0] + (a0 + a1) / 2 - 1;
+                }
+                else if (k == mid && j == 0) name = "Cracking Plant";
+                else if (k == 0 && j == 0) name = "Loading Racks";
+                else if (k == nCol - 1 && j == 0) name = "Refinery Depot";
+                // (On the big maps, with many more parcels: more plant, depots and racks in among the tank farms.)
+                else if (nCol > 5 && (k * 3 + j * 2) % 11 == 7) name = "Cracking Plant";
+                else if (nCol > 5 && (k + j * 4) % 9 == 6) name = "Refinery Depot";
+                else if (nCol > 5 && (k * 2 + j * 5) % 13 == 9) name = "Loading Racks";
+                scPlace(a0, c0, a1, c1, name, 1);
+            }
+    }
+
+    /**
+     * The refinery's places, on the ground refineryTown laid aside; the flare stacks' flames; the pipes in their culvert
+     * from the tanker terminal under the seafront road and out along the jetty; and the tanker itself, lying off it.
+     */
+    private void refineryPlaces() {
+        if (lmRnd == null) {
+            lmRnd = new Random(cfg.seed * 7919L + 35);
+            lmCount = new int[Landmarks.all().size()];
+        }
+        int[] q = scRect;
+        for (int y = q[1]; y < q[3]; y++)
+            for (int x = q[0]; x < q[2]; x++) if (tiles[y * w + x] == SIDEWALK) tiles[y * w + x] = GRASS;
+        for (int i = 0; i < scParcels.size(); i++) {
+            int[] b = scParcels.get(i);
+            String name = scNames.get(i);
+            int in = b[4];
+            fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+            // (A parcel too small for its place gets tanks, or failing that stays paved.)
+            if (!fitsDesign(name, b[2] - b[0] - 2 * in, b[3] - b[1] - 2 * in)) name = "Tank Farm";
+            if (!placeParcel(new int[]{b[0] + in, b[1] + in, b[2] - in, b[3] - in}, name)) continue;
+            if (name.equals("Cracking Plant"))
+                for (float[] f : LandmarkArt15.flaresOf((b[0] + in) * T, (b[1] + in) * T, (b[2] - in) * T, (b[3] - in) * T)) flares.add(f);
+        }
+        Landmarks.Def pipes = landmarkNamed("Pipe Culvert"), ship = landmarkNamed("Oil Tanker");
+        if (jettyAt != null && pipes != null)
+            decor.add(new float[]{D_LANDMARK, (jettyAt[0] + 0.5f) * T, (q[3] - 1) * T, (jettyAt[2] - 0.5f) * T, (jettyAt[3] - 1) * T, pipes.id, 7});
+        if (tankerAt != null && ship != null) {
+            boolean clear = true;
+            for (int y = tankerAt[1] - 1; y <= tankerAt[3] && clear; y++)
+                for (int x = tankerAt[0]; x <= tankerAt[2] && clear; x++)
+                    if (x < 0 || y < 0 || x >= w || y >= h - 1 || tiles[y * w + x] != WATER) clear = false;
+            if (clear) placeLandmark(ship, tankerAt[0], tankerAt[1], tankerAt[2] - tankerAt[0], tankerAt[3] - tankerAt[1]);
+        }
     }
 }

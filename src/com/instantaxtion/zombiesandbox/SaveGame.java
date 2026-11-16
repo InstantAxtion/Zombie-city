@@ -17,7 +17,7 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 77;
+    private static final int VERSION = 78;
 
     private SaveGame() {
     }
@@ -622,7 +622,7 @@ final class SaveGame {
                 // ((11.3) A map or a country no longer in the game: it can't be rebuilt.)
                 // ((25.0) Desert City and Theme Park Island have the numbers of maps long gone (Seattle, New York): a save
                 // from before they came in is one of those, not them.)
-                if ((i == CityConfig.OPT_PRESET && (CityConfig.removed(v) || (v == CityConfig.DESERT && version < 69) || (v == CityConfig.THEME_PARK && version < 72) || (v == CityConfig.SPACE_CENTER && version < 75)))
+                if ((i == CityConfig.OPT_PRESET && (CityConfig.removed(v) || (v == CityConfig.DESERT && version < 69) || (v == CityConfig.THEME_PARK && version < 72) || (v == CityConfig.SPACE_CENTER && version < 75) || (v == CityConfig.REFINERY && version < 78)))
                         || (i == CityConfig.OPT_COUNTRY && v != Country.USA))
                     throw new IOException("This save's map is no longer in the game");
                 if (i < cfg.v.length) cfg.v[i] = Math.max(0, Math.min(cfg.values(i).length - 1, v));

@@ -1291,8 +1291,70 @@ final class World {
         }
     }
 
+    /** ((27.0) Refinery Bay: storage tanks (and the tanker) that have been set off, each on its short fuse. */
+    private final ArrayList<City.Building> litTanks = new ArrayList<City.Building>();
+    int tanksBlown;
+    private float tankSaidAt = -99;
+
+    /**
+     * ((27.0) A storage tank or the tanker takes a hit (a blast, or bullets enough): once it's holed it goes up a moment
+     * later. Nothing sets one off by itself.
+     */
+    void hitTank(City.Building b, float damage) {
+        if (b.tank == 0 || b.collapsed) return;
+        b.hp -= damage;
+        if (b.hp > 0 || b.fuse > 0) return;
+        b.fuse = 0.25f + rnd.nextFloat() * 0.9f;
+        litTanks.add(b);
+    }
+
+    /**
+     * ((27.0) Up it goes: a blast far bigger than a shell's that kills what's near, sets off the tanks next to it (each
+     * a moment later, down the row), burns out the cars round it, is heard right across town, and leaves the shell of
+     * the tank burnt out where it stood.
+     */
+    void tankGoesUp(City.Building b) {
+        if (b.collapsed || b.tank == 0) return;
+        float cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+        boolean ship = b.tank == 2;
+        float radius = ship ? 230 : 96 + (b.x1 - b.x0) * 0.42f;
+        city.collapse(b);
+        collapsedCount++;
+        tanksBlown++;
+        explode(cx, cy, radius, ship ? 900 : 620);
+        // A fireball and a column of black smoke over it.
+        for (int i = 0; i < (ship ? 90 : 46); i++) {
+            float a = rnd.nextFloat() * TAU, s = rnd.nextFloat() * radius * 1.1f;
+            particle(cx + (float) Math.cos(a) * s * 0.25f, cy + (float) Math.sin(a) * s * 0.25f, (float) Math.cos(a) * s, (float) Math.sin(a) * s - 20,
+                    0.7f + rnd.nextFloat() * 0.9f, 5 + rnd.nextFloat() * 7, i % 3 == 0 ? 0xFFFFE08A : rnd.nextBoolean() ? 0xFFFFA020 : 0xFFE8501A, P_FIRE);
+        }
+        for (int i = 0; i < (ship ? 60 : 30); i++)
+            particle(cx + rnd.nextFloat() * 40 - 20, cy + rnd.nextFloat() * 40 - 20, rnd.nextFloat() * 30 - 15, -10 - rnd.nextFloat() * 30,
+                    3 + rnd.nextFloat() * 4, 9 + rnd.nextFloat() * 10, 0xFF1E1C1A, P_SMOKE);
+        decal(cx, cy, radius * (ship ? 0.5f : 0.42f), 0x58101010);
+        shake = Math.min(2.5f, shake + 1.6f);
+        noise(cx, cy, 1400);
+        battleNoise(cx, cy, 900);
+        if (time - tankSaidAt > 12) {
+            tankSaidAt = time;
+            String where = city.placeName(cx, cy);
+            highlight(ship ? "The tanker blew up" : "A storage tank blew up", cx, cy);
+            dispatch.say(Dispatch.WHO_INFO, null, (ship ? "The tanker at the jetty has blown up!" : "A storage tank has blown up at the refinery, by " + where + "!")
+                    + " Keep clear of the tanks.", cx, cy, true);
+            timeline(ship ? "The tanker at the jetty blew up" : "Storage tanks blew up at the refinery", cx, cy);
+        }
+    }
+
     /** Explosions waiting to go off. */
     private void updateBlasts(float dt) {
+        for (int i = litTanks.size() - 1; i >= 0; i--) {
+            City.Building b = litTanks.get(i);
+            b.fuse -= dt;
+            if (b.fuse > 0) continue;
+            litTanks.remove(i);
+            b.fuse = 0;
+            tankGoesUp(b);
+        }
         for (int i = pendingBlasts.size() - 1; i >= 0; i--) {
             float[] b = pendingBlasts.get(i);
             b[4] -= dt;
@@ -17262,6 +17324,8 @@ final class World {
         if (b == null) return;
         int side = wallSide(b, fromX, fromY);
         b.mark(side, along(b, side, x, y), 2 + rnd.nextFloat() * Math.min(14, b.height - 3), 0.5f + rnd.nextFloat() * 0.3f);
+        // ((27.0) Stray rounds into a storage tank: thirty or so and it's holed.)
+        if (b.tank != 0) hitTank(b, 3);
     }
 
     private void blastBuilding(City.Building b, float x, float y, float radius, float damage) {
@@ -17272,6 +17336,11 @@ final class World {
         int side = wallSide(b, x, y);
         b.mark(side, along(b, side, nx, ny), 1 + rnd.nextFloat() * 8, 3 + f * 5);
         b.barricade -= damage * f * 0.3f;
+        // ((27.0) A storage tank holed by it goes up in its turn.)
+        if (b.tank != 0) {
+            hitTank(b, damage * f);
+            return;
+        }
         b.hp -= damage * f * (heavy ? 2.5f : 1);
         if (b.hp > 0) return;
         collapseBuilding(b);
@@ -17280,6 +17349,11 @@ final class World {
     /** Brings a building down (blasted or burnt out): some inside get out, rubble and dust everywhere. */
     void collapseBuilding(City.Building b) {
         if (b.collapsed) return;
+        // ((27.0) A storage tank doesn't fall down: it goes up.)
+        if (b.tank != 0) {
+            tankGoesUp(b);
+            return;
+        }
         // Down it comes.
         int inside = b.occupants.size();
         for (int i = 0; i < inside; i++) {
