@@ -65,7 +65,7 @@ final class GameView extends View implements Menu.Host {
             "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
-    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT, Entity.SCREAMER, Entity.ARMOURED};
+    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT, Entity.ARMOURED};
     private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
             Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
@@ -139,7 +139,6 @@ final class GameView extends View implements Menu.Host {
     private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile",
             "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside",
             "Huge and slow: smashes barricades, throws cars aside; takes a squad, a tank or explosives",
-            "Frail, but its shriek brings the dead from streets around: kill it first",
             "A dead officer or soldier still in armour: the helmet stops the first shot to the head"};
     private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
@@ -3392,18 +3391,6 @@ final class GameView extends View implements Menu.Host {
             if (r[0] + rad < vx0 || r[0] - rad > vx1 || r[1] + rad < vy0 || r[1] - rad > vy1) continue;
             stroke.setColor(alpha(0xFFFFE8B0, 0.35f * (1 - t)));
             c.drawCircle(r[0], r[1], rad, stroke);
-        }
-        // ((27.0) A screamer's shriek: red rings racing out from it.)
-        for (int i = 0, n = world.shriekRings.size(); i < n; i++) {
-            float[] r = world.shriekRings.get(i);
-            for (int k = 0; k < 3; k++) {
-                float t = r[2] / World.SHRIEK_TIME - k * 0.18f;
-                if (t <= 0 || t >= 1) continue;
-                float rad = World.SHRIEK_REACH * 0.5f * t;
-                if (r[0] + rad < vx0 || r[0] - rad > vx1 || r[1] + rad < vy0 || r[1] - rad > vy1) continue;
-                stroke.setColor(alpha(0xFFFF5A48, 0.6f * (1 - t)));
-                c.drawCircle(r[0], r[1], rad, stroke);
-            }
         }
         if (!Float.isNaN(world.hospitalX) && world.hospitalX > vx0 - 30 && world.hospitalX < vx1 + 30 && world.hospitalY > vy0 - 30 && world.hospitalY < vy1 + 30) {
             // ((14.5) The field hospital: a big white tent with a red cross on the roof.)
@@ -7801,7 +7788,7 @@ final class GameView extends View implements Menu.Host {
 
             fill.setColor(e.head);
             if (e.type == Entity.GIANT) drawGiantHead(c, e, r);
-            else c.drawCircle(r * 0.08f, 0, r * (e.type == Entity.SCREAMER ? 0.5f : 0.56f), fill);
+            else c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
             if (e.type == Entity.ARMOURED && e.helmet) {
                 // ((27.0) The helmet: a pale rim round it and a dull shine on top.)
                 stroke.setColor(City.darken(e.head, 0.6f));
@@ -7809,17 +7796,6 @@ final class GameView extends View implements Menu.Host {
                 c.drawCircle(r * 0.08f, 0, r * 0.6f, stroke);
                 fill.setColor(0x50FFFFFF);
                 c.drawCircle(-r * 0.05f, -r * 0.16f, r * 0.14f, fill);
-            } else if (e.type == Entity.SCREAMER) {
-                // ((27.0) A screamer: a wide black mouth - wider still, with rings round it, while it shrieks.)
-                boolean cry = e.shriek > 0;
-                fill.setColor(0xFF1A0606);
-                c.drawCircle(r * (cry ? 0.42f : 0.36f), 0, r * (cry ? 0.3f : 0.17f), fill);
-                if (cry) {
-                    float ph = (world.time * 3) % 1;
-                    stroke.setStrokeWidth(r * 0.14f);
-                    stroke.setColor(alpha(0xFFFF6A5A, 0.8f * (1 - ph)));
-                    c.drawCircle(0, 0, r * (1.3f + ph * 2.2f), stroke);
-                }
             }
             if (scale > 1.9f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
                     || e.type == Entity.RUNNER)) drawHair(c, e, r);
@@ -8610,7 +8586,6 @@ final class GameView extends View implements Menu.Host {
         // ((25.0) The giant; an escaped inmate; a rioter.)
         if (e.type == Entity.GIANT) lines.add("A giant: shrugs off rifle fire and smashes through barricades - bring a squad, a tank or explosives");
         // ((27.0) The screamer and the armoured dead.)
-        if (e.type == Entity.SCREAMER) lines.add("A screamer: its shriek brings the dead from streets around" + (e.shriek > 0 ? " - SHRIEKING" : ""));
         if (e.type == Entity.ARMOURED) lines.add("Armoured: body armour, and " + (e.helmet ? "a helmet that stops the first shot to the head" : "its helmet shot off"));
         if (e.escapee) lines.add("Escaped inmate: on the run from the police");
         if (e.riotUntil > world.time) lines.add("Rioting");

@@ -1503,15 +1503,6 @@ final class World {
                 e.skin = 0xFF829858;
                 e.mass = 1.9f;
                 break;
-            case Entity.SCREAMER:
-                // ((27.0) Thin and frail, no faster than the rest: all it does is shriek, and that's enough.)
-                e.hp = 40;
-                e.radius = 3.3f;
-                e.speed = 12 + rnd.nextFloat() * 4;
-                e.runSpeed = 24 + rnd.nextFloat() * 5;
-                e.skin = 0xFFC2CCA6;
-                e.mass = 0.8f;
-                break;
             case Entity.ARMOURED:
                 // ((27.0) A police officer or soldier come back in what they wore: body armour (most of a body shot
                 // stopped) and a helmet that takes the first shot to the head.)
@@ -2354,11 +2345,6 @@ final class World {
             float[] r = noiseRings.get(i);
             r[3] += dt;
             if (r[3] > 1.4f) noiseRings.remove(i);
-        }
-        for (int i = shriekRings.size() - 1; i >= 0; i--) {
-            float[] r = shriekRings.get(i);
-            r[2] += dt;
-            if (r[2] > SHRIEK_TIME) shriekRings.remove(i);
         }
         updateWildlife(dt);
         if (lodFrame % 15 == 0) checkpointGuards();
@@ -4626,13 +4612,6 @@ final class World {
     }
 
     private void thinkZombie(Entity z, float dt) {
-        // ((27.0) A screamer in full cry stands where it is.)
-        if (z.shriek > 0) {
-            z.shriek -= dt;
-            z.screamCd -= dt;
-            steer(z, (float) Math.cos(z.angle), (float) Math.sin(z.angle), 0);
-            return;
-        }
         if (z.type == Entity.GIANT) giantStep(z, dt);
         else if (z.blocked && !barriers.isEmpty()) bashBarrier(z, dt);
         z.chargeCd -= dt;
@@ -4661,11 +4640,6 @@ final class World {
             if (d > near && facing < 0.1f && t.want < t.runSpeed * 0.9f) t = null;
         }
         if (t != null) {
-            // ((27.0) A screamer that sees the living stops and shrieks.)
-            if (z.type == Entity.SCREAMER && z.screamCd <= 0 && city.los(z.x, z.y, t.x, t.y)) {
-                shriek(z, t);
-                return;
-            }
             if (rnd.nextFloat() < 0.2f) z.frenzy = countZombiesNear(t.x, t.y, 35) >= 3;
             // A brute lowers its head and charges.
             // ((22.6) A bruiser lunges: shorter and more often.)
@@ -9084,35 +9058,6 @@ final class World {
 
     int megaHordes;
 
-    /** ((27.0) How far a screamer's shriek carries, how long it stands shrieking, and how long before it can again. */
-    static final float SHRIEK_REACH = 700, SHRIEK_TIME = 1.6f, SHRIEK_CD = 12;
-    /** Shrieks so far; and those in the air now, for the map: {x, y, age}. */
-    int shrieks;
-    final ArrayList<float[]> shriekRings = new ArrayList<float[]>();
-
-    /**
-     * ((27.0) A screamer has seen one of the living: it stops and shrieks, and every one of the dead within earshot -
-     * whole hordes with them - turns and comes to where it stands. Shoot it first.
-     */
-    void shriek(Entity z, Entity prey) {
-        z.screamCd = SHRIEK_CD;
-        z.shriek = SHRIEK_TIME;
-        z.angle = (float) Math.atan2(prey.y - z.y, prey.x - z.x);
-        z.memory = Math.max(z.memory, 10);
-        z.lastX = prey.x;
-        z.lastY = prey.y;
-        shrieks++;
-        emit(Sfx.SHRIEK, z.x, z.y);
-        noise(z.x, z.y, SHRIEK_REACH);
-        // (Not itself: it stays on what it saw.)
-        z.noiseTimer = 0;
-        if (shriekRings.size() < 12) shriekRings.add(new float[]{z.x, z.y, 0});
-        if (shrieks == 1) {
-            dispatch.say(Dispatch.WHO_INFO, null, "A screamer on " + city.placeName(z.x, z.y) + ": its shriek brings the dead from streets around. Kill it first.", z.x, z.y, true);
-            timeline("A screamer's shriek called the dead in", z.x, z.y);
-        }
-    }
-
     /** ((20.0) A horde of n (25 to 40 if n is negative) in from the nearest edge, heading for (x, y); said on the radio or not. */
     ArrayList<Entity> hordeFrom(float x, float y, int count, boolean announce) {
         ArrayList<Entity> out = new ArrayList<Entity>();
@@ -9125,8 +9070,7 @@ final class World {
         for (int i = 0; i < n; i++) {
             float roll = rnd.nextFloat();
             int type = roll < 0.12f ? Entity.RUNNER : roll < 0.14f ? Entity.BRUTE : roll < 0.2f ? Entity.ZOMBIE_DOG
-                    // ((27.0) And a screamer or two.)
-                    : roll < 0.25f ? Entity.BRUISER : roll < 0.275f ? Entity.SCREAMER : Entity.ZOMBIE;
+                    : roll < 0.25f ? Entity.BRUISER : Entity.ZOMBIE;
             Entity z = spawn(type, edge[0] + rnd.nextFloat() * spread - spread / 2, edge[1] + rnd.nextFloat() * spread - spread / 2);
             if (z == null) continue;
             out.add(z);

@@ -2,18 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "27.1";
-    static final int VERSION_CODE = 271;
+    static final String VERSION = "27.2";
+    static final int VERSION_CODE = 272;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "27.2  -  No more screamers",
+                    "Screamers are gone. Any in a saved game are ordinary zombies now.",
+            },
             {
                     "27.1  -  One map fewer",
                     "The map added in 27.0 has been taken out again.",
             },
             {
                     "27.0  -  Escalation",
-                    "Screamers: fragile zombies whose shriek brings the dead from streets around. Kill them first.",
                     "Armoured dead: police and soldiers who turn keep their armour, and a helmet that stops the first headshot.",
                     "Fire missions: a command post calls mortars from the army base onto big packs of the dead in the open.",
                     "Command posts patch up their own wounded.",

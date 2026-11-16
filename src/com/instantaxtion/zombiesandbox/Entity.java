@@ -4,7 +4,7 @@ package com.instantaxtion.zombiesandbox;
 final class Entity {
     static final int CIVILIAN = 0, COP = 1, SOLDIER = 2, MEDIC = 3, DOG = 4, RAIDER = 5, ZOMBIE = 6, RUNNER = 7,
             BRUTE = 8, /** ((25.0) In the old crawler's place: the giant, only ever put down by hand. */ GIANT = 9,
-            /** ((27.0) Back, and new: it shrieks at the sight of the living, and the dead for streets round come to it. */ SCREAMER = 10,
+            /** (The screamer, gone since 10.50; back in 27.0 and out again in 27.2: any in a save load as zombies.) */ SCREAMER = 10,
             ZOMBIE_DOG = 11, /** ((22.6) In the old spitter's place. */ BRUISER = 12,
             /** ((27.0) In the old bloater's place: a police officer or soldier come back still in armour and helmet. */ ARMOURED = 13,
             /** (Firefighters went in 10.49: any in an old save load as civilians.) */
@@ -20,12 +20,12 @@ final class Entity {
     static int current(int t) {
         switch (t) {
             case FIREFIGHTER: case MEDIC: case RAIDER: return CIVILIAN;
-            case GANGSTER: case INVADER: return ZOMBIE;
+            case GANGSTER: case INVADER: case SCREAMER: return ZOMBIE;
             default: return t;
         }
     }
     static final String[] NAMES = {"Civilian", "Cop", "Soldier", "Medic", "Dog", "Raider", "Zombie", "Runner", "Brute",
-            "Giant", "Screamer", "Zombie dog", "Bruiser", "Armoured zombie", "Firefighter", "Gang member", "Enemy soldier"};
+            "Giant", "Zombie", "Zombie dog", "Bruiser", "Armoured zombie", "Firefighter", "Gang member", "Enemy soldier"};
 
     /** Soldiers' jobs: rifleman, the commander, snipers and machine gunners. */
     static final int ROLE_RIFLE = 0, ROLE_COMMANDER = 1, ROLE_SNIPER = 2, ROLE_GUNNER = 3;
@@ -127,8 +127,7 @@ final class Entity {
 
     // Zombies: where a noise came from, and the screamer's cooldown.
     float noiseX, noiseY, screamCd;
-    /** ((27.0) A screamer standing and shrieking (seconds left); an armoured zombie's helmet, good for one shot to the head. */
-    transient float shriek;
+    /** ((27.0) An armoured zombie's helmet, good for one shot to the head. */
     transient boolean helmet;
 
     // Dispatch: current job (task, at the top), radio callsign and speech icons.

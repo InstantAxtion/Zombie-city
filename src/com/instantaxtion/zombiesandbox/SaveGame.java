@@ -517,9 +517,9 @@ final class SaveGame {
         if (version < 68 && t == Entity.BRUISER) t = Entity.ZOMBIE;
         // ((25.0) Type 9 was the crawler (back as a zombie); it's the giant from version 70.)
         if (version < 70 && t == Entity.GIANT) t = Entity.ZOMBIE;
-        // ((27.0) Types 10 and 13 were the old screamer and the bloater (back as zombies); they're the new screamer and
-        // the armoured dead from version 77.)
-        if (version < 77 && (t == Entity.SCREAMER || t == Entity.ARMOURED)) t = Entity.ZOMBIE;
+        // ((27.0) Type 13 was the bloater (back as a zombie); it's the armoured dead from version 77. (Type 10, the
+        // screamer, is an ordinary zombie whatever the version: see Entity.current.)
+        if (version < 77 && t == Entity.ARMOURED) t = Entity.ZOMBIE;
         // (Kinds no longer in the game load as what they'd be now: see Entity.current.)
         return Entity.current(t);
     }

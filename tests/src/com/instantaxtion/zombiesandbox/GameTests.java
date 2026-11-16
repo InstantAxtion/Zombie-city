@@ -4683,7 +4683,7 @@ public final class GameTests {
                 }
             }
         });
-        test("27.0: screamers and the armoured dead", new Check() {
+        test("27.0: the armoured dead", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
@@ -4692,36 +4692,9 @@ public final class GameTests {
                 World w = new World(c);
                 w.populate(c);
                 w.update(1 / 30f);
-                check(w.zombieCount() == 0 && w.counts[Entity.SCREAMER] == 0 && w.counts[Entity.ARMOURED] == 0, "none of either by themselves");
-                // A screamer sees someone, stops and shrieks: one of the dead out of sight a few streets off comes.
+                check(w.zombieCount() == 0 && w.counts[Entity.ARMOURED] == 0, "none by themselves");
                 float[] p = w.city.randomStreetSpot(new java.util.Random(4));
                 for (Entity e : w.entities) if (!e.dead && Math.hypot(e.x - p[0], e.y - p[1]) < 700) e.dead = e.removed = true;
-                Entity s = w.spawn(Entity.SCREAMER, p[0], p[1]);
-                check(s != null && s.isZombie() && s.hp < 60 && w.zombieCount() >= 1, "a screamer: one of the dead, and frail");
-                Entity far = null;
-                java.util.Random tr = new java.util.Random(9);
-                for (int k = 0; k < 200 && far == null; k++) {
-                    double a = tr.nextFloat() * 6.283;
-                    float[] q = w.city.findWalkable(p[0] + (float) Math.cos(a) * 480, p[1] + (float) Math.sin(a) * 480);
-                    if (q != null && Math.hypot(q[0] - p[0], q[1] - p[1]) > 400 && Math.hypot(q[0] - p[0], q[1] - p[1]) < 600) far = w.spawn(Entity.ZOMBIE, q[0], q[1]);
-                }
-                check(far != null, "another of the dead a few streets off");
-                float[] v = w.city.findWalkable(p[0] + 40, p[1]);
-                Entity prey = w.spawn(Entity.CIVILIAN, v[0], v[1]);
-                s.angle = (float) Math.atan2(prey.y - s.y, prey.x - s.x);
-                boolean stood = false, drawn = false;
-                for (int f = 0; f < 30 * 4 && !(stood && drawn); f++) {
-                    prey.x = v[0];
-                    prey.y = v[1];
-                    prey.hp = prey.maxHp;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
-                    stood |= s.shriek > 0;
-                    drawn |= far.noiseTimer > 0 && Math.hypot(far.noiseX - s.x, far.noiseY - s.y) < 60;
-                }
-                check(w.shrieks >= 1 && stood, "it stops and shrieks at the sight of the living (" + w.shrieks + ")");
-                check(drawn, "and the dead streets off turn and come to it");
-                check(!w.shriekRings.isEmpty() || w.shrieks >= 1, "with rings on the map");
                 // The armoured dead: a soldier always comes back armoured, its helmet good for one shot to the head.
                 Entity z = w.spawn(Entity.ARMOURED, p[0] + 20, p[1]);
                 check(z.armored && z.helmet && z.hp > 120 && z.head != z.skin, "an armoured zombie: tougher, in a helmet");
@@ -4753,7 +4726,7 @@ public final class GameTests {
                 f.delete();
                 l.recount();
                 w.recount();
-                check(l.counts[Entity.SCREAMER] == w.counts[Entity.SCREAMER] && l.counts[Entity.ARMOURED] == w.counts[Entity.ARMOURED] && l.counts[Entity.ARMOURED] >= 1, "both kept in a save");
+                check(l.counts[Entity.ARMOURED] == w.counts[Entity.ARMOURED] && l.counts[Entity.ARMOURED] >= 1 && Entity.current(Entity.SCREAMER) == Entity.ZOMBIE, "kept in a save; a screamer in an older save loads as a zombie");
             }
         });
         test("26.1: every map has an army base; the Archipelago's outer islands are palm-fringed villages, unlike the Islands", new Check() {
