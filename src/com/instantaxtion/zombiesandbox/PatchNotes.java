@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "26.6";
-    static final int VERSION_CODE = 266;
+    static final String VERSION = "27.0";
+    static final int VERSION_CODE = 270;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "27.0  -  Escalation",
+                    "New map: Refinery Bay, an oil port whose storage tanks and tanker go up in chain explosions when hit.",
+                    "Screamers: fragile zombies whose shriek brings the dead from streets around. Kill them first.",
+                    "Armoured dead: police and soldiers who turn keep their armour, and a helmet that stops the first headshot.",
+                    "Fire missions: a command post calls mortars from the army base onto big packs of the dead in the open.",
+                    "Command posts patch up their own wounded.",
+                    "Police marksmen and army snipers take to rooftops beside a fight, out of the dead's reach.",
+            },
             {
                     "26.6  -  Eyes on the road",
                     "Command trucks watch the road: with the dead ahead of them or where they're going, they turn off and set up somewhere clear instead of driving into them.",
