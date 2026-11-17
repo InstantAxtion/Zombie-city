@@ -2701,10 +2701,11 @@ public final class GameTests {
                 z.memory = 10;
                 z.lastX = v.x;
                 z.lastY = v.y;
+                // (Nobody else about to shoot it down or draw it off first: this is about it following them in.)
+                Quiet calm = quiet(w, vb.doorX, vb.doorY, 400, v, z);
                 boolean zin = false;
                 for (int f = 0; f < 30 * 15 && !zin && !z.dead; f++) {
-                    w.update(1 / 30f);
-                    w.evCount = 0;
+                    step(w, calm);
                     zin = city.insideOf(z.x, z.y) == vb;
                 }
                 check(zin, "the dead follow them in through the door");
@@ -4057,11 +4058,15 @@ public final class GameTests {
                 w.update(1 / 30f);
                 // One of the dead on someone, with them in the way: it's still the target, and they work round for a shot.
                 Entity gun = w.spawnCop(0, p[0], p[1]);
-                gun.ammo = gun.magSize;
+                // (Holding fire while it's set up: with 27.5's police rounds a close shot can drop even this one.)
+                gun.ammo = 0;
+                gun.reserve = 0;
                 Entity victim = w.spawn(Entity.CIVILIAN, p[0] + 40, p[1]);
                 Entity biter = w.spawn(Entity.ZOMBIE, p[0] + 48, p[1]);
                 biter.hp = biter.maxHp = 1e5f;
+                Quiet bite = quiet(w, p[0], p[1], 300, gun, victim, biter);
                 for (int f = 0; f < 5; f++) {
+                    bite.sweep(w);
                     victim.x = p[0] + 40;
                     victim.y = p[1];
                     biter.x = p[0] + 48;
@@ -4072,6 +4077,7 @@ public final class GameTests {
                 }
                 WM pick = wm("pickTarget", Entity.class, float.class);
                 pick.setAccessible(true);
+                gun.ammo = gun.magSize;
                 gun.fear = 5;
                 gun.x = p[0];
                 gun.y = p[1];
