@@ -3902,6 +3902,10 @@ final class City {
     final RiverMap riverMap = new RiverMap(this);
     final CoastMap coastMap = new CoastMap(this);
     final AirportMap airportMap = new AirportMap(this);
+    /** ((28.0) Border Town, the Military Airbase and Stadium City: each map's own builder. */
+    final BorderMap borderMap = new BorderMap(this);
+    final AirbaseMap airbaseMap = new AirbaseMap(this);
+    final StadiumMap stadiumMap = new StadiumMap(this);
 
     {
         gen.wire();
@@ -3918,5 +3922,8 @@ final class City {
         riverMap.wire();
         coastMap.wire();
         airportMap.wire();
+        borderMap.wire();
+        airbaseMap.wire();
+        stadiumMap.wire();
     }
 }
