@@ -10,7 +10,7 @@ import static com.instantaxtion.zombiesandbox.Landmarks.*;
 
 /**
  * ((28.0) Landmark designs of the water maps (see Landmarks): the bayou's bait-and-tackle shops, seafood shack and
- * airboat landing; the coast's lighthouse, fish market and coast guard station. None suits any district (districts 0),
+ * airboat landing; the coast's lighthouse and fish market. (The coast guard station is the one there already is.) None suits any district (districts 0),
  * so no other map ever picks one: SwampMap and LighthouseMap put each where it goes, by name.
  */
 final class WaterLandmarks {
@@ -26,7 +26,6 @@ final class WaterLandmarks {
         airboatLanding(out);
         lighthouse(out);
         fishMarket(out);
-        coastGuard(out);
         // (Only ever placed by name.)
         for (int i = first; i < out.size(); i++) out.get(i).districts = 0;
     }
@@ -281,38 +280,6 @@ final class WaterLandmarks {
             boolean roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1) {
                 rect(c, p, 0xFF5A6A76, x0, y0, x1, y1);
                 for (float x = x0 + 2; x < x1; x += 3) line(c, p, 0xFF7A8A96, 0.7f, x, y0, x, y1);
-                return true;
-            }
-        }));
-    }
-
-    static void coastGuard(List<Landmarks.Def> out) {
-        out.add(def("Coast Guard Station", City.OFFICE, 0xFFE8E4DA, City.PLAZA, 10, 14, new int[][]{{1, 1, 7, 5, 2}}, new Painter() {
-            @Override
-            void paint(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r, int[][] plan) {
-                rect(c, p, 0xFFB8B4AA, x0, y0, x1, y1);
-                float[] b = box(x0, y0, plan[0]);
-                // The helipad and the flagpole; a lifeboat on its cradle.
-                boolean wide = x1 - x0 >= y1 - y0;
-                float hx = wide ? (b[2] + x1) / 2 : (x0 + x1) / 2, hy = wide ? (y0 + y1) / 2 : (b[3] + y1) / 2;
-                float hr = Math.min(wide ? (x1 - b[2]) : (x1 - x0), wide ? (y1 - y0) : (y1 - b[3])) * 0.38f;
-                if (hr > 6) {
-                    circle(c, p, 0xFF5A5E62, hx, hy, hr);
-                    circle(c, p, 0xFFE8E4DA, hx, hy, hr * 0.85f);
-                    circle(c, p, 0xFF5A5E62, hx, hy, hr * 0.78f);
-                    line(c, p, 0xFFE8E4DA, 1.6f, hx - hr * 0.3f, hy - hr * 0.4f, hx - hr * 0.3f, hy + hr * 0.4f);
-                    line(c, p, 0xFFE8E4DA, 1.6f, hx + hr * 0.3f, hy - hr * 0.4f, hx + hr * 0.3f, hy + hr * 0.4f);
-                    line(c, p, 0xFFE8E4DA, 1.6f, hx - hr * 0.3f, hy, hx + hr * 0.3f, hy);
-                }
-                circle(c, p, 0xFF8A8C90, b[0] + 2, b[3] + 5, 1);
-                rect(c, p, 0xFFC0302A, b[0] + 2, b[3] + 4, b[0] + 8, b[3] + 6);
-                boat(c, p, b[0] + 6, b[3] + 10, 22, false, 0xFFE07A2A);
-            }
-
-            @Override
-            boolean roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1) {
-                flatRoof(c, p, x0, y0, x1, y1, 0xFFE8E4DA);
-                rect(c, p, 0xFFC0302A, x0 + 1.5f, y0 + 1.5f, x0 + (x1 - x0) * 0.2f, y1 - 1.5f);
                 return true;
             }
         }));
