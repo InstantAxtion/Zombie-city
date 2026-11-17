@@ -34,6 +34,7 @@ final class World {
     final Rescue rescue = new Rescue(this);
     final Exodus exodus = new Exodus(this);
     final BaseLife baseLife = new BaseLife(this);
+    final BaseRaids baseRaids = new BaseRaids(this);
     final Holdouts holdoutLife = new Holdouts(this);
     final Raiders raiders = new Raiders(this);
     final Prison prison = new Prison(this);

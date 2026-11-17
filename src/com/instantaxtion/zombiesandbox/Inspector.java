@@ -374,7 +374,9 @@ final class Inspector {
     /** (25.1) A survivor base's card: its people and guards, its wall, towers, gates and workshop. */
     void drawBaseInspect(Canvas c, SurvivorBases.Base s) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String title = "Survivor base  -  " + s.name;
+        String title = (s.raiders ? "Raiders  -  " : "Survivor base  -  ") + s.name;
+        // ((27.5) Its ground and its raids.)
+        if (s.raiders) lines.add("Raiders: they take in nobody unarmed, and rob convoys and other bases");
         int up = SurvivorBases.wallsUp(gv.world.city, s), want = s.ring.length - s.gates.length;
         lines.add(!s.walled ? "Building its wall: " + up + " of " + want + " sections up"
                 : "A " + SurvivorBases.TIER_NAMES[s.tier] + " wall all the way round" + (s.tier < 2 ? " (" + (s.tier == 0 ? "sandbags" : "concrete") + " next)" : ""));
@@ -384,6 +386,12 @@ final class Inspector {
         lines.add(s.towersUp + (s.towersUp == 1 ? " watchtower" : " watchtowers") + "   " + s.gates.length + (s.gates.length == 1 ? " gate" : " gates")
                 + (shut > 0 ? " (shut)" : " (open)"));
         lines.add(s.walled ? "Workshop: " + (int) s.stash + " rounds in store" : "Workshop: once the wall is up");
+        if (s.territory > 0 || s.raids > 0) {
+            BaseRaids.Raid r = gv.world.baseRaids.raidOf(s);
+            lines.add("Territory: " + s.territory + (s.territory == 1 ? " block" : " blocks") + "   Raids: " + s.raids
+                    + (r != null ? " (" + r.team.size() + " out)" : ""));
+        }
+        if (s.robbed + s.struck > 0) lines.add("Held up " + s.robbed + (s.robbed == 1 ? " vehicle" : " vehicles") + ", robbed " + s.struck + (s.struck == 1 ? " base" : " bases"));
         if (s.inside > 0) lines.add("The dead are inside the wall!");
         gv.text.setTextAlign(Paint.Align.LEFT);
         float lh = 18 * gv.dp, cw = Math.min(gv.getWidth() - 20 * gv.dp, 460 * gv.dp);
@@ -396,7 +404,7 @@ final class Inspector {
         gv.oval.set(left, top, left + cw, top + ch);
         gv.fill.setColor(0xE8101216);
         c.drawRoundRect(gv.oval, 12 * gv.dp, 12 * gv.dp, gv.fill);
-        gv.fill.setColor(0xFFD8B04A);
+        gv.fill.setColor(s.raiders ? 0xFFC42A1E : 0xFFD8B04A);
         c.drawRect(left, top + 10 * gv.dp, left + 4 * gv.dp, top + ch - 10 * gv.dp, gv.fill);
         gv.text.setTextSize(14 * gv.dp);
         gv.text.setColor(0xFFFFFFFF);
@@ -404,7 +412,7 @@ final class Inspector {
         gv.text.setTextSize(12.5f * gv.dp);
         for (int i = 0; i < lines.size(); i++) {
             String l = lines.get(i);
-            gv.text.setColor(l.startsWith("The dead") ? 0xFFFF8A6A : 0xFFB8BDC4);
+            gv.text.setColor(l.startsWith("The dead") || l.startsWith("Raiders") ? 0xFFFF8A6A : 0xFFB8BDC4);
             c.drawText(gv.hud.fitText(l, cw - 24 * gv.dp), left + 14 * gv.dp, top + 22 * gv.dp + (i + 1) * lh, gv.text);
         }
         // Its ground outlined on the map.

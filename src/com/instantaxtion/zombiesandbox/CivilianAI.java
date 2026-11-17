@@ -59,6 +59,8 @@ final class CivilianAI {
             thinkScavenger(e, dt);
             if (e.scavenge != null || e.homeward) return;
         }
+        // ((27.5) Out with a raid from their base.)
+        if (e.raid != null && w.baseRaids.member(e, dt)) return;
         if (e.militia) {
             w.armedAI.thinkMilitia(e, dt);
             if (e.militia) return;

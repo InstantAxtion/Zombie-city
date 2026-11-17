@@ -5037,6 +5037,80 @@ public final class GameTests {
                 check(stuck == 0, "every one gets there (" + stuck + " of " + walks + " stuck" + where + ")");
             }
         });
+        test("27.5: bases raid to clear ground; raider bases rob convoys", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                World w = new World(c);
+                w.populate(c);
+                // Two bases a few blocks apart: survivors (a), raiders (b), each with armed guards.
+                SurvivorBases.Base a = null, b = null;
+                java.util.Random r = new java.util.Random(5);
+                for (int t = 0; t < 6000 && b == null; t++) {
+                    City.Building x = w.city.buildings.get(r.nextInt(w.city.buildings.size()));
+                    if (x.capacity == 0 || !w.city.enterable(x) || x.doorX <= 0) continue;
+                    if (a != null && (Math.hypot(a.b.doorX - x.doorX, a.b.doorY - x.doorY) < 380 || Math.hypot(a.b.doorX - x.doorX, a.b.doorY - x.doorY) > 650)) continue;
+                    w.baseFoundedAt = -999;
+                    SurvivorBases.Base s = w.baseLife.foundBase(x, false);
+                    if (s == null) continue;
+                    if (a == null) a = s;
+                    else b = s;
+                }
+                check(a != null && b != null, "two bases");
+                a.raiders = false;
+                b.raiders = true;
+                SurvivorBases.Base[] both = {a, b};
+                for (SurvivorBases.Base s : both) {
+                    s.walled = true;
+                    for (int i = 0; i < 6; i++) {
+                        Entity e = w.spawn(Entity.CIVILIAN, s.b.doorX + i * 4, s.b.doorY);
+                        w.armCivilian(e, 60);
+                        w.baseLife.joinBase(e, s, true);
+                    }
+                }
+                a.stash = 100;
+                b.raidCd = 9999;
+                // A few of the dead a block or two out from the survivors' base, away from the raiders'.
+                float dx = a.cx() - b.cx(), dy = a.cy() - b.cy(), l = (float) Math.hypot(dx, dy);
+                float[] p = w.city.findWalkable(a.cx() + dx / l * 260, a.cy() + dy / l * 260);
+                for (int i = 0; i < 4; i++) w.spawn(Entity.ZOMBIE, p[0] + i * 5, p[1]);
+                w.recount();
+                w.outbreak = true;
+                for (int f = 0; f < 30 * 150 && a.territory == 0; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(a.raids >= 1 && a.territory >= 1, "the survivors went out and cleared a block (raids " + a.raids + ", ground " + a.territory + ")");
+                check(w.zombieCount() < 4, "the dead out there were cleared (" + w.zombieCount() + " left)");
+                for (int f = 0; f < 30 * 120 && w.baseRaids.raidOf(a) != null; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.baseRaids.raidOf(a) == null, "and came home");
+                // A supply convoy for the survivors' base: the raiders go for it.
+                a.raidCd = 9999;
+                b.raidCd = 0;
+                int bStash = (int) b.stash;
+                check(w.convoys.supply(null, a, null, 120) != null, "a supply convoy sent");
+                for (int f = 0; f < 30 * 400 && b.robbed == 0; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(b.robbed >= 1 && b.stash > bStash, "the raiders held up a truck and took its load (" + b.robbed + ", " + bStash + " -> " + (int) b.stash + ")");
+                File file = File.createTempFile("zcr", ".dat");
+                SaveGame.save(w, file);
+                World ld = SaveGame.load(file);
+                file.delete();
+                SurvivorBases.Base la = null, lb = null;
+                for (SurvivorBases.Base s : ld.bases) {
+                    if (s.b.doorX == a.b.doorX && s.b.doorY == a.b.doorY) la = s;
+                    if (s.b.doorX == b.b.doorX && s.b.doorY == b.b.doorY) lb = s;
+                }
+                check(la != null && lb != null && lb.raiders && !la.raiders && la.territory == a.territory && lb.robbed == b.robbed, "kept in a save");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

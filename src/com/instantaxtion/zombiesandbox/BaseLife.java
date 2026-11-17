@@ -36,6 +36,8 @@ final class BaseLife {
             if (!z.removed && cx > z.left() - 200 && cx < z.right() + 200 && cy > z.top() - 200 && cy < z.bottom() + 200) return null;
         }
         s.name = SurvivorBases.nameFor(w.city, b, b.doorX > 0 ? (int) (b.doorX * 7 + b.doorY * 13) : w.bases.size());
+        // ((27.5) One in four, by the city and the building, a raider base.)
+        s.raiders = w.baseRaids.raiderBase(b);
         w.bases.add(s);
         w.basesFounded++;
         w.baseFoundedAt = w.time;
@@ -115,6 +117,8 @@ final class BaseLife {
             baseGates(s);
             baseWorkshop(s);
         }
+        // ((27.5) Groups out from the bases, and new ones sent.)
+        w.baseRaids.update();
     }
 
     void loseBase(SurvivorBases.Base s) {
@@ -192,6 +196,9 @@ final class BaseLife {
             if (e.leader != null && e.leader.base != s) continue;
             // (Not someone already nearly at a safe zone's gate.)
             if (e.task == Dispatch.T_SEEK && e.seekZone != null && World.hypot(e.x - e.seekZone.x, e.y - e.seekZone.y) < World.hypot(e.x - cx, e.y - cy)) continue;
+            // ((27.5) A raider base takes in only its own kind, the armed - but a small one takes in anyone, to arm from its
+            // workshop: kept to the armed, they stayed too few ever to go raiding.)
+            if (s.raiders && s.members >= 4 && !(e.canShoot() && e.ammo + e.reserve >= 6)) continue;
             joinBase(e, s, e.canShoot());
             took++;
         }
@@ -265,7 +272,7 @@ final class BaseLife {
         ArrayList<Entity> guards = new ArrayList<Entity>();
         for (int k = 0, n = w.spatial.gatherLiving(s.cx(), s.cy(), Math.max(s.tx1 - s.tx0, s.ty1 - s.ty0) * City.T + 260); k < n; k++) {
             Entity e = w.gathered[k];
-            if (!e.dead && e.base == s && e.militia) guards.add(e);
+            if (!e.dead && e.base == s && e.militia && e.raid == null) guards.add(e);
         }
         ArrayList<float[]> spots = new ArrayList<float[]>();
         float cx = s.cx(), cy = s.cy();
@@ -356,7 +363,7 @@ final class BaseLife {
         for (int i = 0; i < w.bases.size(); i++)
             for (int j = i + 1; j < w.bases.size(); j++) {
                 SurvivorBases.Base a = w.bases.get(i), b = w.bases.get(j);
-                if (!a.walled || !b.walled || a.settlement || b.settlement) continue;
+                if (!a.walled || !b.walled || a.settlement || b.settlement || a.raiders != b.raiders) continue;
                 int gapX = Math.max(0, Math.max(a.tx0, b.tx0) - Math.min(a.tx1, b.tx1)), gapY = Math.max(0, Math.max(a.ty0, b.ty0) - Math.min(a.ty1, b.ty1));
                 if (gapX > 18 || gapY > 18) continue;
                 int x0 = Math.min(a.tx0, b.tx0), y0 = Math.min(a.ty0, b.ty0), x1 = Math.max(a.tx1, b.tx1), y1 = Math.max(a.ty1, b.ty1);
@@ -390,6 +397,11 @@ final class BaseLife {
         m.stash = a.stash + b.stash;
         m.age = Math.max(a.age, b.age);
         m.said = 1;
+        m.raiders = a.raiders;
+        m.territory = Math.max(a.territory, b.territory);
+        m.raids = a.raids + b.raids;
+        m.robbed = a.robbed + b.robbed;
+        m.struck = a.struck + b.struck;
         // The old walls inside it come down (those on its own edge stay).
         java.util.HashSet<Integer> edge = new java.util.HashSet<Integer>();
         for (int t : m.ring) edge.add(t);

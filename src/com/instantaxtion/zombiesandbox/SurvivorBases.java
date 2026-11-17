@@ -49,6 +49,10 @@ final class SurvivorBases {
         boolean fallen;
         /** ((26.0) Two bases joined into one walled settlement. */
         boolean settlement;
+        /** ((27.5) A raider base; the blocks round it it has cleared (its ground), raids sent, vehicles held up, bases robbed. */
+        boolean raiders;
+        int territory, raids, robbed, struck;
+        transient float raidCd = 30;
 
         float cx() {
             return (tx0 + tx1 + 1) * City.T / 2f;
