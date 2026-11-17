@@ -2,11 +2,23 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "27.5";
-    static final int VERSION_CODE = 275;
+    static final String VERSION = "28.0";
+    static final int VERSION_CODE = 280;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.0  -  Nine new maps",
+                    "Canyon Town: a red-rock town split by a deep gorge, with few bridges and switchbacks down the cliff.",
+                    "Highway Crossroads: two highways meet in open country, with truck stops, motels and a small town.",
+                    "Frozen North: an icebound harbour town with an airstrip, cabins and a radar station.",
+                    "Military Airbase: runways, hangars and a huge garrison, the town at its gate.",
+                    "Border Town: a fenced border splits the town, crossed only at checkpoints.",
+                    "Stadium City: a huge stadium complex with fan zones, linked to downtown by light rail.",
+                    "Bridge City: many small islands in a bay, joined by long bridges.",
+                    "Swamp Bayou: stilt houses and boardwalks on a bayou, linked by causeways.",
+                    "Lighthouse Coast: villages along a cliff road, a harbour town and a lighthouse.",
+            },
             {
                     "27.5  -  Every city its own",
                     "Every new city is laid out its own way: town shape, downtown, district mix, colours, great park and airport side.",

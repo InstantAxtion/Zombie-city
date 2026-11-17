@@ -318,6 +318,8 @@ final class CityOutskirts extends CityPart {
         java.util.Random r = gen.look.r;
         // (The Archipelago's outer islands stay the palm-fringed villages they are.)
         if (city.cfg.preset() == CityConfig.ARCHIPELAGO && city.island((x0 + x1) / 2, (y0 + y1) / 2) >= 1) return false;
+        // ((28.0) Nor the canyon, the crossroads, the north, the swamp or the coast: their towns are their own.)
+        if (city.region != null || city.cfg.swamp() || city.cfg.lighthouse()) return false;
         int[] opts;
         switch (dt) {
             case DT_SUBURB:

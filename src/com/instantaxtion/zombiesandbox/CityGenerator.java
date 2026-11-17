@@ -895,7 +895,9 @@ final class CityGenerator extends CityPart {
         // ((11.1) Not since the thin band of country: whole corners of town left as fields undid it.)
         if (organic && city.cfg.civic < 27) landGen.erodeTown(bx0, by0, bx1, by1);
         // ((27.5) Map version 40: most big towns lose a corner or two to the fields, each its own shape.)
-        if (organic && look != null && city.waterKind == CityConfig.W_NONE && !city.desert && !city.spaceCenter && city.w >= 456) {
+        if (organic && look != null && city.waterKind == CityConfig.W_NONE && !city.desert && !city.spaceCenter && city.w >= 456
+                // ((28.0) Not the maps laid out their own way.)
+                && city.region == null && !city.cfg.airbase() && !city.cfg.borderTown() && !city.cfg.stadiumCity()) {
             Random nr = new Random(city.cfg.seed * 0x5DEECE66DL + 405);
             if (nr.nextFloat() < 0.8f) landGen.notchTown(bx0, by0, bx1, by1, nr);
         }
