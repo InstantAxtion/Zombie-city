@@ -19,13 +19,13 @@ final class CityConfig implements OptionSet {
             // ((26.0) Space Center, in the old Sydney's place.)
             "Space Center",
             // ((28.0) Highway Crossroads, in the old Tokyo's place.)
-            "Highway Crossroads", "",
-            "",
+            "Highway Crossroads", "Border Town",
+            "Military Airbase",
             // (10.60)
             "Archipelago",
             // ((28.0) Canyon Town, in the old Mountain Valley's place.)
             "Canyon Town",
-            "", "", "", "",
+            "", "", "", "Stadium City",
             // ((28.0) Frozen North.)
             "Frozen North"};
     /** One line about each map, shown on the New Game screen. */
@@ -51,13 +51,13 @@ final class CityConfig implements OptionSet {
             "A resort island with a theme park, beach hotels and a ferry, and the staff town across the strait.",
             "A rocket on its pad, the assembly building, mission control and a landing strip, beside a small town.",
             "Two highways cross out in open country, with truck stops, motels and a small town nearby.",
-            "",
-            "",
+            "A town split by a fenced border, crossed at a few checkpoints.",
+            "A huge air base of runways and hangars, its town at the gate. Far more soldiers.",
             "A tropical island city ringed by five palm-fringed village islands, all joined by bridges.",
             "A red-rock town on a mesa and the canyon floor, split by a deep gorge with few bridges.",
             "",
             "", "",
-            "",
+            "A city round a huge stadium, its arena, fan zones and training pitches, with a light rail to downtown.",
             "An icebound harbour town with an airstrip and long snowy roads out to cabins and a radar station.",
     };
 
@@ -130,14 +130,14 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 2, 3, 1, 1, 1, 0},       // ((25.0) Theme Park Island, in the old New York's place)
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 1, 0},      // ((26.0) Space Center, in the old Sydney's place)
             {STYLE_HOUSES, 1, 0, 1, 1, 1, 1, 1},      // ((28.0) Highway Crossroads, in the old Tokyo's place)
-            {STYLE_MIXED, 2, 1, 2, 2, 0, 3, 1},       // Paris
-            {STYLE_MIXED, 1, 2, 1, 2, 1, 2, 1},       // Garrison State
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((28.0) Border Town)
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 1},       // ((28.0) Military Airbase)
             {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // Archipelago
             {STYLE_MIXED, 1, 1, 1, 1, 1, 2, 1},       // ((28.0) Canyon Town, in the old Mountain Valley's place)
             {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // Bay City
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Delta Marsh
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Fjord Town
-            {STYLE_MIXED, 2, 1, 1, 2, 0, 2, 1},       // Canal City
+            {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // ((28.0) Stadium City)
             {STYLE_HOUSES, 1, 1, 1, 1, 1, 1, 1},      // ((28.0) Frozen North)
     };
 
@@ -164,14 +164,14 @@ final class CityConfig implements OptionSet {
             {1, 0, 1, 1, 1, 0, 35},   // Theme Park Island
             {1, 1, 1, 1, 1, 0, 30},   // Space Center
             {1, 0, 1, 0, 3, 0, 20},   // Highway Crossroads
-            {3, 2, 2, 2, 1, 1, 55},
-            {1, 1, 1, 1, 2, 1, 25},   // Garrison State
+            {1, 1, 1, 1, 2, 1, 35},
+            {1, 1, 1, 1, 1, 1, 25},   // ((28.0) Military Airbase)
             {2, 2, 2, 2, 2, 1, 35},   // Archipelago
             {1, 1, 1, 1, 1, 1, 30},   // Canyon Town
             {2, 2, 2, 2, 2, 1, 40},   // Bay City
             {2, 2, 2, 2, 2, 1, 25},   // Delta Marsh
             {2, 2, 1, 1, 2, 1, 30},   // Fjord Town
-            {3, 2, 2, 2, 1, 1, 50},   // Canal City
+            {1, 2, 1, 1, 1, 0, 40},   // ((28.0) Stadium City)
             {1, 1, 1, 1, 1, 1, 25},   // Frozen North
     };
     // Share of office lots that become apartment blocks, parking garages and pharmacies (percent).
@@ -181,7 +181,7 @@ final class CityConfig implements OptionSet {
             {20, 12, 5}, {20, 6, 5}, {8, 4, 6}, {35, 0, 5}, {20, 0, 5}, {35, 12, 5}, {35, 4, 6},
             {30, 8, 4},
             {20, 8, 5}, {12, 3, 6},
-            {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 6, 6},
+            {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 0, 6},
             {15, 0, 5},
     };
     // Which kinds of park each map likes: park, playground, sports field, courts, garden, skatepark.
@@ -202,10 +202,10 @@ final class CityConfig implements OptionSet {
             {2, 1, 1, 1, 0, 2},
             {3, 2, 1, 2, 2, 1},
             {3, 2, 1, 2, 1, 2}, {4, 2, 1, 1, 2, 1}, {4, 1, 1, 2, 1, 2}, {3, 3, 0, 2, 3, 0}, {3, 2, 2, 1, 2, 1},
-            {2, 1, 1, 1, 3, 0}, {3, 2, 0, 1, 4, 0},
+            {2, 1, 1, 1, 3, 0}, {3, 2, 1, 2, 1, 1},
             {2, 1, 3, 2, 0, 0},
             {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0},
-            {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 1, 0, 1, 3, 0},
+            {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 2, 3, 3, 0, 1},
             {3, 2, 1, 1, 0, 0},
     };
 
@@ -343,7 +343,8 @@ final class CityConfig implements OptionSet {
         // ((25.0) Nor 18: Theme Park Island.)
         // ((26.0) Nor 19: the Space Center.)
         // ((28.0) Nor 20 and 24: Highway Crossroads and Canyon Town.)
-        return preset == 2 || preset == 25 || preset == 21 || preset == 22 || preset == 26 || preset == 27 || preset == 28;
+        // ((28.0) Nor 21, 22 and 28: Border Town, the Military Airbase and Stadium City.)
+        return preset == 2 || preset == 25 || preset == 26 || preset == 27;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -387,6 +388,21 @@ final class CityConfig implements OptionSet {
     boolean canyon() { return v[OPT_PRESET] == CANYON; }
 
     boolean frozenNorth() { return v[OPT_PRESET] == FROZEN_NORTH; }
+
+    /**
+     * ((28.0) Three maps of their own, each built by its own class (BorderMap, AirbaseMap, StadiumMap): a town split by
+     * a fenced border with its crossings; a great air base with its town at the gate; a city round a stadium complex.
+     */
+    static final int BORDER_TOWN = 21, AIRBASE = 22, STADIUM_CITY = 28;
+
+    boolean borderTown() { return v[OPT_PRESET] == BORDER_TOWN; }
+
+    boolean airbase() { return v[OPT_PRESET] == AIRBASE; }
+
+    boolean stadiumCity() { return v[OPT_PRESET] == STADIUM_CITY; }
+
+    /** ((28.0) A map whose army far outnumbers the usual: the Military Town and the Military Airbase. */
+    boolean bigGarrison() { return militaryTown() || airbase(); }
 
     /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
     static final int TOWERS = 10;
@@ -576,6 +592,8 @@ final class CityConfig implements OptionSet {
         // ((28.0) Canyon Town and Frozen North lay out the whole map themselves; Highway Crossroads is mostly country.)
         if (p == CANYON || p == FROZEN_NORTH) return 1f;
         if (p == CROSSROADS) return 0.38f;
+        // ((28.0) Border Town: the town fills the map, the border right across it.)
+        if (p == BORDER_TOWN) return 1f;
         float f = p == 9 ? 0.55f : p == 6 ? 0.72f : 1f;
         // A massive map is nearly all town: a thin band of country round the edge for the highway and farms.
         if (massive()) f = p == 9 ? 0.6f : p == 6 ? 0.88f : 0.92f;
@@ -665,7 +683,9 @@ final class CityConfig implements OptionSet {
         // ((13.0) Up to 300 with the more bases: 160 before.)
         int n = Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
         // ((15.5) The Military Town's great base: three times the garrison, and never fewer than 450.)
-        return Math.round((militaryTown() ? Math.min(700, Math.max(450, n * 3)) : n) * FORCE_SCALE[force]);
+        // ((28.0) The Military Airbase: two and a half times the garrison, never fewer than 380.)
+        int big = militaryTown() ? Math.min(700, Math.max(450, n * 3)) : airbase() ? Math.min(600, Math.max(380, n * 5 / 2)) : n;
+        return Math.round(big * FORCE_SCALE[force]);
     }
 
 
@@ -732,7 +752,7 @@ final class CityConfig implements OptionSet {
 
     /** (13.0) Army bases in town besides the main one: one on the Default and Large maps, up to four on the Colossal. */
     int extraBases() {
-        if (!militaryBase() || militaryTown()) return 0;
+        if (!militaryBase() || bigGarrison()) return 0;
         int s = v[OPT_SIZE];
         return s < LARGE ? 0 : s <= MASSIVE ? 1 : s == HUGE ? 2 : s == GIGANTIC ? 3 : 4;
     }
@@ -760,7 +780,7 @@ final class CityConfig implements OptionSet {
 
     // Which maps have a railway line (with a station and passing trains).
     // Which maps have a railway line: 0 never, 1 about half the time (it depends on the city), 2 always.
-    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
+    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     boolean hasRail() {
         int r = RAIL[v[OPT_PRESET]];
@@ -790,14 +810,14 @@ final class CityConfig implements OptionSet {
             {4, 3, 0, 3, 0, 0, 2, 6},   // Theme Park Island
             {0, 3, 0, 6, 1, 1, 2, 1},   // Space Center
             {0, 2, 2, 7, 2, 0, 2, 1},   // Highway Crossroads
-            {3, 3, 2, 3, 1, 1, 1, 0},
-            {3, 4, 1, 3, 3, 0, 1, 1},   // Garrison State
+            {2, 4, 3, 4, 1, 0, 2, 1},
+            {1, 3, 0, 6, 1, 0, 2, 1},   // ((28.0) Military Airbase)
             {3, 4, 2, 4, 1, 1, 2, 0},   // Archipelago
             {1, 3, 3, 5, 1, 0, 1, 1},   // Canyon Town
             {3, 4, 2, 3, 1, 1, 2, 0},   // Bay City
             {1, 2, 2, 6, 1, 0, 3, 3},   // Delta Marsh
             {1, 2, 3, 5, 1, 0, 3, 2},   // Fjord Town
-            {2, 3, 6, 2, 1, 0, 1, 2},   // Canal City
+            {4, 4, 1, 3, 1, 1, 3, 0},   // ((28.0) Stadium City)
             {0, 3, 2, 6, 3, 0, 1, 1},   // Frozen North
     };
 

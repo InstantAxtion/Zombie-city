@@ -81,6 +81,8 @@ final class Landmarks {
             LandmarkArt13.register(l);
             // ((26.0) The Space Center's own, after those.)
             LandmarkArt14.register(l);
+            // ((28.0) Border Town's and Stadium City's own, after those.)
+            LandmarkArt28.register(l);
             for (int i = 0; i < l.size(); i++) l.get(i).id = i;
             all = l;
         }
