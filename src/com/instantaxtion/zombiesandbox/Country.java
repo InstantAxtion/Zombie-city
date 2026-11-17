@@ -6,7 +6,7 @@ import java.util.Random;
  * Where the city is: the look of its buildings, its street, town and people's names, the road markings and the
  * police cars. (Since 11.3 the game is set in the USA only: the other countries and their code are gone.)
  */
-final class Country {
+final class Country implements Cloneable {
     static final int USA = 0;
     static final String[] NAMES = {"USA"};
     static final String[] INFO = {"Wide avenues with yellow centre lines, clapboard houses and black-and-white cruisers."};
@@ -78,6 +78,21 @@ final class Country {
     final String[] first, last, dogs;
     /** Pavement, grass and plaza colours (0 keeps the usual), and roofs/walls for offices and old buildings (null keeps the usual). */
     int pavement, grass, plaza;
+    /** ((28.0) The water's colour (0 keeps the usual). */
+    int water;
+
+    /** ((28.0) This country with its own ground and water colours, for one map's look (WaterMap): a copy, not the one. */
+    Country tinted(int grass, int pavement, int water) {
+        try {
+            Country c = (Country) clone();
+            c.grass = grass;
+            c.pavement = pavement;
+            c.water = water;
+            return c;
+        } catch (CloneNotSupportedException e) {
+            return this;
+        }
+    }
     /** The everyday traffic: a weighted list of Fleet car models, their paint, and the local taxis and buses. */
     int[] carModels, carColors;
     int taxiColor, busColor;

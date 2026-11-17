@@ -83,6 +83,8 @@ final class Landmarks {
             LandmarkArt14.register(l);
             // ((28.0) Border Town's and Stadium City's own, after those.)
             LandmarkArt28.register(l);
+            // ((28.0) Bridge City's, Swamp Bayou's and Lighthouse Coast's own, after those.)
+            WaterLandmarks.register(l);
             for (int i = 0; i < l.size(); i++) l.get(i).id = i;
             all = l;
         }

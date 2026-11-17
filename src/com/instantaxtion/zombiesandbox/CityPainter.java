@@ -365,6 +365,7 @@ final class CityPainter extends CityPart {
     int waterColor(int x, int y) {
         if (city.region != null && city.region.water(x, y) != 0) return city.region.water(x, y);
         int base = city.waterKind == CityConfig.W_LAKE || city.waterKind == CityConfig.W_NONE ? 0xFF2F6E80 : 0xFF2A6390;
+        if (city.country.water != 0) base = city.country.water;
         int land = 9;
         for (int r = 1; r <= 8 && land == 9; r++)
             for (int k = -r; k <= r && land == 9; k += r)

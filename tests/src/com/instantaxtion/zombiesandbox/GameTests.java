@@ -4529,7 +4529,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() == 292, "250 designs, Theme Park Island's 23, the Space Center's 14 and the 28.0 maps' 5 (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 297, "250 designs, Theme Park Island's 23, the Space Center's 14 and the 28.0 maps' 10 (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();
@@ -5571,6 +5571,108 @@ public final class GameTests {
                     else if (b.kind == City.WAREHOUSE) outerOther++;
                 }
                 check(palms > 200 && outerHouses > 100 && outerOther < outerHouses / 10, "palms (" + palms + "), and houses, not works, on the outer islands (" + outerHouses + "/" + outerOther + ")");
+            }
+        });
+        test("28.0: Bridge City, Swamp Bayou and Lighthouse Coast - islands and long bridges, stilt houses and boardwalks, a lighthouse and cliffs; one road network", new Check() {
+            public void run() throws Exception {
+                for (int preset : new int[]{CityConfig.BRIDGE_CITY, CityConfig.SWAMP, CityConfig.LIGHTHOUSE})
+                    for (long seed : new long[]{3, 28}) {
+                        CityConfig c = new CityConfig();
+                        c.v[CityConfig.OPT_PRESET] = preset;
+                        c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                        c.seed = seed;
+                        c.normalize();
+                        City city = new City(c, 0.05f);
+                        int w = city.w, h = city.h, n = w * h;
+                        byte[] t = city.tiles;
+                        String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
+                        check(!CityConfig.retired(CityConfig.OPT_PRESET, preset), m + "offered");
+                        // The roads and lanes are one network.
+                        int[] comp = new int[n];
+                        java.util.Arrays.fill(comp, -1);
+                        int[] q = new int[n];
+                        java.util.List<Integer> sizes = new java.util.ArrayList<Integer>();
+                        for (int i = 0; i < n; i++) {
+                            if (comp[i] >= 0 || !(t[i] == City.ROAD || t[i] == City.DIRT)) continue;
+                            int id = sizes.size(), hd = 0, tl = 0;
+                            q[tl++] = i;
+                            comp[i] = id;
+                            while (hd < tl) {
+                                int cc = q[hd++], x = cc % w, y = cc / w;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (comp[j] >= 0 || !(t[j] == City.ROAD || t[j] == City.DIRT || t[j] == City.CAR || t[j] == City.LOT)) continue;
+                                    comp[j] = id;
+                                    q[tl++] = j;
+                                }
+                            }
+                            sizes.add(tl);
+                        }
+                        int main = 0, stray = 0;
+                        for (int k = 1; k < sizes.size(); k++) if (sizes.get(k) > sizes.get(main)) main = k;
+                        for (int k = 0; k < sizes.size(); k++) if (k != main && sizes.get(k) >= 4) stray++;
+                        check(stray == 0, m + "one road network (" + stray + " bits on their own)");
+                        // The police stations and the army base are on it, and convoys can drive in.
+                        int posts = 0, off = 0;
+                        for (City.Facility f : city.facilities) {
+                            if (f.kind != City.FACILITY_POLICE && f.kind != City.FACILITY_BASE) continue;
+                            posts++;
+                            int fx = (int) (f.x / City.T), fy = (int) (f.y / City.T);
+                            boolean on = false;
+                            for (int y = Math.max(0, fy - 18); y < Math.min(h, fy + 18) && !on; y++)
+                                for (int x = Math.max(0, fx - 18); x < Math.min(w, fx + 18) && !on; x++) if (comp[y * w + x] == main) on = true;
+                            if (!on) off++;
+                        }
+                        check(city.mainBase() != null && posts >= 2 && off == 0, m + "a base and police stations, all on the roads (" + posts + ", " + off + " off them)");
+                        float[] in = city.edgeRoad(new java.util.Random(1));
+                        check(in != null && comp[(int) (in[1] / City.T) * w + (int) (in[0] / City.T)] == main, m + "convoys drive in");
+                        java.util.HashSet<String> lm = new java.util.HashSet<String>();
+                        for (float[] d : city.decor) {
+                            Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                            if (ld != null) lm.add(ld.name);
+                        }
+                        int water = 0, pier = 0, rock = 0, sand = 0, bridges = 0;
+                        for (int i = 0; i < n; i++) {
+                            if (t[i] == City.WATER) water++;
+                            if (t[i] == City.PIER) pier++;
+                            if (t[i] == City.ROCK) rock++;
+                            if (t[i] == City.SAND) sand++;
+                            if (city.bridge != null && city.bridge[i] && t[i] == City.ROAD) bridges++;
+                        }
+                        if (preset == CityConfig.BRIDGE_CITY) {
+                            int il = city.islandRects.length;
+                            check(il >= 6 && il <= 10, m + "six to ten islands (" + il + ")");
+                            // Every island's streets are on the one network: over the bridges.
+                            int joined = 0;
+                            for (int[] r : city.islandRects) {
+                                boolean on = false;
+                                for (int y = r[1]; y < r[3] && !on; y++) for (int x = r[0]; x < r[2] && !on; x++) if (comp[y * w + x] == main) on = true;
+                                if (on) joined++;
+                            }
+                            check(joined == il && bridges > il * 20 && water > n / 3, m + "every island joined by long bridges (" + joined + "/" + il + ", " + bridges + " bridge tiles)");
+                        } else if (preset == CityConfig.SWAMP) {
+                            int stilts = 0;
+                            for (City.Building b : city.buildings) {
+                                if (b.kind != City.HOUSE) continue;
+                                int x0 = (int) (b.x0 / City.T), y0 = (int) (b.y0 / City.T), x1 = (int) Math.ceil(b.x1 / City.T), y1 = (int) Math.ceil(b.y1 / City.T);
+                                boolean wet = false, walk = false;
+                                for (int y = y0 - 1; y <= y1 && y < h; y++)
+                                    for (int x = x0 - 1; x <= x1 && x < w; x++) {
+                                        if (x < 0 || y < 0) continue;
+                                        if (t[y * w + x] == City.WATER) wet = true;
+                                        if (t[y * w + x] == City.PIER) walk = true;
+                                    }
+                                if (wet && walk) stilts++;
+                            }
+                            check(stilts >= 4 && pier >= 80 && bridges > 0 && water > n / 6, m + "stilt houses on boardwalks over the water, a bridge over the bayou (" + stilts + ", " + pier + ", " + bridges + ")");
+                            check(lm.contains("Airboat Landing") && lm.contains("Marine Supply"), m + "the airboat landing and the marine supply store: " + lm);
+                        } else {
+                            check(lm.contains("Lighthouse") && lm.contains("Harbour Master"), m + "the lighthouse and the harbour master: " + lm);
+                            check(rock > 100 && sand > 20 && water > n / 8 && pier > 10, m + "cliffs, beaches, the sea and piers (" + rock + ", " + sand + ", " + water + ", " + pier + ")");
+                        }
+                    }
             }
         });
         test("26.0: the Space Center has its launch pad and rocket, the assembly building, mission control and the landing strip; no other map gets them", new Check() {

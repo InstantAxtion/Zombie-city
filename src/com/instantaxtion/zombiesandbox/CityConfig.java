@@ -25,7 +25,7 @@ final class CityConfig implements OptionSet {
             "Archipelago",
             // ((28.0) Canyon Town, in the old Mountain Valley's place.)
             "Canyon Town",
-            "", "", "", "Stadium City",
+            "Bridge City", "Swamp Bayou", "Lighthouse Coast", "Stadium City",
             // ((28.0) Frozen North.)
             "Frozen North"};
     /** One line about each map, shown on the New Game screen. */
@@ -55,8 +55,8 @@ final class CityConfig implements OptionSet {
             "A huge air base of runways and hangars, its town at the gate. Far more soldiers.",
             "A tropical island city ringed by five palm-fringed village islands, all joined by bridges.",
             "A red-rock town on a mesa and the canyon floor, split by a deep gorge with few bridges.",
-            "",
-            "", "",
+            "A city on many small islands in a bay, joined by long bridges.",
+            "A bayou town of stilt houses and boardwalks, cut off by the swamp.", "Fishing villages along a winding cliff road, a harbour town and a lighthouse.",
             "A city round a huge stadium, its arena, fan zones and training pitches, with a light rail to downtown.",
             "An icebound harbour town with an airstrip and long snowy roads out to cabins and a radar station.",
     };
@@ -134,9 +134,9 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 1},       // ((28.0) Military Airbase)
             {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // Archipelago
             {STYLE_MIXED, 1, 1, 1, 1, 1, 2, 1},       // ((28.0) Canyon Town, in the old Mountain Valley's place)
-            {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // Bay City
-            {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Delta Marsh
-            {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Fjord Town
+            {STYLE_MIXED, 2, 2, 1, 2, 0, 2, 1},       // ((28.0) Bridge City)
+            {STYLE_HOUSES, 1, 0, 1, 1, 2, 1, 1},      // ((28.0) Swamp Bayou)
+            {STYLE_HOUSES, 1, 0, 2, 1, 2, 1, 1},      // ((28.0) Lighthouse Coast)
             {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // ((28.0) Stadium City)
             {STYLE_HOUSES, 1, 1, 1, 1, 1, 1, 1},      // ((28.0) Frozen North)
     };
@@ -168,9 +168,9 @@ final class CityConfig implements OptionSet {
             {1, 1, 1, 1, 1, 1, 25},   // ((28.0) Military Airbase)
             {2, 2, 2, 2, 2, 1, 35},   // Archipelago
             {1, 1, 1, 1, 1, 1, 30},   // Canyon Town
-            {2, 2, 2, 2, 2, 1, 40},   // Bay City
-            {2, 2, 2, 2, 2, 1, 25},   // Delta Marsh
-            {2, 2, 1, 1, 2, 1, 30},   // Fjord Town
+            {2, 2, 2, 2, 2, 1, 40},   // ((28.0) Bridge City)
+            {2, 1, 1, 1, 2, 1, 30},   // ((28.0) Swamp Bayou)
+            {2, 1, 1, 1, 1, 1, 35},   // ((28.0) Lighthouse Coast)
             {1, 2, 1, 1, 1, 0, 40},   // ((28.0) Stadium City)
             {1, 1, 1, 1, 1, 1, 25},   // Frozen North
     };
@@ -320,6 +320,8 @@ final class CityConfig implements OptionSet {
 
     /** Water on the map: none, the sea along one side (a beach or a port), a river, or a lake. */
     static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5, W_RIVER = 6;
+    /** ((28.0) Water laid out by the map's own class: the swamp's bayous, the coast's sea. */
+    static final int W_SHORE = 7;
     /** ((22.0) River City. */
     static final int RIVER_CITY = 16;
     /** The Islands map, and its one size (tiles across: a bit bigger than Massive). */
@@ -343,8 +345,9 @@ final class CityConfig implements OptionSet {
         // ((25.0) Nor 18: Theme Park Island.)
         // ((26.0) Nor 19: the Space Center.)
         // ((28.0) Nor 20 and 24: Highway Crossroads and Canyon Town.)
-        // ((28.0) Nor 21, 22 and 28: Border Town, the Military Airbase and Stadium City.)
-        return preset == 2 || preset == 25 || preset == 26 || preset == 27;
+        // ((28.0) Nor 21, 22 and 28: Border Town, the Military Airbase and Stadium City; nor 25, 26 and 27: Bridge City,
+        // Swamp Bayou and Lighthouse Coast.)
+        return preset == 2;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -404,6 +407,19 @@ final class CityConfig implements OptionSet {
     /** ((28.0) A map whose army far outnumbers the usual: the Military Town and the Military Airbase. */
     boolean bigGarrison() { return militaryTown() || airbase(); }
 
+    /**
+     * ((28.0) Bridge City (many small islands in a bay joined by long bridges), Swamp Bayou (a town on the edge of a
+     * swamp: stilt houses, boardwalks, causeways) and Lighthouse Coast (fishing villages along a cliff road, a harbour
+     * town, a lighthouse). Each is built by its own class (see WaterMap); every other map builds as before.)
+     */
+    static final int BRIDGE_CITY = 25, SWAMP = 26, LIGHTHOUSE = 27;
+
+    boolean bridgeCity() { return v[OPT_PRESET] == BRIDGE_CITY; }
+
+    boolean swamp() { return v[OPT_PRESET] == SWAMP; }
+
+    boolean lighthouse() { return v[OPT_PRESET] == LIGHTHOUSE; }
+
     /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
     static final int TOWERS = 10;
 
@@ -435,7 +451,8 @@ final class CityConfig implements OptionSet {
         switch (v[OPT_PRESET]) {
             case 12: return W_LAKE;
             case 13: case PRISON_ISLAND: return W_HARBOUR;
-            case ISLANDS: case ARCHIPELAGO: case THEME_PARK: return W_ISLANDS;
+            case ISLANDS: case ARCHIPELAGO: case THEME_PARK: case BRIDGE_CITY: return W_ISLANDS;
+            case SWAMP: case LIGHTHOUSE: return W_SHORE;
             case RIVER_CITY: return W_RIVER;
             default: return W_NONE;
         }
@@ -562,6 +579,8 @@ final class CityConfig implements OptionSet {
         boolean small = civic >= 34;
         if (v[OPT_PRESET] == ISLANDS) return nature() ? (small ? 1040 : ISLANDS_TILES) : 512;
         if (v[OPT_PRESET] == ARCHIPELAGO) return small ? 1040 : ARCHIPELAGO_TILES;
+        // ((28.0) The water maps are never smaller than the Small size: their towns, islands and bridges need the room.)
+        if ((bridgeCity() || swamp() || lighthouse()) && v[OPT_SIZE] < SMALL) return SIZES_V34[SMALL];
         return (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
     }
 
@@ -814,9 +833,9 @@ final class CityConfig implements OptionSet {
             {1, 3, 0, 6, 1, 0, 2, 1},   // ((28.0) Military Airbase)
             {3, 4, 2, 4, 1, 1, 2, 0},   // Archipelago
             {1, 3, 3, 5, 1, 0, 1, 1},   // Canyon Town
-            {3, 4, 2, 3, 1, 1, 2, 0},   // Bay City
-            {1, 2, 2, 6, 1, 0, 3, 3},   // Delta Marsh
-            {1, 2, 3, 5, 1, 0, 3, 2},   // Fjord Town
+            {4, 4, 2, 4, 2, 1, 1, 0},   // ((28.0) Bridge City)
+            {0, 2, 3, 6, 1, 0, 2, 2},   // ((28.0) Swamp Bayou)
+            {0, 2, 4, 5, 1, 0, 2, 2},   // ((28.0) Lighthouse Coast)
             {4, 4, 1, 3, 1, 1, 3, 0},   // ((28.0) Stadium City)
             {0, 3, 2, 6, 3, 0, 1, 1},   // Frozen North
     };
