@@ -1763,7 +1763,7 @@ public final class GameTests {
                         e.task = Dispatch.T_LEAVE;
                         leaving++;
                     }
-                java.lang.reflect.Method qc = World.class.getDeclaredMethod("quarantineCity");
+                WM qc = wm("quarantineCity");
                 qc.setAccessible(true);
                 qc.invoke(w);
                 check(w.quarantined && !w.exodusOn(), "quarantined: nobody sets off");
@@ -1775,7 +1775,7 @@ public final class GameTests {
                 for (Entity e : w.entities) if (!e.dead && e.task == Dispatch.T_LEAVE) still++;
                 check(still == 0, "and nobody else sets off (" + still + ")");
                 // Air strikes: a first, then another.
-                java.lang.reflect.Method as = World.class.getDeclaredMethod("callAirStrike", int.class, boolean.class);
+                WM as = wm("callAirStrike", int.class, boolean.class);
                 as.setAccessible(true);
                 // (The pack still there: the police may have thinned it out by now.)
                 for (int z = 0; z < 14; z++) {
@@ -1808,7 +1808,7 @@ public final class GameTests {
                 c.seed = 52;
                 World w = new World(c);
                 w.populate(c);
-                java.lang.reflect.Method arm = World.class.getDeclaredMethod("armCivilian", Entity.class, int.class);
+                WM arm = wm("armCivilian", Entity.class, int.class);
                 arm.setAccessible(true);
                 // A long outbreak, the dead far away: gangs form among armed survivors.
                 java.util.Random r = new java.util.Random(5);
@@ -1818,7 +1818,7 @@ public final class GameTests {
                 for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
                 check(w.outbreak, "an outbreak on");
                 w.outbreakTime = 400;
-                java.lang.reflect.Method rd = World.class.getDeclaredMethod("raiders");
+                WM rd = wm("raiders");
                 rd.setAccessible(true);
                 for (int k = 0; k < 3000 && w.gangsFormed == 0; k++) rd.invoke(w);
                 int gang = 0;
@@ -1904,7 +1904,7 @@ public final class GameTests {
                 World w = new World(c);
                 w.populate(c);
                 w.setMaxPopulation(100000);
-                java.lang.reflect.Method cp = World.class.getDeclaredMethod("checkpoint", Entity.class, Dispatch.SafeZone.class);
+                WM cp = wm("checkpoint", Entity.class, Dispatch.SafeZone.class);
                 cp.setAccessible(true);
                 Dispatch.SafeZone z = new Dispatch.SafeZone();
                 z.place = "the test";
@@ -2006,7 +2006,7 @@ public final class GameTests {
                         e.task = Dispatch.T_NONE;
                         below.add(e);
                     }
-                    java.lang.reflect.Method sp = World.class.getDeclaredMethod("droneSpeaker", World.Drone.class);
+                    WM sp = wm("droneSpeaker", World.Drone.class);
                     sp.setAccessible(true);
                     w.update(1 / 30f);
                     for (Entity e : below) {
@@ -2043,7 +2043,7 @@ public final class GameTests {
                 check(w.rot(fresh) == 0 && Math.abs(w.rot(old) - World.ROT_MAX) < 0.001f, "rot: none at first, then up to the most (" + w.rot(old) + ")");
                 old.want = fresh.want = 20;
                 old.mx = fresh.mx = 1;
-                java.lang.reflect.Method mv = World.class.getDeclaredMethod("move", Entity.class, float.class);
+                WM mv = wm("move", Entity.class, float.class);
                 mv.setAccessible(true);
                 float ox = old.x, fx = fresh.x;
                 for (int k = 0; k < 30; k++) {
@@ -2071,7 +2071,7 @@ public final class GameTests {
                 lead.leadsHorde = true;
                 lead.hordeSize = 20;
                 w.update(1 / 30f);
-                java.lang.reflect.Method pr = World.class.getDeclaredMethod("pickRoam", Entity.class);
+                WM pr = wm("pickRoam", Entity.class);
                 pr.setAccessible(true);
                 boolean marched = false;
                 for (int k = 0; k < 60 && !marched; k++) {
@@ -2088,7 +2088,7 @@ public final class GameTests {
                 w.alert = 2;
                 Field ob = World.class.getDeclaredField("outbreak");
                 ob.setAccessible(true);
-                java.lang.reflect.Method fh = World.class.getDeclaredMethod("fieldHospital");
+                WM fh = wm("fieldHospital");
                 fh.setAccessible(true);
                 w.spawn(Entity.ZOMBIE, far[0], far[1]);
                 w.update(1 / 30f);
@@ -2415,7 +2415,7 @@ public final class GameTests {
                     pack.add(z);
                 }
                 for (int f = 0; f < 3; f++) w.update(1 / 30f);
-                java.lang.reflect.Method tg = World.class.getDeclaredMethod("throwGrenade", Entity.class, float.class, float.class);
+                WM tg = wm("throwGrenade", Entity.class, float.class, float.class);
                 tg.setAccessible(true);
                 // (Straight onto them: no scatter.)
                 tg.invoke(w, soldier, p[0] + 2, p[1] + 2);
@@ -2632,9 +2632,9 @@ public final class GameTests {
                 if (b.doorX >= b.x0 && b.doorX <= b.x1) ox = b.x0 - 20;
                 check(!city.los(ox, oy, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2), "not through the wall");
                 // Walking in from the street to the far room, and out again: every step a short one, never a jump.
-                java.lang.reflect.Method walk = World.class.getDeclaredMethod("walkToSpot", Entity.class, float.class, float.class, float.class);
+                WM walk = wm("walkToSpot", Entity.class, float.class, float.class, float.class);
                 walk.setAccessible(true);
-                java.lang.reflect.Method move = World.class.getDeclaredMethod("move", Entity.class, float.class);
+                WM move = wm("move", Entity.class, float.class);
                 move.setAccessible(true);
                 java.lang.reflect.Field budget = World.class.getDeclaredField("pathBudget");
                 budget.setAccessible(true);
@@ -2847,7 +2847,7 @@ public final class GameTests {
                 check(at != null, "police have somewhere to come in from");
                 // Run out the clock: failed.
                 w.missionStart = w.time - m0.limit - 1;
-                java.lang.reflect.Method life = World.class.getDeclaredMethod("cityLife");
+                WM life = wm("cityLife");
                 life.setAccessible(true);
                 life.invoke(w);
                 check(w.missionResult == 2 && "Out of time.".equals(w.missionWhy), "out of time, the mission's failed (" + w.missionResult + ", " + w.missionWhy + ")");
@@ -2982,7 +2982,7 @@ public final class GameTests {
                     lw.evCount = 0;
                 }
                 // (However quickly the police get on top of the dead: the outbreak's still on for this.)
-                java.lang.reflect.Method raid = World.class.getDeclaredMethod("raiders");
+                WM raid = wm("raiders");
                 raid.setAccessible(true);
                 for (int k = 0; k < 600 && formed.getInt(lw) == 0; k++) {
                     lw.outbreak = true;
@@ -3528,7 +3528,7 @@ public final class GameTests {
                 check(!w.dispatch.zones.isEmpty(), "a safe zone");
                 Dispatch.SafeZone zone = w.dispatch.zones.get(0);
                 Entity eng = w.spawnSoldier(Entity.ROLE_ENGINEER, zone.x, zone.y);
-                java.lang.reflect.Method ew = World.class.getDeclaredMethod("engineersWire");
+                WM ew = wm("engineersWire");
                 ew.setAccessible(true);
                 java.lang.reflect.Field wcd = World.class.getDeclaredField("wireCd");
                 wcd.setAccessible(true);
@@ -3545,7 +3545,7 @@ public final class GameTests {
                 int zoneWire = w.defences.wires.size() - wiresBefore;
                 check(zoneWire > 0 && zoneWire <= World.ZONE_WIRE, "engineers wire the zone's approaches, up to ten coils (" + zoneWire + ")");
                 // The situation, on the radio.
-                java.lang.reflect.Method sit = World.class.getDeclaredMethod("sitrep");
+                WM sit = wm("sitrep");
                 sit.setAccessible(true);
                 int said = w.dispatch.messageCount;
                 w.outbreakTime = 300;
@@ -3613,7 +3613,7 @@ public final class GameTests {
                 lead.leadsHorde = true;
                 for (int k = 1; k < horde.size(); k++) horde.get(k).hordeLeader = lead;
                 float before = lead.maxHp;
-                java.lang.reflect.Method th = World.class.getDeclaredMethod("thinkHorde", Entity.class);
+                WM th = wm("thinkHorde", Entity.class);
                 th.setAccessible(true);
                 // (A leader of a while, with a fresh count of its horde.)
                 lead.leadSeen = true;
@@ -3630,7 +3630,7 @@ public final class GameTests {
                 Entity sniper = w.spawnSoldier(Entity.ROLE_SNIPER, sx - 60, sy);
                 sniper.ammo = sniper.reserve = 0;
                 Entity near = horde.get(1);
-                java.lang.reflect.Method pick = World.class.getDeclaredMethod("pickTarget", Entity.class, float.class);
+                WM pick = wm("pickTarget", Entity.class, float.class);
                 pick.setAccessible(true);
                 w.update(1 / 30f);
                 w.evCount = 0;
@@ -3674,7 +3674,7 @@ public final class GameTests {
                 w.alphasKilled++;
                 check(w.score() >= sc, "alphas score");
                 // The mop-up: down to a handful, each one's whereabouts is known.
-                java.lang.reflect.Method mop = World.class.getDeclaredMethod("mopUp");
+                WM mop = wm("mopUp");
                 mop.setAccessible(true);
                 w.outbreak = true;
                 w.outbreakTime = 300;
@@ -3700,7 +3700,7 @@ public final class GameTests {
                 Entity stuck = w.spawn(Entity.ZOMBIE, sx, sy);
                 stuck.x = (wall.x0 + wall.x1) / 2;
                 stuck.y = (wall.y0 + wall.y1) / 2;
-                java.lang.reflect.Method un = World.class.getDeclaredMethod("unstick");
+                WM un = wm("unstick");
                 un.setAccessible(true);
                 java.lang.reflect.Field ucd = World.class.getDeclaredField("unstickCd");
                 ucd.setAccessible(true);
@@ -3851,7 +3851,7 @@ public final class GameTests {
                 gw.layWire(gz.x + 10, gz.y);
                 gw.outbreak = true;
                 gw.outbreakTime = 300;
-                java.lang.reflect.Method mop = World.class.getDeclaredMethod("mopUp");
+                WM mop = wm("mopUp");
                 mop.setAccessible(true);
                 mop.invoke(gw);
                 check(gw.lastDead.length > 0, "the last of them known");
@@ -4069,7 +4069,7 @@ public final class GameTests {
                     w.update(1 / 30f);
                     w.evCount = 0;
                 }
-                java.lang.reflect.Method pick = World.class.getDeclaredMethod("pickTarget", Entity.class, float.class);
+                WM pick = wm("pickTarget", Entity.class, float.class);
                 pick.setAccessible(true);
                 gun.fear = 5;
                 gun.x = p[0];
@@ -4421,7 +4421,7 @@ public final class GameTests {
                 }
                 check(a != null && b != null, "two bases near each other");
                 a.walled = b.walled = true;
-                java.lang.reflect.Method jb = World.class.getDeclaredMethod("joinBases");
+                WM jb = wm("joinBases");
                 jb.setAccessible(true);
                 jb.invoke(w);
                 check(w.bases.size() == 1 && w.bases.get(0).settlement, "they join into one settlement");
@@ -4510,7 +4510,7 @@ public final class GameTests {
                     e.leader = null;
                 }
                 lead.lodZ = 5;
-                java.lang.reflect.Method bands = World.class.getDeclaredMethod("bands");
+                WM bands = wm("bands");
                 bands.setAccessible(true);
                 bands.invoke(w);
                 int joined = 0;
@@ -4818,7 +4818,7 @@ public final class GameTests {
                 Entity hid = w.spawn(Entity.CIVILIAN, spot[0], spot[1]);
                 hid.hasGun = true;
                 hid.hp = hid.maxHp = 1e6f;
-                java.lang.reflect.Method fire = World.class.getDeclaredMethod("fire", Entity.class, Entity.class, float.class, float.class);
+                WM fire = wm("fire", Entity.class, Entity.class, float.class, float.class);
                 fire.setAccessible(true);
                 int hitsHid = 0, hitsOpen = 0;
                 for (int k = 0; k < 400; k++) {
@@ -4845,7 +4845,7 @@ public final class GameTests {
                     fire.invoke(w, shooter, hid, 60f, 300f);
                 }
                 check(hid.suppress > 0.5f, "pinned down by fire (" + hid.suppress + ")");
-                java.lang.reflect.Method cs = World.class.getDeclaredMethod("coverStep", Entity.class, float.class);
+                WM cs = wm("coverStep", Entity.class, float.class);
                 cs.setAccessible(true);
                 hid.lastAimT = -99;
                 for (int k = 0; k < 90; k++) cs.invoke(w, hid, 1 / 30f);
@@ -5380,7 +5380,7 @@ public final class GameTests {
     }
 
     private static Entity pickT(World w, Entity e, float r) throws Exception {
-        java.lang.reflect.Method m = World.class.getDeclaredMethod("pickTarget", Entity.class, float.class);
+        WM m = wm("pickTarget", Entity.class, float.class);
         m.setAccessible(true);
         return (Entity) m.invoke(w, e, r);
     }
@@ -5400,4 +5400,44 @@ public final class GameTests {
         onDraw.setAccessible(true);
         onDraw.invoke(v, new Canvas(img.createGraphics()));
     }
+
+    /**
+     * ((27.3) A method of the World's, wherever it now lives: on World itself, or on one of the systems World was split
+     * into (w.combat, w.zombieAI, ...). Invoked with the World as the target, like the Method it stands for was.
+     */
+    static final class WM {
+        final java.lang.reflect.Method m;
+        final java.lang.reflect.Field holder;
+
+        WM(java.lang.reflect.Method m, java.lang.reflect.Field holder) {
+            this.m = m;
+            this.holder = holder;
+        }
+
+        void setAccessible(boolean b) {
+            m.setAccessible(b);
+        }
+
+        Object invoke(Object target, Object... args) throws Exception {
+            return m.invoke(holder == null ? target : holder.get(target), args);
+        }
+    }
+
+    static WM wm(String name, Class<?>... types) throws Exception {
+        try {
+            return new WM(World.class.getDeclaredMethod(name, types), null);
+        } catch (NoSuchMethodException e) {
+            for (java.lang.reflect.Field f : World.class.getDeclaredFields()) {
+                if (f.getType().isPrimitive() || f.getType().getPackage() != World.class.getPackage()) continue;
+                try {
+                    java.lang.reflect.Method m = f.getType().getDeclaredMethod(name, types);
+                    f.setAccessible(true);
+                    return new WM(m, f);
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+            throw e;
+        }
+    }
+
 }
