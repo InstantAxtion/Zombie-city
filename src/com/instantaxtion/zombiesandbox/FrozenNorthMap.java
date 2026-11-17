@@ -89,10 +89,17 @@ final class FrozenNorthMap extends RegionMap {
             }
         // Blocks the water reaches cut back from it; the streets cut off stop short of it.
         boolean alongX = side >= 2;
-        cutBlocks(open, !alongX, r);
-        cutBlocks(inlet, alongX, r);
+        cutBlocks(open, !alongX, r, 4);
+        cutBlocks(inlet, alongX, r, 4);
         for (int i = 0; i < n; i++) if (bay[i]) clear(i, WATER);
-        riverMap.pruneRiverRoads();
+        // The shore road in town, the quay between it and the water; the streets that ran on into the bay end at it.
+        boolean[] inTown = new boolean[n];
+        for (int y = Math.max(0, by0 - 1); y < Math.min(city.h, by1 + 1); y++)
+            for (int x = Math.max(0, bx0 - 1); x < Math.min(city.w, bx1 + 1); x++) inTown[y * city.w + x] = true;
+        boolean[] shore = new boolean[n];
+        for (int i = 0; i < n; i++) shore[i] = bay[i];
+        rimRoad(shore, 2, 4, (byte) (alongX ? 1 : 2));
+        for (int i = 0; i < n; i++) if (!inTown[i] && city.tiles[i] == ROAD && city.roadDir[i] != 0 && !nearTownRoad(i, bx0, by0, bx1, by1)) clear(i, GRASS);
         dropRoadless(r);
         quays();
         // Districts out on the snow have no name to show.
@@ -105,6 +112,11 @@ final class FrozenNorthMap extends RegionMap {
         station();
         cabins();
         return true;
+    }
+
+    boolean nearTownRoad(int i, int bx0, int by0, int bx1, int by1) {
+        int x = i % city.w, y = i / city.w;
+        return x >= bx0 - 1 && x <= bx1 && y >= by0 - 1 && y <= by1;
     }
 
     /** Along the town's shore: a paved quay, and piers out into the ice with ships frozen in beside them. */
@@ -226,7 +238,7 @@ final class FrozenNorthMap extends RegionMap {
 
     void cabins() {
         String[] names = {"Trapper's Cabin", "Hunting Lodge", "Fishing Cabin", "Log Cabin", "Homestead", "Ranger's Cabin", "Old Cabin"};
-        int want = Math.round(clamp(L / 55f, 3, 18));
+        int want = Math.round(clamp(L / 55f, 5, 18));
         for (int t = 0; t < want * 30 && cabins < want; t++) {
             int[] s = spot(9, 7, 3, 1);
             if (s == null) continue;

@@ -34,7 +34,7 @@ final class CanyonMap extends RegionMap {
     /** The buttes and spires: {x, y, rx, ry, height} in tiles. */
     final List<float[]> rocks = new ArrayList<float[]>();
     /** The switchbacks' roads and the bridges, for the test. */
-    int switchbacks, bridges;
+    int switchbacks, bridges, homes;
 
     int idx(int a, int b) {
         int A = flip ? L - 1 - a : a;
@@ -62,7 +62,7 @@ final class CanyonMap extends RegionMap {
         Random rr = new Random(city.cfg.seed * 7331L + 24);
         vertical = rr.nextBoolean();
         flip = rr.nextBoolean();
-        CW = Math.round(clamp(Math.round(L * 0.016f) + 10, 12, 20));
+        CW = Math.round(clamp(Math.round(L * 0.016f) + 10, L < 160 ? 11 : 12, 20));
         int legs = 1 + (CW - 6) / 5;
         int S = Math.round(clamp(L * 0.05f, 7, 14));
         byte dirA = (byte) (vertical ? 1 : 2), dirB = (byte) (vertical ? 2 : 1);
@@ -198,18 +198,18 @@ final class CanyonMap extends RegionMap {
         cutBlocks(gorge, !vertical, rr);
         cutBlocks(cliff, vertical, rr);
         cutBlocks(wash, !vertical, rr);
-        // The rock as water for now, so the streets cut off by it stop at their last junction (see RiverMap).
+        // The rock, the creek down the gorge, the sand of the wash.
         for (int i = 0; i < n; i++) {
-            if ((gorge[i] || cliff[i]) && !keep[i]) clear(i, WATER);
-            else if (wash[i] && city.tiles[i] != ROAD) clear(i, SAND);
+            if ((gorge[i] || cliff[i]) && !keep[i]) {
+                int a = aOf(i), b = bOf(i);
+                boolean creek = gorge[i] && Math.abs(b + 0.5f - gc[a]) <= Math.max(0.8f, ghw[a] * 0.22f);
+                clear(i, creek ? WATER : ROCK);
+            } else if (wash[i] && city.tiles[i] != ROAD) clear(i, SAND);
         }
-        riverMap.pruneRiverRoads();
-        for (int i = 0; i < n; i++) {
-            if (city.tiles[i] != WATER) continue;
-            int a = aOf(i), b = bOf(i);
-            boolean creek = gorge[i] && Math.abs(b + 0.5f - gc[a]) <= Math.max(0.8f, ghw[a] * 0.22f);
-            if (!creek) clear(i, ROCK);
-        }
+        // A road along the rim of the gorge and along the top and the foot of the cliff: the streets that ran on
+        // into the rock end at it.
+        rimRoad(gorge, 1, 3, dirA);
+        rimRoad(cliff, 1, 3, dirB);
         // The switchbacks: the straight street down the cliff made a road that winds down it, hairpin by hairpin.
         for (int[] s : sites) {
             int bc = s[2], aTop = s[3];
@@ -253,7 +253,7 @@ final class CanyonMap extends RegionMap {
 
     @Override
     public String toString() {
-        return "bridges " + bridges + " switchbacks " + switchbacks + " rocks " + rocks.size();
+        return "bridges " + bridges + " switchbacks " + switchbacks + " rocks " + rocks.size() + " homes " + homes;
     }
 
     void addPt(List<Float> pts, float a, float b) {
@@ -269,7 +269,7 @@ final class CanyonMap extends RegionMap {
 
     /** A butte or a cluster of spires on a few blocks of the canyon floor and the mesa, standing in open ground. */
     void buttes(Random rr) {
-        int want = Math.max(1, Math.min(5, L / 180 + 1));
+        int want = L < 200 ? 0 : Math.max(1, Math.min(5, L / 180 + 1));
         List<int[]> cands = new ArrayList<int[]>();
         for (int[] b : city.blocks) {
             if (b.length > 4 || b[2] - b[0] < 14 || b[3] - b[1] < 14) continue;
@@ -326,6 +326,8 @@ final class CanyonMap extends RegionMap {
             rockBlob(x + 0.5f, y + 0.5f, 1.1f, 1.1f, 5 + r.nextFloat() * 7, r);
             want--;
         }
+        // Adobe homes on the ground left open along the rim roads.
+        homes = roadsideHomes(L / 6, r, new int[]{0xFFB8683E, 0xFFA05A3A, 0xFFC88A5A, 0xFF8A4A30}, new int[]{0xFFD8B088, 0xFFE0C49C, 0xFFC89870});
         // Junipers, scrub and the odd cactus for trees.
         for (int i = 0; i < city.w * city.h; i++) {
             if (city.tiles[i] != TREE) continue;

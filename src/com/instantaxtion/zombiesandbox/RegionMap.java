@@ -108,6 +108,74 @@ abstract class RegionMap extends CityPart {
         }
     }
 
+    /**
+     * A road along the edge of mask (rock or water): the open ground d0 to d1 tiles from it (counting diagonally),
+     * outside every block, running the way dir (1 north-south, 2 east-west) - the streets that ran into the mask
+     * now end at it.
+     */
+    void rimRoad(boolean[] mask, int d0, int d1, byte dir) {
+        int n = city.w * city.h;
+        boolean[] inBlock = new boolean[n];
+        for (int[] b : city.blocks)
+            for (int y = Math.max(0, b[1]); y < Math.min(city.h, b[3]); y++)
+                for (int x = Math.max(0, b[0]); x < Math.min(city.w, b[2]); x++) inBlock[y * city.w + x] = true;
+        int[] d = new int[n];
+        int[] q = new int[n];
+        java.util.Arrays.fill(d, 99);
+        int hd = 0, tl = 0;
+        for (int i = 0; i < n; i++)
+            if (mask[i]) {
+                d[i] = 0;
+                q[tl++] = i;
+            }
+        while (hd < tl) {
+            int c = q[hd++], x = c % city.w, y = c / city.w;
+            if (d[c] >= d1) continue;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++) {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= city.w || ny >= city.h) continue;
+                    int j = ny * city.w + nx;
+                    if (d[j] <= d[c] + 1) continue;
+                    d[j] = d[c] + 1;
+                    q[tl++] = j;
+                }
+        }
+        for (int i = 0; i < n; i++) {
+            if (d[i] < d0 || d[i] > d1 || inBlock[i] || mask[i]) continue;
+            byte t = city.tiles[i];
+            if (t == ROAD) {
+                if (city.roadDir[i] != dir) city.roadDir[i] = 3;
+                continue;
+            }
+            if (t != GRASS && t != TREE && t != SIDEWALK && t != SAND) continue;
+            city.tiles[i] = ROAD;
+            city.roadDir[i] = dir;
+        }
+    }
+
+    /**
+     * Homes on the open ground left beside a road (strips too narrow for a block): up to max of them, each three by
+     * four tiles with clear ground round it and a road a step from its door.
+     */
+    int roadsideHomes(int max, Random rr, int[] roofs, int[] walls) {
+        int made = 0;
+        for (int y = 3; y < city.h - 6 && made < max; y++)
+            for (int x = 3; x < city.w - 6 && made < max; x++) {
+                boolean tall = ((x * 7 + y * 3) & 1) == 0;
+                int w = tall ? 3 : 4, h = tall ? 4 : 3;
+                if (!open(x - 1, y - 1, w + 2, h + 2)) continue;
+                boolean road = false;
+                for (int k = -2; k <= Math.max(w, h) + 1 && !road; k++)
+                    road = gen.isRoad(x + k, y - 2) || gen.isRoad(x + k, y + h + 1) || gen.isRoad(x - 2, y + k) || gen.isRoad(x + w + 1, y + k);
+                if (!road || rr.nextFloat() < 0.3f) continue;
+                city.natureLot(x, y, w, h, HOUSE, 1, roofs[rr.nextInt(roofs.length)], walls[rr.nextInt(walls.length)], null, -1);
+                made++;
+                x += w + 2;
+            }
+        return made;
+    }
+
     boolean onMain(int x, int y, int[] comp, int big) {
         return x >= 0 && y >= 0 && x < city.w && y < city.h && comp[y * city.w + x] == big;
     }
@@ -205,6 +273,10 @@ abstract class RegionMap extends CityPart {
      * three tiles clear, the ground between left open with the odd tree.
      */
     void cutBlocks(boolean[] mask, boolean acrossX, Random rr) {
+        cutBlocks(mask, acrossX, rr, 3);
+    }
+
+    void cutBlocks(boolean[] mask, boolean acrossX, Random rr, int gap) {
         int W = city.w;
         for (int k = city.blocks.size() - 1; k >= 0; k--) {
             int[] bk = city.blocks.get(k);
@@ -219,7 +291,7 @@ abstract class RegionMap extends CityPart {
             if (wh < wl) continue;
             city.blocks.remove(k);
             int lo0 = acrossX ? bk[0] : bk[1], hi0 = acrossX ? bk[2] : bk[3];
-            int q0 = wl - 3, q1 = wh + 3;
+            int q0 = wl - gap, q1 = wh + gap;
             if (q0 - lo0 >= 7) city.blocks.add(acrossX ? new int[]{bk[0], bk[1], q0, bk[3]} : new int[]{bk[0], bk[1], bk[2], q0});
             else q0 = lo0;
             if (hi0 - q1 - 1 >= 7) city.blocks.add(acrossX ? new int[]{q1 + 1, bk[1], bk[2], bk[3]} : new int[]{bk[0], q1 + 1, bk[2], bk[3]});
