@@ -250,6 +250,11 @@ final class CanyonMap extends RegionMap {
         return true;
     }
 
+    @Override
+    public String toString() {
+        return "bridges " + bridges + " switchbacks " + switchbacks + " rocks " + rocks.size();
+    }
+
     void addPt(List<Float> pts, float a, float b) {
         pts.add(a);
         pts.add(b);
