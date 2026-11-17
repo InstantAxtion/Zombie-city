@@ -1086,16 +1086,19 @@ final class CityGenerator extends CityPart {
     private void placeServices() {
         for (int n = 0; n < city.cfg.policeStations(); n++) {
             List<Integer> options = new ArrayList<Integer>();
+            // ((28.0) Map version 41: an island with no room for its precinct doesn't stop the rest; then, if there's
+            // still nowhere, the stations may stand closer together. Theme Park Island and the Archipelago often had one.)
+            for (int relax = 0; relax < (city.cfg.civic >= 41 ? 3 : 1) && options.isEmpty(); relax++)
             for (int k = 0; k < city.blocks.size(); k++) {
                 int[] b = city.blocks.get(k);
                 if (used[k] || b[2] - b[0] - 2 < 6 || b[3] - b[1] - 2 < 6) continue;
                 float cx = (b[0] + b[2]) / 2f * T, cy = (b[1] + b[3]) / 2f * T;
                 // (On the Islands, the first three precincts go one to each island.)
                 // ((25.0) On Theme Park Island the headquarters is in the staff town.)
-                if (city.islandRects != null && n < city.islandRects.length && city.island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != (city.themePark ? 1 - n : n)) continue;
+                if (relax == 0 && city.islandRects != null && n < city.islandRects.length && city.island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != (city.themePark ? 1 - n : n)) continue;
                 boolean near = false;
                 // ((28.0) Closer together on the water maps' small towns and islands.)
-                float spread = special != null ? special.spread() : 1f;
+                float spread = (special != null ? special.spread() : 1f) * (relax == 2 ? 0.5f : 1f);
                 for (Facility f : city.facilities)
                     if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < spread * city.w * T / (city.cfg.policeStations() > 3 ? 4.5f : 3f))
                             || World.hypot(f.x - cx, f.y - cy) < spread * Math.max(20, city.w / 6f) * T) near = true;
