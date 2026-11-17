@@ -425,7 +425,7 @@ final class City {
         rnd = new Random(cfg.seed);
         Variants.extra = new Random(cfg.seed * 7919L + 101);
         Random nameRnd = new Random(cfg.seed * 31 + 7);
-        country = Country.get(cfg.country());
+        country = WaterMap.country(cfg, Country.get(cfg.country()));
         name = country.townName(nameRnd);
         tiles = new byte[w * h];
         solid = new boolean[w * h];

@@ -81,6 +81,8 @@ final class Landmarks {
             LandmarkArt13.register(l);
             // ((26.0) The Space Center's own, after those.)
             LandmarkArt14.register(l);
+            // ((28.0) Bridge City's, Swamp Bayou's and Lighthouse Coast's own, after those.)
+            WaterLandmarks.register(l);
             for (int i = 0; i < l.size(); i++) l.get(i).id = i;
             all = l;
         }
