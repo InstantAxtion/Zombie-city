@@ -318,10 +318,18 @@ final class FleetService {
         // ((16.7) But an ammo truck has nobody aboard to walk the rest, and the fight it's for is waiting on it: held
         // up, it plans its way again and keeps at it a good while before it gives up - it used to stop for good on
         // an open road thousands of feet short after four seconds in a jam.)
-        if (v.ammoTruck && v.state == DRIVE && !arrived && v.stuckTimer > 4 && v.jamTries < 4 && v.rerouteCd <= 0 && fleet.routing.route(v, v.tx, v.ty)) {
-            v.jamTries++;
-            v.rerouteCd = 5;
-            v.pathField = null;
+        // ((27.5) It waits out the gap between tries, rather than giving up in it: with no passing a queue on the wrong
+        // side of the road any more, a light's queue or a knot holds it longer than four seconds, and it stopped for good
+        // after its second try, eight seconds in, a long walk short of the fight - its soldiers walked off to find it,
+        // and it went home before they got there.)
+        if (v.ammoTruck && v.state == DRIVE && !arrived && v.stuckTimer > 4 && v.jamTries < 4) {
+            if (v.rerouteCd <= 0) {
+                if (fleet.routing.route(v, v.tx, v.ty)) {
+                    v.jamTries++;
+                    v.rerouteCd = 5;
+                    v.pathField = null;
+                } else arrived = true;
+            }
         } else if (v.stuckTimer > (v.reinforcement ? 12 : 4)) arrived = true;
         if (arrived) return arrivedStep(v, dt);
         fleet.driving.hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));

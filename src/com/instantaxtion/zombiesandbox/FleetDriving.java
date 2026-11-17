@@ -1475,10 +1475,19 @@ final class FleetDriving {
                 float sw = off - sg * City.T * 1.1f, sw2 = off - sg * City.T * 0.75f;
                 if (roadAt(bx, by, ddx, ddy, sw)) off = sw;
                 else if (roadAt(bx, by, ddx, ddy, sw2)) off = sw2;
+                // (In a car park or a yard there's no kerb: round by the other side, if that's clear of the building.)
+                else if (lotAt(bx, by) && roadAt(bx, by, ddx, ddy, off + sg * City.T * 1.1f)) off = off + sg * City.T * 1.1f;
                 else v.passing = 0;
             }
         }
         return off;
+    }
+
+    /** ((27.5) Tile (bx, by) is a car park or a yard (a station's lot, a base's). */
+    boolean lotAt(int bx, int by) {
+        if (bx < 0 || by < 0 || bx >= city.w || by >= city.h) return false;
+        byte t = city.tiles[bx + by * city.w];
+        return t == City.LOT || t == City.BASE;
     }
 
     /** ((27.5) The road itself (not the pavement, a plaza or a lot) at offset off across tile (bx, by), heading (ddx, ddy). */
@@ -1541,6 +1550,11 @@ final class FleetDriving {
         }
         int own = city.tileIndex(v.x, v.y);
         if (own < 0) return false;
+        // (In a car park or a yard - a station's lot, a base's - behind one parked there, or anything else that isn't
+        // moving: round it, there's no lane or pavement to keep to. Its nose there is often still swinging round a turn,
+        // or pointing at the building, so a line straight ahead of it ran into the wall, and a car leaving the lot waited
+        // behind one parked in a bay for good - with the lot's other cars, one off to a call among them, queued behind it.)
+        if ((stuck || o.parked || o.broken) && lotAt(own % city.w, own / city.w)) return true;
         boolean oncoming = city.lanesEachWay(own % city.w, own / city.w, dx, dy) <= 1;
         float lat = oncoming ? -City.T * 1.05f : laneOf(v) == 0 ? City.T * 0.95f : -City.T * 0.95f;
         // All of it road (or a lane and its verge, out in the country). (On a narrow street, a little less far over.)

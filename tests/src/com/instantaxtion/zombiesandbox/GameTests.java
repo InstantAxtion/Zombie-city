@@ -292,8 +292,9 @@ public final class GameTests {
                 // (An unprepared city has only half the spare rounds.)
                 boolean half = w.readiness == 1;
                 for (Entity e : w.entities) {
+                    // ((27.5) A 15-round magazine and four spares, from three.)
                     if (e.type == Entity.COP && e.role == 0 && e.agency == 0 && e.weapon == Entity.W_STD)
-                        check(e.ammo + e.reserve == (half ? 15 + 22 : 60), "an officer carries 60 rounds (" + (e.ammo + e.reserve) + ")");
+                        check(e.ammo + e.reserve == (half ? 15 + 30 : 75), "an officer carries 75 rounds (" + (e.ammo + e.reserve) + ")");
                     if (e.type == Entity.SOLDIER && e.role == Entity.ROLE_RIFLE)
                         check(e.ammo + e.reserve == (half ? 30 + 90 : 210), "a soldier carries 210 rounds (" + (e.ammo + e.reserve) + ")");
                 }
@@ -837,19 +838,21 @@ public final class GameTests {
                     for (Entity e : line) if (e.goal == World.A_FALLBACK) fallBacks++;
                 }
                 check(fallBacks == 0, "six officers together hold against fourteen (" + fallBacks + ")");
-                // Badly hurt with one in sight: pulls back. (On their own, so nobody else shoots it first.)
+                // Badly hurt with one in sight: ((27.5) out of it - to care (FleetMedevac). With the dead right there, they call for
+                // a ride out and fight on where they are till it comes, rather than turning their back to pull away on foot.)
+                // (On their own, so nobody else shoots it first.)
                 w.clearZombies();
                 for (int k = 1; k < line.size(); k++) line.get(k).dead = line.get(k).removed = true;
                 Entity hurt = line.get(0);
                 hurt.hp = hurt.maxHp * 0.2f;
                 hurt.task = Dispatch.T_NONE;
                 w.spawn(Entity.ZOMBIE, hurt.x + 60, hurt.y);
-                boolean pulledBack = false;
-                for (int f = 0; f < 45 && !pulledBack; f++) {
+                boolean toCare = false;
+                for (int f = 0; f < 45 && !toCare; f++) {
                     w.update(1 / 30f);
-                    if (hurt.goal == World.A_WOUNDED) pulledBack = true;
+                    if (hurt.task == Dispatch.T_HEAL && hurt.waitPickup) toCare = true;
                 }
-                check(hurt.dead || pulledBack, "a badly hurt officer pulls back");
+                check(hurt.dead || toCare, "a badly hurt officer calls for a ride out to care (" + hurt.task + ", " + hurt.waitPickup + ")");
                 // On the way to a vehicle with one of the dead right there: deals with it first.
                 w.clearZombies();
                 Fleet.Vehicle ride = null;
@@ -2182,6 +2185,7 @@ public final class GameTests {
                 c.seed = 78;
                 c.normalize();
                 c.seed = 78;
+                c.civic = 39; // the map it was set up on
                 World w = new World(c);
                 w.populate(c);
                 for (int f = 0; f < 30; f++) w.update(1 / 30f);
@@ -2818,6 +2822,7 @@ public final class GameTests {
             public void run() throws Exception {
                 Campaign.Mission m0 = Campaign.MISSIONS[0];
                 CityConfig c = Campaign.config(0);
+                c.civic = 39; // the map it was set up on
                 check(c.mission == 0 && c.zombies() == m0.foes, "the mission's city and enemy");
                 World w = new World(c);
                 w.rnd.setSeed(3);
@@ -6072,7 +6077,9 @@ public final class GameTests {
                     dead.add(z);
                 }
                 p.fireCd = 0;
-                int shells = w.fireMissions;
+                // ((27.5) A big fight with people at it brings the base's fire support truck out too, and its salvos count
+                // as fire missions: the post's own is the one left over.)
+                int shells = w.fireMissions, salvos = w.fleet.fireSupport.salvos;
                 boolean marked = false;
                 for (int f = 0; f < 30 * 16; f++) {
                     for (Entity o : w.entities)
@@ -6084,7 +6091,8 @@ public final class GameTests {
                 }
                 int left = 0;
                 for (Entity z : dead) if (!z.dead) left++;
-                check(p.missions == 1 && w.fireMissions == shells + 1 && marked, "the post called one fire mission on them, marked while inbound (" + p.missions + ")");
+                check(p.missions == 1 && w.fireMissions - (w.fleet.fireSupport.salvos - salvos) == shells + 1 && marked,
+                        "the post called one fire mission on them, marked while inbound (" + p.missions + ", " + (w.fireMissions - shells) + " in all)");
                 check(left < dead.size() - 10, "and the shells landed among them (" + left + " of " + dead.size() + " left)");
                 check(hurt.hp >= hurt.maxHp && p.treated >= 1, "a wounded officer at the tent was patched up (" + p.treated + ", " + hurt.hp + "/" + hurt.maxHp + ", " + (int) Math.hypot(hurt.x - p.x, hurt.y - p.y) + " off, up " + p.up + ")");
                 check(w.fleet.status(p.truck).contains("treated") && w.fleet.status(p.truck).contains("fire mission"), "both on its status line: " + w.fleet.status(p.truck));
