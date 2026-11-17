@@ -266,39 +266,6 @@ final class CanyonMap extends RegionMap {
         return aF[b];
     }
 
-    /**
-     * The blocks mask runs through: each cut back to the part either side of it (across x if acrossX, else across y),
-     * three tiles clear, the ground between left open with the odd tree.
-     */
-    void cutBlocks(boolean[] mask, boolean acrossX, Random rr) {
-        int W = city.w;
-        for (int k = city.blocks.size() - 1; k >= 0; k--) {
-            int[] bk = city.blocks.get(k);
-            int wl = Integer.MAX_VALUE, wh = Integer.MIN_VALUE;
-            for (int y = bk[1]; y < bk[3]; y++)
-                for (int x = bk[0]; x < bk[2]; x++)
-                    if (mask[y * W + x]) {
-                        int c = acrossX ? x : y;
-                        wl = Math.min(wl, c);
-                        wh = Math.max(wh, c);
-                    }
-            if (wh < wl) continue;
-            city.blocks.remove(k);
-            int lo0 = acrossX ? bk[0] : bk[1], hi0 = acrossX ? bk[2] : bk[3];
-            int q0 = wl - 3, q1 = wh + 3;
-            if (q0 - lo0 >= 7) city.blocks.add(acrossX ? new int[]{bk[0], bk[1], q0, bk[3]} : new int[]{bk[0], bk[1], bk[2], q0});
-            else q0 = lo0;
-            if (hi0 - q1 - 1 >= 7) city.blocks.add(acrossX ? new int[]{q1 + 1, bk[1], bk[2], bk[3]} : new int[]{bk[0], q1 + 1, bk[2], bk[3]});
-            else q1 = hi0 - 1;
-            for (int y = bk[1]; y < bk[3]; y++)
-                for (int x = bk[0]; x < bk[2]; x++) {
-                    int c = acrossX ? x : y;
-                    if (c < q0 || c > q1 || mask[y * W + x]) continue;
-                    city.tiles[y * W + x] = rr.nextFloat() < 0.05f ? TREE : GRASS;
-                }
-        }
-    }
-
     /** A butte or a cluster of spires on a few blocks of the canyon floor and the mesa, standing in open ground. */
     void buttes(Random rr) {
         int want = Math.max(1, Math.min(5, L / 180 + 1));
