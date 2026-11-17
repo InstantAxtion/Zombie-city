@@ -18,7 +18,8 @@ import java.util.ArrayList;
  */
 final class SaveGame {
     // ((27.1) Still 78: 27.0 wrote saves at 78 (for a map since taken out again; a save on it is refused as a removed map).)
-    private static final int VERSION = 78;
+    // ((27.4) 79: the vehicles themselves (VehicleSave), at the very end.)
+    private static final int VERSION = 79;
 
     private SaveGame() {
     }
@@ -83,7 +84,15 @@ final class SaveGame {
                 out.writeInt(z.wantGuards);
             }
 
-            // People in vehicles are saved as if they had just got out.
+            // People in vehicles are saved as if they had just got out. ((27.4) Except those in a vehicle that's kept
+            // (VehicleSave): they're saved as they are, and put back aboard when it's loaded.)
+            ArrayList<Fleet.Vehicle> kept = new ArrayList<Fleet.Vehicle>();
+            java.util.IdentityHashMap<Fleet.Vehicle, Integer> keptIndex = new java.util.IdentityHashMap<Fleet.Vehicle, Integer>();
+            for (Fleet.Vehicle v : w.fleet.vehicles)
+                if (VehicleSave.keep(v)) {
+                    keptIndex.put(v, kept.size());
+                    kept.add(v);
+                }
             ArrayList<Entity> all = new ArrayList<Entity>();
             // ((12.0) Saved where they'd come out, without moving anyone in the game that carries on after the save;
             // and the stand-ins for those still aboard don't use up callsigns and squad places in it.)
@@ -99,7 +108,14 @@ final class SaveGame {
                     moved.put(e, new float[]{b.doorX, b.doorY});
                     all.add(e);
                 }
+            java.util.IdentityHashMap<Entity, Boolean> listed = new java.util.IdentityHashMap<Entity, Boolean>();
             for (Fleet.Vehicle v : w.fleet.vehicles) {
+                if (keptIndex.containsKey(v)) {
+                    for (Entity e : v.crew) if (listed.put(e, Boolean.TRUE) == null) all.add(e);
+                    for (Entity e : v.riders) if (listed.put(e, Boolean.TRUE) == null) all.add(e);
+                    if (v.realDriver && v.driver != null && v.driver.dead && listed.put(v.driver, Boolean.TRUE) == null) all.add(v.driver);
+                    continue;
+                }
                 // ((26.0) Those aboard a police boat out on the water come ashore at its mooring.)
                 float[] at = v.kind == Fleet.K_POLICE_BOAT ? Ops.ashoreAt(v) : new float[]{v.x, v.y};
                 for (Entity e : v.riders) {
@@ -498,6 +514,8 @@ final class SaveGame {
             out.writeInt(ops.ferried);
             out.writeInt(ops.sfCalls);
             writePost(out, ops.army);
+            // ((27.4) Version 79 (at the very end): the vehicles, with those aboard, and the convoys.)
+            VehicleSave.write(out, w, kept, keptIndex, index);
         } finally {
             moved = null;
             homeIndex = null;
@@ -686,6 +704,8 @@ final class SaveGame {
 
             int count = in.readInt();
             for (int i = 0; i < count; i++) w.entities.add(readEntity(in, w, d, version));
+            // ((27.4) Everyone as written, in order: the vehicles (at the end) say who of them is aboard.)
+            ArrayList<Entity> written = new ArrayList<Entity>(w.entities);
             if (version >= 2)
                 for (int i = 0; i < count; i++) {
                     int lead = in.readInt();
@@ -1155,13 +1175,14 @@ final class SaveGame {
                 }
                 if (version >= 73) {
                     Ops ops = w.ops;
-                    readPost(in, ops, ops.police);
+                    readPost(in, ops, ops.police, version);
                     ops.rescued = in.readInt();
                     ops.ferried = in.readInt();
                     ops.sfCalls = in.readInt();
-                    if (version >= 76) readPost(in, ops, ops.army);
+                    if (version >= 76) readPost(in, ops, ops.army, version);
                 }
             }
+            if (version >= 79) VehicleSave.read(in, w, written);
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
@@ -1282,10 +1303,15 @@ final class SaveGame {
         out.writeInt(p.resupplied);
     }
 
-    private static void readPost(DataInputStream in, Ops ops, Ops.Post p) throws IOException {
+    private static void readPost(DataInputStream in, Ops ops, Ops.Post p, int version) throws IOException {
         if (in.readBoolean()) {
             float x = in.readFloat(), y = in.readFloat(), a = in.readFloat(), px = in.readFloat(), py = in.readFloat(), hp = in.readFloat();
-            ops.restorePost(p, x, y, a, px, py, hp);
+            // ((27.4) From version 79 the truck itself is kept with the other vehicles (VehicleSave links it): just the tent.)
+            if (version >= 79) {
+                p.up = true;
+                p.x = px;
+                p.y = py;
+            } else ops.restorePost(p, x, y, a, px, py, hp);
         }
         p.cd = in.readFloat();
         p.setUp = in.readInt();

@@ -4682,6 +4682,59 @@ public final class GameTests {
                 }
             }
         });
+        test("27.4: vehicles are kept in a save", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 274;
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                // The police command truck sent out, and a patrol car on its beat.
+                float[] p = w.city.nearestDrivable(w.ops.police.truck.x + 600, w.ops.police.truck.y);
+                Fleet.Vehicle cp = w.ops.placePost(p[0], p[1]);
+                for (int f = 0; f < 30 * 4; f++) w.update(1 / 30f);
+                check(cp != null && !cp.crew.isEmpty() && cp.state != Fleet.WAIT, "a command truck out on the road with its crew");
+                Fleet.Vehicle car = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    if (v.type == Fleet.CRUISER && v.patrol && v.state == Fleet.PATROL && v.crew.size() == 2 && !v.parked) car = v;
+                check(car != null, "a patrol car out on its beat");
+                int kept = 0;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (VehicleSave.keep(v)) kept++;
+                java.util.Set<Integer> crewNames = new java.util.HashSet<Integer>();
+                for (Entity e : car.crew) crewNames.add(e.nameSeed);
+                w.stats.recount();
+                int cops = w.counts[Entity.COP];
+                File f = File.createTempFile("zc274", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                int back = 0;
+                Fleet.Vehicle lcar = null, lcp = null;
+                for (Fleet.Vehicle v : l.fleet.vehicles) {
+                    if (VehicleSave.keep(v)) back++;
+                    if (v.type == Fleet.CRUISER && v.number == car.number) lcar = v;
+                    if (v.kind == Fleet.K_COMMAND) lcp = v;
+                }
+                check(back == kept, "every one of them back (" + back + " of " + kept + ")");
+                check(lcar != null && Math.hypot(lcar.x - car.x, lcar.y - car.y) < 1 && lcar.state == Fleet.PATROL && lcar.crew.size() == 2,
+                        "the patrol car where it was, on patrol, with its two officers aboard");
+                java.util.Set<Integer> lNames = new java.util.HashSet<Integer>();
+                if (lcar != null) for (Entity e : lcar.crew) lNames.add(e.nameSeed);
+                check(lNames.equals(crewNames), "the same two officers");
+                boolean onFoot = false;
+                for (Entity e : l.entities) if (!e.dead && crewNames.contains(e.nameSeed) && e.type == Entity.COP) onFoot = true;
+                check(!onFoot, "and not on foot beside it as well");
+                check(lcp != null && l.ops.police.truck == lcp && Math.hypot(lcp.x - cp.x, lcp.y - cp.y) < 1 && lcp.crew.size() == cp.crew.size(),
+                        "the command truck still on the road with its crew, still the post's truck");
+                l.stats.recount();
+                check(l.counts[Entity.COP] == cops, "the police all counted (" + l.counts[Entity.COP] + " vs " + cops + ")");
+                float x0 = lcar.x, y0 = lcar.y;
+                for (int k = 0; k < 30 * 4; k++) l.update(1 / 30f);
+                check(Math.hypot(lcar.x - x0, lcar.y - y0) > 20 || lcar.state != Fleet.PATROL, "and they carry on (" + (int) Math.hypot(lcar.x - x0, lcar.y - y0) + ")");
+            }
+        });
         test("27.0: the armoured dead", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

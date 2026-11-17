@@ -540,6 +540,8 @@ final class Fleet {
     final City city;
     final ArrayList<Vehicle> vehicles = new ArrayList<Vehicle>();
     int unitCount;
+    /** ((27.4) The vehicles came back from a save (VehicleSave): the stations aren't stocked with cars afresh on top of them.) */
+    boolean fromSave;
     /** How many patrol cars the police keep on the streets. */
     int patrolTarget;
     /** ((11.4) Patrol cars on the streets, counted once a frame.) */

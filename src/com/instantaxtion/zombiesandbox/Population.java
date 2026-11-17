@@ -1047,7 +1047,8 @@ final class Population {
         // ((12.5) A game saved with civilians driving about: they're out of their cars and on foot.)
         for (int i = w.fleet.vehicles.size() - 1; i >= 0; i--) {
             Fleet.Vehicle v = w.fleet.vehicles.get(i);
-            if (v.type != Fleet.CAR || v.evacStop >= 0 || v.player != null || v.parked) continue;
+            // ((27.4) Nor a survivors' pickup or a convoy's bus, kept in the save: see VehicleSave.)
+            if (v.type != Fleet.CAR || v.evacStop >= 0 || v.player != null || v.parked || v.kind == Fleet.K_PICKUP || v.convoy != null) continue;
             for (Entity r : v.riders) w.rides.release(r, v.x, v.y);
             v.riders.clear();
             v.removedFromFleet = true;
@@ -1055,7 +1056,8 @@ final class Population {
         }
         w.fleet.stationHelis();
         w.ops.setupBoats();
-        w.fleet.stockStations();
+        // ((27.4) Not with the police cars kept in the save: they're all there already, crews and all.)
+        if (!w.fleet.fromSave) w.fleet.stockStations();
         w.fleet.stockBases();
         w.fleet.ensureDozers();
         int cops = 0;
