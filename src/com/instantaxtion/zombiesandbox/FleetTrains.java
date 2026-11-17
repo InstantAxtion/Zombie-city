@@ -57,6 +57,12 @@ final class FleetTrains {
         return false;
     }
 
+    /** The station it was coming to is behind it now (stopped at, or passed by). */
+    private static void passStop(Vehicle v, boolean two) {
+        if (two) v.busPhase++;
+        else v.pad = true;
+    }
+
     boolean updateTrain(Vehicle v, float dt) {
         float dir = (float) Math.cos(v.angle);
         if (v.state == WAIT) {
@@ -87,19 +93,29 @@ final class FleetTrains {
             return false;
         }
         float cruise = 110;
-        if (!v.pad && city.stationX >= 0) {
+        // ((28.0) Stadium City's light rail stops twice: at Central Station and at Stadium Station, in the order it
+        // comes to them. busPhase counts the stops behind it; everywhere else pad marks the one station passed.)
+        float sx = city.stationX;
+        boolean two = city.stadiumMap.stopX >= 0 && sx >= 0;
+        if (two) {
+            float s2 = city.stadiumMap.stopX;
+            boolean centralFirst = sx * dir < s2 * dir;
+            sx = v.busPhase == 0 ? (centralFirst ? sx : s2) : v.busPhase == 1 ? (centralFirst ? s2 : sx) : -1;
+            v.pad = sx < 0;
+        }
+        if (!v.pad && sx >= 0) {
             // Slow down for the station and stop with the train alongside the platform.
-            float ahead = (city.stationX + dir * TRAIN_LENGTH / 2 - v.x) * dir;
-            if (ahead < -4) v.pad = true;
+            float ahead = (sx + dir * TRAIN_LENGTH / 2 - v.x) * dir;
+            if (ahead < -4) passStop(v, two);
             else if (ahead < 340) {
-                boolean danger = w.countZombiesNear(city.stationX, v.y, 150) > 0;
+                boolean danger = w.countZombiesNear(sx, v.y, 150) > 0;
                 if (danger) {
-                    v.pad = true;
+                    passStop(v, two);
                 } else {
                     cruise = Math.max(5, ahead * 0.38f);
                     if (ahead < 3) {
                         v.state = WAIT;
-                        v.pad = true;
+                        passStop(v, two);
                         v.speed = 0;
                         v.passengers = 0;
                         v.timer = 9;

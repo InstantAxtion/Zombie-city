@@ -109,6 +109,12 @@ final class CityGenerator extends CityPart {
                 bestX = Math.max(m + 12, Math.min(city.w - m - 12, bestX + look.dtX * (city.w - 2 * m)));
                 bestY = Math.max(m + 12, Math.min(landH - m - 12, bestY + look.dtY * (landH - 2 * m)));
             }
+            // ((28.0) Where the map's own builder wants it.)
+            if (special != null) {
+                float[] at = special.districtSpot(k, bestX, bestY, r);
+                bestX = at[0];
+                bestY = at[1];
+            }
             d.x = bestX;
             d.y = bestY;
             float dist = (float) World.hypot(d.x - city.w / 2f - ox, d.y - city.h / 2f - oy) / (city.w * 0.5f);
@@ -143,6 +149,7 @@ final class CityGenerator extends CityPart {
                 if (city.themePark && k == 1) d.type = DT_SUBURB;
                 // ((26.1) Each island its own kind of place.)
                 if (city.islandRects != null && !city.themePark && city.cfg.distinctIslands()) d.type = islandsMap.islandDistrict(city.island((int) d.x, (int) d.y), d.type);
+                if (special != null) d.type = special.districtType(k, d.x, d.y, d.type);
             }
             usedUnique[d.type] = true;
             String wd = words.get(word++ % words.size());
@@ -704,7 +711,11 @@ final class CityGenerator extends CityPart {
     /** ((27.5) The great park's block, or null. */
     int[] bigParkBlock;
 
+    /** ((28.0) Bridge City, Swamp Bayou or Lighthouse Coast: the map's own builder (null on every other map). */
+    WaterMap special;
+
     void generate() {
+        special = WaterMap.of(city);
         look = city.cfg.civic >= 40 && !city.cfg.themePark() && !city.cfg.spaceCenter() ? new CityCharacter(city.cfg.seed) : null;
         placeTown();
         layStreets();
@@ -716,6 +727,7 @@ final class CityGenerator extends CityPart {
         placeBigSites();
         fillBlocks();
         parkCars();
+        city.borderMap.finish();
         nameStreets();
         finishGround();
     }
@@ -734,7 +746,8 @@ final class CityGenerator extends CityPart {
         // ((15.8) Wider again, for a far bigger prison.)
         if (city.cfg.prisonIsland()) city.seaY = city.h - Math.max(70, (int) (city.h * 0.4f));
         // ((11.0) The four new water maps have the sea along the bottom too, a little narrower.)
-        if (city.waterKind == CityConfig.W_ISLANDS) islandsMap.islandLayout();
+        if (special != null) special.layout();
+        else if (city.waterKind == CityConfig.W_ISLANDS) islandsMap.islandLayout();
         // Where the town is: the whole map, or a core surrounded by countryside.
         float core = city.cfg.coreFraction();
         m = core < 0.99f ? (int) (city.w * (1 - core) / 2) : 0;
@@ -788,6 +801,14 @@ final class CityGenerator extends CityPart {
                 shiftY = (by0 + by1) / 2 - city.h / 2;
             }
         }
+        // ((28.0) A map laid out by a class of its own may put the town elsewhere.)
+        if (city.region != null) {
+            int[] r = city.region.townRect(bx0, by0, bx1, by1);
+            bx0 = r[0];
+            by0 = r[1];
+            bx1 = r[2];
+            by1 = r[3];
+        }
         city.townX0 = bx0;
         city.townY0 = by0;
         city.townX1 = bx1;
@@ -805,6 +826,11 @@ final class CityGenerator extends CityPart {
         makeDistricts();
         if (city.cfg.neighbourhoods()) Neighbourhoods.assign(city, city.cfg.seed);
         if (look != null && city.cfg.neighbourhoods()) Neighbourhoods.paint(city, look.palette);
+        // ((28.0) Laid out the map's own way.)
+        if (special != null) {
+            special.streets();
+            return;
+        }
         if (m > 0) city.fill(0, 0, city.w, city.h, GRASS);
         // A ring road around the edge of town (a village just has its lanes).
         boolean village = city.cfg.density() == 0 && city.cfg.style() == CityConfig.STYLE_HOUSES;
@@ -820,7 +846,9 @@ final class CityGenerator extends CityPart {
         }
         if (m > 0) city.fill(bx0 + in, by0 + in, bx1 - bx0 - in * 2, by1 - by0 - in * 2, village ? GRASS : SIDEWALK);
         // The railway cuts straight across the middle third of the town; the streets are laid out on each side.
-        if (city.cfg.hasRail()) {
+        // ((28.0) Stadium City: its light rail, the stadium complex and the streets round them.)
+        if (city.cfg.stadiumCity()) city.stadiumMap.layout(bx0, by0, bx1, by1, in);
+        else if (city.cfg.hasRail()) {
             int th = by1 - by0;
             city.railY0 = by0 + th / 3 + city.rnd.nextInt(Math.max(1, th / 3));
             city.railRows = 3;
@@ -855,6 +883,12 @@ final class CityGenerator extends CityPart {
         } else if (city.spaceCenter) {
             // ((26.0) The space center's roads along one side, the staff town's streets on the rest.)
             spaceMap.spaceCenterTown();
+        } else if (city.region != null && city.region.layStreets(bx0, by0, bx1, by1, in)) {
+            // ((28.0) Laid out by the map's own class.)
+        } else if (city.cfg.airbase()) {
+            city.airbaseMap.layout(bx0, by0, bx1, by1, in);
+        } else if (city.cfg.borderTown()) {
+            city.borderMap.layout(bx0, by0, bx1, by1, in);
         } else {
             splitTop(bx0 + in, by0 + in, bx1 - in, by1 - in);
         }
@@ -876,6 +910,7 @@ final class CityGenerator extends CityPart {
     private void layCountry() {
         // Out in the country, a highway runs past the town.
         if (m >= 16) roadGen.highway(bx0, by0, bx1, by1);
+        if (city.region != null) city.region.afterHighway(bx0, by0, bx1, by1);
         if (m >= 16 && city.cfg.civic >= 12) roadGen.ringRoad(bx0, by0, bx1, by1);
         // (10.52) Map version 22: the beltway right round the map, before the country fills in round it (on the
         // water maps, the roads round the edge of town: see outerBelt).
@@ -987,13 +1022,22 @@ final class CityGenerator extends CityPart {
         if (city.themePark) parkMap.themeParkPlaces(used);
         // ((26.0) The Space Center: the pads, the assembly building, the crawlerway, mission control and the rest.)
         if (city.spaceCenter) spaceMap.spaceCenterPlaces();
+        if (city.region != null) city.region.places(used);
+        // ((28.0) The air base, the border's crossings and the stadium complex.)
+        if (city.cfg.airbase() || city.cfg.borderTown() || city.cfg.stadiumCity()) {
+            city.airbaseMap.places(used);
+            city.borderMap.places(used);
+            city.stadiumMap.places(used);
+        }
+        if (special != null) special.places(used);
         // ((15.5) The Military Town's great base, in the middle where the streets were kept clear of it.)
         if (bigBase != null) {
             baseGen.militaryBase(bigBase[0] + 1, bigBase[1] + 1, bigBase[2] - bigBase[0] - 2, bigBase[3] - bigBase[1] - 2);
         } else if (city.cfg.militaryBase()) {
             int best = -1, bestArea = 0;
             // ((22.9) Desert City: the base is out in the desert already (the extra ones are in town as usual).)
-            for (int k = 0; k < (testRange != null ? 0 : city.blocks.size()); k++) {
+            // ((28.0) The Military Airbase's base is the air base itself.)
+            for (int k = 0; k < (testRange != null || city.cfg.airbase() ? 0 : city.blocks.size()); k++) {
                 int[] b = city.blocks.get(k);
                 int bw = b[2] - b[0] - 2, bh = b[3] - b[1] - 2;
                 if (used[k] || bw < 9 || bh < 9) continue;
@@ -1048,11 +1092,14 @@ final class CityGenerator extends CityPart {
                 // ((25.0) On Theme Park Island the headquarters is in the staff town.)
                 if (city.islandRects != null && n < city.islandRects.length && city.island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != (city.themePark ? 1 - n : n)) continue;
                 boolean near = false;
+                // ((28.0) Closer together on the water maps' small towns and islands.)
+                float spread = special != null ? special.spread() : 1f;
                 for (Facility f : city.facilities)
-                    if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < city.w * T / (city.cfg.policeStations() > 3 ? 4.5f : 3f))
-                            || World.hypot(f.x - cx, f.y - cy) < Math.max(20, city.w / 6f) * T) near = true;
+                    if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < spread * city.w * T / (city.cfg.policeStations() > 3 ? 4.5f : 3f))
+                            || World.hypot(f.x - cx, f.y - cy) < spread * Math.max(20, city.w / 6f) * T) near = true;
                 if (!near) options.add(k);
             }
+            if (options.isEmpty() && special != null) continue;
             if (options.isEmpty()) break;
             int k = options.get(city.rnd.nextInt(options.size()));
             // ((10.52) The first is the police headquarters: the biggest block on offer, up to twice a station's.)
@@ -1164,8 +1211,8 @@ final class CityGenerator extends CityPart {
                 }
             }
 
-        // The train station sits beside the railway.
-        if (city.railY0 >= 0) {
+        // The train station sits beside the railway. ((28.0) Unless it has its stations already: Stadium City.)
+        if (city.railY0 >= 0 && city.stationX < 0) {
             int best = -1;
             float bestD = Float.MAX_VALUE;
             for (int k = 0; k < city.blocks.size(); k++) {
@@ -1193,7 +1240,8 @@ final class CityGenerator extends CityPart {
     private void placeBigSites() {
         // Big sites: a shopping mall, a stadium and a power station, on blocks large enough to take them.
         rural = city.cfg.density() == 0 && city.cfg.style() == CityConfig.STYLE_HOUSES;
-        if (!rural) {
+        // ((28.0) No malls and their car parks in Stadium City.)
+        if (!rural && !city.cfg.stadiumCity()) {
             int k = bigBlock(used, 11, 9, 0.45f);
             if (k >= 0) {
                 used[k] = true;
@@ -1205,7 +1253,7 @@ final class CityGenerator extends CityPart {
         // ((22.0) A second mall on the bigger maps, and a walled prison out towards the edge of town.)
         // ((25.0) Not on Theme Park Island: one mall is plenty.)
         // ((26.0) Nor in the Space Center's small staff town.)
-        if (city.cfg.v22() && city.w >= 256 && !rural && !city.themePark && !city.spaceCenter) {
+        if (city.cfg.v22() && city.w >= 256 && !rural && !city.themePark && !city.spaceCenter && !city.cfg.stadiumCity()) {
             int k = bigBlock(used, 11, 9, 0.45f);
             if (k >= 0) {
                 used[k] = true;
@@ -1234,7 +1282,7 @@ final class CityGenerator extends CityPart {
             }
         }
         // ((25.0) Nor a stadium or a power station on the resort island.)
-        if ((city.w >= 256 || city.cfg.density() == 2) && !rural && !city.themePark && !city.spaceCenter) {
+        if ((city.w >= 256 || city.cfg.density() == 2) && !rural && !city.themePark && !city.spaceCenter && !city.cfg.stadiumCity()) {
             int k = bigBlock(used, 12, 11, 0.6f);
             if (k >= 0) {
                 used[k] = true;
@@ -1400,8 +1448,10 @@ final class CityGenerator extends CityPart {
      * corners.
      */
     private void finishGround() {
+        if (city.region != null) city.region.finish();
         if (city.desert) desertMap.desertify();
         if (city.themePark || (city.cfg.archipelago() && city.cfg.distinctIslands())) parkMap.tropics();
+        if (special != null) special.finish();
         // Street lamps on the pavement corners at junctions.
         for (int y = 1; y < city.h - 1; y++)
             for (int x = 1; x < city.w - 1; x++) {

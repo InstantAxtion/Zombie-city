@@ -509,7 +509,7 @@ final class World {
         int townShare = satBases > 0 && base != null ? military * 3 / 5 : military;
         int satEach = satBases > 0 ? Math.max(6, (military - (base != null ? townShare : 0)) / satBases) : 0;
         // ((15.5) Not in the Military Town: there the army outnumbers the police many times over.)
-        if (soldiers > 0 && !cfg.militaryTown()) soldiers = Math.min(soldiers, Math.max(6, townShare));
+        if (soldiers > 0 && !cfg.bigGarrison()) soldiers = Math.min(soldiers, Math.max(6, townShare));
         return new int[]{cops, soldiers, satEach};
     }
 

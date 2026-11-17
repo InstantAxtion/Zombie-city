@@ -1161,7 +1161,7 @@ final class Population {
         City.Facility base = w.city.mainBase();
         if (base == null) return;
         // ((15.5) The Military Town's great base: a well-stocked armoury, three times the rounds.)
-        if (w.city.cfg.militaryTown()) base.ammo *= 3;
+        if (w.city.cfg.bigGarrison()) base.ammo *= 3;
         switch (base.baseType) {
             case City.BT_AIR: if (w.dispatch.airSorties > 0) w.dispatch.airSorties++; break;
             case City.BT_ARMOUR: if (w.dispatch.tankReserve > 0) w.dispatch.tankReserve++; break;

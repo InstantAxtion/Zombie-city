@@ -658,6 +658,9 @@ final class SaveGame {
                 if ((i == CityConfig.OPT_PRESET && (CityConfig.removed(v) || (v == CityConfig.DESERT && version < 69) || (v == CityConfig.THEME_PARK && version < 72) || (v == CityConfig.SPACE_CENTER && version < 75)))
                         || (i == CityConfig.OPT_COUNTRY && v != Country.USA))
                     throw new IOException("This save's map is no longer in the game");
+                // ((28.0) Highway Crossroads and Canyon Town have the numbers of maps long gone: an older save is one of those.)
+                if (i == CityConfig.OPT_PRESET && (v == CityConfig.CROSSROADS || v == CityConfig.CANYON) && version < 81)
+                    throw new IOException("This save's map is no longer in the game");
                 if (i < cfg.v.length) cfg.v[i] = Math.max(0, Math.min(cfg.values(i).length - 1, v));
             }
             cfg.seed = in.readLong();

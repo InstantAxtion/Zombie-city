@@ -236,6 +236,8 @@ final class City {
     int[] parkRect;
     /** ((26.0) The Space Center (CityConfig.spaceCenter): everything it changes in building and drawing the map is for it alone. */
     final boolean spaceCenter;
+    /** ((28.0) Highway Crossroads, Canyon Town or Frozen North: the map's own builder and painter (null on every other map). */
+    RegionMap region;
     /** Where the city is: its look and its names. */
     final Country country;
     /** The town's name, the same every time for a given city code. */
@@ -420,12 +422,13 @@ final class City {
         this.desert = cfg.desert();
         this.themePark = cfg.themePark();
         this.spaceCenter = cfg.spaceCenter();
+        this.region = RegionMap.of(this);
         this.detail = detail;
         w = h = cfg.tiles();
         rnd = new Random(cfg.seed);
         Variants.extra = new Random(cfg.seed * 7919L + 101);
         Random nameRnd = new Random(cfg.seed * 31 + 7);
-        country = Country.get(cfg.country());
+        country = WaterMap.country(cfg, Country.get(cfg.country()));
         name = country.townName(nameRnd);
         tiles = new byte[w * h];
         solid = new boolean[w * h];
@@ -3902,6 +3905,10 @@ final class City {
     final RiverMap riverMap = new RiverMap(this);
     final CoastMap coastMap = new CoastMap(this);
     final AirportMap airportMap = new AirportMap(this);
+    /** ((28.0) Border Town, the Military Airbase and Stadium City: each map's own builder. */
+    final BorderMap borderMap = new BorderMap(this);
+    final AirbaseMap airbaseMap = new AirbaseMap(this);
+    final StadiumMap stadiumMap = new StadiumMap(this);
 
     {
         gen.wire();
@@ -3918,5 +3925,8 @@ final class City {
         riverMap.wire();
         coastMap.wire();
         airportMap.wire();
+        borderMap.wire();
+        airbaseMap.wire();
+        stadiumMap.wire();
     }
 }

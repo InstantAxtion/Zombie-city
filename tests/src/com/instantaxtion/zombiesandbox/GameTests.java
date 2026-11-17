@@ -4540,7 +4540,7 @@ public final class GameTests {
         test("22.4: landmarks - a city gets a mix of them, each paints at any size inside its block; River City streets stop short of the water", new Check() {
             @Override
             public void run() throws Exception {
-                check(Landmarks.all().size() == 287, "250 designs, Theme Park Island's 23 and the Space Center's 14 (" + Landmarks.all().size() + ")");
+                check(Landmarks.all().size() == 297, "250 designs, Theme Park Island's 23, the Space Center's 14 and the 28.0 maps' 10 (" + Landmarks.all().size() + ")");
                 // Every design paints, small and large, wide and tall, with its buildings inside the block.
                 android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(600, 600, android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Paint p = new android.graphics.Paint();
@@ -5700,6 +5700,106 @@ public final class GameTests {
                 check(l.counts[Entity.ARMOURED] == w.counts[Entity.ARMOURED] && l.counts[Entity.ARMOURED] >= 1 && Entity.current(Entity.SCREAMER) == Entity.ZOMBIE, "kept in a save; a screamer in an older save loads as a zombie");
             }
         });
+        test("28.0: Highway Crossroads, Canyon Town and Frozen North - each its own place, one road network, base and police on it", new Check() {
+            public void run() throws Exception {
+                for (int preset : new int[]{CityConfig.CROSSROADS, CityConfig.CANYON, CityConfig.FROZEN_NORTH})
+                    for (long seed : new long[]{3, 11}) {
+                        CityConfig c = new CityConfig();
+                        c.v[CityConfig.OPT_PRESET] = preset;
+                        c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                        c.seed = seed;
+                        c.normalize();
+                        check(c.preset() == preset && !CityConfig.retired(CityConfig.OPT_PRESET, preset), CityConfig.PRESETS[preset] + " is offered");
+                        City city = new City(c, 0.05f);
+                        String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
+                        int w = city.w, h = city.h, n = w * h;
+                        byte[] t = city.tiles;
+                        // One road network.
+                        int[] comp = new int[n];
+                        java.util.Arrays.fill(comp, -1);
+                        int[] q = new int[n];
+                        java.util.List<Integer> sizes = new java.util.ArrayList<Integer>();
+                        for (int i = 0; i < n; i++) {
+                            if (comp[i] >= 0 || !(t[i] == City.ROAD || t[i] == City.DIRT)) continue;
+                            int id = sizes.size(), hd = 0, tl = 0;
+                            q[tl++] = i;
+                            comp[i] = id;
+                            while (hd < tl) {
+                                int cc = q[hd++], x = cc % w, y = cc / w;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (comp[j] >= 0 || !(t[j] == City.ROAD || t[j] == City.DIRT || t[j] == City.CAR || t[j] == City.LOT)) continue;
+                                    comp[j] = id;
+                                    q[tl++] = j;
+                                }
+                            }
+                            sizes.add(tl);
+                        }
+                        int main = 0, stray = 0;
+                        for (int k = 1; k < sizes.size(); k++) if (sizes.get(k) > sizes.get(main)) main = k;
+                        for (int k = 0; k < sizes.size(); k++) if (k != main && sizes.get(k) >= 4) stray++;
+                        check(stray == 0, m + "the roads are one network (" + stray + " bits apart)");
+                        // The base and the police stations by a road of it.
+                        check(city.mainBase() != null, m + "has an army base");
+                        int police = 0, off = 0;
+                        for (City.Facility f : city.facilities) {
+                            if (f.kind != City.FACILITY_BASE && f.kind != City.FACILITY_POLICE) continue;
+                            if (f.kind == City.FACILITY_POLICE) police++;
+                            float fx = f.kind == City.FACILITY_BASE ? f.gateX : f.x, fy = f.kind == City.FACILITY_BASE ? f.gateY : f.y;
+                            // (A walk of a few dozen steps over open ground from its door or gate to a road of the network.)
+                            boolean near = false;
+                            java.util.HashMap<Integer, Integer> seen = new java.util.HashMap<Integer, Integer>();
+                            java.util.ArrayDeque<Integer> open = new java.util.ArrayDeque<Integer>();
+                            int s0 = Math.min(h - 1, Math.max(0, (int) (fy / City.T))) * w + Math.min(w - 1, Math.max(0, (int) (fx / City.T)));
+                            open.add(s0);
+                            seen.put(s0, 0);
+                            while (!open.isEmpty() && !near) {
+                                int cc = open.poll(), d = seen.get(cc), x = cc % w, y = cc / w;
+                                if (comp[cc] == main) near = true;
+                                if (d >= 60) continue;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (seen.containsKey(j) || (city.solid[j] && t[j] != City.CAR)) continue;
+                                    seen.put(j, d + 1);
+                                    open.add(j);
+                                }
+                            }
+                            if (!near) off++;
+                        }
+                        check(police > 0 && off == 0, m + "police (" + police + ") and the base by the road network (" + off + " not)");
+                        int water = 0, rock = 0, pines = 0, trees = 0;
+                        for (int i = 0; i < n; i++) {
+                            if (t[i] == City.WATER) water++;
+                            if (t[i] == City.ROCK) rock++;
+                            if (t[i] == City.TREE) {
+                                trees++;
+                                if (city.treeKindAt(i) == Country.TK_PINE) pines++;
+                            }
+                        }
+                        if (preset == CityConfig.CROSSROADS) {
+                            CrossroadsMap x = (CrossroadsMap) city.region;
+                            check(city.hwyAxis >= 0 && x.interchange && !city.overpasses.isEmpty() && city.hwyExits.size() >= 1, m + "the second highway crosses the first over an interchange");
+                            check(x.built[CrossroadsMap.TRUCK] >= 1 && x.built[CrossroadsMap.MOTEL] >= 1 && x.built[CrossroadsMap.FUEL] >= 1, m + "a truck stop, a motel and fuel by the road (" + x + ")");
+                            check((city.townX1 - city.townX0) * (city.townY1 - city.townY0) < w * h / 4, m + "a small town in open country");
+                        } else if (preset == CityConfig.CANYON) {
+                            CanyonMap x = (CanyonMap) city.region;
+                            check(x.bridges >= 1 && x.switchbacks >= 1 && x.rocks.size() >= 1, m + "bridges over the gorge, switchbacks down the cliff, buttes (" + x + ")");
+                            check(rock > n / 25, m + "a cliff and a gorge of rock (" + rock + ")");
+                            check((city.region.ground(10, 10) >> 16 & 255) > (city.region.ground(10, 10) >> 8 & 255), m + "red ground");
+                        } else {
+                            FrozenNorthMap x = (FrozenNorthMap) city.region;
+                            check(x.airstrip && city.airport != null && x.station && x.cabins >= 2 && x.piers >= 1, m + "an airstrip, the radar station, cabins and piers (" + x + ")");
+                            check(water > n / 40, m + "a frozen bay (" + water + ")");
+                            check(pines == trees, m + "every tree a pine");
+                            check((city.region.ground(10, 10) & 255) > 200, m + "snowy ground");
+                        }
+                    }
+            }
+        });
         test("26.1: every map has an army base; the Archipelago's outer islands are palm-fringed villages, unlike the Islands", new Check() {
             public void run() throws Exception {
                 for (int preset : new int[]{CityConfig.THEME_PARK, CityConfig.SPACE_CENTER, 9}) {
@@ -5722,6 +5822,108 @@ public final class GameTests {
                     else if (b.kind == City.WAREHOUSE) outerOther++;
                 }
                 check(palms > 200 && outerHouses > 100 && outerOther < outerHouses / 10, "palms (" + palms + "), and houses, not works, on the outer islands (" + outerHouses + "/" + outerOther + ")");
+            }
+        });
+        test("28.0: Bridge City, Swamp Bayou and Lighthouse Coast - islands and long bridges, stilt houses and boardwalks, a lighthouse and cliffs; one road network", new Check() {
+            public void run() throws Exception {
+                for (int preset : new int[]{CityConfig.BRIDGE_CITY, CityConfig.SWAMP, CityConfig.LIGHTHOUSE})
+                    for (long seed : new long[]{3, 28}) {
+                        CityConfig c = new CityConfig();
+                        c.v[CityConfig.OPT_PRESET] = preset;
+                        c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                        c.seed = seed;
+                        c.normalize();
+                        City city = new City(c, 0.05f);
+                        int w = city.w, h = city.h, n = w * h;
+                        byte[] t = city.tiles;
+                        String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
+                        check(!CityConfig.retired(CityConfig.OPT_PRESET, preset), m + "offered");
+                        // The roads and lanes are one network.
+                        int[] comp = new int[n];
+                        java.util.Arrays.fill(comp, -1);
+                        int[] q = new int[n];
+                        java.util.List<Integer> sizes = new java.util.ArrayList<Integer>();
+                        for (int i = 0; i < n; i++) {
+                            if (comp[i] >= 0 || !(t[i] == City.ROAD || t[i] == City.DIRT)) continue;
+                            int id = sizes.size(), hd = 0, tl = 0;
+                            q[tl++] = i;
+                            comp[i] = id;
+                            while (hd < tl) {
+                                int cc = q[hd++], x = cc % w, y = cc / w;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (comp[j] >= 0 || !(t[j] == City.ROAD || t[j] == City.DIRT || t[j] == City.CAR || t[j] == City.LOT)) continue;
+                                    comp[j] = id;
+                                    q[tl++] = j;
+                                }
+                            }
+                            sizes.add(tl);
+                        }
+                        int main = 0, stray = 0;
+                        for (int k = 1; k < sizes.size(); k++) if (sizes.get(k) > sizes.get(main)) main = k;
+                        for (int k = 0; k < sizes.size(); k++) if (k != main && sizes.get(k) >= 4) stray++;
+                        check(stray == 0, m + "one road network (" + stray + " bits on their own)");
+                        // The police stations and the army base are on it, and convoys can drive in.
+                        int posts = 0, off = 0;
+                        for (City.Facility f : city.facilities) {
+                            if (f.kind != City.FACILITY_POLICE && f.kind != City.FACILITY_BASE) continue;
+                            posts++;
+                            int fx = (int) (f.x / City.T), fy = (int) (f.y / City.T);
+                            boolean on = false;
+                            for (int y = Math.max(0, fy - 18); y < Math.min(h, fy + 18) && !on; y++)
+                                for (int x = Math.max(0, fx - 18); x < Math.min(w, fx + 18) && !on; x++) if (comp[y * w + x] == main) on = true;
+                            if (!on) off++;
+                        }
+                        check(city.mainBase() != null && posts >= 2 && off == 0, m + "a base and police stations, all on the roads (" + posts + ", " + off + " off them)");
+                        float[] in = city.edgeRoad(new java.util.Random(1));
+                        check(in != null && comp[(int) (in[1] / City.T) * w + (int) (in[0] / City.T)] == main, m + "convoys drive in");
+                        java.util.HashSet<String> lm = new java.util.HashSet<String>();
+                        for (float[] d : city.decor) {
+                            Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                            if (ld != null) lm.add(ld.name);
+                        }
+                        int water = 0, pier = 0, rock = 0, sand = 0, bridges = 0;
+                        for (int i = 0; i < n; i++) {
+                            if (t[i] == City.WATER) water++;
+                            if (t[i] == City.PIER) pier++;
+                            if (t[i] == City.ROCK) rock++;
+                            if (t[i] == City.SAND) sand++;
+                            if (city.bridge != null && city.bridge[i] && t[i] == City.ROAD) bridges++;
+                        }
+                        if (preset == CityConfig.BRIDGE_CITY) {
+                            int il = city.islandRects.length;
+                            check(il >= 6 && il <= 10, m + "six to ten islands (" + il + ")");
+                            // Every island's streets are on the one network: over the bridges.
+                            int joined = 0;
+                            for (int[] r : city.islandRects) {
+                                boolean on = false;
+                                for (int y = r[1]; y < r[3] && !on; y++) for (int x = r[0]; x < r[2] && !on; x++) if (comp[y * w + x] == main) on = true;
+                                if (on) joined++;
+                            }
+                            check(joined == il && bridges > il * 20 && water > n / 3, m + "every island joined by long bridges (" + joined + "/" + il + ", " + bridges + " bridge tiles)");
+                        } else if (preset == CityConfig.SWAMP) {
+                            int stilts = 0;
+                            for (City.Building b : city.buildings) {
+                                if (b.kind != City.HOUSE) continue;
+                                int x0 = (int) (b.x0 / City.T), y0 = (int) (b.y0 / City.T), x1 = (int) Math.ceil(b.x1 / City.T), y1 = (int) Math.ceil(b.y1 / City.T);
+                                boolean wet = false, walk = false;
+                                for (int y = y0 - 1; y <= y1 && y < h; y++)
+                                    for (int x = x0 - 1; x <= x1 && x < w; x++) {
+                                        if (x < 0 || y < 0) continue;
+                                        if (t[y * w + x] == City.WATER) wet = true;
+                                        if (t[y * w + x] == City.PIER) walk = true;
+                                    }
+                                if (wet && walk) stilts++;
+                            }
+                            check(stilts >= 4 && pier >= 80 && bridges > 0 && water > n / 6, m + "stilt houses on boardwalks over the water, a bridge over the bayou (" + stilts + ", " + pier + ", " + bridges + ")");
+                            check(lm.contains("Airboat Landing") && lm.contains("Marine Supply"), m + "the airboat landing and the marine supply store: " + lm);
+                        } else {
+                            check(lm.contains("Lighthouse") && lm.contains("Harbour Master"), m + "the lighthouse and the harbour master: " + lm);
+                            check(rock > 100 && sand > 20 && water > n / 8 && pier > 10, m + "cliffs, beaches, the sea and piers (" + rock + ", " + sand + ", " + water + ", " + pier + ")");
+                        }
+                    }
             }
         });
         test("26.0: the Space Center has its launch pad and rocket, the assembly building, mission control and the landing strip; no other map gets them", new Check() {
@@ -5750,6 +5952,124 @@ public final class GameTests {
                     Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
                     check(ld == null || !ours.contains(ld.name), "none of the space center's on Metropolis: " + (ld == null ? "" : ld.name));
                 }
+            }
+        });
+        test("28.0: the Military Airbase, Border Town and Stadium City have their own places, and their roads are one network", new Check() {
+            public void run() throws Exception {
+                for (int preset : new int[]{CityConfig.AIRBASE, CityConfig.BORDER_TOWN, CityConfig.STADIUM_CITY})
+                    for (long seed : new long[]{2801, 2802}) {
+                        CityConfig c = new CityConfig();
+                        c.v[CityConfig.OPT_PRESET] = preset;
+                        c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                        c.seed = seed;
+                        c.normalize();
+                        c.seed = seed;
+                        check(!CityConfig.retired(CityConfig.OPT_PRESET, preset) && !CityConfig.removed(preset), CityConfig.PRESETS[preset] + " is offered");
+                        City city = new City(c, 0.05f);
+                        String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
+                        java.util.HashMap<String, Integer> lm = new java.util.HashMap<String, Integer>();
+                        for (float[] d : city.decor) {
+                            Landmarks.Def ld = (int) d[0] == City.D_LANDMARK ? Landmarks.get((int) d[5]) : null;
+                            if (ld != null) lm.put(ld.name, lm.containsKey(ld.name) ? lm.get(ld.name) + 1 : 1);
+                        }
+                        java.util.HashMap<String, Integer> named = new java.util.HashMap<String, Integer>();
+                        for (City.Building b : city.buildings) if (b.name != null) named.put(b.name, named.containsKey(b.name) ? named.get(b.name) + 1 : 1);
+                        City.Facility base = city.mainBase();
+                        check(base != null, m + "an army base");
+                        if (preset == CityConfig.AIRBASE) {
+                            check(base.baseType == City.BT_AIR && city.runway != null && city.apron != null, m + "the air base, its runway and apron for the aircraft");
+                            check(lm.containsKey("Airfield") && named.containsKey("Control Tower") && named.containsKey("Aircraft Hangar"), m + "airfield, tower and hangars: " + named.keySet());
+                            check(named.containsKey("Fuel Farm") || lm.containsKey("Fuel Farm"), m + "a fuel farm: " + lm.keySet());
+                            int barracks = 0;
+                            for (City.Building b : city.buildings) if (b.kind == City.BARRACKS) barracks++;
+                            check(barracks >= 10 && city.helipads.size() >= 4, m + "barracks rows (" + barracks + ") and the heliport (" + city.helipads.size() + ")");
+                            CityConfig o = new CityConfig();
+                            o.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                            int ours = World.forces(c, city)[1], usual = World.forces(o, city)[1];
+                            check(ours >= 380 && ours >= usual * 2, m + "far more soldiers (" + ours + " to " + usual + ")");
+                        } else if (preset == CityConfig.BORDER_TOWN) {
+                            BorderMap bm = city.borderMap;
+                            int gaps = 0, len = bm.vert ? city.h : city.w;
+                            boolean open = false;
+                            for (int a = 0; a < len; a++) {
+                                byte t = city.tiles[bm.tile(a, bm.bc)];
+                                check(t == City.FENCE || t == City.ROAD, m + "the border fence is unbroken but for the crossings (" + a + ": " + t + ")");
+                                if (t == City.ROAD && !open) gaps++;
+                                open = t == City.ROAD;
+                            }
+                            check(gaps >= 2 && gaps <= 3 && gaps == bm.crossings.size(), m + "two or three crossings (" + gaps + ")");
+                            int patrol = 0;
+                            for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_POLICE && f.name.startsWith("Border Patrol")) patrol++;
+                            check(patrol == 2, m + "a border patrol station each side (" + patrol + ")");
+                            check(lm.containsKey("Customs Yard") && lm.get("Customs Yard") >= 2 * gaps - 1, m + "customs yards at the crossings: " + lm.get("Customs Yard"));
+                            check(city.checkpoints.size() >= 2 * gaps, m + "checkpoints at the crossings");
+                            check(bm.NEAR != bm.FAR && city.districts.get(city.districtAt.get(bm.tile(len / 2, bm.bc - 2))).theme
+                                    != city.districts.get(city.districtAt.get(bm.tile(len / 2, bm.bc + BorderMap.FENCE_W + 1))).theme, m + "each side its own look");
+                        } else {
+                            check(lm.containsKey("Grand Stadium") && lm.containsKey("Fan Zone"), m + "the stadium and its fan zones: " + lm.keySet());
+                            check(lm.containsKey("Basketball Arena") || lm.containsKey("Ice Rink Arena"), m + "the second arena");
+                            check(city.railY0 >= 0 && city.stationX >= 0 && city.stadiumMap.stopX >= 0 && named.containsKey("Stadium Station"), m + "the light rail's two stations");
+                            int pitches = 0;
+                            for (float[] d : city.decor) if ((int) d[0] == City.D_FIELD) pitches++;
+                            check(pitches >= 3, m + "training pitches (" + pitches + ")");
+                            int malls = 0;
+                            for (City.Building b : city.buildings) if (b.kind == City.MALL) malls++;
+                            check(malls == 0, m + "no malls and their car parks");
+                        }
+                        // One road network: every road or lane joined to the rest (cars cross lots), the base's gate and
+                        // every police station on it.
+                        int w = city.w, h = city.h, n = w * h;
+                        byte[] t = city.tiles;
+                        int[] comp = new int[n], q = new int[n];
+                        java.util.Arrays.fill(comp, -1);
+                        java.util.List<Integer> sizes = new java.util.ArrayList<Integer>();
+                        for (int i = 0; i < n; i++) {
+                            if (comp[i] >= 0 || !(t[i] == City.ROAD || t[i] == City.DIRT)) continue;
+                            int id = sizes.size(), hd = 0, tl = 0;
+                            q[tl++] = i;
+                            comp[i] = id;
+                            while (hd < tl) {
+                                int cc = q[hd++], x = cc % w, y = cc / w;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (comp[j] >= 0 || !(t[j] == City.ROAD || t[j] == City.DIRT || t[j] == City.CAR || t[j] == City.LOT)) continue;
+                                    comp[j] = id;
+                                    q[tl++] = j;
+                                }
+                            }
+                            sizes.add(tl);
+                        }
+                        int main = 0, stray = 0;
+                        for (int k = 1; k < sizes.size(); k++) if (sizes.get(k) > sizes.get(main)) main = k;
+                        for (int k = 0; k < sizes.size(); k++) if (k != main && sizes.get(k) >= 4) stray++;
+                        check(stray == 0, m + "one road network (" + stray + " pieces apart)");
+                        for (City.Facility f : city.facilities) {
+                            if (f.kind != City.FACILITY_POLICE && f.kind != City.FACILITY_BASE) continue;
+                            // (Driven to: from the facility over ground a vehicle can cross, to the road network.)
+                            boolean near = false;
+                            int[] seen = new int[n];
+                            int hd = 0, tl = 0;
+                            int s0 = (int) (f.y / City.T) * w + (int) (f.x / City.T);
+                            q[tl++] = s0;
+                            seen[s0] = 1;
+                            while (hd < tl && !near && tl < 200000) {
+                                int cc = q[hd++], x = cc % w, y = cc / w;
+                                if (comp[cc] == main) near = true;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    byte o = t[j];
+                                    if (seen[j] != 0 || !(o == City.ROAD || o == City.DIRT || o == City.LOT || o == City.BASE || o == City.SIDEWALK || o == City.PLAZA || o == City.CAR)) continue;
+                                    seen[j] = 1;
+                                    q[tl++] = j;
+                                }
+                            }
+                            check(near, m + f.name + " is on the road network");
+                        }
+                    }
             }
         });
         test("17.6: gunfights use cover - harder to hit behind it, they move to it, and fire pins them down", new Check() {
