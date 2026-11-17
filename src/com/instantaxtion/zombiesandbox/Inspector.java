@@ -116,6 +116,15 @@ final class Inspector {
         Integer turnedN = gv.world.victims.get(e.nameSeed);
         if (e.isUndead() && turnedN != null) lines.add("Has turned " + turnedN + (turnedN == 1 ? " person" : " people"));
         if (e.nameSeed == gv.world.patientZeroSeed && gv.world.patientZeroSeed != 0) lines.add("PATIENT ZERO");
+        // ((27.5) The last few notable things they did, newest first, with the time: three on a phone, five on a wider
+        // screen.)
+        if (e.histN > 0 && !e.isUndead()) {
+            int show = Math.min(e.histN, gv.getWidth() - 20 * gv.dp < 380 * gv.dp ? 3 : Entity.HIST);
+            for (int k = 0; k < show; k++) {
+                int i = (e.histN - 1 - k) % Entity.HIST;
+                lines.add((k == 0 ? "Lately: " : "            ") + World.clock((int) e.histT[i]) + "  " + e.hist[i]);
+            }
+        }
         gv.text.setTextAlign(Paint.Align.LEFT);
         gv.text.setTextSize(14 * gv.dp);
         float lh = 18 * gv.dp, cw = Math.min(gv.getWidth() - 20 * gv.dp, 420 * gv.dp);

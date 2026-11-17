@@ -138,6 +138,29 @@ final class Entity {
     float noiseX, noiseY, screamCd;
     /** ((27.0) An armoured zombie's helmet, good for one shot to the head. */
     transient boolean helmet;
+    /**
+     * ((27.5) The last few notable things this one did, for its card: what, and when (game seconds), the newest at
+     * histN - 1 (a ring of HIST). Only kept for police, soldiers, armed civilians and survivor heroes (see World.history).
+     */
+    transient String[] hist;
+    transient float[] histT;
+    transient int histN;
+    static final int HIST = 5;
+
+    void remember(float t, String what) {
+        if (hist == null) {
+            hist = new String[HIST];
+            histT = new float[HIST];
+        }
+        // (Not the same thing twice running: a second ride in the same car.)
+        if (histN > 0 && what.equals(hist[(histN - 1) % HIST])) {
+            histT[(histN - 1) % HIST] = t;
+            return;
+        }
+        hist[histN % HIST] = what;
+        histT[histN % HIST] = t;
+        histN++;
+    }
 
     // Dispatch: current job (task, at the top), radio callsign and speech icons.
     Dispatch.Incident incident;

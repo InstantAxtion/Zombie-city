@@ -1116,10 +1116,13 @@ final class ZombieAI {
         w.bites++;
         if (!w.bitBy.containsKey(t.nameSeed) && w.bitBy.size() < 20000) w.bitBy.put(t.nameSeed, z.nameSeed);
         float chance = (w.trait[World.TR_VIRULENT] ? 0.65f : w.trait[World.TR_WEAK_BITE] ? 0.22f : 0.4f) * World.BITE_INFECT * Director.INFECT[w.difficulty];
+        boolean was = t.infected;
         if (!t.infected && t.type != Entity.DOG && w.rnd.nextFloat() < chance) {
             t.infected = true;
             t.infectTimer = w.war.turnTime(8 + w.rnd.nextFloat() * 10);
         }
+        // ((27.5) For their card: the bite that infected them, or one they got away with.)
+        w.history(t, t.infected && !was ? "bitten - infected" : t.hp < t.maxHp * 0.35f ? "badly bitten" : "bitten");
         if (z.type == Entity.BRUTE) w.movement.tryMove(t, nx * 4, ny * 4);
         else if (z.type == Entity.BRUISER) w.movement.tryMove(t, nx * 2, ny * 2);
     }

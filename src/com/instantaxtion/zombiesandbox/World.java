@@ -1823,6 +1823,16 @@ final class World {
         controlledCar = null;
     }
 
+    /**
+     * ((27.5) Something notable this one did, for the history on their card: police, soldiers, armed civilians and
+     * survivor heroes (nobody else's is kept).
+     */
+    void history(Entity e, String what) {
+        if (e == null || e.isUndead() || e.type == Entity.DOG) return;
+        if (e.type != Entity.COP && e.type != Entity.SOLDIER && !e.isArmed() && !e.hero()) return;
+        e.remember(time, what);
+    }
+
     void driveInto(Entity e, Fleet.Vehicle v) {
         playerControl.driveInto(e, v);
     }

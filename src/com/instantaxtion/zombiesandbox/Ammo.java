@@ -60,6 +60,7 @@ final class Ammo {
         int take = Math.min(f.ammo, World.fullReserve(e) - e.reserve);
         f.ammo -= take;
         e.reserve += take;
+        if (take > 0) w.history(e, "resupplied at " + f.name);
         return true;
     }
 

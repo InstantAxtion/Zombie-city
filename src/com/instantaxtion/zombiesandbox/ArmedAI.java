@@ -1698,6 +1698,7 @@ final class ArmedAI {
             o.rallyX = r[0];
             o.rallyY = r[1];
             o.rallyT = w.time + 9;
+            if (o.histN == 0 || w.time - o.histT[(o.histN - 1) % Entity.HIST] > 20) w.history(o, "fell back to " + w.city.placeName(r[0], r[1]));
             if (o != e) {
                 o.goal = World.A_FALLBACK;
                 o.goalCd = 1.5f;

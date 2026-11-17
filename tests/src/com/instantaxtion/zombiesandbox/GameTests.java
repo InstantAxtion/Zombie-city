@@ -1432,7 +1432,8 @@ public final class GameTests {
                 d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Main St! People are being trampled.", 0, 0);
                 d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Oak Ave! People are being trampled.", 0, 0);
                 check(d.messageCount == before + 1, "the same news twice in a row goes out once");
-                for (int f = 0; f < 30 * 16; f++) w.update(1 / 30f);
+                // ((27.5) Within half a minute it's counted onto the line already there instead.)
+                for (int f = 0; f < 30 * 32; f++) w.update(1 / 30f);
                 int at = d.messageCount;
                 d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Elm Rd! People are being trampled.", 0, 0);
                 check(d.messageCount == at + 1, "and again once a while has passed");
@@ -4889,6 +4890,60 @@ public final class GameTests {
                 int more = 0;
                 for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST && !vols.contains(e)) more++;
                 check(more == 0, "none once the stations and bases have fallen");
+            }
+        });
+        test("27.5: unit history, overlays and a quieter radio", new Check() {
+            public void run() throws Exception {
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2400};
+                v.layout(size[0], size[1]);
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                v.startGame(c);
+                v.awaitLoad();
+                draw(v, size);
+                ((Menu) field(v, "menu")).screen = Menu.NONE;
+                World w = (World) field(v, "world");
+                for (int f = 0; f < 60; f++) w.update(1 / 30f);
+                // History: a kill by name, then the same thing twice running kept once; a bystander's isn't kept.
+                Entity cop = null, civ = null;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.type == Entity.COP && cop == null) cop = e;
+                    else if (!e.dead && e.type == Entity.CIVILIAN && !e.isArmed() && !e.hero() && civ == null) civ = e;
+                int had = cop.histN;
+                Entity brute = w.spawn(Entity.BRUTE, cop.x + 30, cop.y);
+                w.experience.killMade(cop, brute);
+                w.history(cop, "bitten");
+                w.history(cop, "bitten");
+                w.history(civ, "bitten");
+                boolean brute0 = false;
+                for (int k = had; k < cop.histN; k++) brute0 |= cop.hist[k % Entity.HIST].equals("killed a brute");
+                check(brute0 && cop.hist[(cop.histN - 1) % Entity.HIST].equals("bitten") && !cop.hist[(cop.histN - 2) % Entity.HIST].equals("bitten") && civ.histN == 0,
+                        "a unit's history kept, once for the same thing twice; a bystander's not (" + java.util.Arrays.toString(cop.hist) + ")");
+                v.follow = cop;
+                draw(v, size);
+                // Overlays: one at a time, each worked out from the grid and drawn.
+                Overlays o = v.overlays;
+                o.cycle();
+                draw(v, size);
+                check(o.mode == Overlays.HEAT && o.found > 0 && o.level != null, "infection heat from the dead on the grid (" + o.found + ")");
+                o.cycle();
+                draw(v, size);
+                int covered = 0;
+                for (byte b : o.level) if (b == 1) covered++;
+                check(o.mode == Overlays.REACH && o.found > 0 && covered > 0, "police/army reach from where they are (" + o.found + " cells, " + covered + " covered)");
+                o.cycle();
+                check(o.mode == Overlays.OFF, "and off again");
+                // Radio: three calls for backup from one fight make one line; lower-priority news is capped each minute.
+                Dispatch d = w.dispatch;
+                int at = d.messageCount;
+                for (int k = 0; k < 3; k++) d.say(Dispatch.WHO_POLICE, null, "Unit 5: Shots fired! Requesting backup!", 400, 400, true);
+                check(d.messageCount == at + 1 && d.log.get(d.log.size() - 1).text.endsWith("(3 times)"), "repeats merged into one line");
+                at = d.messageCount;
+                String[] spots = {"tower", "bridge", "mall", "school", "park", "dock", "depot", "yard", "plaza", "field", "garage", "church"};
+                for (String sp : spots) d.say(Dispatch.WHO_POLICE, null, "Patrols report movement by the " + sp + ".", 0, 0);
+                check(d.messageCount - at <= Dispatch.LOW_CAP && d.quietCapped > 0, "routine news capped (" + (d.messageCount - at) + ")");
             }
         });
         test("27.4: squads focus fire and fall back together", new Check() {

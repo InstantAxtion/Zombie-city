@@ -226,6 +226,8 @@ final class WorldRenderer {
         gv.buildingRenderer.drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
         if (!gv.world.overwatch.isEmpty()) gv.buildingRenderer.drawOverwatch(c, vx0, vy0, vx1, vy1, detailed);
         drawHaze(c, vx0, vy0, vx1, vy1);
+        // ((27.5) Infection heat or police/army reach, over the streets and roofs.)
+        gv.overlays.draw(c, gv.world, vx0, vy0, vx1, vy1);
         // ((19.5) Light, shockwaves, smoke, sparks and debris over it all.)
         gv.vfx.drawAbove(c, vx0, vy0, vx1, vy1);
         drawAircraft(c, vx0, vy0, vx1, vy1);
