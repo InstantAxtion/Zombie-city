@@ -79,8 +79,11 @@ final class FleetDriving {
                 if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) break;
                 byte t = city.tiles[ty * city.w + tx];
                 if (t == City.ROAD || t == City.CAR) continue;
-                v.pullX = x - nx * hand * 6.5f;
-                v.pullY = y - ny * hand * 6.5f;
+                // ((27.5) Right in against it - 6.5 off the kerb left it half in the lane, and the traffic behind
+                // queued for it.) (Not in a junction: there it stays where it is.)
+                if (city.junctionIdAt(v.x, v.y) >= 0) break;
+                v.pullX = x - nx * hand * 4.5f;
+                v.pullY = y - ny * hand * 4.5f;
                 v.pulling = true;
                 break;
             }
@@ -295,7 +298,10 @@ final class FleetDriving {
             v.clearedJ = id;
             return Float.MAX_VALUE;
         }
-        if (!emergency && v.player == null && stopAt < 30 && v.stillT < 20 && exitBlocked(v, id)) {
+        // ((27.5) For good, now: after twenty seconds it used to pull in anyway, stopped in the box, and locked the
+        // cross traffic too - the knots in the middle of junctions. Sat there long enough, it finds another way
+        // (unjam) instead.)
+        if (!emergency && v.player == null && stopAt < 30 && exitBlocked(v, id)) {
             v.held = stopAt < 6;
             return approach;
         }
@@ -754,6 +760,12 @@ final class FleetDriving {
         }
         if (v.exitTile < 0) return false;
         t = v.exitTile;
+        // ((27.5) Which way out: only something stopped on its own side of the road there blocks it - one waiting on
+        // the far side to come the other way into the junction was taken for a blocked exit, and the two sides held
+        // each other at the line. A wreck in its lane does block it (wrecks count as parked, and were left out).)
+        int nt = downhill(v.field, t);
+        int odx = nt % W - t % W, ody = nt / W - t / W;
+        if (Math.abs(odx) + Math.abs(ody) != 1) odx = ody = 0;
         {
             {
                 float ex = (t % W + 0.5f) * City.T, ey = (t / W + 0.5f) * City.T;
@@ -764,9 +776,10 @@ final class FleetDriving {
                     for (int cx = c0x; cx <= c1x; cx++)
                         for (int i = fleet.gridStart[cy * fleet.gridW + cx], ie = fleet.gridStart[cy * fleet.gridW + cx + 1]; i < ie; i++) {
                             Vehicle o = fleet.gridV[i];
-                            if (o == v || o.removedFromFleet || o.parked || offRoad(o) || Math.abs(o.speed) > 4) continue;
+                            if (o == v || o.removedFromFleet || (o.parked && !o.broken) || offRoad(o) || Math.abs(o.speed) > 4) continue;
                             if (Math.abs(o.x - ex) < City.T * 0.9f && Math.abs(o.y - ey) < City.T * 0.9f
-                                    && city.junctionIdAt(o.x, o.y) < 0) return true;
+                                    && city.junctionIdAt(o.x, o.y) < 0
+                                    && (odx == 0 && ody == 0 || (o.x - ex) * -ody + (o.y - ey) * odx > -3)) return true;
                         }
                 return false;
             }
@@ -825,6 +838,9 @@ final class FleetDriving {
             float dx = o.x - v.x, dy = o.y - v.y;
             float ahead = dx * fx + dy * fy;
             float side = Math.abs(dx * -fy + dy * fx);
+            // ((27.5) Pulled in to the kerb and stopped there (at a scene, waiting for its officers): beside the lane,
+            // not in it - the traffic goes on by.)
+            if (o.kerbed && !o.pulling && Math.abs(o.speed) < 1 && side > 7 && v.player == null) continue;
             // (10.42) Two that have ended up on top of one another, each waiting for the other to move: one of
             // them (whichever, so long as it's always the same one) drives out from under.
             if (dx * dx + dy * dy < 64 && v.stillT > 3 && o.stillT > 3 && v.x * 7 + v.y < o.x * 7 + o.y) continue;
@@ -900,8 +916,10 @@ final class FleetDriving {
                     // roadblock or a pickup either - only one waiting at a red light.)
                     || ((v.lightsOn() || (v.type == TRUCK && v.state == DRIVE && v.incident != null)) && o.type != CAR && o.player == null
                         && !o.held && !o.queuedHeld && o.stillT > (o.state == DRIVE ? 4f : 1.5f));
-            if (stuckThere && v.player == null && v.type != TANK) {
-                if (gap < 40) v.passing = 1.4f;
+            // ((27.5) Round it only where that's safe: see canPass. Otherwise it waits behind it like a queue - and the
+            // way round a wreck it can't pass is another route (unjam), not up on the pavement.)
+            if (stuckThere && v.player == null && v.type != TANK && canPass(v, o, gap)) {
+                if (gap < 40) v.passing = PASS_T;
                 limit = Math.min(limit, 30 + Math.max(0, gap));
                 continue;
             }
@@ -912,8 +930,8 @@ final class FleetDriving {
             boolean urgent = v.player == null && v.type != TANK && !v.parked
                     && (v.lightsOn() || (army(v) && (v.state == DRIVE || v.state == RETURN) && v.incident != null));
             if (urgent && lead > 2 && gap < 45 && !o.held && !o.queued && !o.parked && o.player == null
-                    && lead < 60 && city.junctionIdAt(v.x, v.y) < 0 && city.junctionIdAt(o.x, o.y) < 0) {
-                v.passing = 1.4f;
+                    && lead < 60 && city.junctionIdAt(v.x, v.y) < 0 && city.junctionIdAt(o.x, o.y) < 0 && canPass(v, o, gap)) {
+                v.passing = PASS_T;
                 limit = Math.min(limit, Math.max(lead + 30, 45));
                 continue;
             }
@@ -1085,7 +1103,7 @@ final class FleetDriving {
      * the end). True if it has a new way.
      */
     boolean unjam(Vehicle v) {
-        if (v.stillT < 12 || v.parked || v.convoy != null || isPost(v) || v.type == TRAIN || airborne(v)) return false;
+        if (v.stillT < 5 || v.parked || v.convoy != null || isPost(v) || v.type == TRAIN || airborne(v)) return false;
         if (!((v.queued && !v.queuedHeld && !v.held) || v.stillT > 25)) return false;
         float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
         Vehicle block = null;
@@ -1099,6 +1117,12 @@ final class FleetDriving {
                 block = o;
             }
         }
+        // ((27.5) Twelve seconds before it gives up on a queue - but only five behind something that isn't going to move
+        // at all (parked, a wreck, a car left at a scene) when it can't get round it on the road: there's no waiting
+        // that out, and with passing kept off the pavement, finding another way is the only way.)
+        boolean fixed = block != null && (block.parked || block.broken || block.state == ABANDONED
+                || ((block.state == SCENE || block.state == RECALL || block.state == LOAD || block.state == PICKUP) && block.player == null));
+        if (v.stillT < (fixed && v.passing <= 0 ? 5 : 12) && v.stillT <= 25) return false;
         // (The wall: where the blocker is, and just past it - never right on top of this one, or it can't leave.)
         float at = Math.max(block != null ? bd + 6 : 24, 36);
         jamTiles[0] = city.tileIndex(v.x + fx * at, v.y + fy * at);
@@ -1110,6 +1134,69 @@ final class FleetDriving {
         // nose can come round - standing still, the wheels turn nothing.
         backOutIfBehind(v);
         return true;
+    }
+
+    /** ((27.5) Knots undone, and how many times one backed off to do it. */
+    int gaveWay;
+
+    /**
+     * ((27.5) A give-way deadlock: this one is stopped behind another that's stopped behind another ... that's stopped
+     * behind this one - nose to nose, or three or four across each other's bows, each waiting for the next. Nobody's
+     * at a light and nobody will ever move. Of the ring, the one lowest in a fixed order (by where they stand) that
+     * has room behind it backs straight off a length, and the one it was blocking has room to get by. No car drives
+     * through another.
+     */
+    void giveWay(Vehicle v) {
+        if (v.stillT < 6 || v.held || v.queuedHeld || v.giveWayT > 0 || v.backT > 0 || v.player != null || v.parked) return;
+        Vehicle cur = blockerOf(v);
+        int n = 0;
+        for (int k = 0; k < 6 && cur != null && cur != v; k++) {
+            if (cur.held || cur.queuedHeld || cur.parked || cur.broken || cur.player != null || cur.stillT < 3) return;
+            ring[n++] = cur;
+            cur = blockerOf(cur);
+        }
+        if (cur != v || !clearBehind(v, 20)) return;
+        // (Another in the ring, ranked lower, with room to back off itself: it goes, not this one.)
+        for (int k = 0; k < n; k++)
+            if (rank(ring[k]) < rank(v) && clearBehind(ring[k], 20)) return;
+        v.giveWayT = 1.5f;
+        gaveWay++;
+    }
+
+    private final Vehicle[] ring = new Vehicle[6];
+
+    /** ((27.5) A fixed order between any two vehicles, by where they stand. */
+    static float rank(Vehicle v) {
+        return v.x * 7 + v.y;
+    }
+
+    /** ((27.5) The nearest vehicle stopped right in front of v (in its way), or null. */
+    Vehicle blockerOf(Vehicle v) {
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
+        Vehicle best = null;
+        float bd = Float.MAX_VALUE;
+        int c0x = Math.max(0, (int) ((v.x - 40) / GC)), c1x = Math.min(fleet.gridW - 1, (int) ((v.x + 40) / GC));
+        int c0y = Math.max(0, (int) ((v.y - 40) / GC)), c1y = Math.min(fleet.gridH - 1, (int) ((v.y + 40) / GC));
+        for (int cy = c0y; cy <= c1y; cy++)
+            for (int cx = c0x; cx <= c1x; cx++)
+                for (int i = fleet.gridStart[cy * fleet.gridW + cx], ie = fleet.gridStart[cy * fleet.gridW + cx + 1]; i < ie; i++) {
+                    Vehicle o = fleet.gridV[i];
+                    if (o == v || o.removedFromFleet || levels(v, o) || Math.abs(o.speed) > 3) continue;
+                    float dx = o.x - v.x, dy = o.y - v.y, ahead = dx * fx + dy * fy, side = Math.abs(dx * -fy + dy * fx);
+                    float reach = (v.length() + o.length()) * 0.5f + 14;
+                    // (On the line it's about to drive, round the bend too - the way followLimit sees what's in its way.)
+                    if (v.corN >= 3 && !(ahead > 0 && side < 8)) {
+                        float along = alongCorridor(v, o, 9 + o.length() * 0.15f);
+                        if (along < 0) continue;
+                        ahead = along;
+                        side = 0;
+                    }
+                    if (ahead > 0 && ahead < reach && side < 11 && ahead < bd) {
+                        bd = ahead;
+                        best = o;
+                    }
+                }
+        return best;
     }
 
     /** ((27.4) Nothing (that isn't in the air) within dist behind it, in its lane. */
@@ -1136,7 +1223,7 @@ final class FleetDriving {
             if (steerClear(v) || unjam(v)) {
                 v.pathField = null;
                 if (v.field == null) return false;
-            }
+            } else giveWay(v);
         }
         max = roadSpeed(v, dt, max);
         // (Turned back there: it has a new way to go, or none yet.)
@@ -1366,23 +1453,125 @@ final class FleetDriving {
     /** ((27.3) A step of driveStep.) Going round something stopped in the lane: how far over from the route's tile it drives while it does (off is its own lane's). */
     float passingOffset(Vehicle v, float dt, int bx, int by, int ddx, int ddy, float off) {
         v.passing -= dt;
+        boolean inJ = city.junctionIdAt(v.x, v.y) >= 0;
+        // ((27.5) Not in a junction while it's moving: swinging out there cut the corner up onto the pavement. It keeps
+        // to its way across and the junction's rules sort out who goes first. (Lights and sirens, or one stuck there
+        // behind something that isn't moving, edge round it - on the road.))
+        if (inJ && !v.lightsOn() && v.stillT <= 3) return off;
         // (In a junction only to get out of a jam: there a stopped car is usually just waiting to turn.)
-        if (city.junctionIdAt(v.x, v.y) < 0 || v.stillT > 0 || v.speed < 20) {
+        if (!inJ || v.stillT > 0 || v.speed < 20) {
             // ((11.1) Where there's more than one lane each way, round it by the next lane over, not the
             // oncoming one.)
-            if (city.lanesEachWay(bx, by, ddx, ddy) > 1 && city.junctionIdAt(v.x, v.y) < 0)
-                off = city.laneOffset(bx, by, ddx, ddy, laneOf(v) == 0 ? 2 : 0);
-            else {
-                // ((12.0) Over to the other side of the route's tile, as before - unless that's off the road: where
-                // the route ran along the road's outer tile it swung out over the edge, into the lake along a
-                // lakeside road. Then it goes round by the other side.)
-                float sw = off - (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
-                float cx = (bx + 0.5f) * City.T - ddy * sw, cy = (by + 0.5f) * City.T + ddx * sw;
-                if (!city.drivable(cx, cy)) sw = off + (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
-                off = sw;
+            if (city.lanesEachWay(bx, by, ddx, ddy) > 1 && !inJ) {
+                float o2 = city.laneOffset(bx, by, ddx, ddy, laneOf(v) == 0 ? 2 : 0);
+                if (roadAt(bx, by, ddx, ddy, o2)) off = o2;
+                else v.passing = 0;
+            } else {
+                // ((12.0) Over to the other side of the route's tile: the oncoming lane.) ((27.5) Only if that's road:
+                // never round by the kerb side, up over it onto the pavement (it used to, where the oncoming side
+                // wasn't drivable - and the pavement counted as drivable). With no road there it gives up the pass
+                // and waits behind.)
+                float sg = off == 0 ? 1 : Math.signum(off);
+                float sw = off - sg * City.T * 1.1f, sw2 = off - sg * City.T * 0.75f;
+                if (roadAt(bx, by, ddx, ddy, sw)) off = sw;
+                else if (roadAt(bx, by, ddx, ddy, sw2)) off = sw2;
+                else v.passing = 0;
             }
         }
         return off;
+    }
+
+    /** ((27.5) The road itself (not the pavement, a plaza or a lot) at offset off across tile (bx, by), heading (ddx, ddy). */
+    boolean roadAt(int bx, int by, int ddx, int ddy, float off) {
+        int i = city.tileIndex((bx + 0.5f) * City.T - ddy * off, (by + 0.5f) * City.T + ddx * off);
+        return i >= 0 && passable(i, city.tiles[bx + by * city.w]);
+    }
+
+    /**
+     * ((27.5) Somewhere a vehicle on a tile of kind own, going round another, may drive: the road (parking bays too), or
+     * a country lane - and out on a lane in the country, the verge beside it (two meeting on a lane one car wide pull
+     * over onto the grass to pass). In a car park or a yard, the rest of it. Never the pavement, a plaza or anything
+     * solid.
+     */
+    boolean passable(int i, byte own) {
+        byte t = city.tiles[i];
+        if (city.solid[i]) return false;
+        if (t == City.ROAD || t == City.DIRT || t == City.CAR) return true;
+        if (own == City.DIRT) return t == City.GRASS || t == City.SAND || t == City.TRAIL;
+        if (own == City.LOT || own == City.BASE) return t == City.LOT || t == City.BASE;
+        return false;
+    }
+
+    /** ((27.5) All of the line lat over from v (to its right; negative, its left), for reach ahead, somewhere it may pass on. */
+    boolean sideClear(Vehicle v, float fx, float fy, float lat, float reach, byte ownT) {
+        for (float a = 0; a <= reach; a += 6) {
+            int i = city.tileIndex(v.x + fx * a - fy * lat, v.y + fy * a + fx * lat);
+            if (i < 0 || !passable(i, ownT)) return false;
+        }
+        return true;
+    }
+
+    /** ((27.5) How long a pass goes on once there's nothing left ahead to go round: back into its lane promptly. */
+    static final float PASS_T = 0.8f;
+
+    /**
+     * ((27.5) Whether v may go round o, stopped in its lane gap ahead, now: on the right side - a lane over the same way
+     * on a wide road, else the oncoming lane - all of it road (never the pavement), with nothing coming in that lane
+     * for the length of the pass and a good way beyond, and not at or near a junction (lights and sirens may, round a
+     * queue at a light, so long as the way's clear). Once it's going round it carries on (passingOffset still keeps
+     * it on the road).
+     */
+    boolean canPass(Vehicle v, Vehicle o, float gap) {
+        if (v.passing > 0) return true;
+        // (Sat behind something that isn't moving - parked, a wreck, a car at a scene, a knot - for a few seconds: it may
+        // edge round it near a junction, or in one, carefully, if the way's clear. Overtaking traffic that's moving, or
+        // only just stopped, never there.)
+        boolean stuck = v.stillT > 3 && Math.abs(o.speed) < 2;
+        boolean lights = v.lightsOn();
+        if (city.junctionIdAt(v.x, v.y) >= 0 && !stuck && !lights) return false;
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle), rx = -fy, ry = fx;
+        float reach = Math.max(0, gap) + (v.length() + o.length()) * 0.5f + 18;
+        if (!lights && !stuck)
+            for (float a = -City.T; a <= reach + City.T * 2; a += City.T * 0.5f)
+                if (city.junctionIdAt(v.x + fx * a, v.y + fy * a) >= 0) return false;
+        int dx = v.pdx, dy = v.pdy;
+        if (dx == 0 && dy == 0) {
+            if (Math.abs(fx) > Math.abs(fy)) dx = fx > 0 ? 1 : -1;
+            else dy = fy > 0 ? 1 : -1;
+        }
+        int own = city.tileIndex(v.x, v.y);
+        if (own < 0) return false;
+        boolean oncoming = city.lanesEachWay(own % city.w, own / city.w, dx, dy) <= 1;
+        float lat = oncoming ? -City.T * 1.05f : laneOf(v) == 0 ? City.T * 0.95f : -City.T * 0.95f;
+        // All of it road (or a lane and its verge, out in the country). (On a narrow street, a little less far over.)
+        byte ownT = city.tiles[own];
+        if (!sideClear(v, fx, fy, lat, reach, ownT)) {
+            lat *= 0.7f;
+            if (!sideClear(v, fx, fy, lat, reach, ownT)) return false;
+        }
+        // (Stuck ten seconds behind something that isn't moving - a knot, not a slow car: it edges out round it at a
+        // crawl, on the road, whatever's in the other lane. It still stops short of anything in its way there
+        // (followLimit), and traffic coming the other way sees it and waits; the alternative is nobody ever moves.)
+        if (v.stillT > 10 && Math.abs(o.speed) < 2) return true;
+        // Nothing in that lane: coming towards it far enough off to finish (more the faster it comes), or there at all.
+        // (One standing still in it beyond the end of the pass isn't coming: it's queued the other way, and it'll see
+        // this one in front of it if it moves. It's oncoming traffic on the move that needs the long clear stretch.)
+        // (Stuck a good while - a knot, not a slow car - it'll take a shorter gap, crawling, than one overtaking at speed.)
+        float far = reach + (oncoming ? (v.stillT > 15 ? 40 : 80) : 25);
+        int c0x = Math.max(0, (int) ((v.x - far - 40) / GC)), c1x = Math.min(fleet.gridW - 1, (int) ((v.x + far + 40) / GC));
+        int c0y = Math.max(0, (int) ((v.y - far - 40) / GC)), c1y = Math.min(fleet.gridH - 1, (int) ((v.y + far + 40) / GC));
+        for (int cy = c0y; cy <= c1y; cy++)
+            for (int cx = c0x; cx <= c1x; cx++)
+                for (int i = fleet.gridStart[cy * fleet.gridW + cx], ie = fleet.gridStart[cy * fleet.gridW + cx + 1]; i < ie; i++) {
+                    Vehicle q = fleet.gridV[i];
+                    if (q == v || q == o || q.removedFromFleet || offRoad(q) || levels(v, q)) continue;
+                    float qx = q.x - v.x, qy = q.y - v.y, a = qx * fx + qy * fy, s = qx * rx + qy * ry;
+                    if (Math.abs(s - lat) > City.T * 0.5f) continue;
+                    float towards = q.speed * -((float) Math.cos(q.angle) * fx + (float) Math.sin(q.angle) * fy);
+                    float clear = Math.abs(q.speed) < 3 ? reach + 14 : far + Math.max(0, towards) * 1.5f;
+                    if (a > -14 && a < clear) return false;
+                }
+        return true;
     }
 
     /** ((27.3) A step of driveStep.) The most it may do here: the open-road scale, rough ground, whatever's ahead in the lane, a checkpoint. */
@@ -1469,6 +1658,17 @@ final class FleetDriving {
         float diff = want - v.angle;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
+        if (v.giveWayT > 0) {
+            // ((27.5) Giving way in a knot: straight back, slowly, until it's backed a length or something's behind.)
+            v.giveWayT -= dt;
+            if (!clearBehind(v, 4)) v.giveWayT = 0;
+            else {
+                v.speed += (-10 - v.speed) * Math.min(1, dt * 3.2f);
+                v.x += (float) Math.cos(v.angle) * v.speed * dt;
+                v.y += (float) Math.sin(v.angle) * v.speed * dt;
+                return;
+            }
+        }
         if (v.backT > 0) {
             // ((27.4) Backing out of a jam: slowly, the nose swinging round towards the new way, until it's pointing
             // more or less along it or something's behind.)

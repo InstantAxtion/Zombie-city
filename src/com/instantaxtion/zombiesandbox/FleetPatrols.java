@@ -673,10 +673,17 @@ final class FleetPatrols {
         if (!person) v.timer = 0;
         v.stuckTimer += dt;
         boolean queue = fleet.driving.carAhead(v);
-        if ((v.held || queue) && !fleet.routing.gridlocked(v)) v.stuckTimer = Math.min(v.stuckTimer, 1);
+        // ((27.5) Waiting at a light, or in a queue that's moving, is waiting its turn. Sat in one that isn't (behind a
+        // knot, a wreck, another patrol nose to nose with it) it's on its rounds, nowhere it has to be: after ten
+        // seconds it goes somewhere else instead, backing out to turn if it must. Patrol cars waited behind each other
+        // for good, and were nearly every vehicle stuck in town.)
+        boolean waiting = v.held || v.queuedHeld || (queue && v.stillT < 1);
+        if (waiting && !fleet.routing.gridlocked(v)) v.stuckTimer = Math.min(v.stuckTimer, 1);
         if (!fleet.driving.driveStep(v, dt, Math.min(limit, person ? 15 : city.onHighway(v.x, v.y) ? 105 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 95 : 60), queue ? 0.15f : 1f) || v.stuckTimer > 10) {
+            boolean stuck = v.stuckTimer > 10;
             v.stuckTimer = 0;
             fleet.routing.newDestination(v);
+            if (stuck && v.field != null && Math.abs(v.speed) < 6) fleet.driving.backOutIfBehind(v);
         } else if (v.orbited) {
             // ((11.5) Gone round in a circle - a turn too tight for it off a wide road - on its rounds: somewhere else
             // instead, rather than round the block again and again.)

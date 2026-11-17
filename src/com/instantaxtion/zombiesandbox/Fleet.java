@@ -105,6 +105,8 @@ final class Fleet {
         float stillT, passing;
         /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
         transient float backT;
+        /** ((27.5) Backing straight off a length to undo a knot it's part of, giving the other the room (seconds left). */
+        transient float giveWayT;
         /** ((24.0) How long a helicopter has held over its landing spot for the dead round it. */
         float holdT;
         /** How far it has turned without getting any nearer (a car going round in circles), and how long it
@@ -1032,7 +1034,10 @@ final class Fleet {
                 continue;
             }
             // At a scene: in to the kerb, out of the traffic's way.
-            if (((v.type == CRUISER && v.state == SCENE) || (v.type == AMBULANCE && v.state == LOAD)) && Math.abs(v.speed) < 1 && !v.broken)
+            // ((27.5) And while it waits for its officers to come back to it, or to come and get in: the queue behind a
+            // police car stopped in the lane for that sat there as long as it did.)
+            if (((v.type == CRUISER && (v.state == SCENE || v.state == RECALL || v.state == PICKUP)) || (v.type == AMBULANCE && v.state == LOAD))
+                    && Math.abs(v.speed) < 1 && !v.broken && v.player == null)
                 driving.kerbAtScene(v, vdt);
             else if (Math.abs(v.speed) > 10) v.kerbed = false;
             if (!airborne(v) && v.type != TRAIN && v.hp < v.maxHp * 0.5f) smoke(v, vdt);

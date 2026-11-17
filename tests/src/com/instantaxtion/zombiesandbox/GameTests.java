@@ -5388,6 +5388,48 @@ public final class GameTests {
                 check(among != null && w.fieldworks.safePack(f0[0], f0[1], 100, 25, 150, 0) == null, "not with friends close to it");
             }
         });
+        test("27.5: junctions don't lock up", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 23;
+                c.civic = 39; // the map it was set up on
+                World w = new World(c);
+                w.populate(c);
+                // A minute of town traffic, police on patrol among it.
+                float paved = 0, pavement = 0;
+                java.util.Map<Fleet.Vehicle, float[]> at = new java.util.HashMap<Fleet.Vehicle, float[]>();
+                int stuck = 0, moving = 0;
+                for (int f = 0; f < 30 * 60; f++) {
+                    w.update(1 / 30f);
+                    for (int i = 0; i < w.fleet.vehicles.size(); i++) {
+                        Fleet.Vehicle v = w.fleet.vehicles.get(i);
+                        if (v.removedFromFleet || v.player != null || Fleet.offRoad(v) || Fleet.airborne(v)) continue;
+                        if (v.passing > 0 && !v.parked && Math.abs(v.speed) > 1) {
+                            int t = w.city.tileIndex(v.x, v.y);
+                            if (t < 0) continue;
+                            if (w.city.tiles[t] == City.SIDEWALK || w.city.tiles[t] == City.PLAZA) pavement += 1 / 30f;
+                            else paved += 1 / 30f;
+                        }
+                        // Stuck: on its way somewhere, and not 40 units further on in 30 seconds.
+                        boolean trying = !v.parked && !v.broken && (v.state == Fleet.DRIVE || v.state == Fleet.RETURN || v.state == Fleet.PATROL
+                                || (v.type == Fleet.CAR && v.state == Fleet.WAIT));
+                        float[] a = at.get(v);
+                        if (a == null || !trying || Math.hypot(v.x - a[0], v.y - a[1]) > 40) at.put(v, a = new float[]{v.x, v.y, w.time, 0});
+                        if (trying && a[3] == 0 && w.time - a[2] > 30) {
+                            a[3] = 1;
+                            stuck++;
+                        }
+                    }
+                }
+                for (int i = 0; i < w.fleet.vehicles.size(); i++)
+                    if (!Fleet.offRoad(w.fleet.vehicles.get(i)) && !w.fleet.vehicles.get(i).parked) moving++;
+                // Going round something, it keeps to the road: never up on the pavement.
+                check(paved > 1 && pavement < paved * 0.02f, "passing on the road, not the pavement (" + (int) paved + " s vs " + pavement + " s)");
+                check(stuck <= Math.max(3, moving / 8), "hardly anything sat stuck for half a minute (" + stuck + " of " + moving + ")");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -5535,6 +5577,7 @@ public final class GameTests {
                 c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 41;
+                c.civic = 39; // the map it was set up on
                 World w = new World(c);
                 w.populate(c);
                 w.update(1 / 30f);
@@ -6103,6 +6146,7 @@ public final class GameTests {
                 c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 c.seed = 77;
+                c.civic = 39; // the map it was set up on
                 World w = new World(c);
                 w.populate(c);
                 check(w.ops.boats.size() >= 2, "police boats moored on the water (" + w.ops.boats.size() + ")");
