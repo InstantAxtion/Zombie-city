@@ -2,11 +2,24 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "27.4";
-    static final int VERSION_CODE = 274;
+    static final String VERSION = "27.5";
+    static final int VERSION_CODE = 275;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "27.5  -  Every city its own",
+                    "Every new city is laid out its own way: town shape, downtown, district mix, colours, great park and airport side.",
+                    "Seven new kinds of neighbourhood, from trailer parks to market quarters. Police motorcycles redrawn.",
+                    "Medics: the badly hurt walk or are driven to care, heal and go back on duty. The army has armoured ambulances.",
+                    "Damaged patrol cars go home for repair.",
+                    "Commanders hold a line and fall back together. New: the MRAP and the fire support truck.",
+                    "Police rounds hit harder; every soldier with grenades throws them.",
+                    "Cars no longer pass on the pavement or into oncoming traffic; police pull in to the kerb.",
+                    "Civilians volunteer for the police and army. Survivor bases raid, and some turn raider.",
+                    "Unit cards show what a unit did lately; new infection and reach overlays. A quieter radio.",
+                    "A car you let go of drives on. No mid-game checkpoints. Calls are kept in saves.",
+            },
             {
                     "27.4  -  Sharper",
                     "Saved games keep their vehicles: patrol cars, command trucks, convoys, buses and pickups come back where they were, crews aboard.",
