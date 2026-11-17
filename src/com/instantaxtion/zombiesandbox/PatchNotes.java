@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "27.3";
-    static final int VERSION_CODE = 273;
+    static final String VERSION = "27.4";
+    static final int VERSION_CODE = 274;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "27.4  -  Sharper",
+                    "Saved games keep their vehicles: patrol cars, command trucks, convoys, buses and pickups come back where they were, crews aboard.",
+                    "Squads focus fire, cover whoever is reloading, and fall back together to a rally point when they're running dry and overrun.",
+                    "Vehicles plan routes around streets thick with the dead and reroute round jams instead of waiting.",
+                    "A unit on a job keeps it until the job is done; its card says what it's on.",
+                    "Big hordes run faster.",
+            },
             {
                     "27.3  -  Under the hood",
                     "The game's code has been reorganised from the ground up, ready for the improvements to come. It plays exactly as before.",
