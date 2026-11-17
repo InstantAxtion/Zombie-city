@@ -323,9 +323,167 @@ final class LandmarkArt28 {
         out.add(d);
     }
 
+    /** The home side's colours, seat and trim, from the city: every city its own club. */
+    static int[] club(City city) {
+        int[][] k = {{0xFFC8282A, 0xFFF2F2EE}, {0xFF1E4FA8, 0xFFF2F2EE}, {0xFF1E7A3E, 0xFFF2D24A}, {0xFF6A2A8A, 0xFFF2D24A},
+                {0xFFE8C21E, 0xFF1E1E22}, {0xFFE8641E, 0xFF1E1E22}, {0xFF2A9AC8, 0xFFF2F2EE}, {0xFF8A1E2A, 0xFF4A9AD0}};
+        return k[(int) Math.abs(city.cfg.seed % k.length)];
+    }
+
+    /** The stand thickness and the concourse round it, for a stadium of short side S tiles. */
+    static int standT(int S) {
+        return Math.max(3, Math.min(9, S / 5));
+    }
+
     static void stadium(List<Landmarks.Def> out) {
+        // The great stadium: four stands round the pitch (people go in, shelter, fight from them), the open corners of
+        // the bowl with their tiers of seats, the floodlight masts, the big screen, and the concourse all round.
+        Landmarks.Def d = new Landmarks.Def("Grand Stadium", T_BUILDING) {
+            @Override
+            int[][] plan(int bw, int bh, Random r) {
+                boolean al = bw >= bh;
+                int L = Math.max(bw, bh), S = Math.min(bw, bh), m = 2, t = standT(S);
+                int hu = L / 2, hv = S / 2;
+                return new int[][]{
+                        LandmarkArt12.at(al, m + t, m, hu - 1 - (m + t), t, 4), LandmarkArt12.at(al, hu + 1, m, L - m - t - hu - 1, t, 4),
+                        LandmarkArt12.at(al, m + t, S - m - t, hu - 1 - (m + t), t, 4), LandmarkArt12.at(al, hu + 1, S - m - t, L - m - t - hu - 1, t, 4),
+                        LandmarkArt12.at(al, m, m + t, t, hv - 1 - (m + t), 3), LandmarkArt12.at(al, m, hv + 1, t, S - m - t - hv - 1, 3),
+                        LandmarkArt12.at(al, L - m - t, m + t, t, hv - 1 - (m + t), 3), LandmarkArt12.at(al, L - m - t, hv + 1, t, S - m - t - hv - 1, 3)};
+            }
+
+            @Override
+            void ground(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r) {
+                LandmarkArt12.F f = new LandmarkArt12.F(c, p, x0, y0, x1, y1);
+                float L = f.L, S = f.S, m = 2 * TT, t = standT(Math.round(S / TT)) * TT;
+                int[] k = club(city);
+                // The concourse: big pale slabs, a ring of trees and lamps.
+                f.rect(0xFFC4BCA8, 0, 0, L, S);
+                for (float u = 12; u < L; u += 24) f.line(0x18000000, 0.6f, u, 0, u, S);
+                for (float v = 12; v < S; v += 24) f.line(0x18000000, 0.6f, 0, v, L, v);
+                // The bowl: its outer wall, the tiers in the corners.
+                f.roundRect(0xFF6A6E74, m - 3, m - 3, L - m + 3, S - m + 3, t * 1.2f);
+                f.roundRect(0xFF8A8E94, m, m, L - m, S - m, t);
+                for (int q = 0; q < 4; q++) {
+                    float cu = q % 2 == 0 ? m + t : L - m - t, cv = q < 2 ? m + t : S - m - t;
+                    for (int ring = 0; ring < 5; ring++) {
+                        float rr = t * (1 - ring * 0.18f);
+                        f.circle(ring % 2 == 0 ? k[0] : City.darken(k[0], 0.85f), cu, cv, rr);
+                    }
+                    f.circle(0xFF8A8E94, cu, cv, t * 0.12f);
+                }
+                // The pitch, mown in stripes, its lines.
+                float pu0 = m + t + 4, pv0 = m + t + 4, pu1 = L - m - t - 4, pv1 = S - m - t - 4;
+                f.rect(0xFF4E8A3A, m + t, m + t, L - m - t, S - m - t);
+                for (float u = pu0; u < pu1; u += 24) f.rect(0xFF57953F, u, pv0, Math.min(pu1, u + 12), pv1);
+                f.frame(0xFFF2F2EE, 1.2f, pu0, pv0, pu1, pv1);
+                f.line(0xFFF2F2EE, 1.2f, (pu0 + pu1) / 2, pv0, (pu0 + pu1) / 2, pv1);
+                f.ring(0xFFF2F2EE, 1.2f, (pu0 + pu1) / 2, (pv0 + pv1) / 2, Math.min(30, (pv1 - pv0) * 0.18f));
+                float bh = (pv1 - pv0) * 0.5f, bd = Math.min(40, (pu1 - pu0) * 0.14f);
+                f.frame(0xFFF2F2EE, 1.2f, pu0, (pv0 + pv1) / 2 - bh / 2, pu0 + bd, (pv0 + pv1) / 2 + bh / 2);
+                f.frame(0xFFF2F2EE, 1.2f, pu1 - bd, (pv0 + pv1) / 2 - bh / 2, pu1, (pv0 + pv1) / 2 + bh / 2);
+                f.rect(0xFFF2F2EE, pu0 - 2, (pv0 + pv1) / 2 - 6, pu0, (pv0 + pv1) / 2 + 6);
+                f.rect(0xFFF2F2EE, pu1, (pv0 + pv1) / 2 - 6, pu1 + 2, (pv0 + pv1) / 2 + 6);
+                // The floodlight masts on the corners of the bowl.
+                for (int q = 0; q < 4; q++) {
+                    float cu = q % 2 == 0 ? m + 4 : L - m - 4, cv = q < 2 ? m + 4 : S - m - 4;
+                    f.rect(0x40000000, cu - 4, cv - 2, cu + 8, cv + 6);
+                    f.rect(0xFF5A5E64, cu - 5, cv - 3, cu + 5, cv + 3);
+                    for (float uu = cu - 4; uu < cu + 4; uu += 2.5f) f.rect(0xFFFFF6C8, uu, cv - 2, uu + 1.6f, cv + 2);
+                }
+                // Banners on the concourse in the club's colours, trees in their planters.
+                for (float u = 20; u < L - 20; u += 46) {
+                    f.rect(k[0], u, 3, u + 6, 6);
+                    f.rect(k[1], u + 6, 3, u + 12, 6);
+                }
+            }
+
+            @Override
+            void roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1, Random r) {
+                // A stand from above: rows of seats in the club's colours rising away from the pitch, the roof's edge
+                // over the back half.
+                int[] k = club(city);
+                boolean wide = x1 - x0 >= y1 - y0;
+                f2(c, p, x0, y0, x1, y1, wide, k, part);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.minS = 22;
+        d.minL = 28;
+        d.base = City.OFFICE;
+        d.inside = Variants.I_SEATS;
+        d.roofCol = 0xFF8A8E94;
+        out.add(d);
+    }
+
+    /** A stand's seats and roof edge. */
+    static void f2(Canvas c, Paint p, float x0, float y0, float x1, float y1, boolean wide, int[] k, int part) {
+        Landmarks.rect(c, p, 0xFF5A5E64, x0, y0, x1, y1);
+        float d = wide ? y1 - y0 : x1 - x0;
+        // (Which side faces the pitch: the long stands' inner side, by their place in the plan.)
+        boolean inLow = part == 0 || part == 1 || part == 4 || part == 5;
+        for (float s = 1.5f; s < d * 0.62f; s += 2.6f) {
+            int col = ((int) (s / 2.6f)) % 3 == 2 ? k[1] : k[0];
+            float a = inLow ? d - s - 1.4f : s;
+            if (wide) Landmarks.rect(c, p, col, x0 + 1, y0 + a, x1 - 1, y0 + a + 1.6f);
+            else Landmarks.rect(c, p, col, x0 + a, y0 + 1, x0 + a + 1.6f, y1 - 1);
+        }
+        // The roof over the back rows: pale, ribbed.
+        float r0 = inLow ? 0 : d * 0.62f, r1 = inLow ? d * 0.38f : d;
+        if (wide) {
+            Landmarks.rect(c, p, 0xFFDCDEE0, x0, y0 + r0, x1, y0 + r1);
+            for (float x = x0 + 4; x < x1; x += 6) Landmarks.rect(c, p, 0x22000000, x, y0 + r0, x + 0.8f, y0 + r1);
+        } else {
+            Landmarks.rect(c, p, 0xFFDCDEE0, x0 + r0, y0, x0 + r1, y1);
+            for (float y = y0 + 4; y < y1; y += 6) Landmarks.rect(c, p, 0x22000000, x0 + r0, y, x0 + r1, y + 0.8f);
+        }
     }
 
     static void fanZone(List<Landmarks.Def> out) {
+        // A fan zone: a great paved square with the big screen at one end, food and merchandise stalls under striped
+        // awnings down the sides, flags strung over it, trees in planters and the crowd's benches.
+        Landmarks.Def d = new Landmarks.Def("Fan Zone", T_PARK) {
+            @Override
+            void ground(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r) {
+                LandmarkArt12.F f = new LandmarkArt12.F(c, p, x0, y0, x1, y1);
+                float L = f.L, S = f.S;
+                int[] k = club(city);
+                f.rect(0xFFCDBF9E, 0, 0, L, S);
+                // Paving in a big chequer of two tones, a club-coloured band down the middle.
+                for (float u = 0; u < L; u += 32)
+                    for (float v = 0; v < S; v += 32) if (((int) (u / 32) + (int) (v / 32)) % 2 == 0) f.rect(0xFFC2B492, u, v, u + 32, v + 32);
+                f.rect(City.lighten(k[0], 0.2f), 0, S / 2 - 3, L, S / 2 + 3);
+                // The big screen on its frame at the far end, facing down the square.
+                float sw = Math.min(S * 0.6f, 90);
+                f.rect(0x40000000, L - 14, S / 2 - sw / 2 + 3, L - 4, S / 2 + sw / 2 + 3);
+                f.rect(0xFF2A2C30, L - 16, S / 2 - sw / 2, L - 6, S / 2 + sw / 2);
+                f.rect(0xFF3A6AA8, L - 15, S / 2 - sw / 2 + 2, L - 12, S / 2 + sw / 2 - 2);
+                // Stalls down both long sides.
+                for (float u = 10; u < L - 30; u += 26) {
+                    for (int side = 0; side < 2; side++) {
+                        float v = side == 0 ? 4 : S - 16;
+                        f.rect(0x30000000, u + 2, v + 2, u + 20, v + 14);
+                        for (float uu = u; uu < u + 18; uu += 3) f.rect((int) ((uu - u) / 3) % 2 == 0 ? k[0] : k[1], uu, v, uu + 3, v + 12);
+                    }
+                }
+                // Planters with trees, and the crowd.
+                for (float u = 40; u < L - 40; u += 60)
+                    for (int side = 0; side < 2; side++) {
+                        float v = side == 0 ? S * 0.3f : S * 0.7f;
+                        f.circle(0xFF8A8478, u, v, 6);
+                        f.tree(u, v, 5);
+                    }
+                for (int n = 0; n < (int) (L * S / 900); n++) {
+                    float u = 20 + r.nextFloat() * (L - 50), v = 20 + r.nextFloat() * (S - 40);
+                    LandmarkArt12.person(f, u, v, r.nextFloat() < 0.5f ? k[0] : LandmarkArt12.CLOTHES[r.nextInt(LandmarkArt12.CLOTHES.length)]);
+                }
+                // Flags strung across it.
+                for (float u = 30; u < L; u += 50)
+                    for (float v = 6; v < S - 6; v += 8) f.poly((int) (v / 8) % 2 == 0 ? k[0] : k[1], u - 2, v, u + 2, v, u, v + 3);
+            }
+        };
+        d.ground = City.PLAZA;
+        d.minS = 8;
+        d.minL = 10;
+        out.add(d);
     }
 }
