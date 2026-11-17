@@ -70,7 +70,8 @@ final class Indoors {
         }
         if (from != null) {
             // Out: through the rooms to the entrance, then out of the door.
-            if (World.hypot(e.x - from.inX, e.y - from.inY) < 6 || World.hypot(e.x - from.gapX, e.y - from.gapY) < 7) {
+            if (World.hypot(e.x - from.inX, e.y - from.inY) < 6 || World.hypot(e.x - from.gapX, e.y - from.gapY) < 7
+                    || e.routeGiveUp && e.routeB == from && e.routeTx == from.inX && e.routeTy == from.inY) {
                 float ox = from.doorX - e.x, oy = from.doorY - e.y, od = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
                 w.movement.steer(e, ox / od, oy / od, speed);
             } else followRoute(e, from, from.inX, from.inY, speed);
@@ -91,23 +92,78 @@ final class Indoors {
     /** Through a building's rooms, doorway by doorway, to a spot in it. */
     void followRoute(Entity e, City.Building b, float tx, float ty, float speed) {
         if (e.route == null || e.routeB != b || Math.abs(e.routeTx - tx) > 3 || Math.abs(e.routeTy - ty) > 3 || (e.blocked && w.rnd.nextFloat() < 0.05f)) {
-            e.route = w.city.roomRoute(b, e.x, e.y, tx, ty);
+            e.route = clearOfWalls(b, w.city.roomRoute(b, e.x, e.y, tx, ty), e.radius);
             e.routeI = 0;
             e.routeB = b;
             e.routeTx = tx;
             e.routeTy = ty;
             e.blocked = false;
+            e.routeSeen = -1;
+            e.routeGiveUp = false;
         }
         float[] r = e.route;
-        while (e.routeI < r.length / 2 - 1 && World.hypot(r[e.routeI * 2] - e.x, r[e.routeI * 2 + 1] - e.y) < 4) e.routeI++;
+        // ((27.5) A doorway's middle can sit right against its frame: up to it, or pressed against the wall beside
+        // it, they're through.)
+        float near = e.blocked ? 7 : 4;
+        while (e.routeI < r.length / 2 - 1 && World.hypot(r[e.routeI * 2] - e.x, r[e.routeI * 2 + 1] - e.y) < near) e.routeI++;
         float px = r[e.routeI * 2], py = r[e.routeI * 2 + 1];
         float dx = px - e.x, dy = py - e.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
         boolean last = e.routeI >= r.length / 2 - 1;
-        if (last && d < 2.5f) {
+        if (last && (d < 2.5f || e.routeGiveUp)) {
             w.movement.steer(e, 0, 0, 0);
             return;
         }
+        // ((27.5) Getting no closer for two seconds - the spot taken, a corner, someone in the doorway - they settle
+        // for near enough, or go on to the next doorway, or step aside and find another way, instead of walking into
+        // the wall for good.)
+        if (e.routeSeen != e.routeI || d < e.routeBest - 1) {
+            e.routeSeen = e.routeI;
+            e.routeBest = d;
+            e.routeProgT = w.time;
+        } else if (w.time - e.routeProgT > 2) {
+            e.routeProgT = w.time;
+            e.routeBest = d;
+            if (last && d < 12) {
+                e.routeGiveUp = true;
+                w.movement.steer(e, 0, 0, 0);
+                return;
+            }
+            if (!last && d < 9) e.routeI++;
+            else {
+                e.route = clearOfWalls(b, w.city.roomRoute(b, e.x, e.y, tx, ty), e.radius);
+                e.routeI = 0;
+                e.routeSeen = -1;
+                e.unstick = 0.4f;
+                e.unstickAngle = (float) Math.atan2(dy, dx) + (w.rnd.nextBoolean() ? 1.4f : -1.4f);
+            }
+            return;
+        }
         w.movement.steer(e, dx / d, dy / d, last ? Math.min(speed, d * 3 + 2) : speed);
+    }
+
+    private static final float[] NUDGE_X = {1, -1, 0, 0, 0.7f, -0.7f, 0.7f, -0.7f}, NUDGE_Y = {0, 0, 1, -1, 0.7f, 0.7f, -0.7f, -0.7f};
+
+    /**
+     * ((27.5) A doorway's point can sit where someone can't stand - hard by the end of the wall beside it, where
+     * another wall meets it - and they pressed into that corner for good, a step from the gap. Each point on the
+     * way is moved to the nearest place clear of the walls, on the same side of them.
+     */
+    float[] clearOfWalls(City.Building b, float[] r, float radius) {
+        float rr = radius + 0.5f;
+        for (int k = 0; k + 1 < r.length; k += 2) {
+            float x = r[k], y = r[k + 1];
+            if (!w.city.wallHit(b, x, y, rr)) continue;
+            search:
+            for (float step = 1.5f; step <= 7.5f; step += 1.5f)
+                for (int j = 0; j < NUDGE_X.length; j++) {
+                    float nx = x + NUDGE_X[j] * step, ny = y + NUDGE_Y[j] * step;
+                    if (w.city.wallHit(b, nx, ny, rr) || w.city.wallCross(b, x, y, nx, ny) || w.city.insideOf(nx, ny) != b) continue;
+                    r[k] = nx;
+                    r[k + 1] = ny;
+                    break search;
+                }
+        }
+        return r;
     }
 
     /** Somewhere to be in a building: one of the places people sit or stand, or anywhere in one of its rooms. */
@@ -181,8 +237,10 @@ final class Indoors {
         e.inSpotT -= dt;
         if (e.inSpotT <= 0) pickSpot(e, b);
         float d = (float) World.hypot(e.inSpotX - e.x, e.inSpotY - e.y);
-        if (d < 2.5f) {
+        if (d < 2.5f || e.routeGiveUp && e.routeB == b && e.routeTx == e.inSpotX && e.routeTy == e.inSpotY) {
             w.movement.steer(e, 0, 0, 0);
+            // ((27.5) Still squeezed past by those finding their way round them.)
+            e.inT = w.time;
             e.angle = World.turn(e.angle, e.inSpotA, dt * 4);
         } else indoorMove(e, e.inSpotX, e.inSpotY, e.stayHide ? e.runSpeed * 0.6f : e.speed * 0.7f);
         return true;
@@ -216,6 +274,16 @@ final class Indoors {
                     else w.movement.steer(e, 0, 0, 0);
                     return true;
                 }
+            }
+            // ((27.5) With family who've gone in here: with them, not out of the door and straight back in after
+            // them, over and over, for good.)
+            if (e.type == Entity.CIVILIAN && e.leader != null && !e.leader.dead && e.fleeTimer <= 0 && w.city.insideOf(e.leader.x, e.leader.y) == in) {
+                if (World.hypot(e.leader.x - e.x, e.leader.y - e.y) > 14) indoorMove(e, e.leader.x, e.leader.y, e.speed);
+                else {
+                    w.movement.steer(e, 0, 0, 0);
+                    e.inT = w.time;
+                }
+                return true;
             }
             // Nothing to do in here: out.
             e.aiming = false;

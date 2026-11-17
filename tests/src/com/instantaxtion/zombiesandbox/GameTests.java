@@ -4946,6 +4946,97 @@ public final class GameTests {
                 check(d.messageCount - at <= Dispatch.LOW_CAP && d.quietCapped > 0, "routine news capped (" + (d.messageCount - at) + ")");
             }
         });
+        test("27.5: nobody stands idle near a fight; nobody stays stuck on a corner", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 2751;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // A long straight street: a call at one end, the dead a little way past it, an officer on the ring on
+                // the near side - out of pistol range of them. They step in until they have them in their sights.
+                java.util.Random r = new java.util.Random(11);
+                float[] s0 = null;
+                float ux = 0, uy = 0;
+                for (int k = 0; k < 600 && s0 == null; k++) {
+                    float[] q = w.city.randomStreetSpot(r);
+                    if (q == null) continue;
+                    for (int dir = 0; dir < 2 && s0 == null; dir++) {
+                        float ax = dir == 0 ? 1 : 0, ay = dir == 1 ? 1 : 0;
+                        boolean clear = true;
+                        for (int u = -150; u <= 110 && clear; u += 6)
+                            for (int v = -8; v <= 8 && clear; v += 8)
+                                if (w.city.solidAt(q[0] + ax * u + ay * v, q[1] + ay * u + ax * v)) clear = false;
+                        if (clear) {
+                            s0 = q;
+                            ux = ax;
+                            uy = ay;
+                        }
+                    }
+                }
+                check(s0 != null, "a long straight street");
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 6; i++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, s0[0] + ux * (70 + i * 7) + uy * ((i % 2) * 6 - 3), s0[1] + uy * (70 + i * 7) + ux * ((i % 2) * 6 - 3));
+                    untouchable(z);
+                    pack.add(z);
+                }
+                final Entity cop = w.spawnCop(0, s0[0] - ux * 125, s0[1] - uy * 125);
+                Quiet q = empty(w, s0[0], s0[1], 500, cop, pack);
+                w.update(1 / 30f);
+                Dispatch.Incident inc = w.dispatch.sighting(s0[0], s0[1], null);
+                check(inc != null, "a call");
+                cop.task = Dispatch.T_RESPOND;
+                cop.incident = inc;
+                cop.onScene = true;
+                cop.ringOf = inc;
+                cop.ringA = (float) Math.atan2(-uy, -ux);
+                check(Math.hypot(pack.get(0).x - cop.x, pack.get(0).y - cop.y) > 190, "the dead out of pistol range of their place on the ring");
+                boolean fired = stepUntil(w, q, 15, new Cond() {
+                    public boolean done() {
+                        cop.ammo = Math.max(cop.ammo, 5);
+                        return cop.aiming;
+                    }
+                });
+                check(fired, "the officer on the ring steps in until they have them in their sights, not stands there (" + (int) Math.hypot(pack.get(0).x - cop.x, pack.get(0).y - cop.y) + " off)");
+                // Through buildings, from the first room to each of the others: everyone gets there - none pressed into a
+                // corner by a doorway, or a wall that ends in the middle of one, for good.
+                WM move = wm("move", Entity.class, float.class);
+                move.setAccessible(true);
+                int walks = 0, stuck = 0, buildings = 0;
+                String where = "";
+                for (City.Building o : w.city.buildings) {
+                    if (buildings >= 30) break;
+                    if (!w.city.enterable(o) || w.city.planOf(o).rooms.size() < 3) continue;
+                    buildings++;
+                    java.util.List<float[]> rooms = w.city.planOf(o).rooms;
+                    float ax = (rooms.get(0)[0] + rooms.get(0)[2]) / 2, ay = (rooms.get(0)[1] + rooms.get(0)[3]) / 2;
+                    if (w.city.circleBlocked(ax, ay, 4)) continue;
+                    for (int k = 1; k < rooms.size(); k++) {
+                        float bx = (rooms.get(k)[0] + rooms.get(k)[2]) / 2, by = (rooms.get(k)[1] + rooms.get(k)[3]) / 2;
+                        if (w.city.circleBlocked(bx, by, 4)) continue;
+                        Entity e = w.spawn(Entity.CIVILIAN, ax, ay);
+                        boolean got = false;
+                        for (int f = 0; f < 30 * 25 && !got; f++) {
+                            w.indoors.indoorMove(e, bx, by, e.speed);
+                            move.invoke(w, e, 1 / 30f);
+                            float d = (float) Math.hypot(e.x - bx, e.y - by);
+                            got = d < 5 || e.routeGiveUp && d < 12;
+                        }
+                        walks++;
+                        if (!got) {
+                            stuck++;
+                            where = " e.g. at " + (int) e.x + "," + (int) e.y + ", " + (int) Math.hypot(e.x - bx, e.y - by) + " short";
+                        }
+                        e.dead = e.removed = true;
+                    }
+                }
+                check(walks > 40, "walks room to room (" + walks + ")");
+                check(stuck == 0, "every one gets there (" + stuck + " of " + walks + " stuck" + where + ")");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

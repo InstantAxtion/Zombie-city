@@ -278,6 +278,13 @@ final class Entity {
     transient int routeI;
     transient float routeTx, routeTy;
     transient City.Building routeB;
+    /**
+     * ((27.5) Getting nowhere on a route through a building: the waypoint they're on and the closest they've got to
+     * it, when that last got better, and whether they've settled for where they are (the spot taken, or in a corner).
+     */
+    transient int routeSeen = -1;
+    transient float routeBest, routeProgT;
+    transient boolean routeGiveUp;
     /** ((17.1) When they were last finding their way in, out of or round a building: they squeeze past each other there. */
     transient float inT = -9;
     /**

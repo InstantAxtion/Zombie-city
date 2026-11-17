@@ -1324,7 +1324,12 @@ final class ArmedAI {
                     e.onScene = true;
                     w.dispatch.onScene(e, inc);
                 }
-                if (!w.city.solidAt(px, py) && World.hypot(px - e.x, py - e.y) > 6) {
+                // ((27.5) The dead close by but round a corner or just out of pistol range: they stood on their
+                // spot on the ring and never fired a shot. They step in until they can see them, no nearer.)
+                int zd = w.city.fieldAt(w.city.zombieDist, e.x, e.y);
+                boolean closeIn = zd < 16 && (e.ammo > 0 || e.reserve > 0);
+                if (closeIn && zd > 3 && w.movement.followField(e, w.city.zombieDist, e.speed)) return true;
+                if (!closeIn && !w.city.solidAt(px, py) && World.hypot(px - e.x, py - e.y) > 6) {
                     w.wilds.walkToSpot(e, px, py, e.speed * 1.4f);
                     return true;
                 }
@@ -1343,7 +1348,10 @@ final class ArmedAI {
                 e.onScene = true;
                 w.dispatch.onScene(e, inc);
             }
-            if (w.city.fieldAt(w.city.zombieDist, e.x, e.y) < 10 && w.movement.followField(e, w.city.zombieDist, e.speed * 1.2f)) return true;
+            // ((27.5) On scene with the dead a street off and nothing in sight: they go to them (it was only 10
+            // tiles, and they stood at the cordon while the fight went on just out of range).
+            if (w.city.fieldAt(w.city.zombieDist, e.x, e.y) < 16 && (e.ammo > 0 || e.reserve > 0)
+                    && w.movement.followField(e, w.city.zombieDist, e.speed * 1.2f)) return true;
             if (!soldier) {
                 // Police throw a cordon round the scene: spread out in a ring, facing outwards.
                 float a = (e.callsign * 2.4f + e.member * 1.7f) % World.TAU, r = 38;
