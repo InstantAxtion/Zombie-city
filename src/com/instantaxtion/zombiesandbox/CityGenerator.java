@@ -1058,11 +1058,14 @@ final class CityGenerator extends CityPart {
                 // ((25.0) On Theme Park Island the headquarters is in the staff town.)
                 if (city.islandRects != null && n < city.islandRects.length && city.island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != (city.themePark ? 1 - n : n)) continue;
                 boolean near = false;
+                // ((28.0) Closer together on the water maps' small towns and islands.)
+                float spread = special != null ? special.spread() : 1f;
                 for (Facility f : city.facilities)
-                    if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < city.w * T / (city.cfg.policeStations() > 3 ? 4.5f : 3f))
-                            || World.hypot(f.x - cx, f.y - cy) < Math.max(20, city.w / 6f) * T) near = true;
+                    if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < spread * city.w * T / (city.cfg.policeStations() > 3 ? 4.5f : 3f))
+                            || World.hypot(f.x - cx, f.y - cy) < spread * Math.max(20, city.w / 6f) * T) near = true;
                 if (!near) options.add(k);
             }
+            if (options.isEmpty() && special != null) continue;
             if (options.isEmpty()) break;
             int k = options.get(city.rnd.nextInt(options.size()));
             // ((10.52) The first is the police headquarters: the biggest block on offer, up to twice a station's.)

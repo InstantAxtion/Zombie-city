@@ -27,7 +27,7 @@ abstract class WaterMap extends CityPart {
 
     /** The country as this map paints it: the swamp's moss and murky water, the coast's cold sea. */
     static Country country(CityConfig cfg, Country c) {
-        if (cfg.swamp()) return c.tinted(0xFF5C6A3A, 0xFF8E8A7E, 0xFF44583C);
+        if (cfg.swamp()) return c.tinted(0xFF5E6C3A, 0xFF8E8A7E, 0xFF2E4848);
         if (cfg.lighthouse()) return c.tinted(0xFF587A46, 0, 0xFF22587E);
         if (cfg.bridgeCity()) return c.tinted(0, 0, 0xFF285E8A);
         return c;
@@ -52,6 +52,11 @@ abstract class WaterMap extends CityPart {
 
     /** The map's own places, on blocks no one has taken yet (placeBases, before the army base). */
     void places(boolean[] used) {
+    }
+
+    /** How far apart the police stations are kept, as a share of the usual (the towns here are small). */
+    float spread() {
+        return 0.4f;
     }
 
     /** The last touches (finishGround). */

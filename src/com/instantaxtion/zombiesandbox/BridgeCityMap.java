@@ -28,7 +28,7 @@ final class BridgeCityMap extends WaterMap {
         int N = city.w;
         Random r = new Random(city.cfg.seed * 2803L + 25);
         int[][] grids = N < 160 ? new int[][]{{3, 2}, {2, 3}} : N < 300 ? new int[][]{{3, 2}, {2, 3}, {3, 3}}
-                : new int[][]{{3, 3}, {4, 3}, {3, 4}, {4, 2}, {2, 4}, {4, 4}};
+                : new int[][]{{3, 3}, {4, 3}, {3, 4}, {4, 2}, {2, 4}};
         int[] g = grids[r.nextInt(grids.length)];
         int cols = g[0], rows = g[1];
         int cells = cols * rows;
