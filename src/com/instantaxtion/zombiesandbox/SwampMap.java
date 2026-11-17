@@ -471,7 +471,7 @@ final class SwampMap extends WaterMap {
             gen.lmCount = new int[Landmarks.all().size()];
         }
         // Along the front street: the bait shops, the seafood shack and the airboat landing.
-        String[] front = {"Airboat Landing", "Bait & Tackle", "Seafood Shack", "Bait & Tackle"};
+        String[] front = {"Bait & Tackle", "Airboat Landing", "Seafood Shack", "Bait & Tackle"};
         int next = 0;
         int c = townLow ? frontC : frontC + 3;
         for (int pass = 0; pass < 2 && next < front.length; pass++)
@@ -479,7 +479,7 @@ final class SwampMap extends WaterMap {
                 int[] b = city.blocks.get(k);
                 if (used[k] || b.length > 4) continue;
                 boolean touches = across ? (townLow ? b[3] == c : b[1] == c) : (townLow ? b[2] == c : b[0] == c);
-                if (!touches) continue;
+                if (!touches || freeBlocks(town, used) <= 2) continue;
                 if (place(b, front[next])) {
                     used[k] = true;
                     next++;
@@ -489,7 +489,7 @@ final class SwampMap extends WaterMap {
         for (int[] h : hamlets)
             for (int k = 0; k < city.blocks.size(); k++) {
                 int[] b = city.blocks.get(k);
-                if (used[k] || b.length > 4 || !inside(h, (b[0] + b[2]) / 2f, (b[1] + b[3]) / 2f)) continue;
+                if (used[k] || b.length > 4 || !inside(h, (b[0] + b[2]) / 2f, (b[1] + b[3]) / 2f) || freeBlocks(h, used) <= 2) continue;
                 if (place(b, "Bait & Tackle")) {
                     used[k] = true;
                     break;

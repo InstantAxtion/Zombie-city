@@ -183,6 +183,16 @@ abstract class WaterMap extends CityPart {
         return true;
     }
 
+    /** How many blocks inside q nobody has taken yet (the landmarks leave the base and the police room). */
+    int freeBlocks(int[] q, boolean[] used) {
+        int n = 0;
+        for (int k = 0; k < city.blocks.size(); k++) {
+            int[] b = city.blocks.get(k);
+            if (!used[k] && b.length <= 4 && b[0] >= q[0] && b[1] >= q[1] && b[2] <= q[2] && b[3] <= q[3]) n++;
+        }
+        return n;
+    }
+
     /** Smooth value noise, 0 to 1 (seeded by s). */
     static float noise(float x, float y, long s) {
         int x0 = City.fl(x), y0 = City.fl(y);

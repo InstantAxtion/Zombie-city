@@ -261,7 +261,7 @@ final class WaterLandmarks {
     }
 
     static void fishMarket(List<Landmarks.Def> out) {
-        out.add(def("Fish Market", City.SHOP, 0xFF6A7A86, City.PLAZA, 9, 12, new int[][]{{1, 1, 8, 5, 1}}, new Painter() {
+        out.add(def("Fish Market", City.SHOP, 0xFF6A7A86, City.PLAZA, 8, 12, new int[][]{{1, 1, 8, 4, 1}}, new Painter() {
             @Override
             void paint(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r, int[][] plan) {
                 rect(c, p, 0xFFA8A49A, x0, y0, x1, y1);

@@ -67,7 +67,7 @@ final class LighthouseMap extends WaterMap {
         float A = N * 0.03f, f = (float) (Math.PI * 2 / (N * (0.5f + r.nextFloat() * 0.4f))), p = r.nextFloat() * 6.28f;
         // The villages' places along the coast: spread out, the harbour town at the widest.
         int nv = Math.max(2, Math.min(5, 2 + N / 260));
-        int VA = Math.max(34, Math.round(N * 0.1f)), HA = Math.max(46, Math.round(N * 0.22f));
+        int VA = Math.max(40, Math.round(N * 0.1f)), HA = Math.max(64, Math.round(N * 0.22f));
         int total = HA + (nv - 1) * VA;
         int free = N - total - 2 * Math.max(10, N / 20);
         int harbourAt = r.nextInt(nv);
@@ -145,7 +145,7 @@ final class LighthouseMap extends WaterMap {
         for (int k = 0; k < spans.size(); k++) {
             int[] sp = spans.get(k);
             int c0 = Math.round(road[sp[0]] - 1.5f);
-            int depth = k == 0 ? Math.max(40, Math.round(N * 0.22f)) : Math.max(30, Math.round(N * 0.11f));
+            int depth = k == 0 ? Math.max(48, Math.round(N * 0.22f)) : Math.max(34, Math.round(N * 0.11f));
             depth = Math.min(depth, N - c0 - 8);
             towns.add(rect(sp[0], c0, sp[1], c0 + depth));
         }
@@ -390,14 +390,33 @@ final class LighthouseMap extends WaterMap {
             gen.lmCount = new int[Landmarks.all().size()];
         }
         if (light != null) gen.placeParcel(light, "Lighthouse");
+        // The harbour town's fish market down on the quay, between the front street and the water.
+        boolean market = false;
+        int[] hs = spans.get(0);
+        int mid = (hs[0] + hs[1]) / 2;
+        for (int off = 0; off < (hs[1] - hs[0]) / 2 - 10 && !market; off += 6)
+            for (int sg = -1; sg <= 1 && !market; sg += 2) {
+                int a0 = mid + sg * off - 8, a1 = a0 + 16;
+                float sh = 0, rd = Float.MAX_VALUE;
+                for (int a = a0; a < a1; a++) {
+                    sh = Math.max(sh, shore[a]);
+                    rd = Math.min(rd, road[a]);
+                }
+                int c0 = (int) Math.ceil(sh) + 4, c1 = (int) Math.floor(rd - 2.6f);
+                if (c1 - c0 < 8) continue;
+                c0 = Math.max(c0, c1 - 12);
+                int[] pc = rect(a0, c0, a1, c1);
+                market = gen.placeParcel(pc, "Fish Market");
+                if (market) for (int y = pc[1]; y < pc[3]; y++) for (int x = pc[0]; x < pc[2]; x++) built[y * N + x] = true;
+            }
         // On the harbour town's front street: the fish market and the coast guard; a fish market in each village.
         for (int t = 0; t < towns.size(); t++) {
-            String[] names = t == 0 ? new String[]{"Coast Guard Station", "Fish Market"} : new String[]{"Fish Market"};
+            String[] names = t == 0 ? new String[]{market ? "Coast Guard Station" : "Fish Market", "Coast Guard Station"} : new String[]{"Fish Market"};
             int[] q = towns.get(t);
             int next = 0;
             for (int k = 0; k < city.blocks.size() && next < names.length; k++) {
                 int[] b = city.blocks.get(k);
-                if (used[k] || b.length > 4 || !front(q, b)) continue;
+                if (used[k] || b.length > 4 || !front(q, b) || freeBlocks(q, used) <= (t == 0 ? 3 : 2)) continue;
                 int[] in = {b[0] + 1, b[1] + 1, b[2] - 1, b[3] - 1};
                 Landmarks.Def d = CityGenerator.landmarkNamed(names[next]);
                 int pw = in[2] - in[0], ph = in[3] - in[1];
