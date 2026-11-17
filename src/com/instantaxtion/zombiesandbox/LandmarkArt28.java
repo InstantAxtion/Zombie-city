@@ -254,6 +254,73 @@ final class LandmarkArt28 {
     // ------------------------------------------------------------------ Border Town and Stadium City (below)
 
     static void customsYard(List<Landmarks.Def> out) {
+        // A customs yard: the inspection shed along the back, the customs office at one end, the inspection lanes in
+        // front with their booths and barriers, and lorries queued in them waiting to be searched.
+        Landmarks.Def d = new Landmarks.Def("Customs Yard", T_BUILDING) {
+            @Override
+            int[][] plan(int bw, int bh, Random r) {
+                boolean al = bw >= bh;
+                int L = Math.max(bw, bh), S = Math.min(bw, bh);
+                int sd = Math.max(3, Math.min(6, S / 3)), ol = Math.max(4, Math.min(8, L / 4));
+                return new int[][]{LandmarkArt12.at(al, ol + 2, 0, L - ol - 2, sd, 1), LandmarkArt12.at(al, 0, 0, ol, Math.max(4, S - 3), 2)};
+            }
+
+            @Override
+            void ground(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r) {
+                LandmarkArt12.F f = new LandmarkArt12.F(c, p, x0, y0, x1, y1);
+                float L = f.L, S = f.S;
+                int[][] pq = LandmarkArt12.pl(this, x0, y0, x1, y1);
+                float[] shed = LandmarkArt12.bx(f, pq[0]);
+                f.rect(0xFF5A5C60, 0, 0, L, S);
+                float v0 = shed[3] + 4, u0 = shed[0], u1 = L - 2;
+                int lanes = Math.max(2, Math.min(6, (int) ((u1 - u0) / 34)));
+                float lw = (u1 - u0) / lanes;
+                for (int k = 0; k <= lanes; k++) {
+                    float u = u0 + k * lw;
+                    f.rect(0xFFE8C23A, u - 1, v0, u + 1, S - 2);
+                    // A booth on the island between lanes, a striped barrier across each.
+                    if (k < lanes) {
+                        f.rect(0xFF2E2E2E, u + 3, S * 0.55f - 1, u + lw - 3, S * 0.55f + 1);
+                        for (float uu = u + 3; uu < u + lw - 3; uu += 6) f.rect(0xFFD8322A, uu, S * 0.55f - 1, uu + 3, S * 0.55f + 1);
+                    }
+                    f.roundRect(0xFFE6E2D8, u - 3, S * 0.55f - 6, u + 3, S * 0.55f + 2, 1);
+                    f.rect(0xFF3A6A9A, u - 2, S * 0.55f - 5, u + 2, S * 0.55f - 2);
+                }
+                // Lorries waiting in the lanes, nose to the shed.
+                int[] cabs = {0xFFC83A2A, 0xFF2E5FB0, 0xFFE8E4DA, 0xFF3C7A4E, 0xFFD4A21C};
+                for (int k = 0; k < lanes; k++) {
+                    if (r.nextFloat() < 0.25f) continue;
+                    float u = u0 + (k + 0.5f) * lw, v = S * 0.55f + 6;
+                    if (v + 34 > S) continue;
+                    f.rect(0x38000000, u - 5, v + 2, u + 7, v + 36);
+                    f.rect(cabs[r.nextInt(cabs.length)], u - 6, v, u + 6, v + 8);
+                    f.rect(0xFF2A3A4A, u - 5, v + 1, u + 5, v + 3);
+                    f.rect(r.nextBoolean() ? 0xFFB8BCC0 : 0xFF8A6A4A, u - 6.5f, v + 9, u + 6.5f, v + 34);
+                }
+                f.sign(city, "CUSTOMS", (u0 + u1) / 2, S - 6, Math.max(4, Math.min(8, S / 10)), 0xFFF2F2EE);
+            }
+
+            @Override
+            void roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1, Random r) {
+                LandmarkArt12.F f = new LandmarkArt12.F(c, p, x0, y0, x1, y1);
+                if (part == 0) {
+                    // The inspection shed: a long ribbed canopy.
+                    f.rect(0xFF8C949C, 0, 0, f.L, f.S);
+                    for (float u = 3; u < f.L; u += 4) f.line(0x22000000, 0.6f, u, 0, u, f.S);
+                    f.rect(0xFFB0B8C0, 0, 0, f.L, f.S * 0.3f);
+                    return;
+                }
+                Landmarks.flatRoof(c, p, x0, y0, x1, y1, 0xFF6E747A);
+                f.circle(0xFFE8E8E8, f.L * 0.7f, f.S * 0.5f, Math.min(f.L, f.S) * 0.15f);
+            }
+        };
+        d.ground = City.LOT;
+        d.minS = 8;
+        d.minL = 14;
+        d.base = City.WAREHOUSE;
+        d.inside = Variants.I_OFFICE;
+        d.roofCol = 0xFF8C949C;
+        out.add(d);
     }
 
     static void stadium(List<Landmarks.Def> out) {
