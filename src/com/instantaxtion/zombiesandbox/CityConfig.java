@@ -231,7 +231,12 @@ final class CityConfig implements OptionSet {
         if (option == OPT_RESERVES) return value == 1 || value == 2;
         return false;
     }
-    long seed = new Random().nextInt(1000000);
+    /**
+     * The city's seed: a new one each launch (the time-seeded Random) and on every visit to the New Game screen (Menu calls
+     * newSeed). ((27.5) From a billion, not a million: codes and saves already carry any long.)
+     */
+    long seed = new Random().nextInt(SEEDS);
+    static final int SEEDS = 1000000000;
     /** Start the next game on the city from {@link #code()} instead of a new random one. */
     boolean keepCity;
     /**
@@ -502,7 +507,7 @@ final class CityConfig implements OptionSet {
     /** Picks a new random city (keeping the options). */
     void newSeed(Random r) {
         edits.clear();
-        seed = r.nextInt(1000000);
+        seed = r.nextInt(SEEDS);
         // (A real city stays the same.)
         normalize();
     }
