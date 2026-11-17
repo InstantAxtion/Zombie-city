@@ -8,8 +8,8 @@ import static com.instantaxtion.zombiesandbox.City.*;
 
 /**
  * ((28.0) Swamp Bayou: a town on the bank of a wide bayou that winds right across a vast swamp - pools and channels,
- * marsh and cypress, the water murky and the ground mossy. The town's riverfront has its quay, piers, bait-and-tackle
- * shops and the airboat landing; stilt houses stand out over the water on boardwalks round the town's edge; fishing
+ * marsh and cypress, the water murky and the ground mossy. The town's riverfront has its quay, piers, marine supply
+ * stores, the boat repair yard and the airboat landing; stilt houses stand out over the water on boardwalks round the town's edge; fishing
  * camps lie far out in the swamp, a long boardwalk back to the road. Few roads: the town's streets, a couple of
  * hamlets, and the raised causeways joining them, one over the bayou on a bridge and out to the far side, one out to
  * the edge of the map. The police's and the army's boats have the bayou.
@@ -470,8 +470,8 @@ final class SwampMap extends WaterMap {
             gen.lmRnd = new Random(city.cfg.seed * 7919L + 35);
             gen.lmCount = new int[Landmarks.all().size()];
         }
-        // Along the front street: the bait shops, the seafood shack and the airboat landing.
-        String[] front = {"Bait & Tackle", "Airboat Landing", "Seafood Shack", "Bait & Tackle"};
+        // Along the front street: the marine supply stores, the boat repair yard and the airboat landing.
+        String[] front = {"Marine Supply", "Airboat Landing", "Boat Repair", "Marine Supply"};
         int next = 0;
         int c = townLow ? frontC : frontC + 3;
         for (int pass = 0; pass < 2 && next < front.length; pass++)
@@ -490,7 +490,7 @@ final class SwampMap extends WaterMap {
             for (int k = 0; k < city.blocks.size(); k++) {
                 int[] b = city.blocks.get(k);
                 if (used[k] || b.length > 4 || !inside(h, (b[0] + b[2]) / 2f, (b[1] + b[3]) / 2f) || freeBlocks(h, used) <= 2) continue;
-                if (place(b, "Bait & Tackle")) {
+                if (place(b, "Marine Supply")) {
                     used[k] = true;
                     break;
                 }

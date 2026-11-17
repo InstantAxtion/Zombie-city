@@ -10,7 +10,7 @@ import static com.instantaxtion.zombiesandbox.City.*;
  * ((28.0) Lighthouse Coast: the sea along one side of the map (a different side, and a different shore, on every map),
  * a rugged coast of cliffs no one can climb, with coves and their beaches between headlands. One winding coast road
  * runs the length of it from edge to edge, and strung along it are the fishing villages, each at a cove with its quay
- * and piers, and the harbour town, the biggest, with its breakwater, fish market and coast guard. Out on the furthest
+ * and piers, and the harbour town, the biggest, with its breakwater, harbour master and coast guard. Out on the furthest
  * headland stands the lighthouse at the end of its own lane. Inland: hills, woods and farms down their lanes.
  */
 final class LighthouseMap extends WaterMap {
@@ -408,7 +408,7 @@ final class LighthouseMap extends WaterMap {
             gen.lmCount = new int[Landmarks.all().size()];
         }
         if (light != null) gen.placeParcel(light, "Lighthouse");
-        // The harbour town's fish market down on the quay, between the front street and the water.
+        // The harbour master's office down on the quay, between the front street and the water.
         boolean market = false;
         int[] hs = spans.get(0);
         int mid = (hs[0] + hs[1]) / 2;
@@ -424,12 +424,12 @@ final class LighthouseMap extends WaterMap {
                 if (c1 - c0 < 8) continue;
                 c0 = Math.max(c0, c1 - 12);
                 int[] pc = rect(a0, c0, a1, c1);
-                market = gen.placeParcel(pc, "Fish Market");
+                market = gen.placeParcel(pc, "Harbour Master");
                 if (market) for (int y = pc[1]; y < pc[3]; y++) for (int x = pc[0]; x < pc[2]; x++) built[y * N + x] = true;
             }
-        // On the harbour town's front street: the fish market and the coast guard; a fish market in each village.
+        // On the harbour town's front street: the harbour master and the coast guard; a harbour master's office in each village.
         for (int t = 0; t < towns.size(); t++) {
-            String[] names = t == 0 ? new String[]{market ? "Coast Guard Station" : "Fish Market", "Coast Guard Station"} : new String[]{"Fish Market"};
+            String[] names = t == 0 ? new String[]{market ? "Coast Guard Station" : "Harbour Master", "Coast Guard Station"} : new String[]{"Harbour Master"};
             int[] q = towns.get(t);
             int next = 0;
             for (int k = 0; k < city.blocks.size() && next < names.length; k++) {

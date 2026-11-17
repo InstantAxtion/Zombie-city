@@ -9,8 +9,8 @@ import java.util.Random;
 import static com.instantaxtion.zombiesandbox.Landmarks.*;
 
 /**
- * ((28.0) Landmark designs of the water maps (see Landmarks): the bayou's bait-and-tackle shops, seafood shack and
- * airboat landing; the coast's lighthouse and fish market. (The coast guard station is the one there already is.) None suits any district (districts 0),
+ * ((28.0) Landmark designs of the water maps (see Landmarks): the bayou's marine supply stores, boat repair yard and
+ * airboat landing; the coast's lighthouse and harbour master's office. (The coast guard station is the one there already is.) None suits any district (districts 0),
  * so no other map ever picks one: SwampMap and LighthouseMap put each where it goes, by name.
  */
 final class WaterLandmarks {
@@ -21,11 +21,11 @@ final class WaterLandmarks {
 
     static void register(List<Landmarks.Def> out) {
         int first = out.size();
-        baitShop(out);
-        seafoodShack(out);
+        tackleShop(out);
+        boatRepair(out);
         airboatLanding(out);
         lighthouse(out);
-        fishMarket(out);
+        harbourMaster(out);
         // (Only ever placed by name.)
         for (int i = first; i < out.size(); i++) out.get(i).districts = 0;
     }
@@ -134,28 +134,32 @@ final class WaterLandmarks {
 
     // ------------------------------------------------------------------ the bayou
 
-    static void baitShop(List<Landmarks.Def> out) {
-        out.add(def("Bait & Tackle", City.SHOP, 0xFF7A5A3A, City.DIRT, 8, 10, new int[][]{{1, 1, 6, 4, 1}}, new Painter() {
+    static void tackleShop(List<Landmarks.Def> out) {
+        out.add(def("Marine Supply", City.SHOP, 0xFF7A5A3A, City.DIRT, 8, 10, new int[][]{{1, 1, 6, 4, 1}}, new Painter() {
             @Override
             void paint(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r, int[][] plan) {
                 rect(c, p, 0xFF8C7A5A, x0, y0, x1, y1);
                 for (int k = 0; k < 40; k++)
                     circle(c, p, r.nextBoolean() ? 0xFF7A6A4C : 0xFFA08C68, x0 + r.nextFloat() * (x1 - x0), y0 + r.nextFloat() * (y1 - y0), 0.7f);
                 float[] b = box(x0, y0, plan[0]);
-                // The porch along the front, the bait tanks, coolers and a boat on its trailer in the yard.
+                // The porch along the front; racks of oars, rope coils and buoys in the yard, a boat on its trailer.
                 deck(c, p, b[0] - 2, b[3], b[2] + 2, b[3] + 6, 0xFF8A6A48);
                 float yx = b[2] + 6, yy = y0 + 6;
                 for (int k = 0; k < 3 && yx + 10 < x1; k++) {
-                    roundRect(c, p, 0xFF3A6A8A, yx, yy + k * 7, yx + 10, yy + k * 7 + 5, 1.5f);
-                    rect(c, p, 0xFF6A9AB8, yx + 1, yy + k * 7 + 1, yx + 9, yy + k * 7 + 4);
+                    rect(c, p, 0xFF5A4630, yx, yy + k * 7, yx + 10, yy + k * 7 + 1);
+                    for (float x = yx + 1; x < yx + 10; x += 2) line(c, p, 0xFFB89A6A, 0.6f, x, yy + k * 7, x + 1, yy + k * 7 + 5);
                 }
-                for (int k = 0; k < 4; k++) crate(c, p, b[0] + 2 + k * 5, b[3] + 8, 3.5f, k % 2 == 0 ? 0xFFE8E4DA : 0xFF2E6AB0);
+                for (int k = 0; k < 4; k++) {
+                    circle(c, p, 0xFF6A5A3A, b[0] + 4 + k * 5, b[3] + 10, 2);
+                    circle(c, p, 0xFFB8A070, b[0] + 4 + k * 5, b[3] + 10, 1.2f);
+                }
+                for (int k = 0; k < 3; k++) circle(c, p, k % 2 == 0 ? 0xFFE8602A : 0xFFF2F0E8, b[2] - 3 - k * 4, b[3] + 10, 1.6f);
                 float tx = x0 + 6, ty = y1 - 12;
                 if (ty > b[3] + 14) {
                     line(c, p, 0xFF3A3A3A, 1, tx, ty, tx + 26, ty);
                     boat(c, p, tx + 2, ty, 24, false, 0xFF2E5A3A);
                 }
-                sign(city, "BAIT & TACKLE", (b[0] + b[2]) / 2, b[3] + 3, 5, 0xFFF2E8C8);
+                sign(city, "MARINE SUPPLY", (b[0] + b[2]) / 2, b[3] + 3, 5, 0xFFF2E8C8);
             }
 
             @Override
@@ -169,22 +173,32 @@ final class WaterLandmarks {
         }));
     }
 
-    static void seafoodShack(List<Landmarks.Def> out) {
-        out.add(def("Seafood Shack", City.SHOP, 0xFF9A3A2E, City.PLAZA, 8, 10, new int[][]{{1, 1, 5, 4, 1}}, new Painter() {
+    static void boatRepair(List<Landmarks.Def> out) {
+        out.add(def("Boat Repair", City.OFFICE, 0xFF6A7078, City.DIRT, 8, 10, new int[][]{{1, 1, 5, 4, 1}}, new Painter() {
             @Override
             void paint(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r, int[][] plan) {
-                rect(c, p, 0xFF5C6A3A, x0, y0, x1, y1);
+                rect(c, p, 0xFF8C7A5A, x0, y0, x1, y1);
                 float[] b = box(x0, y0, plan[0]);
-                // A deck out from the shack, with picnic tables under umbrellas.
-                deck(c, p, b[2] + 1, y0 + 4, x1 - 3, y1 - 4, 0xFF9A7A54);
-                for (float x = b[2] + 8; x < x1 - 8; x += 12)
-                    for (float y = y0 + 10; y < y1 - 8; y += 12) {
-                        rect(c, p, 0xFF6A4A30, x - 4, y - 1.5f, x + 4, y + 1.5f);
-                        circle(c, p, r.nextBoolean() ? 0xFFD84A3A : 0xFFE8D84A, x, y, 3.5f);
-                        circle(c, p, 0xFFF2F0E8, x, y, 0.8f);
+                // The yard: hulls up on their stands, a hoist over the slipway, drums and timber stacked by the shed.
+                rect(c, p, 0xFF9A9890, b[2] + 2, y0 + 3, x1 - 3, y1 - 3);
+                int[] hulls = {0xFF2E5A3A, 0xFF8A3A2E, 0xFF2E4A6A, 0xFFE8E4DA};
+                int n = 0;
+                for (float y = y0 + 8; y < y1 - 8; y += 12)
+                    for (float x = b[2] + 5; x + 24 < x1 - 4; x += 30) {
+                        rect(c, p, 0xFF4A3420, x + 3, y - 4, x + 5, y + 4);
+                        rect(c, p, 0xFF4A3420, x + 15, y - 4, x + 17, y + 4);
+                        boat(c, p, x, y, 22, false, hulls[n++ % hulls.length]);
                     }
-                for (int k = 0; k < 6; k++) reeds(c, p, x0 + 2 + r.nextFloat() * (b[2] - x0), y1 - 2 - r.nextFloat() * 4, r);
-                sign(city, "SEAFOOD", (b[0] + b[2]) / 2, b[3] + 4, 5, 0xFFF2E8C8);
+                for (int k = 0; k < 5; k++) circle(c, p, k % 2 == 0 ? 0xFF2E6AB0 : 0xFF6A6E74, b[0] + 2 + k * 4, b[3] + 4, 1.6f);
+                for (int k = 0; k < 3; k++) rect(c, p, 0xFFB89A6A, b[0] + 1, b[3] + 8 + k * 2, b[0] + 14, b[3] + 9 + k * 2);
+                sign(city, "BOAT REPAIR", (b[0] + b[2]) / 2, b[3] + 14, 5, 0xFFF2E8C8);
+            }
+
+            @Override
+            boolean roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1) {
+                rect(c, p, 0xFF5A6A76, x0, y0, x1, y1);
+                for (float x = x0 + 2; x < x1; x += 3) line(c, p, 0xFF7A8A96, 0.7f, x, y0, x, y1);
+                return true;
             }
         }));
     }
@@ -259,27 +273,32 @@ final class WaterLandmarks {
         out.add(d);
     }
 
-    static void fishMarket(List<Landmarks.Def> out) {
-        out.add(def("Fish Market", City.SHOP, 0xFF6A7A86, City.PLAZA, 8, 12, new int[][]{{1, 1, 8, 4, 1}}, new Painter() {
+    static void harbourMaster(List<Landmarks.Def> out) {
+        out.add(def("Harbour Master", City.OFFICE, 0xFF6A7A86, City.PLAZA, 8, 12, new int[][]{{1, 1, 8, 4, 2}}, new Painter() {
             @Override
             void paint(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r, int[][] plan) {
                 rect(c, p, 0xFFA8A49A, x0, y0, x1, y1);
                 float[] b = box(x0, y0, plan[0]);
-                // The stalls under their awnings, crates of ice and the fish boxes stacked by the door.
+                // The net loft's racks with nets hung to dry, coils of rope, buoys and the flagpole.
                 for (float x = b[0]; x + 8 < b[2]; x += 10) {
-                    rect(c, p, (int) (x / 10) % 2 == 0 ? 0xFF2E6AB0 : 0xFFF2F0E8, x, b[3] + 1, x + 8, b[3] + 5);
-                    rect(c, p, 0xFF8A6A48, x + 1, b[3] + 5, x + 7, b[3] + 8);
+                    line(c, p, 0xFF5A4630, 0.8f, x, b[3] + 3, x + 8, b[3] + 3);
+                    for (float k = 0; k < 8; k += 1.2f) line(c, p, 0xFF4A6A5A, 0.4f, x + k, b[3] + 3, x + k + 0.6f, b[3] + 8);
                 }
-                for (int k = 0; k < 10; k++)
-                    crate(c, p, x0 + 3 + r.nextFloat() * (x1 - x0 - 8), b[3] + 11 + r.nextFloat() * Math.max(1, y1 - b[3] - 16), 3,
-                            r.nextBoolean() ? 0xFFE8E4DA : 0xFFD8A040);
-                sign(city, "FISH MARKET", (b[0] + b[2]) / 2, b[3] + 3, 5, 0xFF1A2A3A);
+                for (int k = 0; k < 8; k++) {
+                    float cx = x0 + 4 + r.nextFloat() * (x1 - x0 - 8), cy = b[3] + 12 + r.nextFloat() * Math.max(1, y1 - b[3] - 16);
+                    circle(c, p, 0xFF6A5A3A, cx, cy, 1.8f);
+                    circle(c, p, r.nextBoolean() ? 0xFFE8602A : 0xFFF2F0E8, cx, cy, 1.1f);
+                }
+                circle(c, p, 0xFF8A8C90, b[2] + 3, b[1] + 2, 1);
+                rect(c, p, 0xFF2E4A8A, b[2] + 3, b[1] + 1, b[2] + 9, b[1] + 3);
+                sign(city, "HARBOUR MASTER", (b[0] + b[2]) / 2, b[3] + 10, 5, 0xFF1A2A3A);
             }
 
             @Override
             boolean roof(City city, Canvas c, Paint p, int part, float x0, float y0, float x1, float y1) {
                 rect(c, p, 0xFF5A6A76, x0, y0, x1, y1);
-                for (float x = x0 + 2; x < x1; x += 3) line(c, p, 0xFF7A8A96, 0.7f, x, y0, x, y1);
+                rect(c, p, 0xFFE8E4DA, x0 + 1.5f, y0 + 1.5f, x1 - 1.5f, y1 - 1.5f);
+                rect(c, p, 0xFF2E4A8A, x0 + 1.5f, y0 + 1.5f, x0 + (x1 - x0) * 0.25f, y1 - 1.5f);
                 return true;
             }
         }));

@@ -5567,9 +5567,9 @@ public final class GameTests {
                                 if (wet && walk) stilts++;
                             }
                             check(stilts >= 4 && pier >= 80 && bridges > 0 && water > n / 6, m + "stilt houses on boardwalks over the water, a bridge over the bayou (" + stilts + ", " + pier + ", " + bridges + ")");
-                            check(lm.contains("Airboat Landing") && lm.contains("Bait & Tackle"), m + "the airboat landing and the bait shop: " + lm);
+                            check(lm.contains("Airboat Landing") && lm.contains("Marine Supply"), m + "the airboat landing and the marine supply store: " + lm);
                         } else {
-                            check(lm.contains("Lighthouse") && lm.contains("Fish Market"), m + "the lighthouse and the fish market: " + lm);
+                            check(lm.contains("Lighthouse") && lm.contains("Harbour Master"), m + "the lighthouse and the harbour master: " + lm);
                             check(rock > 100 && sand > 20 && water > n / 8 && pier > 10, m + "cliffs, beaches, the sea and piers (" + rock + ", " + sand + ", " + water + ", " + pier + ")");
                         }
                     }
