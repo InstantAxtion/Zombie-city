@@ -4909,7 +4909,10 @@ public final class GameTests {
                 for (int k = 0; k < 400 && f0 == null; k++) {
                     float[] g = w.city.randomStreetSpot(r);
                     float d = (float) Math.hypot(g[0] - fs.homeX, g[1] - fs.homeY);
-                    if (d > 500 && d < 900) f0 = g;
+                    boolean kept = false;
+                    for (int i = 0; i < w.dispatch.zones.size(); i++) kept |= w.dispatch.zones.get(i).contains(g[0], g[1], 2.5f);
+                    for (int i = 0; i < w.bases.size(); i++) kept |= w.bases.get(i).contains(g[0], g[1], 15);
+                    if (d > 500 && d < 900 && !kept) f0 = g;
                 }
                 java.util.List<Entity> fight = new java.util.ArrayList<Entity>();
                 for (int k = 0; k < 40; k++) {
@@ -4922,7 +4925,7 @@ public final class GameTests {
                 float[] sp = w.city.findWalkable(f0[0] + ex / el * 220, f0[1] + ey / el * 220);
                 java.util.List<Entity> guns = new java.util.ArrayList<Entity>();
                 for (int k = 0; k < 2; k++) guns.add(w.spawnSoldier(Entity.ROLE_RIFLE, sp[0] + k * 6, sp[1]));
-                final Quiet q2 = quiet(w, f0[0], f0[1], 300, fight, guns);
+                final Quiet q2 = quiet(w, f0[0], f0[1], 300, fight, guns, fs);
                 final World fw = w;
                 final java.util.List<Entity> fg = guns, fz = fight;
                 boolean fired = stepUntil(w, q2, 90, new Cond() {
@@ -4932,7 +4935,7 @@ public final class GameTests {
                         return fw.fleet.fireSupport.salvos > 0;
                     }
                 });
-                check(fired, "the fire support truck drives out and fires (" + w.fleet.status(fs) + ", " + (int) Math.hypot(fs.x - fs.tx, fs.y - fs.ty) + " to go of " + (int) Math.hypot(fs.homeX - fs.tx, fs.homeY - fs.ty) + ", speed " + (int) fs.speed + ")");
+                check(fired, "the fire support truck drives out and fires (" + w.fleet.status(fs) + ", " + (int) Math.hypot(fs.x - fs.tx, fs.y - fs.ty) + " to go)");
                 check(Math.hypot(fs.x - f0[0], fs.y - f0[1]) > 200, "from behind the lines, well back from the pack");
                 // Never on people: a pack with a soldier among it isn't a target.
                 Entity among = w.spawnSoldier(Entity.ROLE_RIFLE, fight.get(0).x, fight.get(0).y);

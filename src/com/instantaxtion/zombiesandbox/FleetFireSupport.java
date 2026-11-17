@@ -17,7 +17,7 @@ final class FleetFireSupport {
     int salvos;
 
     static final float LOOK = 1600, REACH = 650, BACK = 320, COOLDOWN = 30, CLEAR = 150;
-    static final int SALVOS = 6, PACK = 25;
+    static final int SALVOS = 6, PACK = 25, PACK_HERE = 15;
     /** What it's doing (in timer's place while it's out: see step). */
     static final int SETUP = 3;
 
@@ -75,7 +75,7 @@ final class FleetFireSupport {
                 v.cargo = SALVOS;
                 v.timer = 0;
             }
-            if (v.checkCd > 0 || v.cargo <= 0 || !w.outbreak) return false;
+            if (v.checkCd > 0 || v.cargo <= 0 || w.zombies < PACK) return false;
             v.checkCd = 3 + (v.number & 3) * 0.25f;
             goOut(v);
             return false;
@@ -119,6 +119,11 @@ final class FleetFireSupport {
 
     /** A big fight in reach of home: the spot behind the lines it fires from, and off it goes. */
     private void goOut(Vehicle v) {
+        // (One out from a base at a time.)
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o != v && o.kind == K_FIRE_SUPPORT && o.state != WAIT && !o.broken && World.hypot(o.homeX - v.homeX, o.homeY - v.homeY) < 400) return;
+        }
         float[] pk = w.fieldworks.safePack(v.homeX, v.homeY, LOOK, PACK, CLEAR, 0);
         // (A fight: people with guns at it - a pack nobody is fighting is the mortars' and the air's.)
         if (pk == null || w.spatial.armedNear(pk[0], pk[1], 450) == 0) return;
@@ -185,7 +190,8 @@ final class FleetFireSupport {
         }
         if (v.cannonCd > 0) return false;
         // (Not on top of itself: 140 out at the least.)
-        float[] pk = w.fieldworks.safePack(v.x, v.y, REACH, PACK, CLEAR, 140);
+        // (What's left of the pack once it's there counts: the fight goes on while it drives.)
+        float[] pk = w.fieldworks.safePack(v.x, v.y, REACH, PACK_HERE, CLEAR, 140);
         if (pk == null) return false;
         w.combat.shells(pk[0], pk[1], World.FIRE_DELAY);
         w.emit(Sfx.LAUNCHER, v.x, v.y);

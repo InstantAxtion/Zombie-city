@@ -160,8 +160,10 @@ final class Fieldworks {
             int c = w.spatial.countZombiesNear(z.x, z.y, 80);
             if (c <= best) continue;
             if (w.spatial.armedNear(z.x, z.y, clear) > 0 || w.spatial.countCiviliansNear(z.x, z.y, clear) > 0) continue;
+            // ((27.5) A safe zone's compound and half as much again round it: the margin is a scale (it was 60, which
+            // put most of the city off limits whenever a zone was open).)
             boolean kept = false;
-            for (int k = 0; k < w.dispatch.zones.size() && !kept; k++) kept = !w.dispatch.zones.get(k).removed && w.dispatch.zones.get(k).contains(z.x, z.y, 60);
+            for (int k = 0; k < w.dispatch.zones.size() && !kept; k++) kept = !w.dispatch.zones.get(k).removed && w.dispatch.zones.get(k).contains(z.x, z.y, 1.5f);
             for (int k = 0; k < w.bases.size() && !kept; k++) kept = w.bases.get(k).contains(z.x, z.y, 3);
             if (kept) continue;
             best = c;

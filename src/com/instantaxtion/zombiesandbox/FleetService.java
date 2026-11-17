@@ -308,7 +308,7 @@ final class FleetService {
             }
         }
         // Don't drive into a horde: stop short and let the troops out (an APC drives on in: it's armoured).
-        if (v.state == DRIVE && !v.loop && v.kind != K_APC && v.kind != K_BEARCAT && v.kind != K_MRAP && (v.passengers > 0 || !v.crew.isEmpty()) && hordeAhead(v)) {
+        if (v.state == DRIVE && !v.loop && v.kind != K_APC && v.kind != K_BEARCAT && (v.passengers > 0 || !v.crew.isEmpty()) && hordeAhead(v)) {
             arrived = true;
             v.speed *= 0.3f;
         }

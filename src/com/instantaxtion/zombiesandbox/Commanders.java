@@ -80,12 +80,6 @@ final class Commanders {
         c.cmdSquads = squads;
         // Pulled back just now: let them get there before forming up again.
         if (c.cmdRetreatUntil > w.time) return;
-        // Far more of them coming than these guns can stop: pull back together now, before they're on them.
-        float reach = World.hypot(zc[0] - gx, zc[1] - gy) < 260 ? 1 : 0;
-        if (reach > 0 && pack > n * (soldier ? 10 : 4) * Math.min(1, stock + 0.3f)) {
-            retreat(c, n, zc, soldier);
-            return;
-        }
         // The line about to break: far more of the dead on it than guns, or the guns running dry with them close.
         if (c.cmdLine) {
             int press = w.spatial.countZombiesNear(c.cmdAx, c.cmdAy, 90);
