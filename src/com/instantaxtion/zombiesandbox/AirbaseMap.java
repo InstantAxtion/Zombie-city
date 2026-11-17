@@ -196,9 +196,13 @@ final class AirbaseMap extends CityPart {
         int towerAt = ax0 + L / 2 - 8;
         int hangarW = clamp(Math.round(sd * 1.5f), 14, 44);
         boolean tower = false, fuel = sd >= 14;
+        int hangars = 0;
         int fuelW = clamp(sd * 2, 22, 48) + 3, heliW = Math.min(40, Math.max(16, L / 8)) + 3;
+        // (On a small base, no fuel farm if it would leave no room for a hangar and the tower.)
+        if (xEnd - x < clamp(sd * 2, 16, 40) + 3 + hangarW + 3 + 19 + heliW + fuelW) fuel = false;
         if (fuelFirst && fuel) x = fuelFarm(x, c0, c1, r);
         x = motorPool(x, c0, c1, r);
+        if (!fuel) x = smallFuel(x, c0, c1);
         // (Room kept at the far end for the heliport, and the fuel farm if it's there.)
         int reserve = heliW + (!fuelFirst && fuel ? fuelW : 0);
         while (true) {
@@ -211,7 +215,8 @@ final class AirbaseMap extends CityPart {
             int hw = Math.round(hangarW * (0.75f + 0.55f * r.nextFloat()));
             if (x + hw > xEnd - reserve) hw = hangarW;
             if (x + hw > xEnd - reserve) break;
-            float roll = r.nextFloat();
+            // (The first is always a hangar, so even the smallest base has one.)
+            float roll = hangars++ == 0 ? 1 : r.nextFloat();
             if (roll < 0.2f && sd >= 10) shelters(rc(x, c0, x + hw, c1), r);
             else if (roll < 0.32f) {
                 int[] q = rc(x, c0, x + hw, c1);
@@ -222,7 +227,7 @@ final class AirbaseMap extends CityPart {
         }
         if (!tower && x + 19 <= xEnd - reserve) x = controlTower(x, c0, c1);
         if (!fuelFirst && fuel && x + fuelW <= xEnd - heliW + 3) x = fuelFarm(x, c0, c1, r);
-        if (x + 16 <= xEnd) heliport(x, c0, c1, xEnd);
+        if (x + 16 <= xEnd) heliport(x, c0, c1, xEnd, false);
     }
 
     /** A row of hardened shelters, each a squat building with a fighter on the pad before it. */
@@ -296,6 +301,20 @@ final class AirbaseMap extends CityPart {
     }
 
     /** The motor pool: a hardstand with the army's trucks in rows. */
+    /** A small base's fuel farm: two tanks on a hardstand and the pump house, beside the motor pool. */
+    private int smallFuel(int x, int c0, int c1) {
+        int[] q = rc(x, c0, x + 10, c1);
+        city.baseDecor.add(new float[]{BD_HARDSTAND, q[0] * T, q[1] * T, q[2] * T, q[3] * T});
+        float fs = Math.min(3.8f * T, (q[3] - q[1]) * T * 0.4f);
+        for (int k = 0; k < 2; k++) {
+            float fx = (q[0] + 0.5f + k * 4.6f) * T;
+            city.baseDecor.add(new float[]{BD_FUEL, fx, (q[1] + 0.6f) * T, fx + fs, (q[1] + 0.6f) * T + fs});
+        }
+        plainLot(q[0] + 3, q[3] - 4, 4, 3, WAREHOUSE, 1, 0xFFB8BCB0, 0xFFC8CCC0);
+        name("Fuel Farm");
+        return x + 13;
+    }
+
     private int motorPool(int x, int c0, int c1, Random r) {
         int w = clamp((c1 - c0) * 2, 16, 40);
         int[] q = rc(x, c0, x + w, c1);
@@ -317,13 +336,21 @@ final class AirbaseMap extends CityPart {
     }
 
     /** The heliport: a hardstand with a row of pads, the army's helicopters on them. */
-    private int heliport(int x, int c0, int c1, int xEnd) {
+    private int heliport(int x, int c0, int c1, int xEnd, boolean tanks) {
         int w = Math.min(xEnd - x, Math.max(40, (ax1 - ax0) / 8));
         int[] q = rc(x, c0, x + w, c1);
         city.baseDecor.add(new float[]{BD_HARDSTAND, q[0] * T, q[1] * T, q[2] * T, q[3] * T});
         float py = (q[1] + q[3]) / 2f * T;
-        int pads = 0;
-        for (float px = q[0] * T + 40; px < q[2] * T - 30 && pads < 4; px += 80, pads++) city.helipads.add(new float[]{px, py});
+        int pads = 0, tw = tanks ? 9 : 0;
+        for (float px = q[0] * T + 40; px < (q[2] - tw) * T - 30 && pads < 4; px += 80, pads++) city.helipads.add(new float[]{px, py});
+        if (tanks && w >= 20) {
+            // (A small base's fuel farm: two tanks and the pump house at the end of the heliport.)
+            float fs = Math.min(3.6f * T, (q[3] - q[1]) * T * 0.4f);
+            city.baseDecor.add(new float[]{BD_FUEL, (q[2] - 8) * T, q[1] * T + 4, (q[2] - 8) * T + fs, q[1] * T + 4 + fs});
+            city.baseDecor.add(new float[]{BD_FUEL, (q[2] - 4) * T, q[1] * T + 4, (q[2] - 4) * T + fs, q[1] * T + 4 + fs});
+            plainLot(q[2] - 7, q[3] - 4, 4, 3, WAREHOUSE, 1, 0xFFB8BCB0, 0xFFC8CCC0);
+            name("Fuel Farm");
+        }
         return x + w + 3;
     }
 
