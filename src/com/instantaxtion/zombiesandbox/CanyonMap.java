@@ -320,7 +320,7 @@ final class CanyonMap extends RegionMap {
 
     /** A butte or a cluster of spires on a few blocks of the canyon floor and the mesa, standing in open ground. */
     void buttes(Random rr) {
-        int want = L < 200 ? 0 : Math.max(1, Math.min(5, L / 180 + 1));
+        int want = L < 160 ? 0 : Math.max(1, Math.min(5, L / 180 + 1));
         List<int[]> cands = new ArrayList<int[]>();
         for (int[] b : city.blocks) {
             if (b.length > 4 || b[2] - b[0] < 14 || b[3] - b[1] < 14) continue;
@@ -372,7 +372,7 @@ final class CanyonMap extends RegionMap {
             int x = 3 + r.nextInt(city.w - 6), y = 3 + r.nextInt(city.h - 6);
             if (!open(x - 2, y - 2, 5, 5)) continue;
             boolean byRock = false;
-            for (int dy = -4; dy <= 4; dy++) for (int dx = -4; dx <= 4; dx++) if (tile(x + dx, y + dy) == ROCK) byRock = true;
+            for (int dy = -7; dy <= 7; dy++) for (int dx = -7; dx <= 7; dx++) if (tile(x + dx, y + dy) == ROCK) byRock = true;
             if (!byRock) continue;
             rockBlob(x + 0.5f, y + 0.5f, 1.1f, 1.1f, 5 + r.nextFloat() * 7, r);
             want--;

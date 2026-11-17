@@ -10,7 +10,7 @@ import static com.instantaxtion.zombiesandbox.City.*;
 
 /**
  * ((28.0) Highway Crossroads: open country (few trees, no mountains, long views) where two highways cross. The first
- * is the map's highway as on any country map; the second, a divided highway of its own, crosses over it at a big
+ * is the map's highway as on any country map; the second, six lanes of its own, crosses over it at a big
  * interchange (the bridge over, slip roads on and off both ways). Along the second, out from the interchange, the
  * roadside stops: a truck stop, motels, fuel, repair garages and a weigh station. The small town sits off in one
  * corner of the map, and farms and hamlets are scattered over the rest.
