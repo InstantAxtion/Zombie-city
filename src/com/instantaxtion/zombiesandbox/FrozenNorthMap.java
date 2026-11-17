@@ -93,6 +93,7 @@ final class FrozenNorthMap extends RegionMap {
         cutBlocks(inlet, alongX, r);
         for (int i = 0; i < n; i++) if (bay[i]) clear(i, WATER);
         riverMap.pruneRiverRoads();
+        dropRoadless(r);
         quays();
         // Districts out on the snow have no name to show.
         for (District d : city.districts) {

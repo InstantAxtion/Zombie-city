@@ -246,6 +246,7 @@ final class CanyonMap extends RegionMap {
             landGen.curveRoad(line, false);
             switchbacks++;
         }
+        dropRoadless(rr);
         buttes(rr);
         return true;
     }

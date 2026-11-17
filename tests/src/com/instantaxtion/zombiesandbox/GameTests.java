@@ -5497,12 +5497,26 @@ public final class GameTests {
                             if (f.kind != City.FACILITY_BASE && f.kind != City.FACILITY_POLICE) continue;
                             if (f.kind == City.FACILITY_POLICE) police++;
                             float fx = f.kind == City.FACILITY_BASE ? f.gateX : f.x, fy = f.kind == City.FACILITY_BASE ? f.gateY : f.y;
+                            // (A walk of a few dozen steps over open ground from its door or gate to a road of the network.)
                             boolean near = false;
-                            for (int dy = -14; dy <= 14 && !near; dy++)
-                                for (int dx = -14; dx <= 14 && !near; dx++) {
-                                    int x = (int) (fx / City.T) + dx, y = (int) (fy / City.T) + dy;
-                                    if (x >= 0 && y >= 0 && x < w && y < h && comp[y * w + x] == main) near = true;
+                            java.util.HashMap<Integer, Integer> seen = new java.util.HashMap<Integer, Integer>();
+                            java.util.ArrayDeque<Integer> open = new java.util.ArrayDeque<Integer>();
+                            int s0 = Math.min(h - 1, Math.max(0, (int) (fy / City.T))) * w + Math.min(w - 1, Math.max(0, (int) (fx / City.T)));
+                            open.add(s0);
+                            seen.put(s0, 0);
+                            while (!open.isEmpty() && !near) {
+                                int cc = open.poll(), d = seen.get(cc), x = cc % w, y = cc / w;
+                                if (comp[cc] == main) near = true;
+                                if (d >= 60) continue;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (seen.containsKey(j) || (city.solid[j] && t[j] != City.CAR)) continue;
+                                    seen.put(j, d + 1);
+                                    open.add(j);
                                 }
+                            }
                             if (!near) off++;
                         }
                         check(police > 0 && off == 0, m + "police (" + police + ") and the base by the road network (" + off + " not)");

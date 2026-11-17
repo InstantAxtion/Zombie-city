@@ -41,6 +41,75 @@ abstract class RegionMap extends CityPart {
 
     /** Its own places, on blocks before the bases, services and landmarks take theirs. */
     void places(boolean[] used) {
+        mainBase(used);
+    }
+
+    /**
+     * The main army base, on the biggest block with a street right outside its front gate (the blocks these maps cut
+     * back can have lost theirs). The usual pick of a block is then skipped (as on Desert City, whose base is out in
+     * the desert): the extra bases on the bigger maps go up as usual.
+     */
+    void mainBase(boolean[] used) {
+        int best = -1, bestArea = 0;
+        for (int k = 0; k < city.blocks.size(); k++) {
+            int[] b = city.blocks.get(k);
+            int bw = b[2] - b[0] - 2, bh = b[3] - b[1] - 2;
+            if (used[k] || b.length > 4 || bw < 9 || bh < 9 || bw * bh <= bestArea) continue;
+            int gx = b[0] + 1 + bw / 2;
+            if (b[3] >= city.h || !gen.isRoad(gx, b[3]) || !gen.isRoad(gx - 1, b[3]) || !gen.isRoad(gx + 1, b[3])) continue;
+            bestArea = bw * bh;
+            best = k;
+        }
+        if (best < 0) return;
+        used[best] = true;
+        int[] b = city.blocks.get(best);
+        city.fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+        baseGen.militaryBase(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
+        gen.testRange = new int[4];
+    }
+
+    /** Blocks the streets no longer reach on any side (cut off by water or rock): open ground, with the odd tree. */
+    void dropRoadless(Random rr) {
+        // (A scrap of street left over, a few tiles on its own, isn't a way in.)
+        int n = city.w * city.h;
+        int[] comp = new int[n];
+        int[] q = new int[n];
+        List<Integer> sizes = new java.util.ArrayList<Integer>();
+        java.util.Arrays.fill(comp, -1);
+        for (int i = 0; i < n; i++) {
+            if (comp[i] >= 0 || city.tiles[i] != ROAD) continue;
+            int id = sizes.size(), hd = 0, tl = 0;
+            q[tl++] = i;
+            comp[i] = id;
+            while (hd < tl) {
+                int c = q[hd++], x = c % city.w, y = c / city.w;
+                for (int k = 0; k < 4; k++) {
+                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                    if (nx < 0 || ny < 0 || nx >= city.w || ny >= city.h) continue;
+                    int j = ny * city.w + nx;
+                    if (comp[j] >= 0 || city.tiles[j] != ROAD) continue;
+                    comp[j] = id;
+                    q[tl++] = j;
+                }
+            }
+            sizes.add(tl);
+        }
+        int big = 0;
+        for (int k = 0; k < sizes.size(); k++) if (sizes.get(k) > sizes.get(big)) big = k;
+        for (int k = city.blocks.size() - 1; k >= 0; k--) {
+            int[] b = city.blocks.get(k);
+            boolean road = false;
+            for (int x = b[0] + 1; x < b[2] - 1 && !road; x++) road = onMain(x, b[1] - 1, comp, big) || onMain(x, b[3], comp, big);
+            for (int y = b[1] + 1; y < b[3] - 1 && !road; y++) road = onMain(b[0] - 1, y, comp, big) || onMain(b[2], y, comp, big);
+            if (road) continue;
+            city.blocks.remove(k);
+            for (int y = b[1]; y < b[3]; y++)
+                for (int x = b[0]; x < b[2]; x++) city.tiles[y * city.w + x] = rr.nextFloat() < 0.06f ? TREE : GRASS;
+        }
+    }
+
+    boolean onMain(int x, int y, int[] comp, int big) {
+        return x >= 0 && y >= 0 && x < city.w && y < city.h && comp[y * city.w + x] == big;
     }
 
     /** Last, once every block is filled and the streets are named. */
@@ -78,7 +147,7 @@ abstract class RegionMap extends CityPart {
     }
 
     byte tile(int x, int y) {
-        return x < 0 || y < 0 || x >= city.w || y >= city.h ? WATER : city.tiles[y * city.w + x];
+        return x < 0 || y < 0 || x >= city.w || y >= city.h ? GRASS : city.tiles[y * city.w + x];
     }
 
     /** Whether the rectangle is all open grass or trees (and on the map). */

@@ -123,6 +123,7 @@ final class CrossroadsMap extends RegionMap {
 
     @Override
     void places(boolean[] used) {
+        mainBase(used);
         if (gen.lmRnd == null) {
             gen.lmRnd = new Random(city.cfg.seed * 7919L + 35);
             gen.lmCount = new int[Landmarks.all().size()];
