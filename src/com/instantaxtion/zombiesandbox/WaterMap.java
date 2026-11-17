@@ -209,6 +209,11 @@ abstract class WaterMap extends CityPart {
 
     /** Land the town can't be walked to from (start: a tile in town) goes back to water, so nobody's stranded. */
     void dropStranded(int start) {
+        dropStranded(start, 0, null);
+    }
+
+    /** The same, but a share of the stranded ground kept as thick trees (no one can stand there). */
+    void dropStranded(int start, float trees, Random r) {
         int n = city.w * city.h;
         boolean[] seen = new boolean[n];
         int[] q = new int[n];
@@ -228,7 +233,7 @@ abstract class WaterMap extends CityPart {
         }
         for (int i = 0; i < n; i++)
             if (!seen[i] && city.tiles[i] != WATER) {
-                city.tiles[i] = WATER;
+                city.tiles[i] = r != null && (city.tiles[i] == GRASS || city.tiles[i] == TREE) && r.nextFloat() < trees ? TREE : WATER;
                 city.roadDir[i] = 0;
                 city.mainRoad[i] = false;
             }
