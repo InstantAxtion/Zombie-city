@@ -2408,6 +2408,8 @@ final class World {
 
     /** Police and soldiers patched up at the field hospital this game. */
     int treated;
+    /** ((27.5) Police and soldiers patched up and back on duty. */
+    int returnedToDuty;
 
     /** (14.9) Mortar shells fired so far. */
     int mortarShots;

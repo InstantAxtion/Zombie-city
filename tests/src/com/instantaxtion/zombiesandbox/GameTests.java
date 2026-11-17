@@ -5146,6 +5146,51 @@ public final class GameTests {
                 check(h == 0xedeec66c78d75134L, "a version 39 map is unchanged: " + Long.toHexString(h));
             }
         });
+        test("27.5: the wounded are taken to hospital and come back; vehicles are repaired", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                c.civic = 39; // the map this was set up on
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                // An officer badly hurt a long walk from care (by a road), and a patrol car badly knocked about.
+                Entity cop = null;
+                float far = 0;
+                for (Entity e : w.entities) {
+                    if (e.dead || e.type != Entity.COP || e.ride != null || !w.city.roadNear(e.x, e.y, 2)) continue;
+                    float[] q = w.fleet.medevac.careFor(e, e.x, e.y);
+                    float d = q == null ? 0 : (float) Math.hypot(q[0] - e.x, q[1] - e.y);
+                    if (d > far) {
+                        far = d;
+                        cop = e;
+                    }
+                }
+                Fleet.Vehicle car = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    if (v.type == Fleet.CRUISER && v.patrol && v.state == Fleet.PATROL && !v.crew.isEmpty() && v.kind != Fleet.K_BIKE) car = v;
+                check(cop != null && far > ArmedAI.WALK_TO_CARE && car != null, "a wounded officer far from care, and a patrol car");
+                cop.hp = cop.maxHp * 0.3f;
+                car.hp = car.maxHp * 0.3f;
+                check(w.fleet.patrolFor(car.x, car.y) != car, "a badly damaged car takes no calls");
+                boolean waited = false, inCare = false, mending = false;
+                for (int f = 0; f < 30 * 200 && !(w.returnedToDuty > 0 && car.hp >= car.maxHp); f++) {
+                    w.update(1 / 30f);
+                    waited |= cop.waitPickup;
+                    inCare |= cop.inCare;
+                    mending |= w.fleet.status(car).contains("Repairing");
+                }
+                check(waited && w.fleet.medevac.pickups > 0, "an ambulance fetched them (" + w.fleet.medevac.pickups + ")");
+                check(inCare && w.returnedToDuty == 1 && cop.hp >= cop.maxHp && cop.task != Dispatch.T_HEAL && !cop.dead,
+                        "patched up in care and back on duty (" + (int) cop.hp + "/" + (int) cop.maxHp + ")");
+                check(mending && car.hp >= car.maxHp && !car.broken && w.fleet.medevac.repaired > 0, "the car mended at the station");
+                int armoured = 0;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_ARMD_AMB) armoured++;
+                check(armoured >= 2, "armoured ambulances at the base (" + armoured + ")");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

@@ -198,7 +198,8 @@ final class FleetService {
 
     boolean updateCar(Vehicle v, float dt) {
         if (!v.parked) v.pullTried = false;
-        if (v.type == AMBULANCE) return fleet.ambulances.ambulanceStep(v, dt);
+        // ((27.5) Or out for the wounded (see FleetMedevac).)
+        if (v.type == AMBULANCE) return v.medevac ? fleet.medevac.step(v, dt) : fleet.ambulances.ambulanceStep(v, dt);
         if (v.kind == K_DOZER && v.state == SCENE) return fleet.armyUnits.dozerPush(v, dt);
         // ((14.0) Close, and the traffic rules won't take it the last bit up to a stopped vehicle: it goes straight in.)
         if (v.kind == K_DOZER && v.state == DRIVE && v.clearing != null && !v.clearing.removedFromFleet
@@ -865,7 +866,7 @@ final class FleetService {
         float bd = radius * radius;
         for (int i = 0; i < fleet.vehicles.size(); i++) {
             Vehicle v = fleet.vehicles.get(i);
-            if (!v.standby || v.type != type || v.broken) continue;
+            if (!v.standby || v.type != type || v.broken || FleetMedevac.needsRepair(v)) continue;
             float d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
             if (d < bd) {
                 bd = d;

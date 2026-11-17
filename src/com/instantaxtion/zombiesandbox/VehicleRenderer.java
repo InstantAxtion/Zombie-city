@@ -50,6 +50,11 @@ final class VehicleRenderer {
         }
         boolean truck = v.type == Fleet.TRUCK, amb = v.type == Fleet.AMBULANCE;
         float hl = truck || amb ? 9.5f : 8f, hw = truck ? 5.2f : amb ? 4.9f : 4.4f;
+        // ((27.5) The army's armoured ambulance: longer and broader.)
+        if (v.kind == Fleet.K_ARMD_AMB) {
+            hl = 10.5f;
+            hw = 5.5f;
+        }
         if (v.kind == Fleet.K_APC) {
             hl = 11;
             hw = 5.6f;
@@ -102,7 +107,7 @@ final class VehicleRenderer {
         Country land0 = gv.world.city.country;
         int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.kind == Fleet.K_ARMY_POST ? 0xFF4F5A33 : v.recon ? 0xFF9C8A5E
                 : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
-                : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? 0xFFF2F2F2
+                : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? (v.kind == Fleet.K_ARMD_AMB ? 0xFF5F6B40 : 0xFFF2F2F2)
                 : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
         if (v.burnt) body = 0xFF2B2623;
         else if (v.broken) body = City.darken(body, 0.65f);
@@ -393,6 +398,23 @@ final class VehicleRenderer {
 
     /** ((27.3) From drawVehicleKind.) An ambulance. */
     void drawAmbulance(Canvas c, Fleet.Vehicle v, float hl, float hw) {
+        if (v.kind == Fleet.K_ARMD_AMB) {
+            // ((27.5) The army's armoured ambulance: olive drab, the slit windscreen, and a red cross on a white square on
+            // its roof.)
+            gv.fill.setColor(0xFF2A2E22);
+            c.drawRect(hl * 0.55f, -hw + 1.2f, hl * 0.72f, hw - 1.2f, gv.fill);
+            gv.fill.setColor(0xFF4B5534);
+            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.45f, hw - 0.8f, gv.fill);
+            gv.fill.setColor(0xFFF0F0EC);
+            c.drawRect(-4.2f, -3.2f, 1.2f, 3.2f, gv.fill);
+            gv.fill.setColor(0xFFD83A3A);
+            c.drawRect(-3.6f, -0.8f, 0.6f, 0.8f, gv.fill);
+            c.drawRect(-2.3f, -2.4f, -0.7f, 2.4f, gv.fill);
+            boolean on = v.lightsOn() && ((int) (v.anim * 6)) % 2 == 0;
+            gv.fill.setColor(on ? 0xFF4A8AFF : 0xFF26324A);
+            c.drawRect(hl * 0.46f, -hw + 0.6f, hl * 0.52f, -hw + 1.6f, gv.fill);
+            return;
+        }
         gv.fill.setColor(0xFF1E2A33);
         c.drawRect(hl * 0.55f, -hw + 1, hl * 0.78f, hw - 1, gv.fill);
         gv.fill.setColor(0xFFD83A3A);

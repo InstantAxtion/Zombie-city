@@ -253,7 +253,7 @@ final class FleetCrews {
             // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
             if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
-                int type = v.type == AMBULANCE ? Entity.CIVILIAN : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
+                int type = v.type == AMBULANCE ? (v.kind == K_ARMD_AMB ? Entity.SOLDIER : Entity.CIVILIAN) : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
                 // ((12.0) A driver from outside isn't on the city's roll: they used to take a callsign or a place in a
                 // squad, so the officers and squads after them were numbered with gaps and squads came up short.)
                 int cops = w.dispatch.copCount, soldiers = w.dispatch.soldierCount;

@@ -344,7 +344,9 @@ final class Inspector {
             case Dispatch.T_HIDE: return "Running to hide indoors";
             case Dispatch.T_PICKUP: return e.hasGun ? "Picking up rounds lying in the street" : "Grabbing a dropped gun";
             case Dispatch.T_RESUPPLY: return "Going to restock ammo";
-            case Dispatch.T_HEAL: return "Going to get patched up";
+            // ((27.5) In hospital, or waiting for the ambulance.)
+            case Dispatch.T_HEAL: return e.inCare ? "In hospital, " + (int) (100 * e.hp / Math.max(1, e.maxHp)) + "%"
+                    : e.waitPickup ? (e.casevac != null ? "Wounded: the ambulance is on its way" : "Wounded: waiting for an ambulance") : "Going to get patched up";
             case Dispatch.T_RIDE: return "Running for a car";
             case Dispatch.T_ENLIST: return "Going to sign up";
             case Dispatch.T_CLEANUP: return "Clearing away bodies";

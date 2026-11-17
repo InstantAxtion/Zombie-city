@@ -248,6 +248,10 @@ final class Entity {
     transient boolean migrating;
     /** ((14.5) Time spent being treated at the field hospital so far.) */
     transient float hospitalT;
+    /** ((27.5) Badly hurt far from care, waiting for an ambulance (and the one coming); brought in and being patched up. */
+    transient boolean waitPickup, inCare;
+    transient Fleet.Vehicle casevac;
+    transient float pickupT, medCd, medSaid = -99, casevacAt;
     /** ((14.7) In the squad of the one you're playing: who, and their place in the line behind them.) */
     transient Entity commandedBy;
     /** ((14.9) When a way that couldn't be found is next looked for again.) */

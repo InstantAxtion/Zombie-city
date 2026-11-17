@@ -71,6 +71,8 @@ final class Fleet {
     static final int K_POLICE_BOAT = 14, K_COMMAND = 15;
     /** ((26.1) The army's mobile command post truck, kept at its base.) */
     static final int K_ARMY_POST = 16;
+    /** ((27.5) The army's armoured ambulance (type AMBULANCE), parked at its base for the wounded: see FleetMedevac.) */
+    static final int K_ARMD_AMB = 17;
 
     /** ((26.1) A mobile command post truck, the police's or the army's. */
     static boolean isPost(Vehicle v) {
@@ -220,6 +222,9 @@ final class Fleet {
          * done and need picking up (pickup: it drives out, waits for them to climb in, and brings them back).
          */
         boolean parkHome;
+        /** ((27.5) An ambulance out for the wounded (see FleetMedevac), and how far through the pickup it is. */
+        boolean medevac;
+        int medPhase;
         /** Taking outside help home again (10.27). */
         boolean leaving;
         float stageCd;
@@ -420,7 +425,7 @@ final class Fleet {
                 return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : v.ammoTruck ? "Army ammo truck  -  " + v.cargo + " rounds" : "Army truck";
             case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
             case TANK: return "Tank";
-            case AMBULANCE: return "Ambulance";
+            case AMBULANCE: return v.kind == K_ARMD_AMB ? "Army armoured ambulance" : "Ambulance";
             case TRAIN: return "Train";
             case JET: return "Jet";
             case BOAT: return v.kind == K_POLICE_BOAT ? "Police boat  -  Marine " + v.boatNum : v.evacStop >= 0 ? "Evacuation boat" : "Landing craft";
@@ -432,6 +437,9 @@ final class Fleet {
     /** A short line about what a vehicle is doing, shown above it on the map. */
     String status(Vehicle v) {
         String where = v.place != null ? v.place : null;
+        // ((27.5) Being mended at home.)
+        String fix = FleetMedevac.repairing(v);
+        if (fix != null) return describe(v).split("  -  ")[0] + ": " + fix;
         if (v.kind == K_POLICE_BOAT || isPost(v)) return w.ops.status(v);
         switch (v.type) {
             case HELI:
@@ -481,6 +489,15 @@ final class Fleet {
                     default: return "Tank: Returning to base";
                 }
             case AMBULANCE:
+                if (v.medevac) {
+                    String who = v.kind == K_ARMD_AMB ? "Armoured ambulance" : "Ambulance";
+                    if (v.broken) return who + ": Wrecked";
+                    if (v.medPhase == FleetMedevac.MP_NONE) return who + ": Parked, ready";
+                    if (v.medPhase == FleetMedevac.MP_TO) return who + ": On the way to the wounded" + (where != null ? " on " + where : "");
+                    if (v.medPhase == FleetMedevac.MP_LOAD) return who + ": Taking the wounded aboard";
+                    if (v.medPhase == FleetMedevac.MP_CARE) return who + ": " + v.riders.size() + " wounded aboard, to care";
+                    return who + ": Returning";
+                }
                 if (v.broken) return "Ambulance: Broken down";
                 // ((12.0) Parked at its station: it said "Responding".)
                 if (v.parked || v.standby) return "Ambulance: Parked, ready";
@@ -564,6 +581,7 @@ final class Fleet {
         aircraft = new FleetAircraft(this);
         trains = new FleetTrains(this);
         ambulances = new FleetAmbulances(this);
+        medevac = new FleetMedevac(this);
         convoyUnits = new FleetPickups(this);
         commandTrucks = new FleetCommand(this);
         crews = new FleetCrews(this);
@@ -584,6 +602,7 @@ final class Fleet {
     final FleetAircraft aircraft;
     final FleetTrains trains;
     final FleetAmbulances ambulances;
+    final FleetMedevac medevac;
     final FleetPickups convoyUnits;
     final FleetCommand commandTrucks;
     final FleetCrews crews;
@@ -944,6 +963,7 @@ final class Fleet {
         if (frameNo % 30 == 0) routing.releaseRoutes();
         patrolCount = patrols.patrolCars();
         patrols.staffPatrols(dt);
+        medevac.update(dt);
         timers(dt);
         if (trafficTimer <= 0) {
             trafficTimer = 6;
