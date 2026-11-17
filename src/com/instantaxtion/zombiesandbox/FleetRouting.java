@@ -352,10 +352,67 @@ final class FleetRouting {
         // it, gave up every time, and patrol cars sat in the yard with their officers in them for the whole game.)
         if (casual && offTheRoad(v)) casual = false;
         city.searchCap = casual ? 15000 : 0;
+        // ((27.4) Round the streets thick with the dead - all but where it's going, if that's to a call.)
+        hazardOn(hazardMul(v), x, y, emergency(v) ? HAZ_CALL : HAZ_TRIP);
         try {
             return routeOn(v, x, y, field);
         } finally {
             city.searchCap = 0;
+            hazardOff();
+        }
+    }
+
+    /**
+     * ((27.4) How much a vehicle minds the dead on the way, out of 100: armour (the APC, IFV, BearCat, tank and the
+     * bulldozer) hardly at all, everything else a great deal; nothing while there aren't any, or when it's you driving.
+     */
+    int hazardMul(Vehicle v) {
+        if (v.player != null || w.zombies == 0) return 0;
+        if (v.type == TANK || v.kind == K_APC || v.kind == K_IFV || v.kind == K_BEARCAT || v.kind == K_DOZER) return 25;
+        return 100;
+    }
+
+    /** ((27.4) The square round where it's going where the dead don't count, in tiles: a call's, and any other trip's. */
+    static final int HAZ_CALL = 7, HAZ_TRIP = 2;
+
+    /** ((27.4) The next route search keeps clear of the dead (see City.hazard), mul of 100, but not within r tiles of (tx, ty). */
+    void hazardOn(int mul, float tx, float ty, int r) {
+        if (mul <= 0) return;
+        city.hazZ = w.zCount;
+        city.hazGw = w.gw;
+        city.hazGh = w.gh;
+        city.hazCell = Math.max(1, World.CELL / City.T);
+        city.hazMul = mul;
+        city.hazTx = (int) (tx / City.T);
+        city.hazTy = (int) (ty / City.T);
+        city.hazR = r;
+    }
+
+    void hazardOff() {
+        city.hazZ = null;
+        city.blockN = 0;
+    }
+
+    /**
+     * ((27.4) Plans v's way again, past the tiles given (a wreck, a jam, a knot at a junction), which it won't drive
+     * through, and round the dead as usual. False if there's no other way: it keeps the route it has.
+     */
+    boolean routeAround(Vehicle v, int[] tiles, int n) {
+        city.blockN = 0;
+        for (int i = 0; i < n && i < city.blockT.length; i++) if (tiles[i] >= 0) city.blockT[city.blockN++] = tiles[i];
+        // (Not if it's sitting on one of them: then nothing gets it out.)
+        int own = city.tileIndex(v.x, v.y);
+        for (int i = 0; i < city.blockN; i++) {
+            int b = city.blockT[i];
+            if (Math.abs(own % city.w - b % city.w) <= 1 && Math.abs(own / city.w - b / city.w) <= 1) {
+                city.blockN = 0;
+                return false;
+            }
+        }
+        try {
+            return route(v, v.tx, v.ty);
+        } finally {
+            city.blockN = 0;
         }
     }
 

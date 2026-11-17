@@ -4876,6 +4876,77 @@ public final class GameTests {
                 check(b.owner == null && !b.removed, "out of the vehicle: no longer its crew");
             }
         });
+        test("27.4: vehicles steer clear of the dead", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 41;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // A police car's way across town, with none of the dead about.
+                java.util.Random r = new java.util.Random(7);
+                Fleet.Vehicle car = w.fleet.make(Fleet.CRUISER);
+                int[] path = new int[4096];
+                int n = 0;
+                float[] a = null, b = null;
+                for (int k = 0; k < 200 && n < 30; k++) {
+                    a = w.city.nearestDrivable(w.city.randomStreetSpot(r)[0], w.city.randomStreetSpot(r)[1]);
+                    b = w.city.nearestDrivable(w.city.randomStreetSpot(r)[0], w.city.randomStreetSpot(r)[1]);
+                    if (a == null || b == null || Math.hypot(a[0] - b[0], a[1] - b[1]) < 700) continue;
+                    car.x = a[0];
+                    car.y = a[1];
+                    if (w.fleet.routing.route(car, b[0], b[1])) n = w.fleet.routing.traceRoute(car, path);
+                }
+                check(n >= 30, "a way across town (" + n + ")");
+                int len = tilesTo(w, car);
+                // A crowd of the dead standing in the middle of it.
+                int mid = path[n / 2];
+                float mx = (mid % w.city.w + 0.5f) * City.T, my = (mid / w.city.w + 0.5f) * City.T;
+                java.util.List<Entity> crowd = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 16; k++) {
+                    float[] q = w.city.findWalkable(mx + (k % 4) * 5 - 8, my + (k / 4) * 5 - 8);
+                    if (q == null) continue;
+                    Entity z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                    untouchable(z);
+                    crowd.add(z);
+                }
+                step(w, quiet(w, mx, my, 400, crowd.toArray()));
+                check(w.zombies > 0 && near(w, path, n, crowd) > 0, "the dead on the way it planned (" + near(w, path, n, crowd) + ")");
+                // Planned again: round them.
+                car.x = a[0];
+                car.y = a[1];
+                check(w.fleet.routing.route(car, b[0], b[1]), "a new way");
+                int n2 = w.fleet.routing.traceRoute(car, path);
+                int len2 = tilesTo(w, car);
+                check(near(w, path, n2, crowd) == 0 && len2 < len * 2, "round them, not through them, and not far out of the way (" + len + " -> " + len2 + " tiles)");
+                // An APC minds them far less: its way is no longer than the car's.
+                Fleet.Vehicle apc = w.fleet.make(Fleet.TRUCK);
+                w.fleet.setKind(apc, Fleet.K_APC);
+                apc.x = a[0];
+                apc.y = a[1];
+                check(w.fleet.routing.route(apc, b[0], b[1]) && tilesTo(w, apc) <= tilesTo(w, car), "armour cares less (" + tilesTo(w, apc) + " tiles, the car " + tilesTo(w, car) + ")");
+                // A car on the old line with the crowd just ahead of it, going somewhere past them: it plans round them.
+                int before = path[Math.max(0, n / 2 - 6)];
+                Fleet.Vehicle cruiser = w.fleet.make(Fleet.CRUISER);
+                cruiser.x = (before % w.city.w + 0.5f) * City.T;
+                cruiser.y = (before / w.city.w + 0.5f) * City.T;
+                cruiser.angle = (float) Math.atan2(my - cruiser.y, mx - cruiser.x);
+                cruiser.tx = b[0];
+                cruiser.ty = b[1];
+                check(w.fleet.driving.steerClear(cruiser) && w.fleet.driving.steered == 1, "the dead ahead: a new way round");
+                // A wreck across the way: planned round it.
+                int[] p3 = new int[4096];
+                int m = w.fleet.routing.traceRoute(car, p3);
+                int wall = p3[m / 2];
+                check(w.fleet.routing.routeAround(car, new int[]{wall}, 1), "a way round a blockage");
+                int m2 = w.fleet.routing.traceRoute(car, p3);
+                boolean through = false;
+                for (int i = 0; i < m2; i++) if (Math.abs(p3[i] % w.city.w - wall % w.city.w) <= 1 && Math.abs(p3[i] / w.city.w - wall / w.city.w) <= 1) through = true;
+                check(!through && w.city.blockN == 0 && w.city.hazZ == null, "past it, and nothing left set for the next search");
+            }
+        });
         test("27.0: the armoured dead", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -5705,6 +5776,32 @@ public final class GameTests {
     }
 
     /** A test's zombie that stays where it's put and can't be finished off (call each step). */
+    /** ((27.4) How many tiles a vehicle's route takes it, start to finish. */
+    static int tilesTo(World w, Fleet.Vehicle v) {
+        int t = w.city.tileIndex(v.x, v.y), n = 0;
+        while (v.field.get(t) > 4 && n < 100000) {
+            int next = w.fleet.driving.downhill(v.field, t);
+            if (next == t) break;
+            t = next;
+            n++;
+        }
+        return n;
+    }
+
+    /** ((27.4) How many tiles of a traced route come within 20 of any of these. */
+    static int near(World w, int[] path, int n, java.util.List<Entity> crowd) {
+        int c = 0;
+        for (int i = 0; i < n; i++) {
+            float x = (path[i] % w.city.w + 0.5f) * City.T, y = (path[i] / w.city.w + 0.5f) * City.T;
+            for (Entity z : crowd)
+                if (Math.hypot(z.x - x, z.y - y) < 20) {
+                    c++;
+                    break;
+                }
+        }
+        return c;
+    }
+
     static void untouchable(Entity z) {
         z.speed = z.runSpeed = 0;
         z.vx = z.vy = 0;

@@ -32,8 +32,15 @@ final class FleetService {
         if (start == null) start = city.nearestDrivable(fromX, fromY);
         if (start == null) return false;
         int[] full = fleet.routing.scratchField();
-        if (!city.driveField(full, toX, toY, false, city.tileIndex(start[0], start[1]))
-                || full[city.tileIndex(start[0], start[1])] >= City.FAR) return false;
+        // ((27.4) Round the dead on the way, to the call.)
+        fleet.routing.hazardOn(w.zombies > 0 ? 100 : 0, toX, toY, FleetRouting.HAZ_CALL);
+        boolean way;
+        try {
+            way = city.driveField(full, toX, toY, false, city.tileIndex(start[0], start[1]));
+        } finally {
+            fleet.routing.hazardOff();
+        }
+        if (!way || full[city.tileIndex(start[0], start[1])] >= City.FAR) return false;
         Route field = fleet.routing.corridor(full, start[0], start[1]);
         boolean cops = unitType == Entity.COP;
         int cars = cops ? (count + 1) / 2 : 1;

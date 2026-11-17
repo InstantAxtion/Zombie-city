@@ -95,6 +95,8 @@ final class Fleet {
         boolean removedFromFleet;
         /** Seconds stopped; pulling out round something stopped in the lane (seconds left); queued behind traffic. */
         float stillT, passing;
+        /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
+        transient float backT;
         /** ((24.0) How long a helicopter has held over its landing spot for the dead round it. */
         float holdT;
         /** How far it has turned without getting any nearer (a car going round in circles), and how long it

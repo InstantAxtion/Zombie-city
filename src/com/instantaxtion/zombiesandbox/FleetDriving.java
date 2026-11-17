@@ -882,7 +882,10 @@ final class FleetDriving {
                     // crew (not a roadblock: that's there to stop them): it isn't going anywhere. Its "queued" was left over from before it stopped, so the
                     // traffic behind it took it for a queue and sat there with it for good.)
                     || ((o.type == CRUISER || o.type == TRUCK || o.type == AMBULANCE) && o.player == null && o.stillT > 3
-                        && (o.state == SCENE || o.state == RECALL || o.state == LOAD))
+                        && (o.state == SCENE || o.state == RECALL || o.state == LOAD
+                            // ((27.4) Nor one waiting at the kerb for its officers to come and get in: that can be a
+                            // minute and a half, and the queue behind took it for a red light and waited it out.)
+                            || o.state == PICKUP))
                     || (o.yieldT > 0 && !o.yieldStop && v.lightsOn())
                     // (Lights and sirens go round a queue sitting at a red light, too.)
                     || (v.lightsOn() && o.type == CAR && o.player == null && o.stillT > 1f)
@@ -1038,12 +1041,103 @@ final class FleetDriving {
         if (impact > 0) fleet.damage(v, impact, false);
     }
 
+    /** ((27.4) The tiles a route search may not step onto, for unjam: the blocker's own and the one past it. */
+    private final int[] jamTiles = new int[2];
+    /** ((27.4) Times so far a vehicle found a way round the dead ahead (steerClear), and round a jam or a wreck (unjam). */
+    int steered, unjammed;
+
+    /**
+     * ((27.4) The dead on the road just ahead - three or more within the next hundred-odd feet - and that isn't where
+     * it's going: it plans its way again, round them (the search keeps clear of crowds of the dead: see City.hazard).
+     * Not armour, which drives through them; not a patrol out to shoot them, a convoy (which halts and fights), a
+     * command post truck (which has its own: Ops.postBlocked), an armed pickup, or anything going to that very fight
+     * - the call's own rules stop it short of them.) True if it has a new way.
+     */
+    boolean steerClear(Vehicle v) {
+        if (w.zombies == 0 || fleet.routing.hazardMul(v) < 100 || v.loop || v.convoy != null || isPost(v) || v.recon
+                || v.kind == K_PICKUP || v.type == TRAIN || airborne(v)) return false;
+        if (!w.zombieWithin(v.x, v.y, 190)) return false;
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
+        int n = w.countZombiesNear(v.x + fx * 60, v.y + fy * 60, 45) + w.countZombiesNear(v.x + fx * 135, v.y + fy * 135, 50);
+        if (n < 3) return false;
+        float hx = v.x + fx * 95, hy = v.y + fy * 95;
+        if (World.hypot(v.tx - hx, v.ty - hy) < 240) return false;
+        v.rerouteCd = 4;
+        if (!fleet.routing.route(v, v.tx, v.ty)) return false;
+        steered++;
+        // (Hemmed in, hardly moving, and the new way is back the way it came: back out of them.)
+        if (Math.abs(v.speed) < 6) backOutIfBehind(v);
+        return true;
+    }
+
+    /** ((27.4) If v's way now starts behind it and there's room there, it backs out first (see steerAndMove). */
+    void backOutIfBehind(Vehicle v) {
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
+        int own = city.tileIndex(v.x, v.y), next = downhill(v.field, own);
+        float nx = (next % city.w + 0.5f) * City.T - v.x, ny = (next / city.w + 0.5f) * City.T - v.y;
+        if (next != own && nx * fx + ny * fy < 0 && clearBehind(v, 20)) v.backT = 2.5f;
+    }
+
+    /**
+     * ((27.4) Sat in a queue that isn't moving (not one waiting at a light) for twelve seconds, or stopped at all for
+     * twenty-five: whatever's in front - a wreck, a knot of traffic, a junction locked solid - is taken as a wall,
+     * and it looks for another way round. With none, it keeps its place (and the gridlock breaker still has it in
+     * the end). True if it has a new way.
+     */
+    boolean unjam(Vehicle v) {
+        if (v.stillT < 12 || v.parked || v.convoy != null || isPost(v) || v.type == TRAIN || airborne(v)) return false;
+        if (!((v.queued && !v.queuedHeld && !v.held) || v.stillT > 25)) return false;
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
+        Vehicle block = null;
+        float bd = 45;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == v || o.removedFromFleet || airborne(o) || Math.abs(o.speed) > 5) continue;
+            float dx = o.x - v.x, dy = o.y - v.y, ahead = dx * fx + dy * fy, side = Math.abs(dx * -fy + dy * fx);
+            if (ahead > 4 && ahead < bd && side < 10) {
+                bd = ahead;
+                block = o;
+            }
+        }
+        // (The wall: where the blocker is, and just past it - never right on top of this one, or it can't leave.)
+        float at = Math.max(block != null ? bd + 6 : 24, 36);
+        jamTiles[0] = city.tileIndex(v.x + fx * at, v.y + fy * at);
+        jamTiles[1] = city.tileIndex(v.x + fx * (at + City.T), v.y + fy * (at + City.T));
+        v.rerouteCd = 10;
+        if (!fleet.routing.routeAround(v, jamTiles, 2)) return false;
+        unjammed++;
+        // The new way starts back the way it came, and the wall's in front: back out (if there's room behind) so the
+        // nose can come round - standing still, the wheels turn nothing.
+        backOutIfBehind(v);
+        return true;
+    }
+
+    /** ((27.4) Nothing (that isn't in the air) within dist behind it, in its lane. */
+    boolean clearBehind(Vehicle v, float dist) {
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == v || o.removedFromFleet || airborne(o)) continue;
+            float dx = o.x - v.x, dy = o.y - v.y, back = -(dx * fx + dy * fy), side = Math.abs(dx * -fy + dy * fx);
+            if (back > 0 && back < dist + (v.length() + o.length()) * 0.5f && side < 9) return false;
+        }
+        return !city.solidAt(v.x - fx * (v.length() * 0.5f + 6), v.y - fy * (v.length() * 0.5f + 6));
+    }
+
     /**
      * One step of driving downhill in the vehicle's field, keeping to the right-hand side of the road.
      * Returns false once it has arrived (or has no route).
      */
     boolean driveStep(Vehicle v, float dt, float max, float throttle) {
         if (v.field == null) return false;
+        // ((27.4) A few times a second: the dead thick on the road ahead, or stuck behind something that isn't going to
+        // move - a new way round, if there is one.)
+        if (v.player == null && v.rerouteCd <= 0 && (int) (v.anim * 2.5f) != (int) ((v.anim - dt) * 2.5f)) {
+            if (steerClear(v) || unjam(v)) {
+                v.pathField = null;
+                if (v.field == null) return false;
+            }
+        }
         max = roadSpeed(v, dt, max);
         // (Turned back there: it has a new way to go, or none yet.)
         if (v.field == null) return false;
@@ -1375,6 +1469,20 @@ final class FleetDriving {
         float diff = want - v.angle;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
+        if (v.backT > 0) {
+            // ((27.4) Backing out of a jam: slowly, the nose swinging round towards the new way, until it's pointing
+            // more or less along it or something's behind.)
+            v.backT -= dt;
+            if (Math.abs(diff) < 0.6f || !clearBehind(v, 4)) v.backT = 0;
+            else {
+                float steer = Math.abs(v.speed) < 1.5f ? 0 : dt * 2.4f;
+                v.angle += Math.max(-steer, Math.min(steer, diff));
+                v.speed += (-12 - v.speed) * Math.min(1, dt * 3.2f);
+                v.x += (float) Math.cos(v.angle) * v.speed * dt;
+                v.y += (float) Math.sin(v.angle) * v.speed * dt;
+                return;
+            }
+        }
         // Wheels only turn the car while it's moving.
         // (Standing still, or as good as - held at a junction or in a jam - it doesn't turn on the spot.)
         float steer = Math.abs(v.speed) < 1.5f ? 0 : dt * 5 * Math.min(1, 0.05f + Math.abs(v.speed) / 18f);

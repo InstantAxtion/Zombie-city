@@ -2846,6 +2846,36 @@ final class City {
         }
     }
 
+    /**
+     * ((27.4) For one route search (set by FleetRouting around it, null otherwise): the dead on the map, so the way
+     * keeps clear of streets thick with them - how many of the dead in each cell of World.CELL (hazGw cells across,
+     * hazCell tiles to a cell), how much the vehicle minds them (hazMul, out of 100: armour minds less), and a square
+     * of hazR tiles round (hazTx, hazTy) - where it's going - where they don't count, so it can still get to a fight.
+     * And up to four tiles it can't get past at all (a wreck or a jam in the way), blockT, with the tiles round them.)
+     */
+    int[] hazZ;
+    int hazGw, hazGh, hazCell = 4, hazMul = 100, hazTx = -99, hazTy = -99, hazR;
+    final int[] blockT = new int[4];
+    int blockN;
+
+    /** ((27.4) What stepping onto tile n costs over and above the road for this search; -1 if it's blocked. */
+    int hazard(int n) {
+        int x = n % w, y = n / w;
+        for (int i = 0; i < blockN; i++) {
+            int b = blockT[i];
+            if (Math.abs(x - b % w) <= 1 && Math.abs(y - b / w) <= 1) return -1;
+        }
+        if (hazZ == null || (Math.abs(x - hazTx) <= hazR && Math.abs(y - hazTy) <= hazR)) return 0;
+        int cx = x / hazCell, cy = y / hazCell;
+        if (cx >= hazGw || cy >= hazGh) return 0;
+        int z = hazZ[cy * hazGw + cx];
+        if (z == 0) return 0;
+        // (A few: a little out of the way to miss them. A crowd: well out of the way. Never more than the search's
+        // ring of buckets allows a step: see DIAL.)
+        int c = z < 3 ? 2 : z < 6 ? 8 : z < 12 ? 16 : 24;
+        return c * hazMul / 100;
+    }
+
     int[] dfLast;
     int[] dfTouched = new int[4096];
     int dfTouchedN = -1;
@@ -2891,6 +2921,8 @@ final class City {
             dialN[b] = 0;
         }
         boolean aim = from >= 0;
+        // ((27.4) The dead or a blockage to keep out of, for this search.)
+        boolean haz = hazZ != null || blockN > 0;
         int s0 = tileIndex(p[0], p[1]);
         dist[s0] = 0;
         dfTouch(s0);
@@ -2934,6 +2966,11 @@ final class City {
                     }
                     if (strict && (sc & 64) == 0) continue;
                     int c = sc & 63, n = k == 0 ? t + 1 : k == 1 ? t - 1 : k == 2 ? t + w : t - w;
+                    if (haz) {
+                        int hz = hazard(n);
+                        if (hz < 0) continue;
+                        c += hz;
+                    }
                     if (gt + c >= dist[n]) continue;
                     if (dist[n] == FAR) dfTouch(n);
                     dist[n] = gt + c;
@@ -2941,8 +2978,10 @@ final class City {
                     left++;
                 }
                 if (link >= 0) {
-                    int c = driveCost(link) + 16;
-                    if (driveCost(link) >= 0 && gt + c < dist[link]) {
+                    int c = driveCost(link) + 16, hz = haz ? hazard(link) : 0;
+                    // (Not much on a bridge's step: it's already long, and the ring of buckets has room for so much.)
+                    c += Math.min(8, Math.max(0, hz));
+                    if (driveCost(link) >= 0 && hz >= 0 && gt + c < dist[link]) {
                         if (dist[link] == FAR) dfTouch(link);
                         dist[link] = gt + c;
                         dialPush(link, gt + c + (aim ? 2 * (Math.abs(link % w - fx) + Math.abs(link / w - fy)) : 0));
@@ -2954,8 +2993,10 @@ final class City {
             for (int k = 0; k < (link >= 0 ? 5 : 4); k++) {
                 if (k == 4) {
                     // (10.32) Over the bridge, from its other end. ((10.36) Costed as the eight tiles it spans.)
-                    int c = driveCost(link) + 16;
-                    if (driveCost(link) >= 0 && gt + c < dist[link]) {
+                    int c = driveCost(link) + 16, hz = haz ? hazard(link) : 0;
+                    // (Not much on a bridge's step: it's already long, and the ring of buckets has room for so much.)
+                    c += Math.min(8, Math.max(0, hz));
+                    if (driveCost(link) >= 0 && hz >= 0 && gt + c < dist[link]) {
                         if (dist[link] == FAR) dfTouch(link);
                         dist[link] = gt + c;
                         dialPush(link, gt + c + (aim ? 2 * (Math.abs(link % w - fx) + Math.abs(link / w - fy)) : 0));
@@ -2982,6 +3023,11 @@ final class City {
                 if (c >= 0 && c <= 4 && junctionId.get(n) < 0 && junctionId.get(t) < 0) {
                     byte rd = roadDir[n];
                     if ((rd == 1 && k < 2) || (rd == 2 && k >= 2)) c += 14;
+                }
+                if (c >= 0 && haz) {
+                    int hz = hazard(n);
+                    if (hz < 0) continue;
+                    c += hz;
                 }
                 if (c < 0 || gt + c >= dist[n]) continue;
                 if (dist[n] == FAR) dfTouch(n);
