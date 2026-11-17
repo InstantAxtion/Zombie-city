@@ -363,6 +363,7 @@ final class CityPainter extends CityPart {
 
     /** The colour of a tile of open water: darker the further it is from the shore. */
     int waterColor(int x, int y) {
+        if (city.region != null && city.region.water(x, y) != 0) return city.region.water(x, y);
         int base = city.waterKind == CityConfig.W_LAKE || city.waterKind == CityConfig.W_NONE ? 0xFF2F6E80 : 0xFF2A6390;
         int land = 9;
         for (int r = 1; r <= 8 && land == 9; r++)
@@ -431,6 +432,7 @@ final class CityPainter extends CityPart {
         paintGroundTexture(c, p, X0, Y0, X1, Y1);
         paintRoadsAndWater(c, p, X0, Y0, X1, Y1);
         paintPathsAndDecor(c, p, X0, Y0, X1, Y1);
+        if (city.region != null) city.region.paintOver(c, p, X0, Y0, X1, Y1);
         paintBuildings(c, p, X0, Y0, X1, Y1);
         paintStreetThings(c, p, X0, Y0, X1, Y1);
     }
@@ -452,7 +454,7 @@ final class CityPainter extends CityPart {
                 boolean real = city.drawnRealistic;
                 switch (t) {
                     case SIDEWALK: col = city.country.pavement != 0 ? city.country.pavement : real ? 0xFF96938C : 0xFF8F8D87; break;
-                    case GRASS: case TREE: col = city.desert ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
+                    case GRASS: case TREE: col = city.desert || city.region != null ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
                     case PLAZA: case STATUE: col = city.country.plaza != 0 ? city.country.plaza : real ? 0xFFB2A58A : 0xFFB3A487; break;
                     case LOT: col = real ? 0xFF46474A : 0xFF48494D; break;
                     case BUILDING: col = city.country.pavement != 0 ? city.country.pavement : real ? 0xFF96938C : 0xFF8F8D87; break;
@@ -461,8 +463,8 @@ final class CityPainter extends CityPart {
                     case WATER: col = waterColor(x, y); break;
                     case SAND: col = sandColor(); break;
                     case PIER: col = 0xFF8C6C4A; break;
-                    case ROCK: col = 0xFF7E796E; break;
-                    case TRAIL: col = city.desert ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
+                    case ROCK: col = city.region != null ? city.region.rock(x, y) : 0xFF7E796E; break;
+                    case TRAIL: col = city.desert || city.region != null ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : real ? 0xFF4F6F36 : 0xFF4C7837; break;
                     default: col = real ? 0xFF38393C : 0xFF3A3D43; break;
                 }
                 if (paved && (t == SIDEWALK || t == BUILDING || t == PLAZA)) {
@@ -475,7 +477,7 @@ final class CityPainter extends CityPart {
                 if (t == CAR && isLotCar(x, y)) col = 0xFF48494D;
                 if (t == CAR && city.carKind.get(y * city.w + x) == 2) col = 0xFF6A6E5E;
                 if (city.slipTile != null && city.slipTile[y * city.w + x] && (t == ROAD || t == CAR))
-                    col = city.desert ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : real ? 0xFF4F6F36 : 0xFF4C7837;
+                    col = city.desert || city.region != null ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : real ? 0xFF4F6F36 : 0xFF4C7837;
                 else if (city.curveTile != null && city.curveTile[y * city.w + x] && (t == ROAD || t == CAR))
                     col = city.country.pavement != 0 ? city.country.pavement : real ? 0xFF96938C : 0xFF8F8D87;
                 else if (t == ROAD || (t == CAR && col != 0xFF48494D && col != 0xFF6A6E5E)) {
@@ -516,6 +518,7 @@ final class CityPainter extends CityPart {
                 float fx = x * T, fy = y * T;
                 // Each tile's own randomness, so it looks the same however much of the map is drawn.
                 prnd.setSeed(tileSeed(x, y, 1));
+                if (city.region != null && city.region.texture(c, p, t, x, y, fx, fy, prnd)) continue;
                 if (t == SIDEWALK) {
                     // Paving slabs, a few of them newer or stained.
                     float roll = prnd.nextFloat();
@@ -936,7 +939,7 @@ final class CityPainter extends CityPart {
         }
         if (sand > 0) return sandColor();
         if (plaza > 0) return city.country.plaza != 0 ? city.country.plaza : city.drawnRealistic ? 0xFFB2A58A : 0xFFB3A487;
-        if (city.desert) return grassColour(x, y);
+        if (city.desert || city.region != null) return grassColour(x, y);
         return city.country.grass != 0 ? city.country.grass : city.drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
     }
 
@@ -2752,8 +2755,8 @@ final class CityPainter extends CityPart {
         if (x < 0 || y < 0 || x >= city.w || y >= city.h) return 0;
         byte t = city.tiles[y * city.w + x];
         if (city.bridge != null && city.bridge[y * city.w + x]) return 0;
-        if (t == GRASS || t == TREE || t == TRAIL) return city.desert ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : city.drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
-        if (t == ROCK) return 0xFF7E796E;
+        if (t == GRASS || t == TREE || t == TRAIL) return city.desert || city.region != null ? grassColour(x, y) : city.country.grass != 0 ? city.country.grass : city.drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837;
+        if (t == ROCK) return city.region != null ? city.region.rock(x, y) : 0xFF7E796E;
         if (t == SAND) return sandColor();
         return 0;
     }
@@ -4442,6 +4445,7 @@ final class CityPainter extends CityPart {
 
     /** The colour of open ground (grass, or in the desert sand unless watered). */
     int grassColour(int x, int y) {
+        if (city.region != null) return city.region.ground(x, y);
         if (city.desert && !lushAt(x, y)) {
             // (Broad, soft swells of lighter and darker sand, in a few steps so a row still goes down in long runs.)
             float n = (float) (Math.sin(x * 0.043f + y * 0.017f) * Math.sin(y * 0.051f - x * 0.011f + 1.7f));

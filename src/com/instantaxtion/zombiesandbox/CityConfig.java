@@ -17,11 +17,17 @@ final class CityConfig implements OptionSet {
             // ((25.0) Theme Park Island, in the old New York's place.)
             "Theme Park Island",
             // ((26.0) Space Center, in the old Sydney's place.)
-            "Space Center", "", "",
+            "Space Center",
+            // ((28.0) Highway Crossroads, in the old Tokyo's place.)
+            "Highway Crossroads", "",
             "",
             // (10.60)
-            "Archipelago", "",
-            "", "", "", ""};
+            "Archipelago",
+            // ((28.0) Canyon Town, in the old Mountain Valley's place.)
+            "Canyon Town",
+            "", "", "", "",
+            // ((28.0) Frozen North.)
+            "Frozen North"};
     /** One line about each map, shown on the New Game screen. */
     static final String[] PRESET_INFO = {
             "A bit of everything: towers, suburbs and parks.",
@@ -44,13 +50,15 @@ final class CityConfig implements OptionSet {
             "A desert town with a casino strip, oases and an army test range.",
             "A resort island with a theme park, beach hotels and a ferry, and the staff town across the strait.",
             "A rocket on its pad, the assembly building, mission control and a landing strip, beside a small town.",
-            "", "",
+            "Two highways cross out in open country, with truck stops, motels and a small town nearby.",
+            "",
             "",
             "A tropical island city ringed by five palm-fringed village islands, all joined by bridges.",
-            "",
+            "A red-rock town on a mesa and the canyon floor, split by a deep gorge with few bridges.",
             "",
             "", "",
             "",
+            "An icebound harbour town with an airstrip and long snowy roads out to cabins and a radar station.",
     };
 
     static final int STYLE_MIXED = 0, STYLE_OFFICES = 1, STYLE_HOUSES = 2, STYLE_WAREHOUSES = 3;
@@ -121,15 +129,16 @@ final class CityConfig implements OptionSet {
             {STYLE_HOUSES, 1, 0, 1, 1, 1, 2, 1},      // ((22.9) Desert City, in the old Seattle's place)
             {STYLE_MIXED, 1, 2, 3, 1, 1, 1, 0},       // ((25.0) Theme Park Island, in the old New York's place)
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 1, 0},      // ((26.0) Space Center, in the old Sydney's place)
-            {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // Tokyo
+            {STYLE_HOUSES, 1, 0, 1, 1, 1, 1, 1},      // ((28.0) Highway Crossroads, in the old Tokyo's place)
             {STYLE_MIXED, 2, 1, 2, 2, 0, 3, 1},       // Paris
             {STYLE_MIXED, 1, 2, 1, 2, 1, 2, 1},       // Garrison State
             {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // Archipelago
-            {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Mountain Valley
+            {STYLE_MIXED, 1, 1, 1, 1, 1, 2, 1},       // ((28.0) Canyon Town, in the old Mountain Valley's place)
             {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // Bay City
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Delta Marsh
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Fjord Town
             {STYLE_MIXED, 2, 1, 1, 2, 0, 2, 1},       // Canal City
+            {STYLE_HOUSES, 1, 1, 1, 1, 1, 1, 1},      // ((28.0) Frozen North)
     };
 
     // Landmarks per medium map:  churches, schools, fire stations, supermarkets, gas stations, cemeteries,
@@ -154,14 +163,16 @@ final class CityConfig implements OptionSet {
             {1, 1, 1, 1, 3, 1, 30},   // Desert City
             {1, 0, 1, 1, 1, 0, 35},   // Theme Park Island
             {1, 1, 1, 1, 1, 0, 30},   // Space Center
-            {2, 2, 2, 2, 1, 1, 50}, {3, 2, 2, 2, 1, 1, 55},
+            {1, 0, 1, 0, 3, 0, 20},   // Highway Crossroads
+            {3, 2, 2, 2, 1, 1, 55},
             {1, 1, 1, 1, 2, 1, 25},   // Garrison State
             {2, 2, 2, 2, 2, 1, 35},   // Archipelago
-            {2, 1, 1, 1, 2, 1, 30},   // Mountain Valley
+            {1, 1, 1, 1, 1, 1, 30},   // Canyon Town
             {2, 2, 2, 2, 2, 1, 40},   // Bay City
             {2, 2, 2, 2, 2, 1, 25},   // Delta Marsh
             {2, 2, 1, 1, 2, 1, 30},   // Fjord Town
             {3, 2, 2, 2, 1, 1, 50},   // Canal City
+            {1, 1, 1, 1, 1, 1, 25},   // Frozen North
     };
     // Share of office lots that become apartment blocks, parking garages and pharmacies (percent).
     private static final int[][] BUILDING_MIX = {
@@ -171,6 +182,7 @@ final class CityConfig implements OptionSet {
             {30, 8, 4},
             {20, 8, 5}, {12, 3, 6},
             {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 6, 6},
+            {15, 0, 5},
     };
     // Which kinds of park each map likes: park, playground, sports field, courts, garden, skatepark.
     private static final int[][] PARK_MIX = {
@@ -194,6 +206,7 @@ final class CityConfig implements OptionSet {
             {2, 1, 3, 2, 0, 0},
             {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0},
             {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 1, 0, 1, 3, 0},
+            {3, 2, 1, 1, 0, 0},
     };
 
     /** Current index into VALUES for each option. */
@@ -257,7 +270,7 @@ final class CityConfig implements OptionSet {
 
     boolean exodus() { return exodus != EXODUS_OFF; }
 
-    boolean littleNature() { return outskirts == 1 && civic >= 7; }
+    boolean littleNature() { return (outskirts == 1 || crossroads()) && civic >= 7; }
     /**
      * Which public buildings the city was laid out with: 0 as before 10.4, 1 the government quarter (10.4),
      * 2 and the National Guard armory (10.5), 3 the bigger maps of 10.10 with hills, mountains, lakes, streams
@@ -329,7 +342,8 @@ final class CityConfig implements OptionSet {
         // ((22.9) Nor 17: Desert City.)
         // ((25.0) Nor 18: Theme Park Island.)
         // ((26.0) Nor 19: the Space Center.)
-        return preset == 2 || preset == 25 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((28.0) Nor 20 and 24: Highway Crossroads and Canyon Town.)
+        return preset == 2 || preset == 25 || preset == 21 || preset == 22 || preset == 26 || preset == 27 || preset == 28;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
@@ -361,6 +375,18 @@ final class CityConfig implements OptionSet {
     static final int SPACE_CENTER = 19;
 
     boolean spaceCenter() { return v[OPT_PRESET] == SPACE_CENTER; }
+
+    /**
+     * ((28.0) Highway Crossroads, Canyon Town and Frozen North: each laid out and painted by a class of its own
+     * (RegionMap). Everything they change in the building of a city is for them alone.)
+     */
+    static final int CROSSROADS = 20, CANYON = 24, FROZEN_NORTH = 29;
+
+    boolean crossroads() { return v[OPT_PRESET] == CROSSROADS; }
+
+    boolean canyon() { return v[OPT_PRESET] == CANYON; }
+
+    boolean frozenNorth() { return v[OPT_PRESET] == FROZEN_NORTH; }
 
     /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
     static final int TOWERS = 10;
@@ -437,7 +463,7 @@ final class CityConfig implements OptionSet {
     }
 
     /** The character for each map in a city code. */
-    private static final String CODE_MAPS = "123456789ABCDEFGHIJKLMNOPQRST";
+    private static final String CODE_MAPS = "123456789ABCDEFGHIJKLMNOPQRSTU";
 
     /** (12.0) The same city with the same options, to play again from the start. */
     CityConfig copy() {
@@ -547,6 +573,9 @@ final class CityConfig implements OptionSet {
         int p = v[OPT_PRESET];
         // (Towns on the water fill the whole map.)
         if (water() != W_NONE) return 1f;
+        // ((28.0) Canyon Town and Frozen North lay out the whole map themselves; Highway Crossroads is mostly country.)
+        if (p == CANYON || p == FROZEN_NORTH) return 1f;
+        if (p == CROSSROADS) return 0.38f;
         float f = p == 9 ? 0.55f : p == 6 ? 0.72f : 1f;
         // A massive map is nearly all town: a thin band of country round the edge for the highway and farms.
         if (massive()) f = p == 9 ? 0.6f : p == 6 ? 0.88f : 0.92f;
@@ -731,7 +760,7 @@ final class CityConfig implements OptionSet {
 
     // Which maps have a railway line (with a station and passing trains).
     // Which maps have a railway line: 0 never, 1 about half the time (it depends on the city), 2 always.
-    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
+    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
 
     boolean hasRail() {
         int r = RAIL[v[OPT_PRESET]];
@@ -760,14 +789,16 @@ final class CityConfig implements OptionSet {
             {1, 3, 1, 8, 2, 0, 1, 0},   // Desert City
             {4, 3, 0, 3, 0, 0, 2, 6},   // Theme Park Island
             {0, 3, 0, 6, 1, 1, 2, 1},   // Space Center
-            {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
+            {0, 2, 2, 7, 2, 0, 2, 1},   // Highway Crossroads
+            {3, 3, 2, 3, 1, 1, 1, 0},
             {3, 4, 1, 3, 3, 0, 1, 1},   // Garrison State
             {3, 4, 2, 4, 1, 1, 2, 0},   // Archipelago
-            {1, 2, 3, 5, 1, 0, 3, 2},   // Mountain Valley
+            {1, 3, 3, 5, 1, 0, 1, 1},   // Canyon Town
             {3, 4, 2, 3, 1, 1, 2, 0},   // Bay City
             {1, 2, 2, 6, 1, 0, 3, 3},   // Delta Marsh
             {1, 2, 3, 5, 1, 0, 3, 2},   // Fjord Town
             {2, 3, 6, 2, 1, 0, 1, 2},   // Canal City
+            {0, 3, 2, 6, 3, 0, 1, 1},   // Frozen North
     };
 
     /** How likely each kind of district is on this map. */

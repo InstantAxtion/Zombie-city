@@ -785,6 +785,14 @@ final class CityGenerator extends CityPart {
                 shiftY = (by0 + by1) / 2 - city.h / 2;
             }
         }
+        // ((28.0) A map laid out by a class of its own may put the town elsewhere.)
+        if (city.region != null) {
+            int[] r = city.region.townRect(bx0, by0, bx1, by1);
+            bx0 = r[0];
+            by0 = r[1];
+            bx1 = r[2];
+            by1 = r[3];
+        }
         city.townX0 = bx0;
         city.townY0 = by0;
         city.townX1 = bx1;
@@ -852,6 +860,8 @@ final class CityGenerator extends CityPart {
         } else if (city.spaceCenter) {
             // ((26.0) The space center's roads along one side, the staff town's streets on the rest.)
             spaceMap.spaceCenterTown();
+        } else if (city.region != null && city.region.layStreets(bx0, by0, bx1, by1, in)) {
+            // ((28.0) Laid out by the map's own class.)
         } else {
             splitTop(bx0 + in, by0 + in, bx1 - in, by1 - in);
         }
@@ -868,6 +878,7 @@ final class CityGenerator extends CityPart {
     private void layCountry() {
         // Out in the country, a highway runs past the town.
         if (m >= 16) roadGen.highway(bx0, by0, bx1, by1);
+        if (city.region != null) city.region.afterHighway(bx0, by0, bx1, by1);
         if (m >= 16 && city.cfg.civic >= 12) roadGen.ringRoad(bx0, by0, bx1, by1);
         // (10.52) Map version 22: the beltway right round the map, before the country fills in round it (on the
         // water maps, the roads round the edge of town: see outerBelt).
@@ -979,6 +990,7 @@ final class CityGenerator extends CityPart {
         if (city.themePark) parkMap.themeParkPlaces(used);
         // ((26.0) The Space Center: the pads, the assembly building, the crawlerway, mission control and the rest.)
         if (city.spaceCenter) spaceMap.spaceCenterPlaces();
+        if (city.region != null) city.region.places(used);
         // ((15.5) The Military Town's great base, in the middle where the streets were kept clear of it.)
         if (bigBase != null) {
             baseGen.militaryBase(bigBase[0] + 1, bigBase[1] + 1, bigBase[2] - bigBase[0] - 2, bigBase[3] - bigBase[1] - 2);
@@ -1392,6 +1404,7 @@ final class CityGenerator extends CityPart {
      * corners.
      */
     private void finishGround() {
+        if (city.region != null) city.region.finish();
         if (city.desert) desertMap.desertify();
         if (city.themePark || (city.cfg.archipelago() && city.cfg.distinctIslands())) parkMap.tropics();
         // Street lamps on the pavement corners at junctions.

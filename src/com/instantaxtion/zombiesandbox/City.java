@@ -236,6 +236,8 @@ final class City {
     int[] parkRect;
     /** ((26.0) The Space Center (CityConfig.spaceCenter): everything it changes in building and drawing the map is for it alone. */
     final boolean spaceCenter;
+    /** ((28.0) Highway Crossroads, Canyon Town or Frozen North: the map's own builder and painter (null on every other map). */
+    RegionMap region;
     /** Where the city is: its look and its names. */
     final Country country;
     /** The town's name, the same every time for a given city code. */
@@ -420,6 +422,7 @@ final class City {
         this.desert = cfg.desert();
         this.themePark = cfg.themePark();
         this.spaceCenter = cfg.spaceCenter();
+        this.region = RegionMap.of(this);
         this.detail = detail;
         w = h = cfg.tiles();
         rnd = new Random(cfg.seed);
