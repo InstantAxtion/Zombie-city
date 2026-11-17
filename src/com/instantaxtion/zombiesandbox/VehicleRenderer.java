@@ -65,6 +65,9 @@ final class VehicleRenderer {
         } else if (v.kind == Fleet.K_IFV) {
             hl = 11.5f;
             hw = 6f;
+        } else if (v.kind == Fleet.K_MRAP || v.kind == Fleet.K_FIRE_SUPPORT) {
+            hl = 10.5f;
+            hw = 5.6f;
         } else if (Fleet.isPost(v)) {
             hl = 11.5f;
             hw = 5.4f;
@@ -220,6 +223,52 @@ final class VehicleRenderer {
             gv.fill.setColor(City.lighten(body, 0.14f));
             c.drawRect(hl * 0.55f, -hw + 1.8f, hl - 0.5f, hw - 1.8f, gv.fill);
             drawRoofGun(c, v, -hl * 0.1f, 3.6f, 11f, body);
+        } else if (v.kind == Fleet.K_MRAP) {
+            // ((27.5) The MRAP: a tall armoured box on big wheels, a slab-sided cab with small thick windows, the
+            // gunner's turret on the roof.)
+            gv.fill.setColor(0xFF111214);
+            for (int k = 0; k < 3; k++) {
+                float wx = -hl * 0.62f + k * hl * 0.55f;
+                c.drawRect(wx - 2f, -hw - 0.8f, wx + 2f, -hw + 0.9f, gv.fill);
+                c.drawRect(wx - 2f, hw - 0.9f, wx + 2f, hw + 0.8f, gv.fill);
+            }
+            gv.fill.setColor(City.darken(body, 0.82f));
+            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.4f, hw - 0.8f, gv.fill);
+            gv.fill.setColor(City.lighten(body, 0.12f));
+            c.drawRect(hl * 0.45f, -hw + 0.8f, hl - 0.4f, hw - 0.8f, gv.fill);
+            gv.fill.setColor(0xFF1E2A33);
+            c.drawRect(hl * 0.48f, -hw + 1.6f, hl * 0.6f, -hw + 2.8f, gv.fill);
+            c.drawRect(hl * 0.48f, hw - 2.8f, hl * 0.6f, hw - 1.6f, gv.fill);
+            c.drawRect(hl * 0.62f, -hw * 0.5f, hl * 0.72f, hw * 0.5f, gv.fill);
+            // (The rear door, and the spare wheel on it.)
+            gv.fill.setColor(0xFF161716);
+            c.drawCircle(-hl + 1.6f, 0, 1.5f, gv.fill);
+            drawRoofGun(c, v, -hl * 0.15f, 2.8f, 7f, body);
+        } else if (v.kind == Fleet.K_FIRE_SUPPORT) {
+            // ((27.5) The fire support truck: the cab in front, a flat bed with the mortar's baseplate and tube on it;
+            // set up, its legs are out at the corners and the tube is turned towards the target.)
+            gv.fill.setColor(City.lighten(body, 0.1f));
+            c.drawRect(hl * 0.4f, -hw + 0.8f, hl - 0.6f, hw - 0.8f, gv.fill);
+            gv.fill.setColor(0xFF1E2A33);
+            c.drawRect(hl * 0.4f, -hw + 1.2f, hl * 0.55f, hw - 1.2f, gv.fill);
+            gv.fill.setColor(City.darken(body, 0.72f));
+            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.35f, hw - 0.8f, gv.fill);
+            boolean set = v.state == Fleet.SCENE && !v.broken;
+            if (set) {
+                gv.fill.setColor(0xFF2A2B28);
+                for (int sx = -1; sx <= 1; sx += 2)
+                    for (int sy = -1; sy <= 1; sy += 2) c.drawRect(sx * hl * 0.55f - 0.7f, sy * (hw + 1.6f) - 0.7f, sx * hl * 0.55f + 0.7f, sy * (hw + 1.6f) + 0.7f, gv.fill);
+            }
+            gv.fill.setColor(0xFF3A3C36);
+            c.drawCircle(-hl * 0.35f, 0, 2.6f, gv.fill);
+            float a = set ? v.turret - v.angle : (float) Math.PI;
+            gv.stroke.setColor(0xFF1C1D1A);
+            gv.stroke.setStrokeWidth(2f);
+            c.drawLine(-hl * 0.35f, 0, -hl * 0.35f + (float) Math.cos(a) * 5.5f, (float) Math.sin(a) * 5.5f, gv.stroke);
+            if (set && v.cannonCd > FleetFireSupport.COOLDOWN - 0.4f) {
+                gv.fill.setColor(0xFFFFD27A);
+                c.drawCircle(-hl * 0.35f + (float) Math.cos(a) * 6.5f, (float) Math.sin(a) * 6.5f, 2.2f, gv.fill);
+            }
         } else if (v.kind == Fleet.K_GUNTRUCK) {
             // ((14.6) The gun truck: the cab in front, an open bed behind, and the gun mounted in it.)
             gv.fill.setColor(City.lighten(body, 0.1f));

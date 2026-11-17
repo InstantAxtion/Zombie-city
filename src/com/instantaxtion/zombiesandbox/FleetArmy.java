@@ -405,7 +405,7 @@ final class FleetArmy {
         if (p == null) p = city.takeParkedTruck(sx, sy, 600);
         if (p == null) return false;
         int kind = city.cfg.nature() ? (inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && fleet.routing.onRoad(inc.x, inc.y) ? K_GUNTRUCK
-                : inc.zombiesNear >= 10 ? K_APC : squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0) : 0;
+                : inc.zombiesNear >= 8 && mrapFree(null) ? K_MRAP : inc.zombiesNear >= 10 ? K_APC : squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0) : 0;
         musterTruck(squad, p, inc, kind);
         return true;
     }
@@ -639,7 +639,22 @@ final class FleetArmy {
         return bay(g, f);
     }
 
+    /** ((27.5) MRAPs each base has (out or in), and whether base f (null: any) still has one to send. */
+    static final int MRAPS_PER_BASE = 3;
+
+    boolean mrapFree(City.Facility f) {
+        int out = 0, bases = 0;
+        for (City.Facility b : city.facilities) if (b.kind == City.FACILITY_BASE && !b.fallen) bases++;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle v = fleet.vehicles.get(i);
+            if (v.kind != K_MRAP || v.broken) continue;
+            if (f == null || World.hypot(v.homeX - f.x, v.homeY - f.y) < Math.max(260, f.r * 2.5f)) out++;
+        }
+        return out < (f == null ? bases * MRAPS_PER_BASE : MRAPS_PER_BASE);
+    }
+
     void stockBases() {
+        fleet.fireSupport.stock();
         for (City.Facility f : city.facilities) {
             if (f.kind != City.FACILITY_BASE || f.fallen) continue;
             float rad = Math.max(260, f.r * 2.5f);

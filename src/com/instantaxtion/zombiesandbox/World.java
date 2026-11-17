@@ -16,6 +16,7 @@ final class World {
     final Indoors indoors = new Indoors(this);
     final DogAI dogAI = new DogAI(this);
     final ArmedAI armedAI = new ArmedAI(this);
+    final Commanders commanding = new Commanders(this);
     final Police police = new Police(this);
     final Posts posts = new Posts(this);
     final Ammo ammo = new Ammo(this);

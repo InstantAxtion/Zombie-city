@@ -670,6 +670,8 @@ final class ArmedAI {
         boolean soldier = e.type == Entity.SOLDIER;
         float range = shotRange(e, soldier);
         if (e.role == Entity.ROLE_COMMANDER && soldier) command(e, dt);
+        // ((27.5) An officer in charge spreads the squads round them along a line, and pulls them back together.)
+        if (soldier ? e.role == Entity.ROLE_COMMANDER : e.type == Entity.COP) w.commanding.lead(e, soldier, dt);
         // ((15.0) Up on a horse, a mounted officer sees the dead round them - whatever they're doing - and marks them
         // for the units nearby.)
         if (!soldier && e.role == Entity.ROLE_MOUNTED && (e.lookT -= dt) <= 0) {
@@ -752,6 +754,7 @@ final class ArmedAI {
         if (e.hp >= e.maxHp * 0.6f) e.retreatSaid = false;
         if (cordonStep(e, t, dt)) return;
         if (postStep(e, t)) return;
+        if (lineStep(e, t, soldier, stock, range, dt)) return;
         boolean stationary = e.task == Dispatch.T_POST || e.task == Dispatch.T_HOLD
                 || (e.task == Dispatch.T_CORDON && World.hypot(e.postX - e.x, e.postY - e.y) < 40);
         if (engageStep(e, t, soldier, stock, range, stationary, dt)) return;
@@ -1169,6 +1172,28 @@ final class ArmedAI {
         return false;
     }
 
+    /**
+     * ((27.5) On a commander's line (see Commanders): to their place on it, and fighting from there as from a post -
+     * stepping back when pressed, taking it again after.
+     */
+    private boolean lineStep(final Entity e, final Entity t, final boolean soldier, final float stock, final float range, final float dt) {
+        if (e.lineT <= w.time || e.cmdBy == null || e.cmdBy.dead || e == w.controlled
+                || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_RESPOND)) return false;
+        float pd = (float) World.hypot(e.lineX - e.x, e.lineY - e.y);
+        if (t == null) {
+            if (pd > 6) w.wilds.walkToSpot(e, e.lineX, e.lineY, pd > 40 ? e.runSpeed * 0.9f : e.speed);
+            else w.movement.steer(e, 0, 0, 0);
+            return true;
+        }
+        // (Once the dead are close they fight as they always do - side-stepping for a clear shot, backing off when
+        // pressed; until then they get to their place, shooting on the way.)
+        float d = (float) World.hypot(t.x - e.x, t.y - e.y) + 0.001f;
+        if (pd < 24 || d < 110 || w.spatial.countZombiesNear(e.x, e.y, 60) >= 2) return false;
+        w.wilds.walkToSpot(e, e.lineX, e.lineY, e.speed * 1.2f);
+        w.combat.aimAndFire(e, t, d, range, dt);
+        return true;
+    }
+
     /** One of the dead to shoot: keeping their distance, firing, and a grenade into a crowd of them. True when that was their step. */
     private boolean engageStep(final Entity e, final Entity t, final boolean soldier, final float stock, final float range, final boolean stationary, final float dt) {
         if (t != null && e.task != Dispatch.T_MOVE) {
@@ -1549,7 +1574,9 @@ final class ArmedAI {
                     // ((16.9) Each kind of police officer's nerve: see doctrine.)
                     float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : World.doctrine(e) != null ? World.doctrine(e)[5] : 4;
                     // ((10.59) A veteran stands longer.)
-                    nerve += World.rank(e) * 0.75f + (World.perk(e, World.P_NERVE) ? 2 : 0) + (w.ops.boosts(e) ? 2 : 0);
+                    nerve += World.rank(e) * 0.75f + (World.perk(e, World.P_NERVE) ? 2 : 0) + (w.ops.boosts(e) ? 2 : 0)
+                            // ((27.5) On a commander's line, with the others either side: they stand a little longer.)
+                            + (e.lineT > w.time && e.cmdBy != null && !e.cmdBy.dead ? 1.5f : 0);
                     if (odds >= nerve - (e.goal == World.A_FALLBACK ? 1.5f : 0))
                         w.armedScore[World.A_FALLBACK] = 0.6f + 0.05f * (odds - nerve) + (stock < 0.4f ? 0.15f : 0) + 0.15f * (World.caution(e) - 0.5f)
                                 + (e.kills > 10 ? -0.05f : 0);

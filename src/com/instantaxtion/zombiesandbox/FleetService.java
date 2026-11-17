@@ -210,6 +210,7 @@ final class FleetService {
         }
         if (v.recon) return fleet.armyUnits.reconStep(v, dt);
         if (isPost(v)) return fleet.commandTrucks.commandPostStep(v, dt);
+        if (v.kind == K_FIRE_SUPPORT) return fleet.fireSupport.step(v, dt);
         if (v.type == TRUCK) fleet.turret(v, dt);
         if (v.state == PICKUP) return pickupStep(v, dt);
         if (v.state == SCENE && v.type == CRUISER) return cruiserAtScene(v, dt);
@@ -274,7 +275,7 @@ final class FleetService {
         }
         // ((10.51) Quicker on a call, the army above all: the trucks used to trundle to a fight.)
         boolean call = fleet.routing.emergency(v) && v.state != RETURN;
-        float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100)
+        float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100) : v.kind == K_MRAP ? (call ? 95 : 78)
                 : v.kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
         // ((24.2) Not on a call (going home, off to restock, empty): the lights and the junctions' rules, like
         // everyone else - they went straight through red lights and across traffic. Waiting at one isn't being stuck.)
@@ -307,7 +308,7 @@ final class FleetService {
             }
         }
         // Don't drive into a horde: stop short and let the troops out (an APC drives on in: it's armoured).
-        if (v.state == DRIVE && !v.loop && v.kind != K_APC && v.kind != K_BEARCAT && (v.passengers > 0 || !v.crew.isEmpty()) && hordeAhead(v)) {
+        if (v.state == DRIVE && !v.loop && v.kind != K_APC && v.kind != K_BEARCAT && v.kind != K_MRAP && (v.passengers > 0 || !v.crew.isEmpty()) && hordeAhead(v)) {
             arrived = true;
             v.speed *= 0.3f;
         }
@@ -615,7 +616,7 @@ final class FleetService {
     boolean unloadAtCall(Vehicle v) {
         fleet.crews.unload(v, true);
         v.passengers = 0;
-        if ((v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK) && v.supply == 0) {
+        if ((v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK || v.kind == K_MRAP) && v.supply == 0) {
             // The APC stays to give its squad covering fire.
             v.state = SCENE;
             v.timer = 90;

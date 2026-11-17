@@ -86,6 +86,13 @@ final class Entity {
     transient Entity aimPick;
     /** ((27.4) Falling back with the others: where they're all making for, and until when. */
     transient float rallyX, rallyY, rallyT;
+    /** ((27.5) On a commander's line: the officer, their place on it, and until when (see Commanders). */
+    transient Entity cmdBy;
+    transient float lineX, lineY, lineT;
+    /** ((27.5) A leader's own: next look round, the line's middle, pulled back until, squads in hand and at the start. */
+    transient float cmdCd, cmdAx, cmdAy, cmdRetreatUntil;
+    transient int cmdSquads, cmdUnits;
+    transient boolean cmdLine;
     /** ((24.0) Turned away from a full zone: not to try again until then. */
     transient float refusedUntil;
     /** ((24.0) The safe zone they're making for. */

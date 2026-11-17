@@ -63,6 +63,8 @@ final class Inspector {
         // ((27.4) Whose they are just now: a command post's guard, a roof's marksman, a truck's crew (see Jobs).)
         String job = Jobs.describe(e);
         if (job != null) lines.add(job);
+        String cmd = gv.world.commanding.describe(e);
+        if (cmd != null) lines.add(cmd);
         String life = gv.world.jobTitle(e);
         if (life != null) lines.add(life + (e.home != null ? ", lives on " + gv.world.city.placeName(e.home.doorX, e.home.doorY).split(" & ")[0]
                 : homeless(e) ? ", no home" : ""));

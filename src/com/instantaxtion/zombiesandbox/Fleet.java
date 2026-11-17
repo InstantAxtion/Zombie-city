@@ -71,6 +71,12 @@ final class Fleet {
     static final int K_POLICE_BOAT = 14, K_COMMAND = 15;
     /** ((26.1) The army's mobile command post truck, kept at its base.) */
     static final int K_ARMY_POST = 16;
+    /**
+     * ((27.5) The army's MRAP: a mine-resistant armoured truck with a gunner up top, for a squad sent into the worst of
+     * it; and its fire support truck: a mortar on the back, kept at base and brought up behind the lines to shell the
+     * big packs (see FleetFireSupport). Numbers well clear of the others' kinds.)
+     */
+    static final int K_MRAP = 30, K_FIRE_SUPPORT = 31;
 
     /** ((26.1) A mobile command post truck, the police's or the army's. */
     static boolean isPost(Vehicle v) {
@@ -392,6 +398,7 @@ final class Fleet {
         float length() {
             if (kind == K_APC) return 11f;
             if (kind == K_HUMVEE) return 8.5f;
+            if (kind == K_MRAP || kind == K_FIRE_SUPPORT) return 10.5f;
             if (kind == K_BIKE) return 4.5f;
             return type == TANK ? 11f : type == TRUCK || type == AMBULANCE ? 9.5f
                     : type == CAR ? MODEL_HL[model] : 8f;
@@ -410,6 +417,8 @@ final class Fleet {
                 if (v.kind == K_APC) return "Armoured personnel carrier" + (v.guardUnit ? "  -  " + Country.guard()[1] : "");
                 if (v.kind == K_IFV) return "Infantry fighting vehicle";
                 if (v.kind == K_GUNTRUCK) return "Army gun truck";
+                if (v.kind == K_MRAP) return "Army MRAP  -  mine-resistant, a gunner up top";
+                if (v.kind == K_FIRE_SUPPORT) return "Army fire support truck  -  mortar carrier";
                 if (v.kind == K_HUMVEE) return (v.guardUnit ? Country.guard()[1] + " " : "") + "Humvee" + (v.loop ? "  -  base patrol" : "");
                 if (v.shelter) return "Armoured police van  -  shelter, " + v.riders.size() + " of " + SHELTER_SEATS + " inside";
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
@@ -489,7 +498,8 @@ final class Fleet {
                 return "Ambulance: Responding";
             case CRUISER:
             case TRUCK: {
-                String who = v.kind == K_APC ? "APC" : v.kind == K_HUMVEE ? "Humvee" : v.kind == K_RIOT_VAN ? "Riot van"
+                if (v.kind == K_FIRE_SUPPORT) return fireSupport.status(v, where);
+                String who = v.kind == K_MRAP ? "MRAP" : v.kind == K_APC ? "APC" : v.kind == K_HUMVEE ? "Humvee" : v.kind == K_RIOT_VAN ? "Riot van"
                         : v.kind == K_BIKE ? "Police motorcycle" : v.kind == K_BEARCAT ? "BearCat" : v.type == CRUISER ? "Police car" : v.swat ? "SWAT van" : "Army truck";
                 if (v.restock) return v.state == RETURN ? "Supply truck: Heading out of town"
                         : "Supply truck: Delivering" + (where != null ? " to " + where : "");
@@ -566,6 +576,7 @@ final class Fleet {
         ambulances = new FleetAmbulances(this);
         convoyUnits = new FleetPickups(this);
         commandTrucks = new FleetCommand(this);
+        fireSupport = new FleetFireSupport(this);
         crews = new FleetCrews(this);
         evacBuses = new FleetEvac(this);
         playerDriving = new FleetPlayer(this);
@@ -586,6 +597,7 @@ final class Fleet {
     final FleetAmbulances ambulances;
     final FleetPickups convoyUnits;
     final FleetCommand commandTrucks;
+    final FleetFireSupport fireSupport;
     final FleetCrews crews;
     final FleetEvac evacBuses;
     final FleetPlayer playerDriving;
@@ -604,7 +616,7 @@ final class Fleet {
 
     /** ((26.0) Nobody gets into it through a window: tanks, APCs, IFVs, BearCats, SWAT and riot vans, the shelter van. */
     static boolean armoured(Vehicle v) {
-        return v.type == TANK || v.kind == K_APC || v.kind == K_IFV || v.kind == K_BEARCAT || v.kind == K_RIOT_VAN || v.swat || v.shelter;
+        return v.type == TANK || v.kind == K_APC || v.kind == K_IFV || v.kind == K_BEARCAT || v.kind == K_RIOT_VAN || v.kind == K_MRAP || v.swat || v.shelter;
     }
 
     /** (11.1) The police's trucks: SWAT vans, riot vans and BearCats. */
@@ -639,7 +651,7 @@ final class Fleet {
     void setKind(Vehicle v, int kind) {
         v.kind = kind;
         float hp = kind == K_APC ? 520 : kind == K_HUMVEE ? 220 : kind == K_RIOT_VAN ? 380 : kind == K_BIKE ? 70 : kind == K_BEARCAT ? 600
-                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : kind == K_COMMAND || kind == K_ARMY_POST ? 900 : kind == K_POLICE_BOAT ? 300 : v.maxHp;
+                : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : kind == K_MRAP ? 700 : kind == K_FIRE_SUPPORT ? 320 : kind == K_COMMAND || kind == K_ARMY_POST ? 900 : kind == K_POLICE_BOAT ? 300 : v.maxHp;
         v.hp = v.maxHp = hp;
     }
 
@@ -652,7 +664,7 @@ final class Fleet {
         if (v.gunMount) return true;
         switch (v.kind) {
             // ((26.1) Not riot vans: no gun on their roof.)
-            case K_APC: case K_HUMVEE: case K_IFV: case K_GUNTRUCK: case K_BEARCAT: case K_POLICE_BOAT:
+            case K_APC: case K_HUMVEE: case K_IFV: case K_GUNTRUCK: case K_BEARCAT: case K_POLICE_BOAT: case K_MRAP:
                 return true;
             case 0:
                 return troopTruck(v);
@@ -668,7 +680,7 @@ final class Fleet {
 
     /** ((26.0) A roof gun drawn on top of a vehicle that isn't built round one (see GameView.drawVehicle). */
     static boolean addedGun(Vehicle v) {
-        return mountedGun(v) && v.kind != K_APC && v.kind != K_IFV && v.kind != K_GUNTRUCK && v.kind != K_HUMVEE && v.type != BOAT;
+        return mountedGun(v) && v.kind != K_APC && v.kind != K_IFV && v.kind != K_GUNTRUCK && v.kind != K_HUMVEE && v.kind != K_MRAP && v.type != BOAT;
     }
 
     /**
@@ -677,7 +689,7 @@ final class Fleet {
      */
     static boolean gunManned(Vehicle v) {
         if (v.broken) return false;
-        if (v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK || v.kind == K_HUMVEE) return true;
+        if (v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK || v.kind == K_HUMVEE || v.kind == K_MRAP) return true;
         if (v.parked || v.standby || v.shelter || v.state == ABANDONED || v.state == MUSTER || v.player != null) return false;
         return v.type == BOAT || v.convoy != null || !v.crew.isEmpty() || v.driver != null || v.passengers > 0 || v.state == SCENE;
     }
@@ -688,6 +700,7 @@ final class Fleet {
             case K_IFV: return 240;
             case K_GUNTRUCK: return 210;
             case K_APC: return 170;
+            case K_MRAP: return 180;
             case K_BEARCAT: case K_POLICE_BOAT: return 160;
             case K_HUMVEE: return 140;
             case K_RIOT_VAN: return 130;
@@ -700,6 +713,7 @@ final class Fleet {
             case K_IFV: return 40;
             case K_GUNTRUCK: return 15;
             case K_APC: return 24;
+            case K_MRAP: return 20;
             case K_BEARCAT: return 16;
             case K_RIOT_VAN: return 12;
             case K_POLICE_BOAT: return 11;
@@ -1180,6 +1194,8 @@ final class Fleet {
         if (v.type == HELI && v.broken) return;
         // (Armour: the dead can claw at an APC or the riot van all day.)
         if (!blast && (v.kind == K_APC || v.kind == K_RIOT_VAN)) amount *= 0.3f;
+        // ((27.5) The MRAP: built to shrug off claws and blasts alike, though not for ever.)
+        if (v.kind == K_MRAP) amount *= blast ? 0.5f : 0.3f;
         v.hp -= amount;
         cars.tripAlarm(v, 0.6f);
         if (v.broken) {
@@ -1318,6 +1334,8 @@ final class Fleet {
             float far = (float) World.hypot(inc.x - p[0], inc.y - p[1]);
             // ((14.6) The worst of it gets the IFV; a big pack out on the roads, the gun truck.)
             kind = inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && routing.onRoad(inc.x, inc.y) ? K_GUNTRUCK
+                    // ((27.5) A dangerous call: one of the base's few MRAPs, while there's one.)
+                    : inc.zombiesNear >= 8 && base.baseType != City.BT_ARMOUR && armyUnits.mrapFree(base) ? K_MRAP
                     : inc.zombiesNear >= 10 || (base.baseType == City.BT_ARMOUR && inc.zombiesNear >= 5) ? K_APC
                     : far > 900 && squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0;
             if (forceKind >= 0) kind = forceKind;

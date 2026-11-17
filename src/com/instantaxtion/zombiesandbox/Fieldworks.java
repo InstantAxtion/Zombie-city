@@ -129,16 +129,37 @@ final class Fieldworks {
             manned = !e.dead && e.type == Entity.SOLDIER && Math.abs(e.x - base.x) < rad && Math.abs(e.y - base.y) < rad;
         }
         if (!manned) return null;
-        int best = 24;
+        float[] pk = safePack(px, py, reach, 25, 120, 0);
+        if (pk == null) return null;
+        float bx = pk[0], by = pk[1];
+        int best = (int) pk[2];
+        w.combat.shells(bx, by, World.FIRE_DELAY);
+        w.fireMissions++;
+        String place = w.city.placeName(bx, by);
+        w.dispatch.say(who, null, caller + ": Fire mission, " + best + " of the dead in the open on " + place + ". Requesting mortars.", px, py, true);
+        w.dispatch.say(Dispatch.WHO_MILITARY, null, base.name + ": Fire mission on " + place + ". Rounds on the way - keep clear!", bx, by);
+        w.stats.timeline("A command post called mortars down on " + place, bx, by);
+        return new float[]{bx, by, best};
+    }
+
+    /**
+     * ((27.5) Out of fireMission.) The biggest pack of the dead (at least min, counted within 80) within reach of
+     * (px, py) and further than near from it, with nobody armed or not turned within clear of it and not in a safe
+     * zone or a survivors' base: {x, y, count}, or null.
+     */
+    float[] safePack(float px, float py, float reach, int min, float clear, float near) {
+        int best = min - 1;
         float bx = 0, by = 0;
         for (int i = 0, n = w.entities.size(), seen = 0; i < n; i++) {
             Entity z = w.entities.get(i);
             if (z.dead || !z.isZombie()) continue;
             // (Every fourth of them: a pack of 25 has a few looked at.)
-            if ((seen++ & 3) != 0 || World.hypot(z.x - px, z.y - py) > reach) continue;
+            if ((seen++ & 3) != 0) continue;
+            float d = (float) World.hypot(z.x - px, z.y - py);
+            if (d > reach || d < near) continue;
             int c = w.spatial.countZombiesNear(z.x, z.y, 80);
             if (c <= best) continue;
-            if (w.spatial.armedNear(z.x, z.y, 120) > 0 || w.spatial.countCiviliansNear(z.x, z.y, 120) > 0) continue;
+            if (w.spatial.armedNear(z.x, z.y, clear) > 0 || w.spatial.countCiviliansNear(z.x, z.y, clear) > 0) continue;
             boolean kept = false;
             for (int k = 0; k < w.dispatch.zones.size() && !kept; k++) kept = !w.dispatch.zones.get(k).removed && w.dispatch.zones.get(k).contains(z.x, z.y, 60);
             for (int k = 0; k < w.bases.size() && !kept; k++) kept = w.bases.get(k).contains(z.x, z.y, 3);
@@ -147,14 +168,7 @@ final class Fieldworks {
             bx = z.x;
             by = z.y;
         }
-        if (best < 25) return null;
-        w.combat.shells(bx, by, World.FIRE_DELAY);
-        w.fireMissions++;
-        String place = w.city.placeName(bx, by);
-        w.dispatch.say(who, null, caller + ": Fire mission, " + best + " of the dead in the open on " + place + ". Requesting mortars.", px, py, true);
-        w.dispatch.say(Dispatch.WHO_MILITARY, null, base.name + ": Fire mission on " + place + ". Rounds on the way - keep clear!", bx, by);
-        w.stats.timeline("A command post called mortars down on " + place, bx, by);
-        return new float[]{bx, by, best};
+        return best >= min ? new float[]{bx, by, best} : null;
     }
 
     /** An airborne squad dropped on the spot: six soldiers, a machine gunner among them, who hold it. */

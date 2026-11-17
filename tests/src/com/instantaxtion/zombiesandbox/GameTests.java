@@ -4825,6 +4825,121 @@ public final class GameTests {
                         "and the car carries on to it, not back on patrol (" + (int) d0 + " -> " + (int) Math.hypot(lcar.x - li.x, lcar.y - li.y) + ")");
             }
         });
+        test("27.5: commanders hold a line; the MRAP and fire support truck", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 13;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                w.outbreak = true;
+                w.alert = 2;
+                // A commander and three squads on a street, a pack of 30 coming at them from 300 off down it.
+                java.util.Random r = new java.util.Random(5);
+                float[] p = null, z0 = null;
+                for (int k = 0; k < 400 && z0 == null; k++) {
+                    p = w.city.randomStreetSpot(r);
+                    double a = r.nextFloat() * 6.283;
+                    float[] q = w.city.findWalkable(p[0] + (float) Math.cos(a) * 300, p[1] + (float) Math.sin(a) * 300);
+                    if (q != null && Math.hypot(q[0] - p[0], q[1] - p[1]) > 250 && w.city.los(p[0], p[1], q[0], q[1])) z0 = q;
+                }
+                check(z0 != null, "a street with room");
+                Entity cm = w.spawnSoldier(Entity.ROLE_COMMANDER, p[0], p[1]);
+                java.util.List<Entity> ours = new java.util.ArrayList<Entity>();
+                ours.add(cm);
+                for (int s = 0; s < 3; s++)
+                    for (int m = 0; m < 5; m++) {
+                        float[] q = w.city.findWalkable(p[0] + m * 4 - 8, p[1] + s * 5 - 5);
+                        Entity e = w.spawnSoldier(Entity.ROLE_RIFLE, q[0], q[1]);
+                        e.squad = 901 + s;
+                        e.member = m + 1;
+                        ours.add(e);
+                    }
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 30; k++) {
+                    float[] q = w.city.findWalkable(z0[0] + r.nextFloat() * 50 - 25, z0[1] + r.nextFloat() * 50 - 25);
+                    if (q != null) pack.add(w.spawn(Entity.ZOMBIE, q[0], q[1]));
+                }
+                Quiet q = empty(w, p[0], p[1], 700, ours, pack);
+                final Entity fc = cm;
+                check(stepUntil(w, q, 5, new Cond() {
+                    public boolean done() {
+                        return fc.cmdLine;
+                    }
+                }), "the commander forms a line");
+                String card = w.commanding.describe(cm);
+                check(card != null && card.startsWith("Commanding: 3 squads"), "the card says so (" + card + ")");
+                // Spread out, not stacked: each on a place of their own on the line.
+                int on = 0, stacked = 0;
+                for (Entity e : ours) {
+                    if (e == cm || e.lineT <= w.time) continue;
+                    on++;
+                    for (Entity o : ours) if (o != e && o != cm && o.lineT > w.time && Math.hypot(o.lineX - e.lineX, o.lineY - e.lineY) < 6) stacked++;
+                }
+                check(on >= 12 && stacked == 0, "squads spread along it (" + on + " on it, " + stacked + " stacked)");
+                // The line about to break: the dead on it and the rounds gone - they all go back, together, to one place.
+                for (Entity z : pack) {
+                    float[] s0 = w.city.findWalkable(cm.cmdAx + r.nextFloat() * 40 - 20, cm.cmdAy + r.nextFloat() * 40 - 20);
+                    if (s0 != null) {
+                        z.x = s0[0];
+                        z.y = s0[1];
+                    }
+                }
+                for (Entity e : ours) e.reserve = 0;
+                w.spatial.buildHash();
+                cm.cmdCd = 0;
+                w.commanding.lead(cm, true, 0);
+                int back = 0;
+                for (Entity e : ours) if (e.rallyT > w.time && e.rallyX == cm.rallyX && e.rallyY == cm.rallyY) back++;
+                check(w.commanding.retreats == 1 && back >= 12, "the commander pulls them all back together (" + back + ")");
+                // The MRAP: armoured, a gunner, hard to hurt.
+                Fleet.Vehicle m = w.fleet.make(Fleet.TRUCK);
+                w.fleet.setKind(m, Fleet.K_MRAP);
+                check(Fleet.mountedGun(m) && Fleet.gunManned(m) && Fleet.armoured(m) && m.maxHp >= 700, "the MRAP has a manned gun and armour");
+                check(w.fleet.describe(m).contains("MRAP"), "and is named");
+                // Fire support trucks parked at the bases; one goes out to a big fight and shells the pack, not the people.
+                Fleet.Vehicle fs = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_FIRE_SUPPORT) fs = v;
+                check(fs != null && fs.state == Fleet.WAIT, "a fire support truck at the base");
+                for (Entity o : ours) o.dead = o.removed = true;
+                for (Entity z : pack) z.dead = z.removed = true;
+                float[] f0 = null;
+                for (int k = 0; k < 400 && f0 == null; k++) {
+                    float[] g = w.city.randomStreetSpot(r);
+                    float d = (float) Math.hypot(g[0] - fs.homeX, g[1] - fs.homeY);
+                    if (d > 500 && d < 900) f0 = g;
+                }
+                java.util.List<Entity> fight = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 40; k++) {
+                    float[] g = w.city.findWalkable(f0[0] + r.nextFloat() * 60 - 30, f0[1] + r.nextFloat() * 60 - 30);
+                    if (g != null) fight.add(w.spawn(Entity.ZOMBIE, g[0], g[1]));
+                }
+                for (Entity z : fight) untouchable(z);
+                // (Two soldiers fighting them, out of the blast.)
+                float ex = fs.homeX - f0[0], ey = fs.homeY - f0[1], el = (float) Math.hypot(ex, ey);
+                float[] sp = w.city.findWalkable(f0[0] + ex / el * 220, f0[1] + ey / el * 220);
+                java.util.List<Entity> guns = new java.util.ArrayList<Entity>();
+                for (int k = 0; k < 2; k++) guns.add(w.spawnSoldier(Entity.ROLE_RIFLE, sp[0] + k * 6, sp[1]));
+                final Quiet q2 = quiet(w, f0[0], f0[1], 300, fight, guns);
+                final World fw = w;
+                final java.util.List<Entity> fg = guns, fz = fight;
+                boolean fired = stepUntil(w, q2, 90, new Cond() {
+                    public boolean done() {
+                        for (Entity g : fg) hold(g, g.x, g.y);
+                        for (Entity z : fz) z.vx = z.vy = 0;
+                        return fw.fleet.fireSupport.salvos > 0;
+                    }
+                });
+                check(fired, "the fire support truck drives out and fires (" + w.fleet.status(fs) + ", " + (int) Math.hypot(fs.x - fs.tx, fs.y - fs.ty) + " to go of " + (int) Math.hypot(fs.homeX - fs.tx, fs.homeY - fs.ty) + ", speed " + (int) fs.speed + ")");
+                check(Math.hypot(fs.x - f0[0], fs.y - f0[1]) > 200, "from behind the lines, well back from the pack");
+                // Never on people: a pack with a soldier among it isn't a target.
+                Entity among = w.spawnSoldier(Entity.ROLE_RIFLE, fight.get(0).x, fight.get(0).y);
+                w.spatial.buildHash();
+                check(among != null && w.fieldworks.safePack(f0[0], f0[1], 100, 25, 150, 0) == null, "not with friends close to it");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
