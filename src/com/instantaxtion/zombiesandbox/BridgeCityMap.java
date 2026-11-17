@@ -27,16 +27,16 @@ final class BridgeCityMap extends WaterMap {
     void layout() {
         int N = city.w;
         Random r = new Random(city.cfg.seed * 2803L + 25);
-        int[][] grids = N < 160 ? new int[][]{{3, 2}, {2, 3}} : N < 300 ? new int[][]{{3, 2}, {2, 3}, {3, 3}}
+        int[][] grids = N < 160 ? new int[][]{{2, 2}} : N < 300 ? new int[][]{{3, 2}, {2, 3}, {3, 3}}
                 : new int[][]{{3, 3}, {4, 3}, {3, 4}, {4, 2}, {2, 4}};
         int[] g = grids[r.nextInt(grids.length)];
         int cols = g[0], rows = g[1];
         int cells = cols * rows;
         // How many go missing from the grid: none on the small maps, up to four on a big grid (six to ten islands).
-        int keepMin = cells >= 9 ? Math.min(8, cells - 1) : 6, keepMax = Math.min(10, cells);
+        int keepMin = cells >= 9 ? Math.min(8, cells - 1) : Math.min(6, cells), keepMax = Math.min(10, cells);
         int keep = keepMin + r.nextInt(keepMax - keepMin + 1);
-        float M = N * 0.03f, cw = (N - 2 * M) / cols, ch = (N - 2 * M) / rows;
-        float gap = Math.max(22, N * 0.06f);
+        float M = N < 160 ? 2 : N * 0.03f, cw = (N - 2 * M) / cols, ch = (N - 2 * M) / rows;
+        float gap = N < 160 ? 20 : Math.max(22, N * 0.06f);
         for (int attempt = 0; attempt < 60; attempt++) {
             Random a = new Random(city.cfg.seed * 7717L + attempt * 31L);
             boolean[] on = new boolean[cells];
@@ -156,6 +156,16 @@ final class BridgeCityMap extends WaterMap {
     static int find(int[] root, int i) {
         while (root[i] != i) i = root[i] = root[root[i]];
         return i;
+    }
+
+    @Override
+    float[] districtSpot(int k, float x, float y, Random r) {
+        // (The second district is the port's, on its island.)
+        if (k == 1 && port >= 0) {
+            int[] q = city.islandRects[port];
+            return new float[]{(q[0] + q[2]) / 2f, (q[1] + q[3]) / 2f};
+        }
+        return new float[]{x, y};
     }
 
     @Override

@@ -539,6 +539,8 @@ final class CityConfig implements OptionSet {
         boolean small = civic >= 34;
         if (v[OPT_PRESET] == ISLANDS) return nature() ? (small ? 1040 : ISLANDS_TILES) : 512;
         if (v[OPT_PRESET] == ARCHIPELAGO) return small ? 1040 : ARCHIPELAGO_TILES;
+        // ((28.0) The water maps are never smaller than the Small size: their towns, islands and bridges need the room.)
+        if ((bridgeCity() || swamp() || lighthouse()) && v[OPT_SIZE] < SMALL) return SIZES_V34[SMALL];
         return (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
     }
 

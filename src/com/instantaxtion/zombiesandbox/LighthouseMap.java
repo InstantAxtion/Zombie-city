@@ -66,8 +66,8 @@ final class LighthouseMap extends WaterMap {
         float base = N * (0.27f + r.nextFloat() * 0.06f);
         float A = N * 0.03f, f = (float) (Math.PI * 2 / (N * (0.5f + r.nextFloat() * 0.4f))), p = r.nextFloat() * 6.28f;
         // The villages' places along the coast: spread out, the harbour town at the widest.
-        int nv = Math.max(2, Math.min(5, 2 + N / 260));
-        int VA = Math.max(40, Math.round(N * 0.1f)), HA = Math.max(64, Math.round(N * 0.22f));
+        int nv = Math.max(2, Math.min(5, 2 + N / 300));
+        int VA = Math.max(40, Math.round(N * 0.1f)), HA = Math.max(64, Math.round(N * 0.24f));
         int total = HA + (nv - 1) * VA;
         int free = N - total - 2 * Math.max(10, N / 20);
         int harbourAt = r.nextInt(nv);
@@ -145,7 +145,7 @@ final class LighthouseMap extends WaterMap {
         for (int k = 0; k < spans.size(); k++) {
             int[] sp = spans.get(k);
             int c0 = Math.round(road[sp[0]] - 1.5f);
-            int depth = k == 0 ? Math.max(48, Math.round(N * 0.22f)) : Math.max(34, Math.round(N * 0.11f));
+            int depth = k == 0 ? Math.max(48, Math.round(N * 0.25f)) : Math.max(34, Math.round(N * 0.13f));
             depth = Math.min(depth, N - c0 - 8);
             towns.add(rect(sp[0], c0, sp[1], c0 + depth));
         }
@@ -218,6 +218,7 @@ final class LighthouseMap extends WaterMap {
             pts[k * 2 + 1] = Yf(a, c);
         }
         causeway(pts, 0, null);
+        cottages();
         harbours();
         lighthouse();
         farms();
@@ -227,6 +228,23 @@ final class LighthouseMap extends WaterMap {
             int x = i % N, y = i / N;
             float wood = fbm(x / 30f, y / 30f, seed + 5);
             if (r.nextFloat() < (wood > 0.52f ? 0.55f : wood > 0.45f ? 0.14f : 0.03f) && clearOfWays(x, y)) city.tiles[i] = TREE;
+        }
+    }
+
+    /** Cottages strung along the coast road between the villages, now on the inland side, now on the sea side. */
+    void cottages() {
+        for (int a = 8 + r.nextInt(6); a < N - 12; a += 8 + r.nextInt(8)) {
+            boolean skip = false;
+            for (int[] sp : spans) if (a > sp[0] - 10 && a < sp[1] + 8) skip = true;
+            if (skip || Math.abs(a - headA) < 12) continue;
+            boolean seaSide = r.nextFloat() < 0.35f;
+            float rc = road[a];
+            int c0 = seaSide ? (int) Math.floor(rc - 1.6f) - 4 - 3 : (int) Math.ceil(rc + 1.6f) + 3;
+            if (seaSide && c0 < shore[a] + 9) continue;
+            int[] q = rect(a, c0, a + 3, c0 + 3);
+            if (!all(q[0] - 1, q[1] - 1, 5, 5, GRASS)) continue;
+            lotGen.addLot(q[0], q[1], 3, 3, HOUSE);
+            for (int y = q[1] - 2; y < q[3] + 2; y++) for (int x = q[0] - 2; x < q[2] + 2; x++) if (in(x, y)) built[y * N + x] = true;
         }
     }
 
@@ -437,6 +455,11 @@ final class LighthouseMap extends WaterMap {
             case 2: return b[0] == q[0] + 3;
             default: return b[2] == q[2] - 3;
         }
+    }
+
+    @Override
+    float spread() {
+        return 0.55f;
     }
 
     @Override
