@@ -1305,8 +1305,13 @@ final class ArmedAI {
                 w.emit(Sfx.RELOAD, e.x, e.y);
             }
             boolean launcher = soldier && e.role == Entity.ROLE_GRENADIER;
-            if (soldier && (e.role == Entity.ROLE_RIFLE || launcher) && e.grenades > 0 && e.grenadeCd <= 0 && d > (launcher ? 60 : 70)
-                    && d < (launcher ? 280 : 200) && (w.spatial.countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) || (launcher && t.type == Entity.GIANT)) && !w.spatial.peopleNear(t.x, t.y, 60)) {
+            // ((27.5) Every soldier who carries grenades throws them - special forces, Marines, the Guard and recon scouts
+            // carried theirs all fight long and never pulled a pin; only riflemen and grenadiers did. Not the mortar team:
+            // its "grenades" are its shells. And not indoors, theirs or the dead's: a grenade in a room is everyone's.)
+            boolean thrower = soldier && e.role != Entity.ROLE_MORTAR;
+            if (thrower && e.grenades > 0 && e.grenadeCd <= 0 && d > (launcher ? 60 : 70)
+                    && d < (launcher ? 280 : 200) && (w.spatial.countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) || (launcher && t.type == Entity.GIANT)) && !w.spatial.peopleNear(t.x, t.y, 60)
+                    && w.city.insideOf(e.x, e.y) == null && w.city.insideOf(t.x, t.y) == null) {
                 w.combat.throwGrenade(e, t.x, t.y);
                 // (A launcher reloads quicker than a man can pull another pin.)
                 if (launcher) {

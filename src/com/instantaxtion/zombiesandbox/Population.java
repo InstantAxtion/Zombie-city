@@ -583,9 +583,10 @@ final class Population {
                 e.radius = 3.8f;
                 e.speed = 22;
                 e.runSpeed = 40;
-                // A 15-round pistol and three spare magazines.
+                // A 15-round pistol and ((27.5) four) spare magazines: a duty belt's worth (three ran dry halfway through a fight
+                // with a dozen of the dead).
                 e.magSize = 15;
-                e.reserve = 45;
+                e.reserve = 60;
                 e.body = 0xFF23408E;
                 e.head = 0xFF141C38;
                 break;

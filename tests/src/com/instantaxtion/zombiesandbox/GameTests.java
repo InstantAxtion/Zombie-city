@@ -5191,6 +5191,83 @@ public final class GameTests {
                 check(armoured >= 2, "armoured ambulances at the base (" + armoured + ")");
             }
         });
+        test("27.5: police can hold their own; every soldier with grenades throws them", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                World w = new World(c);
+                w.setMaxPopulation(6000);
+                w.populate(c);
+                w.update(1 / 30f);
+                w.outbreak = true;
+                w.alert = 2;
+                // An open stretch of street, with a pack of the dead down it.
+                java.util.Random r = new java.util.Random(5);
+                float[] p = null, q = null;
+                for (int k = 0; k < 400 && q == null; k++) {
+                    p = w.city.randomStreetSpot(r);
+                    double a = r.nextFloat() * 6.283;
+                    float[] t = w.city.findWalkable(p[0] + (float) Math.cos(a) * 120, p[1] + (float) Math.sin(a) * 120);
+                    if (t != null && w.city.los(p[0], p[1], t[0], t[1]) && w.city.insideOf(p[0], p[1]) == null && w.city.insideOf(t[0], t[1]) == null) q = t;
+                }
+                check(q != null, "an open stretch of street");
+                // A service round in the body: real damage now, and it checks the one it hits.
+                Entity cop = w.spawnCop(0, p[0], p[1]);
+                cop.weapon = Entity.W_STD;
+                Entity z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                float hp = z.hp;
+                for (int k = 0; k < 40 && z.hp == hp; k++) {
+                    w.combat.fire(cop, z, (float) Math.hypot(z.x - cop.x, z.y - cop.y), 300);
+                    if (z.hp <= 0) z.hp = hp;
+                }
+                check(z.hp < hp && hp - z.hp >= Combat.POLICE_PISTOL * World.GUN_DAMAGE * 0.8f && z.stun > 0, "a police round hurts and checks one of the dead (" + (hp - z.hp) + ")");
+                z.dead = z.removed = true;
+                cop.dead = cop.removed = true;
+                // Two officers against ten: they put down at least half of them (most of the time all of them).
+                java.util.List<Entity> cops = new java.util.ArrayList<Entity>(), pack = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 2; i++) cops.add(w.spawnCop(0, p[0] + i * 8 - 4, p[1]));
+                for (int i = 0; i < 10; i++) {
+                    float[] s = w.city.findWalkable(q[0] + (i % 5) * 6 - 12, q[1] + (i / 5) * 6 - 3);
+                    pack.add(w.spawn(Entity.ZOMBIE, s != null ? s[0] : q[0], s != null ? s[1] : q[1]));
+                }
+                Quiet qt = empty(w, p[0], p[1], 600, cops, pack);
+                final java.util.List<Entity> fpack = pack;
+                boolean cleared = stepUntil(w, qt, 75, new Cond() {
+                    public boolean done() {
+                        for (Entity e : fpack) if (!e.dead && e.hp > 0) return false;
+                        return true;
+                    }
+                });
+                int kills = 0;
+                for (Entity e : pack) if (e.dead || e.hp <= 0) kills++;
+                check(cleared || kills >= 5, "two officers put down at least half a pack of ten (" + kills + ")");
+                for (Entity e : cops) e.dead = e.removed = true;
+                // Special forces, Marines, the Guard and recon throw what they carry (they never did); the mortar team keeps its shells.
+                int[] roles = {Entity.ROLE_SF, Entity.ROLE_MARINE, Entity.ROLE_GUARD, Entity.ROLE_RECON};
+                for (int role : roles) {
+                    Entity g = w.spawnSoldier(role, p[0], p[1]);
+                    int had = g.grenades;
+                    java.util.List<Entity> nades = new java.util.ArrayList<Entity>();
+                    for (int i = 0; i < 13; i++) {
+                        float[] s = w.city.findWalkable(q[0] + (i % 5) * 6 - 12, q[1] + (i / 5) * 6 - 6);
+                        nades.add(w.spawn(Entity.ZOMBIE, s != null ? s[0] : q[0], s != null ? s[1] : q[1]));
+                    }
+                    Quiet gq = empty(w, p[0], p[1], 600, g, nades);
+                    final Entity fg = g;
+                    final int fhad = had;
+                    stepUntil(w, gq, 20, new Cond() {
+                        public boolean done() {
+                            return fg.grenades < fhad;
+                        }
+                    });
+                    check(had > 0 && g.grenades < had, Entity.ROLE_NAMES[role] + " throws a grenade at a pack (" + had + " -> " + g.grenades + ")");
+                    g.dead = g.removed = true;
+                    for (Entity e : nades) e.dead = e.removed = true;
+                }
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
