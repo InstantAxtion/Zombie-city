@@ -45,6 +45,7 @@ final class CityGenerator extends CityPart {
         float core = city.cfg.coreFraction();
         int m = core < 0.99f ? (int) (city.w * (1 - core) / 2) : 0;
         int n = 3 + (city.w - 2 * m) / 32;
+        if (look != null) n = Math.max(3, n + look.moreDistricts);
         // (Since 10.10 the town sits off to one side of the map: see placeTown.)
         int ox = shiftX, oy = shiftY;
         // (Only the land is split into districts.)
@@ -103,9 +104,16 @@ final class CityGenerator extends CityPart {
                     }
                 }
             }
+            // ((27.5) Downtown off-centre, a different way in every city.)
+            if (look != null && k == 0 && city.islandRects == null && !city.spaceCenter) {
+                bestX = Math.max(m + 12, Math.min(city.w - m - 12, bestX + look.dtX * (city.w - 2 * m)));
+                bestY = Math.max(m + 12, Math.min(landH - m - 12, bestY + look.dtY * (landH - 2 * m)));
+            }
             d.x = bestX;
             d.y = bestY;
             float dist = (float) World.hypot(d.x - city.w / 2f - ox, d.y - city.h / 2f - oy) / (city.w * 0.5f);
+            // ((27.5) Measured from downtown, wherever it is, and its spread the city's own.)
+            if (look != null && k > 0) dist = (float) World.hypot(d.x - city.districts.get(0).x, d.y - city.districts.get(0).y) / (city.w * 0.5f) / look.core;
             if (k == 0) d.type = city.cfg.coreDistrict();
             else if (front) d.type = city.waterKind == CityConfig.W_HARBOUR ? DT_INDUSTRIAL : DT_MIDTOWN;
             else {
@@ -123,6 +131,7 @@ final class CityGenerator extends CityPart {
                         wt *= Math.abs(ang) < 1f ? 2.5f : 0.4f;
                     }
                     if ((t == DT_OLDTOWN || t == DT_CAMPUS) && usedUnique[t]) wt *= 0.3f;
+                    if (look != null) wt *= look.weight(t);
                     wts[t] = wt;
                     total += wt;
                 }
@@ -200,6 +209,8 @@ final class CityGenerator extends CityPart {
             ky[k] = d.y;
             // Downtown is compact; suburbs sprawl.
             kw[k] = d.type == DT_DOWNTOWN ? 1.25f : d.type == DT_SUBURB ? 0.85f : 1f;
+            // ((27.5) A big sprawling downtown in one city, a tight little core in the next.)
+            if (look != null && d.type == DT_DOWNTOWN) kw[k] = 1.25f / look.core;
         }
         int prevBest = 0;
         for (int y = 0; y < city.h; y++)
@@ -522,6 +533,9 @@ final class CityGenerator extends CityPart {
         int bw = x1 - x0, bh = y1 - y0;
         float cx = (x0 + x1) / 2f - city.w / 2f - shiftX, cy = (y0 + y1) / 2f - city.h / 2f - shiftY;
         float d = (float) Math.sqrt(cx * cx + cy * cy) / (city.w * 0.5f);
+        // ((27.5) How far out of town, measured from downtown wherever it is.)
+        if (look != null && !city.districts.isEmpty())
+            d = (float) World.hypot((x0 + x1) / 2f - city.districts.get(0).x, (y0 + y1) / 2f - city.districts.get(0).y) / (city.w * 0.5f);
         boolean rural = city.cfg.density() == 0 && city.cfg.style() == CityConfig.STYLE_HOUSES;
         // Each district has its own grain: small tight blocks downtown and in the old town, big ones in the
         // suburbs, on campus and in the industrial estates.
@@ -539,7 +553,29 @@ final class CityGenerator extends CityPart {
         // On the biggest maps a stretch of suburb is laid out as a neighbourhood of its own, not more grid.
         // ((11.5) From the Large size up, and the old town too: not everything on the one grid.)
         boolean more = city.cfg.civic >= 28;
-        if (city.w >= (more ? 300 : 400) && depth >= 1 && bw >= 44 && bh >= 44 && bw <= 76 && bh <= 76
+        // ((27.5) The city's great park, one big block of it with no streets across, where this city wants it.)
+        if (look != null && look.bigPark && bigParkBlock == null && city.w >= 192 && depth >= 1 && bw >= 34 && bh >= 34 && bw <= 80 && bh <= 80
+                && city.waterKind != CityConfig.W_ISLANDS && !city.desert) {
+            float px = city.townX0 + look.parkX * (city.townX1 - city.townX0), py = city.townY0 + look.parkY * (city.townY1 - city.townY0);
+            if (px >= x0 && px < x1 && py >= y0 && py < y1 && dt != DT_DOWNTOWN) {
+                bigParkBlock = new int[]{x0, y0, x1, y1};
+                city.blocks.add(bigParkBlock);
+                return -1;
+            }
+        }
+        if (look != null) {
+            // ((27.5) Map version 40: neighbourhoods on every size of map and in more kinds of district, as many as
+            // the city leans to; the rest of the grid as fine or coarse as the city's own.)
+            float p = dt == DT_SUBURB || dt == DT_PARKSIDE ? 0.75f : dt == DT_MIDTOWN ? (d > 0.4f ? 0.5f : 0.25f)
+                    : dt == DT_OLDTOWN ? 0.4f : dt == DT_INDUSTRIAL ? 0.45f : dt == DT_CAMPUS ? 0.55f : 0f;
+            // (Never more than a fifth or so of the town, so there are still the ordinary blocks for the landmarks and the rest.)
+            boolean room = nbArea + bw * bh <= 0.22f * (city.townX1 - city.townX0) * (city.townY1 - city.townY0);
+            if (city.w >= 160 && depth >= 1 && bw >= 38 && bh >= 38 && bw <= 76 && bh <= 76 && room
+                    && look.r.nextFloat() < Math.min(0.95f, p * look.nbRate) && landGen.neighbourhood(x0, y0, x1, y1, d)) {
+                nbArea += bw * bh;
+                return -1;
+            }
+        } else if (city.w >= (more ? 300 : 400) && depth >= 1 && bw >= 44 && bh >= 44 && bw <= 76 && bh <= 76
                 && city.rnd.nextFloat() < (dt == DT_SUBURB || dt == DT_PARKSIDE ? (more ? 0.9f : 0.8f) : dt == DT_MIDTOWN ? (d > 0.45f ? 0.55f : 0.2f)
                         : more && dt == DT_OLDTOWN ? 0.35f
                         : dt == DT_INDUSTRIAL ? 0.45f : 0f)
@@ -553,6 +589,7 @@ final class CityGenerator extends CityPart {
         if (city.cfg.towers()) maxLeaf -= 3;
         // Blocks are twice the size they used to be (in tiles): real buildings need room.
         maxLeaf *= 2;
+        if (look != null) maxLeaf = Math.max(14, Math.round(maxLeaf * look.grain));
         if (bw <= maxLeaf && bh <= maxLeaf) {
             city.blocks.add(new int[]{x0, y0, x1, y1});
             return -1;
@@ -599,6 +636,8 @@ final class CityGenerator extends CityPart {
         // (Since 10.24 streets line up across the junctions nearly everywhere; only the old town still wanders.)
         boolean lineUp = city.cfg.civic >= 9;
         if (lineUp) align = dt == DT_OLDTOWN ? 0.8f : 1f;
+        // ((27.5) Some cities grew a street at a time: more of their streets jog at the junctions.)
+        if (look != null && dt != DT_DOWNTOWN) align -= look.jog;
         // Lines are kept as street centres (doubled, so odd widths stay exact): a narrow street lines up
         // with the middle of a wide one, not with its edge.
         int hint = vertical ? hintX : hintY;
@@ -655,7 +694,15 @@ final class CityGenerator extends CityPart {
     private boolean rural;
     private boolean[] used;
 
+    /** ((27.5) The city's own character, on map version 40 (null before, and on the maps laid out their own way). */
+    CityCharacter look;
+    /** ((27.5) How much of the town (in tiles) is laid out as neighbourhoods so far.) */
+    int nbArea;
+    /** ((27.5) The great park's block, or null. */
+    int[] bigParkBlock;
+
     void generate() {
+        look = city.cfg.civic >= 40 && !city.cfg.themePark() && !city.cfg.spaceCenter() ? new CityCharacter(city.cfg.seed) : null;
         placeTown();
         layStreets();
         layCountry();
@@ -722,6 +769,21 @@ final class CityGenerator extends CityPart {
                 shiftX = (bx0 + bx1) / 2 - city.w / 2;
                 shiftY = (by0 + by1) / 2 - city.h / 2;
             }
+            // ((27.5) Map version 40: the town wider than it's tall, or taller than it's wide, and off to one side,
+            // a different way in every city (only ever smaller than the square, so the roads round it still fit).
+            if (look != null && city.waterKind == CityConfig.W_NONE) {
+                float squeeze = 0.86f + look.r.nextFloat() * 0.14f;
+                boolean across = look.r.nextBoolean();
+                int hx = Math.round((bx1 - bx0) / 2f * (across ? squeeze : 1)), hy = Math.round((by1 - by0) / 2f * (across ? 1 : squeeze));
+                int cx = (bx0 + bx1) / 2 + (across ? Math.round((look.r.nextFloat() * 2 - 1) * ((bx1 - bx0) / 2f - hx)) : 0);
+                int cy = (by0 + by1) / 2 + (across ? 0 : Math.round((look.r.nextFloat() * 2 - 1) * ((by1 - by0) / 2f - hy)));
+                bx0 = cx - hx;
+                bx1 = cx + hx;
+                by0 = cy - hy;
+                by1 = cy + hy;
+                shiftX = (bx0 + bx1) / 2 - city.w / 2;
+                shiftY = (by0 + by1) / 2 - city.h / 2;
+            }
         }
         city.townX0 = bx0;
         city.townY0 = by0;
@@ -739,6 +801,7 @@ final class CityGenerator extends CityPart {
     private void layStreets() {
         makeDistricts();
         if (city.cfg.neighbourhoods()) Neighbourhoods.assign(city, city.cfg.seed);
+        if (look != null && city.cfg.neighbourhoods()) Neighbourhoods.paint(city, look.palette);
         if (m > 0) city.fill(0, 0, city.w, city.h, GRASS);
         // A ring road around the edge of town (a village just has its lanes).
         boolean village = city.cfg.density() == 0 && city.cfg.style() == CityConfig.STYLE_HOUSES;
@@ -889,6 +952,27 @@ final class CityGenerator extends CityPart {
         used = new boolean[city.blocks.size()];
         // Hamlets out in the country are just homes, farms and the odd shop.
         for (int k = 0; k < city.blocks.size(); k++) if (city.blocks.get(k).length > 4 && city.blocks.get(k)[4] >= 2) used[k] = true;
+        // ((27.5) The great park, before the bases and the rest want its block.)
+        for (int k = 0; k < city.blocks.size(); k++)
+            if (city.blocks.get(k) == bigParkBlock) {
+                used[k] = true;
+                int[] b = bigParkBlock;
+                city.fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+                lotGen.park(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
+                int pw = b[2] - b[0], ph = b[3] - b[1];
+                if (pw >= 40 && ph >= 40) {
+                    // A pond in the middle of a big one, off to one side.
+                    float cx = b[0] + pw * (0.35f + look.r.nextFloat() * 0.3f), cy = b[1] + ph * (0.35f + look.r.nextFloat() * 0.3f);
+                    float rx = pw * (0.12f + look.r.nextFloat() * 0.08f), ry = ph * (0.1f + look.r.nextFloat() * 0.08f);
+                    for (int y = b[1] + 4; y < b[3] - 4; y++)
+                        for (int x = b[0] + 4; x < b[2] - 4; x++) {
+                            float ox = (x + 0.5f - cx) / rx, oy = (y + 0.5f - cy) / ry;
+                            float wob = 1 + 0.15f * (float) Math.sin(Math.atan2(oy, ox) * 3 + cx);
+                            if (ox * ox + oy * oy < wob * wob) city.tiles[y * city.w + x] = WATER;
+                        }
+                } else lotGen.bandstand(b[0] + 1, b[1] + 1, pw - 2, ph - 2);
+                city.openAreas.add(new float[]{(b[0] + b[2]) / 2f * T, (b[1] + b[3]) / 2f * T, 0});
+            }
         // ((22.9) Desert City: the casino strip, before anything else takes the blocks along it.)
         if (city.desert && stripSt != null) desertMap.strip(used);
         // ((25.0) Theme Park Island: the park's rides, the hotels along the beach, the staff town's clinic and housing.)
@@ -1181,7 +1265,8 @@ final class CityGenerator extends CityPart {
         if (city.cfg.landmarks()) {
             int open = 0;
             for (int k = 0; k < city.blocks.size(); k++) if (!used[k] && city.blocks.get(k).length <= 4) open++;
-            int want = Math.min(Math.round(open * 0.5f), Math.max(10, Math.round(open * 0.15f)));
+            // ((27.5) A little more of what's left in a city that's mostly neighbourhoods and big blocks, so it still gets its ten.)
+            int want = Math.min(Math.round(open * (look != null ? 0.6f : 0.5f)), Math.max(10, Math.round(open * 0.15f)));
             lmOpen = open;
             lmLeft = want;
         }
@@ -1209,6 +1294,8 @@ final class CityGenerator extends CityPart {
             // ((11.1) The town's edge isn't worn away any more: the farms start a ring further in.)
             if (fd > (city.cfg.civic >= 27 ? 0.68f : 0.8f) && iw >= 7 && ih >= 7 && city.rnd.nextFloat() < farmChance) {
                 landGen.farm(ix, iy, iw, ih);
+                // ((27.5) One block fewer the landmarks might have had, so they still come out at their number.)
+                if (look != null) lmOpen--;
                 continue;
             }
             if (plot) {
@@ -1653,6 +1740,16 @@ final class CityGenerator extends CityPart {
             return;
         }
         int ax1 = x0 + aw, ay1 = y0 + ah;
+        if (look != null && look.airportRight) {
+            // ((27.5) The airport in the top right corner of this one, the streets round it the other way.)
+            int ax0 = x1 - aw;
+            carve(new Street(x0, ay1, x1, ay1 + 3, false, true));
+            carve(new Street(ax0 - 3, y0, ax0, ay1 + 3, true, true));
+            if (ax0 - 3 - x0 >= 6) split(x0, y0, ax0 - 3, ay1, 1, -1, -1);
+            if (y1 - (ay1 + 3) >= 6) split(x0, ay1 + 3, x1, y1, 1, -1, -1);
+            airportMap.airportGrounds(ax0, y0, x1, ay1);
+            return;
+        }
         carve(new Street(x0, ay1, x1, ay1 + 3, false, true));
         carve(new Street(ax1, y0, ax1 + 3, ay1 + 3, true, true));
         if (x1 - (ax1 + 3) >= 6) split(ax1 + 3, y0, x1, ay1, 1, -1, -1);

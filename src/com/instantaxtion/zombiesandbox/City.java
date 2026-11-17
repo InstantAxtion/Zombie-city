@@ -1745,7 +1745,9 @@ final class City {
 
     // ------------------------------------------------------------------ neighbourhoods
 
-    static final int NB_CLOSES = 0, NB_CRESCENT = 1, NB_GREEN = 2, NB_ESTATE = 3, NB_ACRES = 4, NB_GATED = 5, NB_WORKS = 6, NB_WINDING = 7;
+    static final int NB_CLOSES = 0, NB_CRESCENT = 1, NB_GREEN = 2, NB_ESTATE = 3, NB_ACRES = 4, NB_GATED = 5, NB_WORKS = 6, NB_WINDING = 7,
+    // ((27.5) Map version 40.)
+            NB_TRAILERS = 8, NB_TOWERS = 9, NB_MARKET = 10, NB_QUAD = 11, NB_CIRCUS = 12, NB_TERRACES = 13, NB_LOFTS = 14;
 
     boolean roadNear(int x, int y, int r) {
         for (int j = y - r; j <= y + r; j++)

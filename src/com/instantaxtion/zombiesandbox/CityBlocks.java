@@ -901,6 +901,8 @@ final class CityBlocks extends CityPart {
                 roof = Neighbourhoods.pick(th.roofs, city.rnd);
             } else if (kind == WAREHOUSE) {
                 wall = Neighbourhoods.pick(th.officeWalls, city.rnd);
+                // ((27.5) Old warehouses made lofts: roof gardens on many of them.)
+                if (th == Neighbourhoods.NB_THEMES[City.NB_LOFTS - City.NB_TRAILERS]) roof = Neighbourhoods.pick(th.roofs, city.rnd);
             }
         }
         addVariantLot(x, y, lw, lh, roof, kind, floors, wall);

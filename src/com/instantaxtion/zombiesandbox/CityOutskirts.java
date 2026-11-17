@@ -260,6 +260,8 @@ final class CityOutskirts extends CityPart {
         boolean rT = gen.isRoad(mx, y0 - 1), rB = gen.isRoad(mx, y1), rL = gen.isRoad(x0 - 1, my), rR = gen.isRoad(x1, my);
         if (!rT && !rB && !rL && !rR) return false;
         int dt = city.districtType(mx, my);
+        // ((27.5) Map version 40: the new kinds first, more often than not, each where it belongs.)
+        if (gen.look != null && newNeighbourhood(x0, y0, x1, y1, d, dt, rT, rB, rL, rR)) return true;
         int type;
         float r = city.rnd.nextFloat();
         if (dt == DT_INDUSTRIAL) type = NB_WORKS;
@@ -304,6 +306,157 @@ final class CityOutskirts extends CityPart {
                 : new int[]{x0, y0, x1, y1, 3, type, green[0], green[1], green[2], green[3]});
         nameNeighbourhood(x0, y0, x1, y1, type, dt);
         return true;
+    }
+
+    /**
+     * ((27.5) Map version 40) The new kinds of neighbourhood: a trailer park round its loop, a tower estate of slab
+     * blocks set in parkland, a market quarter of narrow lanes and little shops round a square, a college quad, a
+     * circus (a round place with streets running out of it on the diagonal to the corners), rows of terraces down
+     * straight parallel streets, and old warehouses made lofts. False if none of them suits or fits here.
+     */
+    boolean newNeighbourhood(int x0, int y0, int x1, int y1, float d, int dt, boolean rT, boolean rB, boolean rL, boolean rR) {
+        java.util.Random r = gen.look.r;
+        // (The Archipelago's outer islands stay the palm-fringed villages they are.)
+        if (city.cfg.preset() == CityConfig.ARCHIPELAGO && city.island((x0 + x1) / 2, (y0 + y1) / 2) >= 1) return false;
+        int[] opts;
+        switch (dt) {
+            case DT_SUBURB:
+            case DT_PARKSIDE: opts = d > 0.55f ? new int[]{NB_TRAILERS, NB_TERRACES, NB_CIRCUS, NB_TOWERS} : new int[]{NB_TERRACES, NB_CIRCUS, NB_TOWERS}; break;
+            case DT_MIDTOWN: opts = new int[]{NB_MARKET, NB_TOWERS, NB_CIRCUS, NB_TERRACES}; break;
+            case DT_OLDTOWN: opts = new int[]{NB_MARKET, NB_TERRACES, NB_CIRCUS}; break;
+            case DT_CAMPUS: opts = new int[]{NB_QUAD, NB_QUAD, NB_CIRCUS}; break;
+            case DT_INDUSTRIAL: opts = new int[]{NB_LOFTS, NB_LOFTS, NB_TRAILERS}; break;
+            default: return false;
+        }
+        if (dt != DT_CAMPUS && r.nextFloat() > 0.62f) return false;
+        int start = r.nextInt(opts.length);
+        for (int k = 0; k < opts.length; k++) {
+            int type = opts[(start + k) % opts.length];
+            if (k < opts.length - 1 && sameNearby((x0 + x1) / 2, (y0 + y1) / 2, type)) continue;
+            // (Not too many of any one kind, however big the map: the old kinds have their turn too.)
+            int had = 0;
+            for (int[] o : city.blocks) if (o.length > 5 && o[4] == 3 && o[5] == type) had++;
+            if (had >= 2 + city.w / 200) continue;
+            int[] green = layoutNew(type, x0, y0, x1, y1, rT, rB, rL, rR);
+            if (green == null) continue;
+            city.blocks.add(green.length < 4 ? new int[]{x0, y0, x1, y1, 3, type}
+                    : new int[]{x0, y0, x1, y1, 3, type, green[0], green[1], green[2], green[3]});
+            nameNeighbourhood(x0, y0, x1, y1, type, dt);
+            return true;
+        }
+        return false;
+    }
+
+    /** The roads of one of the new kinds: its green {x0, y0, x1, y1}, an empty array for none, or null if it won't fit. */
+    int[] layoutNew(int type, int x0, int y0, int x1, int y1, boolean rT, boolean rB, boolean rL, boolean rR) {
+        int bw = x1 - x0, bh = y1 - y0;
+        switch (type) {
+            case NB_TRAILERS: {
+                // A loop lane inside the block, a lane across the middle of it, and one or two ways in.
+                if (bw < 38 || bh < 38) return null;
+                int rx0 = x0 + 8, rx1 = x1 - 8, ry0 = y0 + 8, ry1 = y1 - 8;
+                lane3(false, rx0, rx1, ry0);
+                lane3(false, rx0, rx1, ry1 - 3);
+                lane3(true, ry0, ry1, rx0);
+                lane3(true, ry0, ry1, rx1 - 3);
+                boolean across = bw >= bh;
+                if ((across ? ry1 - ry0 : rx1 - rx0) >= 30) {
+                    int c = across ? (ry0 + ry1) / 2 - 1 : (rx0 + rx1) / 2 - 1;
+                    lane3(!across, across ? rx0 : ry0, across ? rx1 : ry1, c);
+                }
+                entrances(x0, y0, x1, y1, rx0, ry0, rx1, ry1, rT, rB, rL, rR, 1 + gen.look.r.nextInt(2));
+                return new int[0];
+            }
+            case NB_TERRACES:
+            case NB_LOFTS: {
+                // Straight streets side by side right through the block, from the road on one side to the other.
+                boolean vert;
+                if (rT && rB && (bh >= bw || !(rL && rR))) vert = true;
+                else if (rL && rR) vert = false;
+                else return null;
+                int span = vert ? bw : bh, a0 = vert ? y0 : x0, a1 = vert ? y1 : x1, c0 = vert ? x0 : y0;
+                int step = type == NB_LOFTS ? 20 + gen.look.r.nextInt(3) : 12 + gen.look.r.nextInt(3);
+                int n = (span - 8) / step;
+                if (n < 2) return null;
+                int first = c0 + (span - (n - 1) * step - 3) / 2;
+                for (int k = 0; k < n; k++) lane3(vert, a0, a1, first + k * step);
+                // A street across them all in the middle, on a long block.
+                if (a1 - a0 >= 50) lane3(!vert, first, first + (n - 1) * step + 3, (a0 + a1) / 2 - 1);
+                return new int[0];
+            }
+            case NB_MARKET: {
+                // Narrow lanes both ways, close together, and the market square in the middle.
+                if (bw < 38 || bh < 38) return null;
+                int step = 12 + gen.look.r.nextInt(2);
+                int nx = (bw - 6) / step, ny = (bh - 6) / step;
+                if (nx < 2 || ny < 2) return null;
+                int fx = x0 + (bw - (nx - 1) * step - 3) / 2, fy = y0 + (bh - (ny - 1) * step - 3) / 2;
+                for (int k = 0; k < nx; k++) lane3(true, y0, y1, fx + k * step);
+                for (int k = 0; k < ny; k++) lane3(false, x0, x1, fy + k * step);
+                int cx = fx + ((nx - 1) / 2) * step + 3, cy = fy + ((ny - 1) / 2) * step + 3;
+                return new int[]{cx + 1, cy + 1, cx + step - 4, cy + step - 4};
+            }
+            case NB_QUAD:
+            case NB_TOWERS:
+                return villageGreen(x0, y0, x1, y1, rT, rB, rL, rR);
+            case NB_CIRCUS: {
+                if (bw < 40 || bh < 40) return null;
+                float cx = (x0 + x1) / 2f, cy = (y0 + y1) / 2f, rad = Math.max(7, Math.min(bw, bh) * 0.17f);
+                float[] ring = new float[2 * 65];
+                for (int k = 0; k <= 64; k++) {
+                    double t = k / 64.0 * Math.PI * 2;
+                    ring[k * 2] = cx + (float) Math.cos(t) * rad;
+                    ring[k * 2 + 1] = cy + (float) Math.sin(t) * rad;
+                }
+                int spokes = 0;
+                // On the diagonal to every corner with a street along both sides of it.
+                boolean[] corner = {rT && rL, rT && rR, rB && rL, rB && rR};
+                float[][] at = {{x0 + 0.5f, y0 + 0.5f}, {x1 - 0.5f, y0 + 0.5f}, {x0 + 0.5f, y1 - 0.5f}, {x1 - 0.5f, y1 - 0.5f}};
+                float[][] lines = new float[4][];
+                for (int k = 0; k < 4; k++) {
+                    if (!corner[k]) continue;
+                    float ex = at[k][0], ey = at[k][1], dx = ex - cx, dy = ey - cy, len = (float) Math.sqrt(dx * dx + dy * dy);
+                    float sx = cx + dx / len * rad, sy = cy + dy / len * rad;
+                    lines[k] = CityGenerator.bezier(sx, sy, sx + (ex - sx) / 3, sy + (ey - sy) / 3, sx + (ex - sx) * 2 / 3, sy + (ey - sy) * 2 / 3, ex, ey, 24);
+                    spokes++;
+                }
+                // Straight out to the street on any side where there aren't two diagonals already.
+                if (spokes < 2) {
+                    if (rT) lane3(true, y0, Math.round(cy - rad) + 1, Math.round(cx) - 1);
+                    if (rB) lane3(true, Math.round(cy + rad) - 1, y1, Math.round(cx) - 1);
+                    if (rL) lane3(false, x0, Math.round(cx - rad) + 1, Math.round(cy) - 1);
+                    if (rR) lane3(false, Math.round(cx + rad) - 1, x1, Math.round(cy) - 1);
+                }
+                curveRoad(ring, true);
+                for (float[] l : lines) if (l != null) curveRoad(l, false);
+                int g = Math.round(rad * 0.62f);
+                return clearOfRoad(new int[]{Math.round(cx) - g, Math.round(cy) - g, Math.round(cx) + g, Math.round(cy) + g});
+            }
+            default:
+                return null;
+        }
+    }
+
+    /** Lanes in from the streets round the block to a loop {rx0, ry0, rx1, ry1} inside it: up to n of them. */
+    void entrances(int x0, int y0, int x1, int y1, int rx0, int ry0, int rx1, int ry1, boolean rT, boolean rB, boolean rL, boolean rR, int n) {
+        List<Integer> sides = new ArrayList<Integer>();
+        if (rT) sides.add(0);
+        if (rB) sides.add(1);
+        if (rL) sides.add(2);
+        if (rR) sides.add(3);
+        java.util.Collections.shuffle(sides, gen.look.r);
+        for (int k = 0; k < Math.min(n, sides.size()); k++) {
+            int sd = sides.get(k);
+            if (sd < 2) {
+                int c = rx0 + (rx1 - rx0) / 3 + gen.look.r.nextInt(Math.max(1, (rx1 - rx0) / 3));
+                if (sd == 0) lane3(true, y0, ry0 + 1, c);
+                else lane3(true, ry1 - 1, y1, c);
+            } else {
+                int c = ry0 + (ry1 - ry0) / 3 + gen.look.r.nextInt(Math.max(1, (ry1 - ry0) / 3));
+                if (sd == 2) lane3(false, x0, rx0 + 1, c);
+                else lane3(false, rx1 - 1, x1, c);
+            }
+        }
     }
 
     boolean sameNearby(int x, int y, int type) {
@@ -566,7 +719,9 @@ final class CityOutskirts extends CityPart {
         if (city.districtAt == null || city.districts.size() > 110) return;
         String[][] ends = {{" Meadows", " Fields", " Chase", " Rise"}, {" Crescent", " Gardens", " Park"},
                 {" Green", " Common"}, {" Estate", " Court", " Towers"}, {" Acres", " Ranch", " Farms"},
-                {" Manor", " Reserve", " Hills"}, {" Business Park", " Trading Estate", " Commerce Park"}, {" Way", " Bends", " Vale"}};
+                {" Manor", " Reserve", " Hills"}, {" Business Park", " Trading Estate", " Commerce Park"}, {" Way", " Bends", " Vale"},
+                {" Park Homes", " Mobile Park", " Trailer Court"}, {" Towers", " House Estate", " Heights"}, {" Market", " Bazaar", " Arcade"},
+                {" College", " Quad", " Halls"}, {" Circus", " Place", " Circle"}, {" Terrace", " Row", " Rows"}, {" Lofts", " Yards", " Wharf"}};
         String word = city.country.districtWords[city.rnd.nextInt(city.country.districtWords.length)];
         String[] e = ends[type];
         District d = new District();
@@ -577,6 +732,11 @@ final class CityOutskirts extends CityPart {
         d.y = (y0 + y1) / 2f;
         d.cx = d.x * T;
         d.cy = d.y * T;
+        // ((27.5) Map version 40: the new kinds their own look, the rest the city's.)
+        if (gen.look != null && city.cfg.neighbourhoods() && !city.desert) {
+            d.theme = type >= NB_TRAILERS ? Neighbourhoods.NB_THEMES[type - NB_TRAILERS] : city.districts.get(city.districtAt.get(((y0 + y1) / 2) * city.w + (x0 + x1) / 2)).theme;
+            if (d.theme == null) d.theme = Neighbourhoods.PALETTES[gen.look.palette];
+        }
         int id = city.districts.size();
         city.districts.add(d);
         for (int y = Math.max(0, y0); y < Math.min(city.h, y1); y++)
@@ -621,7 +781,36 @@ final class CityOutskirts extends CityPart {
                 keep = new int[]{gx0, gy0, gx1, gy1};
                 int gw = gx1 - gx0, gh = gy1 - gy0;
                 boolean small = gw <= 16 && gh <= 16;
-                if (type == NB_WORKS) {
+                if (type == NB_MARKET) {
+                    // ((27.5) The market square: paved, stalls' awnings round a fountain.)
+                    city.fill(gx0, gy0, gw, gh, PLAZA);
+                    city.addDecor(D_FOUNTAIN, ((gx0 + gx1) / 2 - 1) * T, ((gy0 + gy1) / 2 - 1) * T, ((gx0 + gx1) / 2 + 1) * T, ((gy0 + gy1) / 2 + 1) * T, 0);
+                    if (gw >= 6 && gh >= 6) city.addDecor(D_UMBRELLA, (gx0 + 1) * T, (gy0 + 1) * T, (gx1 - 1) * T, (gy1 - 1) * T, 0);
+                    city.openAreas.add(new float[]{(gx0 + gx1) / 2f * T, (gy0 + gy1) / 2f * T, 2});
+                } else if (type == NB_QUAD) {
+                    // ((27.5) The quad: a lawn with paths corner to corner and a fountain where they cross.)
+                    city.fill(gx0, gy0, gw, gh, GRASS);
+                    for (int k = 0; k < Math.max(gw, gh); k++) {
+                        int px = gx0 + k * gw / Math.max(gw, gh), py = gy0 + k * gh / Math.max(gw, gh);
+                        city.tiles[py * city.w + px] = PLAZA;
+                        city.tiles[(gy1 - 1 - (py - gy0)) * city.w + px] = PLAZA;
+                    }
+                    city.addDecor(D_FOUNTAIN, ((gx0 + gx1) / 2 - 1) * T, ((gy0 + gy1) / 2 - 1) * T, ((gx0 + gx1) / 2 + 1) * T, ((gy0 + gy1) / 2 + 1) * T, 0);
+                    city.openAreas.add(new float[]{(gx0 + gx1) / 2f * T, (gy0 + gy1) / 2f * T, 0});
+                } else if (type == NB_TOWERS) {
+                    // ((27.5) Slab blocks standing in the grass, paths between them.)
+                    city.fill(gx0, gy0, gw, gh, GRASS);
+                    boolean wide = gw >= gh;
+                    int n = Math.max(1, Math.min(3, (wide ? gw : gh) / 8));
+                    for (int k = 0; k < n; k++) {
+                        int sw = wide ? 5 : Math.min(gw - 4, 12), sh = wide ? Math.min(gh - 4, 12) : 5;
+                        int sx = wide ? gx0 + 1 + k * (gw - 2) / n + ((gw - 2) / n - sw) / 2 : gx0 + (gw - sw) / 2;
+                        int sy = wide ? gy0 + (gh - sh) / 2 : gy0 + 1 + k * (gh - 2) / n + ((gh - 2) / n - sh) / 2;
+                        if (sw >= 4 && sh >= 4 && allType(sx, sy, sw, sh, GRASS)) lotGen.addLot(sx, sy, sw, sh, APARTMENT);
+                    }
+                    for (int x = gx0; x < gx1; x++) if (city.tiles[((gy0 + gy1) / 2) * city.w + x] == GRASS) city.tiles[((gy0 + gy1) / 2) * city.w + x] = PLAZA;
+                    city.openAreas.add(new float[]{(gx0 + gx1) / 2f * T, (gy0 + gy1) / 2f * T, 0});
+                } else if (type == NB_WORKS) {
                     // A yard with a big distribution depot in the middle.
                     city.fill(gx0, gy0, gw, gh, LOT);
                     if (gw >= 12 && gh >= 12) lotGen.addLot(gx0 + 3, gy0 + 3, gw - 6, gh - 6, WAREHOUSE);
@@ -692,6 +881,35 @@ final class CityOutskirts extends CityPart {
             case NB_WORKS:
                 frontage(x0, y0, x1, y1, keep, WAREHOUSE, 9, 13, 3, 3, 0f);
                 frontage(x0, y0, x1, y1, keep, OFFICE, 6, 8, 2, 2, 0.1f);
+                break;
+            case NB_TRAILERS:
+                // ((27.5) Mobile homes, close together.)
+                frontage(x0, y0, x1, y1, keep, HOUSE, 3, 4, 1, 1, 0.04f);
+                break;
+            case NB_TOWERS:
+                frontage(x0, y0, x1, y1, keep, APARTMENT, 6, 9, 3, 4, 0f);
+                break;
+            case NB_MARKET:
+                // Little shops shoulder to shoulder, flats over some.
+                frontage(x0, y0, x1, y1, keep, SHOP, 3, 5, 0, 0, 0f);
+                frontage(x0, y0, x1, y1, keep, APARTMENT, 4, 5, 0, 0, 0f);
+                break;
+            case NB_QUAD:
+                frontage(x0, y0, x1, y1, keep, OFFICE, 6, 9, 2, 2, 0f);
+                frontage(x0, y0, x1, y1, keep, APARTMENT, 5, 7, 2, 2, 0.1f);
+                break;
+            case NB_CIRCUS:
+                // Tall terraced town houses round the circus and along the diagonals.
+                frontage(x0, y0, x1, y1, keep, gen.curDistrict == DT_SUBURB || gen.curDistrict == DT_PARKSIDE ? HOUSE : APARTMENT, 4, 6, 1, 0, 0f);
+                frontage(x0, y0, x1, y1, keep, HOUSE, 4, 5, 1, 1, 0.05f);
+                break;
+            case NB_TERRACES:
+                // Terraces: narrow houses wall to wall down both sides of every street.
+                frontage(x0, y0, x1, y1, keep, HOUSE, 3, 4, 1, 0, 0f);
+                break;
+            case NB_LOFTS:
+                frontage(x0, y0, x1, y1, keep, WAREHOUSE, 7, 10, 0, 1, 0f);
+                frontage(x0, y0, x1, y1, keep, APARTMENT, 5, 7, 0, 1, 0.05f);
                 break;
             case NB_GATED:
                 // Inside the fence, every house faces the estate's own roads.

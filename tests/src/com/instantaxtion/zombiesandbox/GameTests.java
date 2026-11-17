@@ -5111,6 +5111,41 @@ public final class GameTests {
                 check(la != null && lb != null && lb.raiders && !la.raiders && la.territory == a.territory && lb.robbed == b.robbed, "kept in a save");
             }
         });
+        test("27.5: every city is its own", new Check() {
+            public void run() throws Exception {
+                // Four seeds of the same map: each its own town shape, downtown, district mix and neighbourhoods.
+                java.util.HashSet<String> sigs = new java.util.HashSet<String>(), shapes = new java.util.HashSet<String>();
+                int newKinds = 0;
+                for (int seed = 1; seed <= 4; seed++) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                    c.seed = seed;
+                    c.normalize();
+                    City city = new City(c, 0.1f);
+                    int[] dt = new int[City.DT_COUNT], nb = new int[City.NB_LOFTS + 1];
+                    for (City.District d : city.districts) dt[d.type]++;
+                    for (int[] b : city.blocks) if (b.length > 5 && b[4] == 3) nb[b[5]]++;
+                    for (int k = City.NB_TRAILERS; k <= City.NB_LOFTS; k++) newKinds += nb[k];
+                    String shape = city.townX0 + "," + city.townY0 + "-" + city.townX1 + "," + city.townY1;
+                    shapes.add(shape);
+                    sigs.add(shape + " " + (int) city.districts.get(0).x + "," + (int) city.districts.get(0).y + " " + java.util.Arrays.toString(dt) + " " + java.util.Arrays.toString(nb));
+                }
+                check(sigs.size() == 4, "four seeds, four different cities: " + sigs);
+                check(shapes.size() >= 3, "the towns are different shapes: " + shapes);
+                check(newKinds >= 2, "the new kinds of neighbourhood turn up (" + newKinds + ")");
+                // A city built on map version 39 is exactly the one it always was.
+                CityConfig old = new CityConfig();
+                old.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                old.seed = 1;
+                old.civic = 39;
+                old.normalize();
+                City o = new City(old, 0.1f);
+                long h = 1;
+                for (int i = 0; i < o.w * o.h; i++) h = h * 31 + o.tiles[i];
+                h = h * 31 + o.buildings.size();
+                check(h == 0xedeec66c78d75134L, "a version 39 map is unchanged: " + Long.toHexString(h));
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
