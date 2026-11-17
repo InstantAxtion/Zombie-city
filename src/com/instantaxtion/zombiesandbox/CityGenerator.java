@@ -713,6 +713,7 @@ final class CityGenerator extends CityPart {
         placeBigSites();
         fillBlocks();
         parkCars();
+        city.borderMap.finish();
         nameStreets();
         finishGround();
     }

@@ -158,6 +158,17 @@ final class BorderMap extends CityPart {
         }
     }
 
+    /** Once the cars are parked along the kerbs: none left standing in a checkpoint. */
+    void finish() {
+        if (!city.cfg.borderTown() || bc < 0) return;
+        for (int at : crossings)
+            for (int c = bc - 8; c < bc + FENCE_W + 8; c++)
+                for (int a = at; a < at + 5; a++) {
+                    int i = tile(a, c);
+                    if (city.tiles[i] == CAR) city.tiles[i] = ROAD;
+                }
+    }
+
     boolean inCrossing(int a) {
         for (int at : crossings) if (a >= at && a < at + 5) return true;
         return false;
@@ -296,6 +307,17 @@ final class BorderMap extends CityPart {
                 f.name = "Border Patrol (" + (vert ? (f2 ? "East" : "West") : (f2 ? "South" : "North")) + ")";
             }
         }
+        // The rest of the customs zones: ordinary blocks of the town (never a farm spilling over the fence).
+        for (int k = 0; k < city.blocks.size(); k++) {
+            int[] b = city.blocks.get(k);
+            if (used[k] || b.length > 4) continue;
+            int mc0 = vert ? b[0] : b[1], mc1 = vert ? b[2] : b[3];
+            boolean zone = (mc0 >= bc - cd && mc1 <= bc) || (mc0 >= bc + FENCE_W && mc1 <= bc + FENCE_W + cd);
+            if (!zone || b[2] - b[0] < 4 || b[3] - b[1] < 4) continue;
+            used[k] = true;
+            city.fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+            lotGen.block(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
+        }
         // The far side's squares: paved, a statue, trees round the edge, a gathering place.
         for (int k = 0; k < city.blocks.size(); k++) {
             int[] b = city.blocks.get(k);
@@ -305,6 +327,16 @@ final class BorderMap extends CityPart {
             lotGen.plaza(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2);
             city.openAreas.add(new float[]{(b[0] + b[2]) / 2f * T, (b[1] + b[3]) / 2f * T, 1});
         }
+        // (No median through the checkpoints: the crossing is paved right across there.)
+        for (int at : crossings)
+            for (int c = bc - 6; c < bc + FENCE_W + 6; c++)
+                for (int a = at; a < at + 5; a++) {
+                    int i = tile(a, c);
+                    if (city.tiles[i] == TREE || city.tiles[i] == GRASS) {
+                        city.tiles[i] = ROAD;
+                        city.roadDir[i] = (byte) (vert ? 2 : 1);
+                    }
+                }
         // A checkpoint on each side of the strip at every crossing.
         for (int at : crossings)
             for (int side = 0; side < 2; side++) {
