@@ -58,7 +58,7 @@ final class AirbaseMap extends CityPart {
         Random r = new Random(city.cfg.seed * 6151L + 22);
         int W = bx1 - bx0, H = by1 - by0;
         up = r.nextBoolean();
-        depth = clamp(Math.round(H * (0.54f + 0.08f * r.nextFloat())), 44, 340);
+        depth = clamp(Math.round(H * (0.56f + 0.06f * r.nextFloat())), 44, 400);
         depth = Math.min(depth, H - 36);
         // Now and then base housing round one end of it, the base shorter for it.
         int end = W >= 230 && r.nextFloat() < 0.6f ? (r.nextBoolean() ? -1 : 1) : 0;
@@ -207,13 +207,35 @@ final class AirbaseMap extends CityPart {
                 x = controlTower(x, c0, c1);
                 continue;
             }
-            if (x + hangarW > xEnd - reserve) break;
-            hangar(rc(x, c0, x + hangarW, c1), r);
-            x += hangarW + 3;
+            // Hangars of a few sizes, now and then a shelter row for the fighters or a maintenance shed instead.
+            int hw = Math.round(hangarW * (0.75f + 0.55f * r.nextFloat()));
+            if (x + hw > xEnd - reserve) hw = hangarW;
+            if (x + hw > xEnd - reserve) break;
+            float roll = r.nextFloat();
+            if (roll < 0.2f && sd >= 10) shelters(rc(x, c0, x + hw, c1), r);
+            else if (roll < 0.32f) {
+                int[] q = rc(x, c0, x + hw, c1);
+                plainLot(q[0] + 1, q[1] + 1, q[2] - q[0] - 2, q[3] - q[1] - 2, WAREHOUSE, 2, 0xFF6E7660, 0xFF7E8670);
+                name("Maintenance Shed");
+            } else hangar(rc(x, c0, x + hw, c1), r);
+            x += hw + 3;
         }
         if (!tower && x + 19 <= xEnd - reserve) x = controlTower(x, c0, c1);
         if (!fuelFirst && fuel && x + fuelW <= xEnd - heliW + 3) x = fuelFarm(x, c0, c1, r);
         if (x + 16 <= xEnd) heliport(x, c0, c1, xEnd);
+    }
+
+    /** A row of hardened shelters, each a squat building with a fighter on the pad before it. */
+    private void shelters(int[] q, Random r) {
+        city.baseDecor.add(new float[]{BD_HARDSTAND, q[0] * T, q[1] * T, q[2] * T, q[3] * T});
+        int h = q[3] - q[1], sdp = Math.max(4, h / 2);
+        int y = up ? q[3] - sdp : q[1];
+        for (int x = q[0] + 1; x + 6 <= q[2] - 1; x += 8) {
+            plainLot(x, y, 6, sdp, WAREHOUSE, 2, 0xFF7A8070, 0xFF8A9080);
+            name("Aircraft Shelter");
+            float jx = (x + 3) * T, jy = (up ? q[1] + (h - sdp) / 2f : q[1] + sdp + (h - sdp) / 2f) * T;
+            if (h - sdp >= 3) city.baseDecor.add(new float[]{BD_JET, jx - 14, jy - 11, jx + 14, jy + 11});
+        }
     }
 
     /** A hangar: the building at the back, its doors open onto the airfield, the apron in front. */
@@ -343,15 +365,22 @@ final class AirbaseMap extends CityPart {
         city.apron = new float[]{(ap[0] + ap[2]) / 2f * T, up ? (ap[1] + 1) * T : (ap[3] - 5) * T};
         // The weapons store: rows of earth-covered bunkers out past the runways.
         int far = (b0 >= 0 ? b1 : a1) + 8, end = S - 4;
+        boolean storeLeft = r.nextBoolean();
         if (end - far >= 12) {
-            int bxs = x0 + Math.round(L * (r.nextBoolean() ? 0.06f : 0.62f)), bxe = bxs + Math.round(L * 0.3f);
-            for (int c = far; c + 4 <= end && c < far + 40; c += 8)
+            int bxs = x0 + Math.round(L * (storeLeft ? 0.06f : 0.62f)), bxe = bxs + Math.round(L * 0.3f);
+            for (int c = far; c + 4 <= end && c < far + 64; c += 8)
                 for (int bx = bxs; bx + 5 <= bxe; bx += 9) {
                     int[] q = rc(bx, cField + c, bx + 5, cField + c + 4);
                     plainLot(q[0], q[1], q[2] - q[0], q[3] - q[1], WAREHOUSE, 1, 0xFF6A7A4A, 0xFF7A8A5A);
                     name("Ammunition Bunker");
                 }
         }
+        // A belt of trees along the far fence.
+        for (int c = S - 7; c < S; c++)
+            for (int x = x0 + 1; x < x1 - 1; x++) {
+                int i = yAt(cField + c) * city.w + x;
+                if (city.tiles[i] == GRASS && r.nextFloat() < 0.35f && !city.hasNeighbor(x, yAt(cField + c), TREE)) city.tiles[i] = TREE;
+            }
     }
 
     /** The base: its middle by the barracks, the main gate, the guards there and the checkpoint just outside. */

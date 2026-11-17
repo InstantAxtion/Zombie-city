@@ -105,10 +105,10 @@ final class LandmarkArt28 {
         int ad = AirbaseMap.clamp(Math.round(S * 0.18f), 5, 30);
         int tw = S >= 40 ? 4 : 3;
         int t0 = ad + 1, t1 = t0 + tw;
-        int g1 = AirbaseMap.clamp(Math.round(S * 0.1f), 3, 22);
-        int rw = AirbaseMap.clamp(Math.round(S * 0.09f), 4, 12);
+        int g1 = AirbaseMap.clamp(Math.round(S * 0.15f), 3, 80);
+        int rw = AirbaseMap.clamp(Math.round(S * 0.055f), 4, 16);
         int a0 = t1 + g1, a1 = a0 + rw;
-        int g2 = AirbaseMap.clamp(Math.round(S * 0.14f), 5, 32);
+        int g2 = AirbaseMap.clamp(Math.round(S * 0.28f), 5, 120);
         int b0 = -1, b1 = -1;
         if (a1 + g2 + rw + 4 <= S && S >= 40) {
             b0 = a1 + g2;
