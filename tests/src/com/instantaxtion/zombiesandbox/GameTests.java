@@ -4825,6 +4825,72 @@ public final class GameTests {
                         "and the car carries on to it, not back on patrol (" + (int) d0 + " -> " + (int) Math.hypot(lcar.x - li.x, lcar.y - li.y) + ")");
             }
         });
+        test("27.5: civilians volunteer for the police and the army", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 52;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // Not before the emergency broadcast.
+                w.outbreak = true;
+                w.peakZombies = 10;
+                w.alert = 1;
+                w.recruiting.volunteers();
+                int going = 0;
+                for (Entity e : w.entities) if (e.volunteering) going++;
+                check(going == 0, "nobody volunteers before the broadcast");
+                // After it: a few at a time, to the nearest station or base with kit, and only so many.
+                w.alert = 2;
+                for (int k = 0; k < 40; k++) w.recruiting.volunteers();
+                java.util.List<Entity> vols = new java.util.ArrayList<Entity>();
+                for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST) vols.add(e);
+                check(!vols.isEmpty() && vols.size() <= Recruitment.MAX_VOLUNTEERS, "some sign up, no more than the cap (" + vols.size() + ")");
+                boolean police = false, army = false;
+                for (Entity e : vols) {
+                    check(e.type == Entity.CIVILIAN && !e.infected && !e.inmate && e.base == null && e.enlistAt != null, "able adults only");
+                    if (e.enlistAt.kind == City.FACILITY_POLICE) police = true;
+                    else army = true;
+                }
+                // Each at the station or base: they come out in uniform, the same person.
+                java.util.Map<Entity, Integer> seeds = new java.util.HashMap<Entity, Integer>();
+                for (Entity e : vols) {
+                    seeds.put(e, e.nameSeed);
+                    e.x = e.enlistAt.x;
+                    e.y = e.enlistAt.y;
+                }
+                for (int f = 0; f < 30 * 10; f++) {
+                    for (Entity e : vols) if (!e.removed) {
+                        e.x = e.enlistAt != null ? e.enlistAt.x : e.x;
+                        e.y = e.enlistAt != null ? e.enlistAt.y : e.y;
+                    }
+                    w.update(1 / 30f);
+                }
+                int aux = 0, sol = 0;
+                for (Entity e : w.entities) {
+                    if (e.dead || e.role != Entity.ROLE_VOLUNTEER) continue;
+                    check(seeds.containsValue(e.nameSeed) && e.signedUpAt != null, "the same person, signed up at a station or base");
+                    if (e.type == Entity.COP) {
+                        aux++;
+                        check("Auxiliary".equals(Names.copRank(e)) && e.maxHp < 60 && e.isArmed(), "a police auxiliary: a pistol, less to them than an officer");
+                    } else {
+                        sol++;
+                        check("Volunteer".equals(Names.soldierRank(e)) && e.maxHp < 100 && e.grenades == 0, "an army volunteer: a rifle, no grenades");
+                    }
+                }
+                check(aux + sol >= 1 && (aux > 0 || !police) && (sol > 0 || !army), "they come out as auxiliaries and volunteers (" + aux + ", " + sol + ")");
+                check(w.volunteersPolice + w.volunteersArmy == aux + sol, "counted (" + w.volunteersPolice + " + " + w.volunteersArmy + ")");
+                // A fallen station or base takes nobody more.
+                for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_POLICE || f.kind == City.FACILITY_BASE) f.fallen = true;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN) e.asked = false;
+                for (int k = 0; k < 10; k++) w.recruiting.volunteers();
+                int more = 0;
+                for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST && !vols.contains(e)) more++;
+                check(more == 0, "none once the stations and bases have fallen");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

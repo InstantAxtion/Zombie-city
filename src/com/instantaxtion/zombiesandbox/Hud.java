@@ -1217,7 +1217,8 @@ final class Hud {
             // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
             float lineRoom = gv.statsRect.width() - 24 * gv.dp;
             c.drawText(shrinkToFit("Turned " + gv.world.turned + "   Killed " + gv.world.zombiesKilled
-                    + (gv.world.recruits + gv.world.refused > 0 ? "   Recruits " + gv.world.recruits : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
+                    + (gv.world.recruits + gv.world.refused > 0 ? "   Recruits " + gv.world.recruits : "")
+                    + (gv.world.volunteersPolice + gv.world.volunteersArmy > 0 ? "   Volunteers " + (gv.world.volunteersPolice + gv.world.volunteersArmy) : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
             gv.text.setTextSize(11.5f * gv.dp);
             y += lh;
             // ((26.1) Only what's in use: no Hiding line (nobody hides out of sight any more), people aboard only when there are some.)

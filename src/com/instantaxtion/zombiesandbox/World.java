@@ -171,6 +171,8 @@ final class World {
     int turnedAway;
     /** Recruitment: the most cops and soldiers there have been, how many civilians joined up or refused. */
     int peakCops, peakSoldiers, recruits, refused;
+    /** ((27.5) Volunteers signed up after the broadcast: as police auxiliaries, and with the army. */
+    int volunteersPolice, volunteersArmy;
     /** How far the infection has evolved (0-5), how long the outbreak has run, and the recovery afterwards. */
     int mutation;
     /** Counters for records and achievements. */
@@ -689,6 +691,7 @@ final class World {
 
     /** ((13.3) What someone is, for the Top Fighters list: "SWAT officer", "Machine gunner", "Civilian"...) */
     static String kindOf(Entity e) {
+        if (e.role == Entity.ROLE_VOLUNTEER && e.type == Entity.COP) return "Police auxiliary";
         if (e.role > 0 && e.role < Entity.ROLE_NAMES.length && (e.type == Entity.COP || e.type == Entity.SOLDIER)) return Entity.ROLE_NAMES[e.role];
         if (e.type == Entity.COP) return "Police officer";
         return e.type >= 0 && e.type < Entity.NAMES.length ? Entity.NAMES[e.type] : "";
@@ -1651,7 +1654,9 @@ final class World {
         h ^= h >>> 15;
         // ((26.0) Hunters and ex-soldiers shoot like they've done it before.)
         int tr = e.trade();
-        return ((h & 0x7FFFFFFF) % 1000) / 1000f * 0.15f + (tr == Entity.TR_HUNTER || tr == Entity.TR_VETERAN ? 0.2f : 0) + (e.hero() ? 0.1f : 0);
+        return ((h & 0x7FFFFFFF) % 1000) / 1000f * 0.15f + (tr == Entity.TR_HUNTER || tr == Entity.TR_VETERAN ? 0.2f : 0) + (e.hero() ? 0.1f : 0)
+                // ((27.5) Volunteers: a few days' worth of training at most.)
+                - (e.role == Entity.ROLE_VOLUNTEER ? 0.12f : 0);
     }
 
     void heardShot(Entity shooter, Entity target, float radius) {

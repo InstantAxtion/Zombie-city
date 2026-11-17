@@ -48,6 +48,8 @@ final class Names {
     }
 
     static String copRank(Entity e) {
+        // ((27.5) A civilian signed up to help: an auxiliary, whatever they've done.)
+        if (e.role == Entity.ROLE_VOLUNTEER) return "Auxiliary";
         return copLadder(e)[copRankIndex(e)];
     }
 
@@ -65,6 +67,7 @@ final class Names {
     }
 
     static String soldierRank(Entity e) {
+        if (e.role == Entity.ROLE_VOLUNTEER) return "Volunteer";
         return officer(e) ? OFFICER_RANKS[soldierRankIndex(e)] : SOLDIER_RANKS[soldierRankIndex(e)];
     }
 

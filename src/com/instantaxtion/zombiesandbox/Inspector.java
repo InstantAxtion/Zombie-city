@@ -60,6 +60,9 @@ final class Inspector {
         else if (e.trade() != Entity.TR_NONE) title = Names.person(e.nameSeed) + "  -  " + Entity.TRADE_NAMES[e.trade()];
         else title = Names.person(e.nameSeed) + "  -  " + Entity.NAMES[e.type];
         lines.add(doing(e));
+        // ((27.5) A civilian who signed up.)
+        if (e.role == Entity.ROLE_VOLUNTEER && (e.type == Entity.COP || e.type == Entity.SOLDIER))
+            lines.add((e.type == Entity.COP ? "Police auxiliary" : "Army volunteer") + (e.signedUpAt != null ? " (signed up at " + e.signedUpAt.name + ")" : ""));
         // ((27.4) Whose they are just now: a command post's guard, a roof's marksman, a truck's crew (see Jobs).)
         String job = Jobs.describe(e);
         if (job != null) lines.add(job);
