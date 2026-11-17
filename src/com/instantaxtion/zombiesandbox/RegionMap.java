@@ -68,6 +68,13 @@ abstract class RegionMap extends CityPart {
         gen.testRange = new int[4];
     }
 
+    /** A piece {x0, y0, x1, y1} of block bk, keeping what else bk says of itself (a plot's kind, a neighbourhood's layout). */
+    static int[] piece(int[] bk, int[] r) {
+        int[] p = bk.clone();
+        System.arraycopy(r, 0, p, 0, 4);
+        return p;
+    }
+
     /** Blocks the streets no longer reach on any side (cut off by water or rock): open ground, with the odd tree. */
     void dropRoadless(Random rr) {
         // (A scrap of street left over, a few tiles on its own, isn't a way in.)
@@ -292,9 +299,9 @@ abstract class RegionMap extends CityPart {
             city.blocks.remove(k);
             int lo0 = acrossX ? bk[0] : bk[1], hi0 = acrossX ? bk[2] : bk[3];
             int q0 = wl - gap, q1 = wh + gap;
-            if (q0 - lo0 >= 7) city.blocks.add(acrossX ? new int[]{bk[0], bk[1], q0, bk[3]} : new int[]{bk[0], bk[1], bk[2], q0});
+            if (q0 - lo0 >= 7) city.blocks.add(piece(bk, acrossX ? new int[]{bk[0], bk[1], q0, bk[3]} : new int[]{bk[0], bk[1], bk[2], q0}));
             else q0 = lo0;
-            if (hi0 - q1 - 1 >= 7) city.blocks.add(acrossX ? new int[]{q1 + 1, bk[1], bk[2], bk[3]} : new int[]{bk[0], q1 + 1, bk[2], bk[3]});
+            if (hi0 - q1 - 1 >= 7) city.blocks.add(piece(bk, acrossX ? new int[]{q1 + 1, bk[1], bk[2], bk[3]} : new int[]{bk[0], q1 + 1, bk[2], bk[3]}));
             else q1 = hi0 - 1;
             for (int y = bk[1]; y < bk[3]; y++)
                 for (int x = bk[0]; x < bk[2]; x++) {

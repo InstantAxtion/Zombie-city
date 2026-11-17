@@ -195,9 +195,9 @@ final class CanyonMap extends RegionMap {
             for (int b = s[0]; b < s[0] + s[1]; b++)
                 for (int a = 0; a < L; a++) if (cliff[idx(a, b)]) keep[idx(a, b)] = true;
         // The blocks the rock runs through: cut back from it (what's left between, open ground).
-        cutBlocks(gorge, !vertical, rr);
-        cutBlocks(cliff, vertical, rr);
-        cutBlocks(wash, !vertical, rr);
+        cutBlocks(gorge, vertical, rr);
+        cutBlocks(cliff, !vertical, rr);
+        cutBlocks(wash, vertical, rr);
         // The rock, the creek down the gorge, the sand of the wash.
         for (int i = 0; i < n; i++) {
             if ((gorge[i] || cliff[i]) && !keep[i]) {
@@ -208,8 +208,7 @@ final class CanyonMap extends RegionMap {
         }
         // A road along the rim of the gorge and along the top and the foot of the cliff: the streets that ran on
         // into the rock end at it.
-        rimRoad(gorge, 1, 3, dirA);
-        rimRoad(cliff, 1, 3, dirB);
+        rims();
         // The switchbacks: the straight street down the cliff made a road that winds down it, hairpin by hairpin.
         for (int[] s : sites) {
             int bc = s[2], aTop = s[3];
@@ -254,6 +253,58 @@ final class CanyonMap extends RegionMap {
     @Override
     public String toString() {
         return "bridges " + bridges + " switchbacks " + switchbacks + " rocks " + rocks.size() + " homes " + homes;
+    }
+
+    /**
+     * The rim roads, smooth curves: along both rims of the gorge down to the top of the cliff, along the top of the
+     * cliff either side of the gorge, and along its foot.
+     */
+    void rims() {
+        for (int s = -1; s <= 1; s += 2) {
+            List<Float> pts = new ArrayList<Float>();
+            for (int a = 0; a < L; a += 3) {
+                float b = gc[a] + s * (ghw[a] + 2.1f);
+                int bi = Math.max(0, Math.min(L - 1, Math.round(b)));
+                float top = aF[bi] - CW - 2.1f;
+                if (a + 0.5f >= top) {
+                    addPt(pts, top, b);
+                    break;
+                }
+                addPt(pts, a + 0.5f, b);
+            }
+            lay(pts);
+        }
+        for (int s = -1; s <= 1; s += 2) {
+            List<Float> pts = new ArrayList<Float>();
+            for (int b = s < 0 ? 0 : L - 1; b >= 0 && b < L; b -= s * 3) {
+                int a = Math.max(0, Math.min(L - 1, Math.round(aF[b] - CW - 2.1f)));
+                float edge = gc[a] + s * (ghw[a] + 2.1f);
+                if (s < 0 ? b + 0.5f >= edge : b + 0.5f <= edge) {
+                    addPt(pts, aF[Math.max(0, Math.min(L - 1, Math.round(edge)))] - CW - 2.1f, edge);
+                    break;
+                }
+                addPt(pts, aF[b] - CW - 2.1f, b + 0.5f);
+            }
+            lay(pts);
+        }
+        List<Float> foot = new ArrayList<Float>();
+        for (int b = 0; b < L; b += 3) addPt(foot, aF[b] + 1.9f, b + 0.5f);
+        addPt(foot, aF[L - 1] + 1.9f, L - 0.5f);
+        lay(foot);
+    }
+
+    /** A smooth road along points {a, b, ...}. */
+    void lay(List<Float> pts) {
+        if (pts.size() < 4) return;
+        float[] line = new float[pts.size()];
+        for (int k = 0; k < line.length; k += 2) {
+            float A = flip ? L - pts.get(k) : pts.get(k);
+            float B = pts.get(k + 1);
+            line[k] = Math.max(0.5f, Math.min(L - 0.5f, vertical ? B : A));
+            line[k + 1] = Math.max(0.5f, Math.min(L - 0.5f, vertical ? A : B));
+        }
+        line = CityGenerator.chaikin(line);
+        landGen.curveRoad(line, false);
     }
 
     void addPt(List<Float> pts, float a, float b) {
@@ -328,6 +379,21 @@ final class CanyonMap extends RegionMap {
         }
         // Adobe homes on the ground left open along the rim roads.
         homes = roadsideHomes(L / 6, r, new int[]{0xFFB8683E, 0xFFA05A3A, 0xFFC88A5A, 0xFF8A4A30}, new int[]{0xFFD8B088, 0xFFE0C49C, 0xFFC89870});
+        // The town's parks watered green (an empty block of red sand looks like nothing at all).
+        lawn = new boolean[city.w * city.h];
+        for (int[] b : city.blocks) {
+            int open = 0, built = 0, all = 0;
+            for (int y = b[1] + 1; y < b[3] - 1; y++)
+                for (int x = b[0] + 1; x < b[2] - 1; x++) {
+                    byte t = city.tiles[y * city.w + x];
+                    all++;
+                    if (t == GRASS || t == TREE) open++;
+                    if (t == BUILDING) built++;
+                }
+            if (built > 0 || open * 10 < all * 6) continue;
+            for (int y = b[1] + 1; y < b[3] - 1; y++)
+                for (int x = b[0] + 1; x < b[2] - 1; x++) lawn[y * city.w + x] = true;
+        }
         // Junipers, scrub and the odd cactus for trees.
         for (int i = 0; i < city.w * city.h; i++) {
             if (city.tiles[i] != TREE) continue;
@@ -360,6 +426,8 @@ final class CanyonMap extends RegionMap {
 
     // ------------------------------------------------------------------ painting
 
+    boolean[] lawn;
+
     int zoneAt(int x, int y) {
         return zone == null ? 0 : zone[y * city.w + x];
     }
@@ -368,6 +436,7 @@ final class CanyonMap extends RegionMap {
     int ground(int x, int y) {
         float n = (float) (Math.sin(x * 0.047f + y * 0.019f) * Math.sin(y * 0.053f - x * 0.013f + 1.3f));
         int step = Math.round(n * 2);
+        if (lawn != null && lawn[y * city.w + x]) return mix(0xFF6A7E3C, step > 0 ? 0xFF8A9A50 : 0xFF4A5E2A, Math.abs(step) * 0.2f);
         int z = zoneAt(x, y);
         int base = z == 1 || z == 2 ? 0xFFC8946A : z == 4 ? 0xFFD8B486 : 0xFFB8704A;
         return mix(base, step > 0 ? 0xFFE8C8A0 : 0xFF7A3A22, Math.abs(step) * 0.06f);
@@ -383,6 +452,7 @@ final class CanyonMap extends RegionMap {
 
     @Override
     boolean texture(Canvas c, Paint p, byte t, int x, int y, float fx, float fy, Random r) {
+        if ((t == GRASS || t == TREE) && lawn != null && lawn[y * city.w + x]) return false;
         if (t == GRASS || t == TREE || t == TRAIL) {
             // Red grit and pebbles, a dry tuft now and then.
             for (int k = 0; k < 4; k++) {
