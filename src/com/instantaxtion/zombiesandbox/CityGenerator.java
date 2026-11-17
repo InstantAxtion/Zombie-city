@@ -569,7 +569,10 @@ final class CityGenerator extends CityPart {
             float p = dt == DT_SUBURB || dt == DT_PARKSIDE ? 0.75f : dt == DT_MIDTOWN ? (d > 0.4f ? 0.5f : 0.25f)
                     : dt == DT_OLDTOWN ? 0.4f : dt == DT_INDUSTRIAL ? 0.45f : dt == DT_CAMPUS ? 0.55f : 0f;
             // (Never more than a fifth or so of the town, so there are still the ordinary blocks for the landmarks and the rest.)
-            boolean room = nbArea + bw * bh <= 0.22f * (city.townX1 - city.townX0) * (city.townY1 - city.townY0);
+            // ((27.5) Fewer on the island maps, where they crowded out the rest.)
+            boolean isles = city.waterKind == CityConfig.W_ISLANDS;
+            if (isles) p *= 0.5f;
+            boolean room = nbArea + bw * bh <= (isles ? 0.12f : 0.22f) * (city.townX1 - city.townX0) * (city.townY1 - city.townY0);
             if (city.w >= 160 && depth >= 1 && bw >= 38 && bh >= 38 && bw <= 76 && bh <= 76 && room
                     && look.r.nextFloat() < Math.min(0.95f, p * look.nbRate) && landGen.neighbourhood(x0, y0, x1, y1, d)) {
                 nbArea += bw * bh;
@@ -857,6 +860,11 @@ final class CityGenerator extends CityPart {
         }
         // ((11.1) Not since the thin band of country: whole corners of town left as fields undid it.)
         if (organic && city.cfg.civic < 27) landGen.erodeTown(bx0, by0, bx1, by1);
+        // ((27.5) Map version 40: most big towns lose a corner or two to the fields, each its own shape.)
+        if (organic && look != null && city.waterKind == CityConfig.W_NONE && !city.desert && !city.spaceCenter && city.w >= 456) {
+            Random nr = new Random(city.cfg.seed * 0x5DEECE66DL + 405);
+            if (nr.nextFloat() < 0.8f) landGen.notchTown(bx0, by0, bx1, by1, nr);
+        }
         if (city.seaY > 0) coastMap.coast();
         if (city.cfg.prisonIsland()) prisonMap.prisonIsland();
     }

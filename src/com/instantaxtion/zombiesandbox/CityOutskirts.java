@@ -328,7 +328,9 @@ final class CityOutskirts extends CityPart {
             case DT_INDUSTRIAL: opts = new int[]{NB_LOFTS, NB_LOFTS, NB_TRAILERS}; break;
             default: return false;
         }
-        if (dt != DT_CAMPUS && r.nextFloat() > 0.62f) return false;
+        // (The curving cul-de-sacs of the suburbs keep most of their turns, and the islands get fewer of the new kinds.)
+        float chance = city.waterKind == CityConfig.W_ISLANDS ? 0.3f : dt == DT_SUBURB || dt == DT_PARKSIDE ? 0.38f : 0.62f;
+        if (dt != DT_CAMPUS && r.nextFloat() > chance) return false;
         int start = r.nextInt(opts.length);
         for (int k = 0; k < opts.length; k++) {
             int type = opts[(start + k) % opts.length];
@@ -1038,6 +1040,41 @@ final class CityOutskirts extends CityPart {
             if (keep) kept.add(b);
             else city.fill(b[0], b[1], b[2] - b[0], b[3] - b[1], GRASS);
         }
+        trimTo(kept, bx0, by0, bx1, by1);
+    }
+
+    /**
+     * ((27.5) Map version 40) A big town's outline its own: one or two of its corners left as open country, never the
+     * airport's. Each corner a different size, so no two towns have the same shape.
+     */
+    void notchTown(int bx0, int by0, int bx1, int by1, java.util.Random r) {
+        int w = bx1 - bx0, h = by1 - by0;
+        int[] air = city.airport;
+        List<int[]> notches = new ArrayList<int[]>();
+        int want = 1 + r.nextInt(2), start = r.nextInt(4);
+        for (int k = 0; k < 4 && notches.size() < want; k++) {
+            int c = (start + k) % 4;
+            boolean right = (c & 1) != 0, bottom = (c & 2) != 0;
+            int nw = Math.round(w * (0.16f + r.nextFloat() * 0.16f)), nh = Math.round(h * (0.16f + r.nextFloat() * 0.16f));
+            int x0 = right ? bx1 - nw : bx0, y0 = bottom ? by1 - nh : by0;
+            int[] n = {x0, y0, x0 + nw, y0 + nh};
+            if (air != null && n[0] < air[2] + 6 && air[0] - 6 < n[2] && n[1] < air[3] + 6 && air[1] - 6 < n[3]) continue;
+            notches.add(n);
+        }
+        if (notches.isEmpty()) return;
+        List<int[]> kept = new ArrayList<int[]>();
+        for (int[] b : city.blocks) {
+            float x = (b[0] + b[2]) / 2f, y = (b[1] + b[3]) / 2f;
+            boolean out = false;
+            for (int[] n : notches) if (x >= n[0] && x < n[2] && y >= n[1] && y < n[3]) out = true;
+            if (out) city.fill(b[0], b[1], b[2] - b[0], b[3] - b[1], GRASS);
+            else kept.add(b);
+        }
+        trimTo(kept, bx0, by0, bx1, by1);
+    }
+
+    /** What's left of town after its edge is worn away: the roads out in the new fields dug up, stray bits gone. */
+    private void trimTo(List<int[]> kept, int bx0, int by0, int bx1, int by1) {
         // Roads more than a few tiles from the town are dug up.
         boolean[] near = new boolean[city.w * city.h];
         for (int[] b : kept)
