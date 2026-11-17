@@ -439,41 +439,68 @@ final class LandmarkArt28 {
     }
 
     static void fanZone(List<Landmarks.Def> out) {
-        // A fan zone: a great paved square with the big screen at one end, food and merchandise stalls under striped
-        // awnings down the sides, flags strung over it, trees in planters and the crowd's benches.
+        // A fan zone: a great paved square in the club's colours with the big screen at one end, merchandise stalls and
+        // ticket booths under striped awnings down the sides, flags strung over it. No two quite alike: the screen at
+        // either end, paving in a chequer or in stripes, and in the middle either the crowd among planted trees, rows of
+        // stepped seating facing the screen, or the club's crest laid in the paving.
         Landmarks.Def d = new Landmarks.Def("Fan Zone", T_PARK) {
             @Override
             void ground(City city, Canvas c, Paint p, float x0, float y0, float x1, float y1, Random r) {
                 LandmarkArt12.F f = new LandmarkArt12.F(c, p, x0, y0, x1, y1);
                 float L = f.L, S = f.S;
                 int[] k = club(city);
+                boolean far = r.nextBoolean(), stripes = r.nextBoolean();
+                int middle = r.nextInt(3);
                 f.rect(0xFFCDBF9E, 0, 0, L, S);
-                // Paving in a big chequer of two tones, a club-coloured band down the middle.
-                for (float u = 0; u < L; u += 32)
-                    for (float v = 0; v < S; v += 32) if (((int) (u / 32) + (int) (v / 32)) % 2 == 0) f.rect(0xFFC2B492, u, v, u + 32, v + 32);
+                if (stripes) for (float u = 0; u < L; u += 24) f.rect(0xFFC2B492, u, 0, u + 12, S);
+                else
+                    for (float u = 0; u < L; u += 32)
+                        for (float v = 0; v < S; v += 32) if (((int) (u / 32) + (int) (v / 32)) % 2 == 0) f.rect(0xFFC2B492, u, v, u + 32, v + 32);
                 f.rect(City.lighten(k[0], 0.2f), 0, S / 2 - 3, L, S / 2 + 3);
-                // The big screen on its frame at the far end, facing down the square.
-                float sw = Math.min(S * 0.6f, 90);
-                f.rect(0x40000000, L - 14, S / 2 - sw / 2 + 3, L - 4, S / 2 + sw / 2 + 3);
-                f.rect(0xFF2A2C30, L - 16, S / 2 - sw / 2, L - 6, S / 2 + sw / 2);
-                f.rect(0xFF3A6AA8, L - 15, S / 2 - sw / 2 + 2, L - 12, S / 2 + sw / 2 - 2);
-                // Stalls down both long sides.
-                for (float u = 10; u < L - 30; u += 26) {
+                // The big screen on its frame at one end, facing down the square.
+                float sw = Math.min(S * 0.6f, 90), se = far ? L - 16 : 6;
+                f.rect(0x40000000, se + 2, S / 2 - sw / 2 + 3, se + 12, S / 2 + sw / 2 + 3);
+                f.rect(0xFF2A2C30, se, S / 2 - sw / 2, se + 10, S / 2 + sw / 2);
+                f.rect(0xFF3A6AA8, far ? se + 1 : se + 7, S / 2 - sw / 2 + 2, far ? se + 4 : se + 9, S / 2 + sw / 2 - 2);
+                // Merchandise stalls and ticket booths down both long sides, the booths in white.
+                float u0 = far ? 10 : 30, u1 = far ? L - 30 : L - 10;
+                int n = 0;
+                for (float u = u0; u < u1 - 20; u += 26, n++) {
                     for (int side = 0; side < 2; side++) {
                         float v = side == 0 ? 4 : S - 16;
                         f.rect(0x30000000, u + 2, v + 2, u + 20, v + 14);
-                        for (float uu = u; uu < u + 18; uu += 3) f.rect((int) ((uu - u) / 3) % 2 == 0 ? k[0] : k[1], uu, v, uu + 3, v + 12);
+                        if (n % 4 == 3) {
+                            f.rect(0xFFF2F2EE, u + 4, v, u + 16, v + 12);
+                            f.rect(0xFF3A4A5A, u + 6, side == 0 ? v + 9 : v + 1, u + 14, side == 0 ? v + 11 : v + 3);
+                        } else
+                            for (float uu = u; uu < u + 18; uu += 3) f.rect((int) ((uu - u) / 3) % 2 == 0 ? k[0] : k[1], uu, v, uu + 3, v + 12);
                     }
                 }
-                // Planters with trees, and the crowd.
-                for (float u = 40; u < L - 40; u += 60)
-                    for (int side = 0; side < 2; side++) {
-                        float v = side == 0 ? S * 0.3f : S * 0.7f;
-                        f.circle(0xFF8A8478, u, v, 6);
-                        f.tree(u, v, 5);
+                float m0 = far ? 30 : 46, m1 = far ? L - 46 : L - 30;
+                if (middle == 1 && m1 - m0 > 40) {
+                    // Rows of stepped seating facing the screen.
+                    for (float u = m0; u < m1; u += 10) {
+                        f.rect(0x30000000, u + 1, S * 0.24f + 1, u + 7, S * 0.76f + 1);
+                        f.rect(0xFF9A9EA4, u, S * 0.24f, u + 6, S * 0.76f);
+                        for (float v = S * 0.24f + 2; v < S * 0.76f - 2; v += 4) f.rect(k[0], far ? u + 3.5f : u + 0.5f, v, far ? u + 5.5f : u + 2.5f, v + 2.5f);
                     }
-                for (int n = 0; n < (int) (L * S / 900); n++) {
-                    float u = 20 + r.nextFloat() * (L - 50), v = 20 + r.nextFloat() * (S - 40);
+                } else if (middle == 2 && S > 40) {
+                    // The club's crest laid in the paving.
+                    float cr = Math.min(S * 0.3f, (m1 - m0) * 0.3f), cu = (m0 + m1) / 2;
+                    f.circle(k[1], cu, S / 2, cr);
+                    f.circle(k[0], cu, S / 2, cr * 0.82f);
+                    f.ngon(k[1], cu, S / 2, cr * 0.5f, 5, -Math.PI / 2);
+                } else {
+                    // Planters with trees, and the crowd.
+                    for (float u = m0 + 10; u < m1 - 10; u += 60)
+                        for (int side = 0; side < 2; side++) {
+                            float v = side == 0 ? S * 0.3f : S * 0.7f;
+                            f.circle(0xFF8A8478, u, v, 6);
+                            f.tree(u, v, 5);
+                        }
+                }
+                for (int q = 0; q < (int) (L * S / 900); q++) {
+                    float u = m0 + r.nextFloat() * Math.max(1, m1 - m0), v = 20 + r.nextFloat() * (S - 40);
                     LandmarkArt12.person(f, u, v, r.nextFloat() < 0.5f ? k[0] : LandmarkArt12.CLOTHES[r.nextInt(LandmarkArt12.CLOTHES.length)]);
                 }
                 // Flags strung across it.

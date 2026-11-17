@@ -118,10 +118,10 @@ final class StadiumMap extends CityPart {
         if (ma1 - ma0 - sth >= 12) {
             int ey = topMain ? st0 - 3 : st1;
             gen.carve(new Street(s0, ey, s1, ey + 3, false, false));
-            venues(s0, topMain ? ma0 : ey + 3, s1, topMain ? ey : ma1, new String[]{"Fan Zone", "Athletics Stadium", "Music Festival Ground"}, r);
+            venues(s0, topMain ? ma0 : ey + 3, s1, topMain ? ey : ma1, new String[]{"Fan Zone", "Athletics Stadium", "Skate Park"}, r);
         }
-        venues(sx0, ma0, s0 - 3, ma1, new String[]{"Fan Zone", "Food Truck Plaza", "Velodrome", "Fan Zone"}, r);
-        venues(s1 + 3, ma0, sx1, ma1, new String[]{r.nextBoolean() ? "Fan Zone" : "Food Truck Plaza", "Fan Zone", "Training Ground", "Music Festival Ground"}, r);
+        venues(sx0, ma0, s0 - 3, ma1, new String[]{"Fan Zone", "Velodrome", "Skate Park", "Tennis Club"}, r);
+        venues(s1 + 3, ma0, sx1, ma1, new String[]{"Fan Zone", "Training Ground", "Velodrome", "Skate Park"}, r);
         // The other half: the arena, the pitches, a fan zone - in a seeded order.
         int aw = clamp(Math.round(sw * 0.3f), 18, 52), fw = clamp(Math.round(sw * 0.22f), 12, 44);
         int a0 = r.nextBoolean() ? sx0 : sx1 - aw;
@@ -134,36 +134,40 @@ final class StadiumMap extends CityPart {
         int f0 = fanFirst ? b0 : b1 - fw, f1 = f0 + fw;
         if (b1 - b0 - fw - 3 >= 14) {
             gen.carve(new Street(fanFirst ? f1 : f0 - 3, oy0, fanFirst ? f1 + 3 : f0, oy1, true, false));
-            venues(f0, oy0, f1, oy1, new String[]{"Fan Zone", "Food Truck Plaza"}, r);
+            venues(f0, oy0, f1, oy1, new String[]{"Fan Zone", "Skate Park", "Tennis Club"}, r);
             venues(fanFirst ? f1 + 3 : b0, oy0, fanFirst ? b1 : f0 - 3, oy1, new String[]{"Pitches", "Athletics Stadium", "Pitches", "Training Ground"}, r);
         } else venues(b0, oy0, b1, oy1, new String[]{"Pitches", "Fan Zone"}, r);
     }
 
     /**
-     * A stretch of the complex cut by streets into parts no more than about sixty tiles a side, each the next of what's
-     * on the menu (round again if it runs out).
+     * A stretch of the complex cut by streets into parts no more than about sixty tiles a side: the first the first on
+     * the list, the rest picked from it at random, never the same as the part before.
      */
-    private void venues(int x0, int y0, int x1, int y1, String[] menu, Random r) {
-        venues(x0, y0, x1, y1, menu, new int[1]);
+    private void venues(int x0, int y0, int x1, int y1, String[] list, Random r) {
+        venues(x0, y0, x1, y1, list, r, new String[1]);
     }
 
-    private void venues(int x0, int y0, int x1, int y1, String[] menu, int[] next) {
+    private void venues(int x0, int y0, int x1, int y1, String[] list, Random r, String[] last) {
         int w = x1 - x0, h = y1 - y0;
         if (w > 64 && w >= h) {
             int at = x0 + w / 2 - 1;
             gen.carve(new Street(at, y0, at + 3, y1, true, false));
-            venues(x0, y0, at, y1, menu, next);
-            venues(at + 3, y0, x1, y1, menu, next);
+            venues(x0, y0, at, y1, list, r, last);
+            venues(at + 3, y0, x1, y1, list, r, last);
             return;
         }
         if (h > 64) {
             int at = y0 + h / 2 - 1;
             gen.carve(new Street(x0, at, x1, at + 3, false, false));
-            venues(x0, y0, x1, at, menu, next);
-            venues(x0, at + 3, x1, y1, menu, next);
+            venues(x0, y0, x1, at, list, r, last);
+            venues(x0, at + 3, x1, y1, list, r, last);
             return;
         }
-        part(x0, y0, x1, y1, menu[next[0]++ % menu.length]);
+        String kind = list[0];
+        if (last[0] != null)
+            for (int k = 0; k < 6 && (kind.equals(last[0]) || k == 0); k++) kind = list[r.nextInt(list.length)];
+        last[0] = kind;
+        part(x0, y0, x1, y1, kind);
     }
 
     private void part(int x0, int y0, int x1, int y1, String kind) {
