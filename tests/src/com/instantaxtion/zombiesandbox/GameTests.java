@@ -2238,13 +2238,10 @@ public final class GameTests {
                 check(v.barHp > 0 && Math.hypot(v.barX1 - v.barX0, v.barY1 - v.barY0) >= 12, "barriers up across the road");
                 float bx = (v.barX0 + v.barX1) / 2, by = (v.barY0 + v.barY1) / 2;
                 // (Nobody else about: no one to shoot the dead before they reach it, or to draw them off elsewhere.)
-                for (Entity o : w.entities)
-                    if (!o.dead && !o.isZombie() && Math.hypot(o.x - bx, o.y - by) < 500) {
-                        o.dead = true;
-                        o.removed = true;
-                    }
+                Quiet calm = quiet(w, bx, by, 500);
                 float[] bait = w.city.findWalkable(bx + ax * 30, by + ay * 30);
                 Entity held = w.spawn(Entity.CIVILIAN, bait[0], bait[1]);
+                calm.keep(held);
                 java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
                 for (int k = 0; k < 8; k++) {
                     float[] p = w.city.findWalkable(bx - ax * (30 + k * 4) + ay * (k % 3 - 1) * 5, by - ay * (30 + k * 4) + ax * (k % 3 - 1) * 5);
@@ -2254,10 +2251,9 @@ public final class GameTests {
                 boolean wentDown = false;
                 for (int f = 0; f < 30 * 40 && !wentDown; f++) {
                     held.speed = held.runSpeed = 0;
-                    held.x = bait[0];
-                    held.y = bait[1];
+                    hold(held, bait[0], bait[1]);
                     held.hp = held.maxHp;
-                    w.update(1 / 30f);
+                    step(w, calm);
                     // (They head for the one beyond, whatever else catches their eye.)
                     for (Entity zz : pack) {
                         if (zz.dead) continue;
@@ -2341,16 +2337,13 @@ public final class GameTests {
                 // Up on a horse they see the dead round them and mark them for the others.
                 for (Entity hh : horses) if (!hh.dead && !hh.removed && hh.ride == null) m = hh;
                 float[] p = w.city.findWalkable(m.x + 90, m.y);
-                // (Nobody else armed close by to shoot it first.)
-                for (Entity o : w.entities) if (o != m && !o.dead && (o.isArmed() || o.hasGun) && Math.hypot(o.x - p[0], o.y - p[1]) < 400) o.dead = o.removed = true;
+                // (Nobody else close by to shoot it first; and it can't be shot down before the next look round.)
                 Entity z = w.spawn(Entity.ZOMBIE, p[0], p[1]);
-                z.speed = z.runSpeed = 0;
+                Quiet ride = quiet(w, p[0], p[1], 400, m, z);
                 boolean marked = false;
                 for (int f = 0; f < 30 * 2 && !marked; f++) {
-                    // (Tough enough not to be shot down before the next look round.)
-                    z.hp = z.maxHp = 100000;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
+                    untouchable(z);
+                    step(w, ride);
                     marked = z.spottedUntil > w.time;
                 }
                 check(marked, "the dead nearby marked for the others (" + m.task + " " + m.dead + " " + (int) Math.hypot(z.x - m.x, z.y - m.y) + " " + z.dead + ")");
@@ -2402,8 +2395,9 @@ public final class GameTests {
                     if (w.city.findWalkable(q[0] + 70, q[1]) != null && w.city.los(q[0], q[1], q[0] + 70, q[1])) at = q;
                 }
                 // (Nobody else about to shoot them first.)
-                for (Entity o : w.entities) if (!o.dead && Math.hypot(o.x - at[0], o.y - at[1]) < 500) { o.dead = true; o.removed = true; }
+                Quiet alone = empty(w, at[0], at[1], 500);
                 Entity soldier = w.spawn(Entity.SOLDIER, at[0], at[1]);
+                alone.keep(soldier);
                 soldier.ammo = soldier.reserve = 0;
                 float[] p = w.city.findWalkable(at[0] + 70, at[1]);
                 java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
@@ -2414,7 +2408,8 @@ public final class GameTests {
                     z.armored = false;
                     pack.add(z);
                 }
-                for (int f = 0; f < 3; f++) w.update(1 / 30f);
+                alone.keepAll(pack);
+                for (int f = 0; f < 3; f++) step(w, alone);
                 WM tg = wm("throwGrenade", Entity.class, float.class, float.class);
                 tg.setAccessible(true);
                 // (Straight onto them: no scatter.)
@@ -2426,8 +2421,7 @@ public final class GameTests {
                 for (int f = 0; f < 45; f++) {
                     for (Entity z : pack) z.speed = z.runSpeed = 0;
                     soldier.ammo = soldier.reserve = 0;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
+                    step(w, alone);
                 }
                 int down = 0;
                 for (Entity z : pack) if (z.dead || z.hp <= 0) down++;
@@ -3448,10 +3442,9 @@ public final class GameTests {
                 for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { cop = e; break; }
                 check(cop != null, "a cop on the street");
                 float sx = cop.x, sy = cop.y;
-                // (Nobody about to get in the way.)
-                for (Entity e : w.entities) if (!e.isZombie() && World.hypot(e.x - sx, e.y - sy) < 500) { e.removed = true; e.dead = true; }
-                for (Fleet.Vehicle fv : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) if (World.hypot(fv.x - sx, fv.y - sy) < 500) w.fleet.discard(fv);
-                w.update(1 / 30f);
+                // (Nobody about to get in the way, nor to shoot the test's dead first.)
+                Quiet nobody = quiet(w, sx, sy, 500);
+                step(w, nobody);
                 // Wire: one coil to a tile.
                 float[] coil = w.layWire(sx, sy);
                 check(coil != null && w.defences.wires.size() == 1 && w.defences.wireAt(w, sx, sy) && coil[2] == Defences.WIRE_HP, "a coil laid");
@@ -3468,13 +3461,11 @@ public final class GameTests {
                 // Walking through it kills them in the end.
                 z.x = coil[0];
                 for (int f = 0; f < 30 * 20 && !z.dead; f++) {
-                    z.x = coil[0];
-                    z.y = coil[1];
+                    hold(z, coil[0], coil[1]);
                     z.noiseX = coil[0] + 400;
                     z.noiseY = coil[1];
                     z.noiseTimer = 10;
-                    w.update(1 / 30f);
-                    w.evCount = 0;
+                    step(w, nobody);
                 }
                 check(z.dead && w.defences.wireKills == 1, "one of the dead dies in the wire (" + z.hp + ")");
                 // And it wears out.
@@ -3598,10 +3589,9 @@ public final class GameTests {
                 Entity cop = null;
                 for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { cop = e; break; }
                 float sx = cop.x, sy = cop.y;
-                // (Nobody about to get in the way.)
-                for (Entity e : w.entities) if (!e.isZombie() && World.hypot(e.x - sx, e.y - sy) < 500) { e.removed = true; e.dead = true; }
-                for (Fleet.Vehicle fv : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) if (World.hypot(fv.x - sx, fv.y - sy) < 500) w.fleet.discard(fv);
-                w.update(1 / 30f);
+                // (Nobody about to get in the way, nor to shoot the test's dead first.)
+                Quiet nobody = quiet(w, sx, sy, 500);
+                step(w, nobody);
                 // A horde of thirteen: its leader becomes an alpha.
                 java.util.ArrayList<Entity> horde = new java.util.ArrayList<Entity>();
                 for (int k = 0; k < 13; k++) {
@@ -3892,22 +3882,27 @@ public final class GameTests {
                     gun.y = p[1];
                     Entity z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
                     z.hp = z.maxHp = 5000;
-                    // (Nobody else in the room, in the line of fire.)
-                    final City.Building rm = room;
-                    for (Entity o : w.entities) if (o != gun && o != z && !o.dead && w.city.insideOf(o.x, o.y) == rm) o.dead = o.removed = true;
+                    // (Nobody else in the room or round it: nobody in the line of fire, nothing else to shoot at.)
+                    Quiet room0 = empty(w, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 160, gun, z);
                     int shots = w.shotsFired;
-                    boolean aimed = false;
+                    boolean aimed = false, hit = false;
                     for (int f = 0; f < 150; f++) {
-                        z.x = q[0];
-                        z.y = q[1];
-                        gun.x = p[0];
-                        gun.y = p[1];
+                        // (A shot to the head ends it at once, however tough it is: another of the dead in its place, so
+                        // it's how they fight in a room that's measured, not whether the first shot was lucky.)
+                        if (z.dead) {
+                            hit = true;
+                            z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                            z.hp = z.maxHp = 5000;
+                            room0.keep(z);
+                        }
+                        hold(z, q[0], q[1]);
+                        hold(gun, p[0], p[1]);
                         gun.hp = gun.maxHp;
-                        w.update(1 / 30f);
-                        w.evCount = 0;
+                        step(w, room0);
                         aimed |= gun.aiming;
+                        hit |= z.dead || z.hp < z.maxHp;
                     }
-                    check(aimed && w.shotsFired - shots >= 4 && z.hp < z.maxHp, (who == 0 ? "a police officer" : "a soldier") + " indoors opens fire on one of the dead in the room ("
+                    check(aimed && w.shotsFired - shots >= 4 && hit, (who == 0 ? "a police officer" : "a soldier") + " indoors opens fire on one of the dead in the room ("
                             + (w.shotsFired - shots) + " shots, aimed " + aimed + ", task " + gun.task + ", ammo " + gun.ammo + "/" + gun.reserve + ", mag " + gun.magSize + ", role " + gun.role + ", melee " + gun.melee + ", dead " + gun.dead + ", rig " + (gun.rig != null) + ")");
                     z.hp = 0;
                     gun.removed = true;
@@ -4493,7 +4488,10 @@ public final class GameTests {
                 boolean kept = false;
                 for (Entity e : l.entities) if (e.nameSeed == s.nameSeed && e.type == Entity.SOLDIER) kept = e.level == s.level && e.perks == s.perks && Math.abs(e.xp - s.xp) < 0.01f;
                 check(kept, "level, perks and experience kept in a save");
-                // A civilian with a gun gathers frightened people near the dead.
+                // A civilian with a gun gathers frightened people near the dead. (Nobody else about for them to fall in
+                // behind instead - the soldier above included.)
+                s.dead = s.removed = true;
+                Quiet band = quiet(w, p[0], p[1], 300);
                 Entity lead = w.spawn(Entity.CIVILIAN, p[0] + 20, p[1]);
                 w.armCivilian(lead, 12);
                 java.util.List<Entity> scared = new java.util.ArrayList<Entity>();
@@ -4503,7 +4501,8 @@ public final class GameTests {
                 }
                 w.spawn(Entity.ZOMBIE, p[0] + 60, p[1] + 60);
                 w.outbreak = true;
-                for (int f = 0; f < 3; f++) w.update(1 / 30f);
+                band.keep(lead).keepAll(scared);
+                for (int f = 0; f < 3; f++) step(w, band);
                 for (Entity e : scared) {
                     e.fleeTimer = 5;
                     e.task = Dispatch.T_NONE;
@@ -4876,7 +4875,9 @@ public final class GameTests {
                 w.populate(c);
                 w.update(1 / 30f);
                 check(w.city.prison != null, "the map has a prison");
-                // The giant: spawned by hand, a squad shooting at it, a barricade in its way.
+                // The giant: spawned by hand, a squad shooting at it, a barricade in its way. (Measured as it comes, not
+                // as the world's strain of the dead happens to make it.)
+                plainStrain(w);
                 java.util.Random tr = new java.util.Random(25);
                 Entity g = null;
                 float[] bar = null;
@@ -4972,11 +4973,9 @@ public final class GameTests {
                 v.riders.add(p);
                 for (int k = 0; k < 6; k++) w.spawn(Entity.ZOMBIE, v.x + (float) Math.cos(k) * 8, v.y + (float) Math.sin(k) * 8);
                 float hp0 = v.hp;
-                for (int f = 0; f < 30 * 8 && v.riders.contains(p); f++) {
-                    // (Nobody else about for them to go after instead.)
-                    for (Entity e : w.entities) if (!e.dead && !e.isZombie() && World.hypot(e.x - v.x, e.y - v.y) < 300) e.dead = e.removed = true;
-                    w.update(1 / 30f);
-                }
+                // (Nobody else about for them to go after instead, nor to shoot them off the car.)
+                Quiet car = quiet(w, v.x, v.y, 300, v, p);
+                for (int f = 0; f < 30 * 8 && v.riders.contains(p); f++) step(w, car);
                 check(v.hp < hp0, "the dead on a parked car wear it down (" + (int) v.hp + "/" + (int) hp0 + ")");
                 check(!v.riders.contains(p) && w.dragged >= 1, "and drag out the one inside (broken " + v.broken + ", dragged " + w.dragged + ", riders " + v.riders.size() + ", breakT " + v.breakT + ", on it " + v.clawN + ", speed " + v.speed + ", occ " + v.occupied() + ")");
                 // A ring of barricades round someone: one of the dead alone climbs it at the usual pace, a heap of them faster.
@@ -5053,6 +5052,8 @@ public final class GameTests {
                 w.noise(g[0], g[1], 265 * World.BATTLE_CARRY);
                 check(z.noiseTimer <= 0, "a single shot doesn't carry that far");
                 boolean drawn = false;
+                // (Nobody within sight of it to go after instead; and the only noise it hears is this one.)
+                Quiet near = quiet(w, z.x, z.y, 600).follow(z);
                 for (int f = 0; f < 30 * 8 && !drawn; f++) {
                     if (f % 15 == 0) {
                         // (A sound somewhere else on the map - a car alarm, a fight across town - isn't this one.)
@@ -5061,8 +5062,7 @@ public final class GameTests {
                         z.memory = z.searchTimer = 0;
                         w.battleNoise(g[0], g[1], 265);
                     }
-                    for (Entity e : w.entities) if (!e.dead && !e.isZombie() && World.hypot(e.x - z.x, e.y - z.y) < 600) e.dead = e.removed = true;
-                    w.update(1 / 30f);
+                    step(w, near);
                     drawn = z.noiseTimer > 0 && World.hypot(z.noiseX - g[0], z.noiseY - g[1]) < 120;
                 }
                 check(drawn, "but a fight going on draws it in (noise " + z.noiseTimer + " at " + (int) World.hypot(z.noiseX - g[0], z.noiseY - g[1]) + ", memory " + z.memory + ", dead " + z.dead + ", away " + (int) World.hypot(z.x - g[0], z.y - g[1]) + ")");
@@ -5198,9 +5198,22 @@ public final class GameTests {
                 check(s != null, "a bit of shore");
                 float lx = (s[1] % w.city.w + 0.5f) * City.T, ly = (s[1] / w.city.w + 0.5f) * City.T;
                 Entity civ = w.spawn(Entity.CIVILIAN, lx, ly), z = w.spawn(Entity.ZOMBIE, lx + 70, ly);
+                // (Nobody else about to shoot the one cornering them, or to take them off first: only the boats come.)
+                Quiet shore = quiet(w, lx, ly, 400, civ, z, w.ops.boats);
                 for (int k = 0; k < 50 && w.ops.rescued == 0; k++) {
                     civ.stun = z.stun = 5;
-                    for (int f = 0; f < 30; f++) w.update(1 / 30f);
+                    for (int f = 0; f < 30; f++) {
+                        // (Still cornered until a boat has taken the job: one shot from a passing boat's gun doesn't end
+                        // the test - another of the dead takes its place.)
+                        boolean coming = false;
+                        for (Fleet.Vehicle bt : w.ops.boats) coming |= bt.waitFor == civ && (bt.boatJob == Ops.J_RESCUE || bt.boatJob == Ops.J_LOAD);
+                        if (z.dead && !coming && w.ops.rescued == 0) {
+                            z = w.spawn(Entity.ZOMBIE, lx + 70, ly);
+                            shore.keep(z);
+                        }
+                        if (!z.dead) z.stun = Math.max(z.stun, 1);
+                        step(w, shore);
+                    }
                 }
                 check(w.ops.rescued >= 1 && !civ.dead && World.hypot(civ.x - lx, civ.y - ly) > 200, "a boat came in and took them round to safety (" + w.ops.rescued + ")");
                 z.dead = z.removed = true;
@@ -5363,7 +5376,9 @@ public final class GameTests {
         if (!mine(name)) return;
         long t = System.currentTimeMillis();
         // ((20.0) Every test plays out the same way each run: the simulation's dice are seeded from the test's name.)
-        World.testSeed = name.hashCode() & 0x7fffffffL;
+        // ((27.3) Plus ZC_SEED_SALT (a system property or an environment variable), to play a test out with other dice:
+        // a test that only passes with one set of them is checking luck, not the game.)
+        World.testSeed = (name.hashCode() & 0x7fffffffL) + seedSalt();
         try {
             c.run();
             passed++;
@@ -5372,6 +5387,143 @@ public final class GameTests {
             failed++;
             System.out.println("FAIL  " + name + ": " + e);
             e.printStackTrace(System.out);
+        }
+    }
+
+    // ------------------------------------------------------------------ ((27.3) set-ups that don't depend on luck
+
+    /**
+     * A patch of the map kept to the test's own: everyone else within r of (x, y) - the living, and with zombiesToo the
+     * dead as well - and every vehicle there (crew, riders and all) is taken off, when it's made and again each step
+     * (step/stepUntil), so nobody wandering or driving in can shoot the test's zombie first, stand in a line of fire or
+     * draw the dead off. The kept ones (entities or vehicles) are left alone.
+     */
+    static final class Quiet {
+        float x, y;
+        final float r;
+        final boolean zombiesToo;
+        /** If set, the patch moves with this one (centred on it each sweep). */
+        Entity around;
+        final java.util.Set<Object> keep = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
+
+        Quiet(float x, float y, float r, boolean zombiesToo) {
+            this.x = x;
+            this.y = y;
+            this.r = r;
+            this.zombiesToo = zombiesToo;
+        }
+
+        /** Keeps these (entities, vehicles, or whole lists of them) out of the sweep. */
+        Quiet keep(Object... o) {
+            for (Object k : o) {
+                if (k instanceof java.util.Collection) keepAll((java.util.Collection<?>) k);
+                else if (k != null) keep.add(k);
+            }
+            return this;
+        }
+
+        Quiet keepAll(java.util.Collection<?> o) {
+            for (Object k : o) if (k != null) keep.add(k);
+            return this;
+        }
+
+        /** The patch goes where e goes. */
+        Quiet follow(Entity e) {
+            around = e;
+            keep.add(e);
+            return this;
+        }
+
+        void sweep(World w) {
+            if (around != null) {
+                x = around.x;
+                y = around.y;
+            }
+            for (int i = 0, n = w.entities.size(); i < n; i++) {
+                Entity e = w.entities.get(i);
+                if (e.dead || keep.contains(e) || (e.isZombie() && !zombiesToo)) continue;
+                if (Math.hypot(e.x - x, e.y - y) < r) e.dead = e.removed = true;
+            }
+            for (int i = w.fleet.vehicles.size() - 1; i >= 0; i--) {
+                Fleet.Vehicle v = w.fleet.vehicles.get(i);
+                if (keep.contains(v) || Math.hypot(v.x - x, v.y - y) >= r) continue;
+                boolean ours = false;
+                for (Entity e : v.crew) ours |= keep.contains(e);
+                for (Entity e : v.riders) ours |= keep.contains(e);
+                if (ours) continue;
+                v.crew.clear();
+                v.riders.clear();
+                v.passengers = 0;
+                w.fleet.discard(v);
+            }
+        }
+    }
+
+    /** Keeps everyone but the test's own (and the dead) out of r round (x, y): see Quiet. Swept once now. */
+    static Quiet quiet(World w, float x, float y, float r, Object... keep) {
+        Quiet q = new Quiet(x, y, r, false).keep(keep);
+        q.sweep(w);
+        return q;
+    }
+
+    /** The same, the dead too (only the kept ones stay). */
+    static Quiet empty(World w, float x, float y, float r, Object... keep) {
+        Quiet q = new Quiet(x, y, r, true).keep(keep);
+        q.sweep(w);
+        return q;
+    }
+
+    /** One step of the world (a 30th of a second), the quiet patch swept first. */
+    static void step(World w, Quiet q) {
+        if (q != null) q.sweep(w);
+        w.update(1 / 30f);
+        w.evCount = 0;
+    }
+
+    /** What a test waits for (and what it does to its own each step: hold someone, keep a zombie standing...). */
+    interface Cond {
+        boolean done();
+    }
+
+    /** Steps the world until c is done or secs have gone by; true if it was done. */
+    static boolean stepUntil(World w, Quiet q, float secs, Cond c) {
+        for (int f = 0, n = Math.round(secs * 30); f < n; f++) {
+            if (c.done()) return true;
+            step(w, q);
+        }
+        return c.done();
+    }
+
+    /**
+     * The dead as they come, with none of the strain's quirks (each world rolls its own: tough, frail, swift...): for a
+     * test that measures one of them - its health, its pace - rather than the luck of the roll.
+     */
+    static void plainStrain(World w) {
+        java.util.Arrays.fill(w.trait, false);
+        w.mutation = 0;
+    }
+
+    /** Pins e where it is meant to be (call each step). */
+    static void hold(Entity e, float x, float y) {
+        e.x = x;
+        e.y = y;
+        e.vx = e.vy = 0;
+    }
+
+    /** A test's zombie that stays where it's put and can't be finished off (call each step). */
+    static void untouchable(Entity z) {
+        z.speed = z.runSpeed = 0;
+        z.vx = z.vy = 0;
+        z.hp = z.maxHp = Math.max(z.maxHp, 100000);
+    }
+
+    private static long seedSalt() {
+        String salt = System.getProperty("ZC_SEED_SALT");
+        if (salt == null) salt = System.getenv("ZC_SEED_SALT");
+        try {
+            return salt == null ? 0 : Long.parseLong(salt.trim());
+        } catch (NumberFormatException e) {
+            return 0;
         }
     }
 

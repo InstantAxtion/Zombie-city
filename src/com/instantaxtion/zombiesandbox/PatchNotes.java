@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "27.2";
-    static final int VERSION_CODE = 272;
+    static final String VERSION = "27.3";
+    static final int VERSION_CODE = 273;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "27.3  -  Under the hood",
+                    "The game's code has been reorganised from the ground up, ready for the improvements to come. It plays exactly as before.",
+            },
             {
                     "27.2  -  No more screamers",
                     "Screamers are gone. Any in a saved game are ordinary zombies now.",
