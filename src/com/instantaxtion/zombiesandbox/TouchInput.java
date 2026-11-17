@@ -351,6 +351,13 @@ final class TouchInput {
             gv.hud.openTimeline();
             return true;
         }
+        // ((27.5) The overlays: on to the next one (heat, reach, off).)
+        if (!gv.overlayBtn.isEmpty() && gv.overlayBtn.contains(x, y) || !gv.overlayKey.isEmpty() && gv.overlayKey.contains(x, y)
+                || !gv.overlayChip.isEmpty() && gv.overlayChip.contains(x, y)) {
+            gv.click();
+            gv.overlays.cycle();
+            return true;
+        }
         if (!gv.tacBtn.isEmpty() && gv.tacBtn.contains(x, y)) {
             gv.click();
             gv.hotOpen = false;

@@ -55,10 +55,15 @@ final class Entity {
     static final int ROLE_PRISON_GUARD = 20;
     /** ((26.0) The army's special forces: four to a team, suppressed rifles, flown in for the worst of it.) */
     static final int ROLE_SF = 21;
+    /**
+     * ((27.5) A civilian who signed up once the emergency broadcast went out: a police auxiliary in a hi-vis vest with a
+     * pistol, or an army volunteer with a rifle and basic kit. Weaker than the regulars, but in the fight.)
+     */
+    static final int ROLE_VOLUNTEER = 22;
     static final String[] ROLE_NAMES = {"Soldier", "Commander", "Sniper", "Gunner", "Riot officer", "K9 handler",
             "National Guard", "SWAT officer", "Combat medic", "Grenadier", "Police marksman", "Rescue specialist", "Pilot",
             "(unused)", "Marine", "Recon scout", "Combat engineer", "Mortar team", "Mounted officer", "Traffic officer", "Prison guard",
-            "Special forces"};
+            "Special forces", "Volunteer"};
 
     /*
      * ((13.5) What the simulation looks at for everyone every step - what they are, where, how they are, and how
@@ -102,6 +107,8 @@ final class Entity {
     /** ((25.0) The survivor base they belong to, whether they're up a watchtower, and where in it they're making for. */
     transient SurvivorBases.Base base;
     transient boolean onTower;
+    /** ((27.5) The raid they're out on, if any. */
+    transient BaseRaids.Raid raid;
     /**
      * ((27.0) Rooftop overwatch: the building a marksman or sniper has taken the roof of (onTower once they're up), where
      * on the roof they are, where at the foot of its wall they stand, and until they look for another roof.)
@@ -140,6 +147,29 @@ final class Entity {
     float noiseX, noiseY, screamCd;
     /** ((27.0) An armoured zombie's helmet, good for one shot to the head. */
     transient boolean helmet;
+    /**
+     * ((27.5) The last few notable things this one did, for its card: what, and when (game seconds), the newest at
+     * histN - 1 (a ring of HIST). Only kept for police, soldiers, armed civilians and survivor heroes (see World.history).
+     */
+    transient String[] hist;
+    transient float[] histT;
+    transient int histN;
+    static final int HIST = 5;
+
+    void remember(float t, String what) {
+        if (hist == null) {
+            hist = new String[HIST];
+            histT = new float[HIST];
+        }
+        // (Not the same thing twice running: a second ride in the same car.)
+        if (histN > 0 && what.equals(hist[(histN - 1) % HIST])) {
+            histT[(histN - 1) % HIST] = t;
+            return;
+        }
+        hist[histN % HIST] = what;
+        histT[histN % HIST] = t;
+        histN++;
+    }
 
     // Dispatch: current job (task, at the top), radio callsign and speech icons.
     Dispatch.Incident incident;
@@ -225,6 +255,10 @@ final class Entity {
     transient boolean migrating;
     /** ((14.5) Time spent being treated at the field hospital so far.) */
     transient float hospitalT;
+    /** ((27.5) Badly hurt far from care, waiting for an ambulance (and the one coming); brought in and being patched up. */
+    transient boolean waitPickup, inCare;
+    transient Fleet.Vehicle casevac;
+    transient float pickupT, medCd, medSaid = -99, casevacAt;
     /** ((14.7) In the squad of the one you're playing: who, and their place in the line behind them.) */
     transient Entity commandedBy;
     /** ((14.9) When a way that couldn't be found is next looked for again.) */
@@ -257,6 +291,13 @@ final class Entity {
     transient int routeI;
     transient float routeTx, routeTy;
     transient City.Building routeB;
+    /**
+     * ((27.5) Getting nowhere on a route through a building: the waypoint they're on and the closest they've got to
+     * it, when that last got better, and whether they've settled for where they are (the spot taken, or in a corner).
+     */
+    transient int routeSeen = -1;
+    transient float routeBest, routeProgT;
+    transient boolean routeGiveUp;
     /** ((17.1) When they were last finding their way in, out of or round a building: they squeeze past each other there. */
     transient float inT = -9;
     /**
@@ -276,6 +317,9 @@ final class Entity {
     boolean hordeAnnounced;
     /** Civilians: already asked to sign up (and said no), and where they are going to enlist. */
     boolean asked;
+    /** ((27.5) On the way to sign up as a volunteer (not to replace the lost), and where they signed up once they have.) */
+    transient boolean volunteering;
+    transient City.Facility signedUpAt;
     City.Facility enlistAt;
     /** Zombies approach from their own angle so a crowd surrounds its prey. */
     float flank;

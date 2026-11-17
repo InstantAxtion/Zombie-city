@@ -23,6 +23,11 @@ final class Experience {
     void killMade(Entity e, Entity z) {
         killMade(e);
         if (e.isZombie() || z == null) return;
+        // ((27.5) For their card: the big ones by name, and every tenth.)
+        if (z.type == Entity.BRUTE || z.type == Entity.BRUISER || z.type == Entity.GIANT || z.type == Entity.ARMOURED || z.type == Entity.RUNNER
+                || z.type == Entity.ZOMBIE_DOG || z.leadsHorde)
+            w.history(e, "killed " + (z.leadsHorde ? "a horde's leader" : z.type == Entity.ARMOURED ? "an armoured zombie" : "a " + Entity.NAMES[z.type].toLowerCase(java.util.Locale.ROOT)));
+        else if (e.kills % 10 == 0) w.history(e, e.kills + " kills");
         // (Its own look at the grid, not gatherLiving's list: a kill can come in the middle of a loop over that.)
         int cx0 = Math.max(0, (int) ((z.x - 24) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((z.x + 24) / World.CELL));
         int cy0 = Math.max(0, (int) ((z.y - 24) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((z.y + 24) / World.CELL));
@@ -35,6 +40,7 @@ final class Experience {
                     float reach = z.radius + o.radius + 14; // (in reach of it, or just shoved off by it)
                     if ((o.x - z.x) * (o.x - z.x) + (o.y - z.y) * (o.y - z.y) > reach * reach) continue;
                     e.saved++;
+                    w.history(e, "saved someone from a bite");
                     gainXp(e, 20);
                     return;
                 }
@@ -69,6 +75,7 @@ final class Experience {
         // ((26.0) A civilian good enough at it becomes a name the survivors know.)
         if (heroWas != e.hero() && e.hero()) {
             w.stats.highlight(Names.hero(e.nameSeed) + " is a survivor hero", e.x, e.y);
+            w.history(e, "became a survivor hero");
             w.dispatch.say(Dispatch.WHO_INFO, null, "News: Survivors are talking about " + Names.hero(e.nameSeed) + ", who has saved "
                     + e.saved + (e.saved == 1 ? " life" : " lives") + " and put down " + e.kills + " of the dead.", e.x, e.y);
         }
@@ -76,6 +83,7 @@ final class Experience {
         String rankNow = Names.rank(e);
         if (rankWas != null && rankNow != null && !rankWas.equals(rankNow)) {
             w.stats.highlight(Names.person(e.nameSeed) + " promoted to " + rankNow, e.x, e.y);
+            w.history(e, "promoted to " + rankNow);
             w.dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
                     "Field promotion: " + rankNow + " " + Names.person(e.nameSeed) + ".", e.x, e.y);
         }

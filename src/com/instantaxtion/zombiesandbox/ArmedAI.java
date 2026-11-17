@@ -442,47 +442,121 @@ final class ArmedAI {
 
     /**
      * (14.5) Badly hurt and out of the fight: back to the field hospital (if it's in reach), a few seconds there, and
-     * out good as new. True while busy with it.
+     * out good as new. True while busy with it. ((27.5) Wherever there's care: the command post's aid station, the
+     * field hospital, a hospital, or else their own station or base (FleetMedevac.careFor). Close by and clear of the
+     * dead, they walk there; a long way off or in the thick of it, they wait where they are for an ambulance (the army's
+     * armoured one for soldiers) to fetch them. Patched up there a little at a time - their card says how far - and
+     * back to duty with full magazines.)
      */
     boolean hospitalStep(Entity e, float dt) {
-        // ((27.0) Their own side's command post, set up and nearer, is an aid station too.)
-        Ops.Post aid = e.hp < e.maxHp * 0.35f || e.task == Dispatch.T_HEAL ? w.ops.aidFor(e, w.hospitalX, w.hospitalY) : null;
-        float hospitalX = aid != null ? aid.x : w.hospitalX, hospitalY = aid != null ? aid.y : w.hospitalY;
-        if (Float.isNaN(hospitalX) || e.infected || e == w.controlled || e.rig != null) {
-            if (e.task == Dispatch.T_HEAL) e.task = Dispatch.T_NONE;
+        if (e.medCd > 0) e.medCd -= dt;
+        if (e.infected || e == w.controlled || e.ride != null) {
+            if (e.task == Dispatch.T_HEAL && e.ride == null) endHeal(e);
             return false;
         }
         if (e.task != Dispatch.T_HEAL) {
-            if (e.hp >= e.maxHp * 0.35f || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_RESPOND && e.task != Dispatch.T_POST)
-                    || World.hypot(hospitalX - e.x, hospitalY - e.y) > World.HOSPITAL_REACH || w.spatial.nearest(e, 90, true, false) != null) return false;
+            e.waitPickup = e.inCare = false;
+            if (e.hp >= e.maxHp * WOUNDED || e.medCd > 0 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_RESPOND && e.task != Dispatch.T_POST
+                    && e.task != Dispatch.T_CORDON && e.task != Dispatch.T_GUARD)) return false;
+            float[] care = w.fleet.medevac.careFor(e, e.x, e.y);
+            if (care == null) return false;
+            float d = (float) World.hypot(care[0] - e.x, care[1] - e.y);
+            // ((27.5) In the thick of it, they no longer just fight on till they drop: they call for a ride out and keep
+            // fighting where they are till it comes.)
+            boolean fight = w.spatial.nearest(e, 90, true, false) != null;
             w.dispatch.releaseForResupply(e);
+            // (Off their car's crew: it goes on without them.)
+            if (e.rig != null) e.rig.squad.remove(e);
+            e.rig = null;
             e.task = Dispatch.T_HEAL;
             e.hospitalT = 0;
-            w.dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
-                    aid != null ? "I'm hit bad. Falling back to the command post." : "I'm hit bad. Falling back to the field hospital.", e.x, e.y);
+            e.pickupT = 0;
+            e.waitPickup = fight || d > WALK_TO_CARE || w.countZombiesNear(e.x, e.y, 200) >= 3;
+            if (w.time - e.medSaid > 30) {
+                e.medSaid = w.time;
+                Ops.Post aid = w.ops.aidFor(e, w.hospitalX, w.hospitalY);
+                w.dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                        e.waitPickup ? "I'm hit bad. Need a medevac on " + w.city.placeName(e.x, e.y) + "."
+                                : aid != null ? "I'm hit bad. Falling back to the command post." : "I'm hit bad. Falling back to get patched up.", e.x, e.y);
+            }
+            if (fight) return false;
         }
-        if (w.spatial.nearest(e, 50, true, false) != null) return false;
         // (Patched up on the way by a medic: back to it.)
-        if (e.hp >= e.maxHp * 0.95f) {
-            e.task = Dispatch.T_NONE;
+        if (!e.inCare && e.hp >= e.maxHp * 0.95f) {
+            endHeal(e);
             return false;
         }
+        if (e.waitPickup) {
+            e.pickupT += dt;
+            Fleet.Vehicle v = e.casevac;
+            // (Nobody came: they make their own way, if it's within walking distance at all.)
+            if (v == null && e.pickupT > PICKUP_WAIT) {
+                e.waitPickup = false;
+                float[] care = w.fleet.medevac.careFor(e, e.x, e.y);
+                if (care == null || World.hypot(care[0] - e.x, care[1] - e.y) > World.HOSPITAL_REACH) {
+                    endHeal(e);
+                    e.medCd = 60;
+                    return false;
+                }
+            } else {
+                // (The ambulance is here: over to it and in.)
+                if (v != null && v.medPhase == FleetMedevac.MP_LOAD && World.hypot(v.x - e.x, v.y - e.y) < 220) {
+                    e.aiming = false;
+                    w.wilds.walkToSpot(e, v.x, v.y, e.runSpeed * 0.8f);
+                    return true;
+                }
+                if (w.spatial.nearest(e, 90, true, false) != null) return false;
+                w.movement.steer(e, 0, 0, 0);
+                e.aiming = false;
+                return true;
+            }
+        }
+        Ops.Post aid = w.ops.aidFor(e, w.hospitalX, w.hospitalY);
+        float[] care = w.fleet.medevac.careFor(e, e.x, e.y);
+        if (care == null) {
+            endHeal(e);
+            return false;
+        }
+        if (!e.inCare && w.spatial.nearest(e, 50, true, false) != null) return false;
+        float hospitalX = care[0], hospitalY = care[1];
         float dx = hospitalX - e.x, dy = hospitalY - e.y, d = (float) Math.sqrt(dx * dx + dy * dy);
         if (d > 40 && !(e.blocked && d < 60)) {
             e.aiming = false;
+            e.inCare = false;
             w.wilds.walkToSpot(e, hospitalX, hospitalY, e.runSpeed * 0.8f);
             return true;
         }
         w.movement.steer(e, 0, 0, 0);
+        e.aiming = false;
+        e.inCare = true;
         e.hospitalT += dt;
-        if (e.hospitalT >= World.HOSPITAL_TIME) {
+        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * dt / CARE_TIME);
+        if (e.hp >= e.maxHp) {
             e.hp = e.maxHp;
-            e.task = Dispatch.T_NONE;
-            e.hospitalT = 0;
+            // (Back to duty, magazines full.)
+            if (e.magSize > 0) {
+                e.reserve = Math.max(e.reserve, e.magSize * 5);
+                e.ammo = Math.max(e.ammo, e.magSize);
+                e.outOfAmmoSaid = false;
+            }
+            endHeal(e);
             w.treated++;
+            w.returnedToDuty++;
             if (aid != null) aid.treated++;
         }
         return true;
+    }
+
+    /** ((27.5) How far they'd walk to care before waiting for a ride instead, and how long they wait for one. */
+    static final float WALK_TO_CARE = 600, PICKUP_WAIT = 90;
+    /** ((27.5) Badly hurt, and the seconds it takes to patch them up. */
+    static final float WOUNDED = 0.35f, CARE_TIME = 30;
+
+    private void endHeal(Entity e) {
+        if (e.task == Dispatch.T_HEAL) e.task = Dispatch.T_NONE;
+        e.hospitalT = 0;
+        e.waitPickup = e.inCare = false;
+        e.casevac = null;
     }
 
     /**
@@ -1256,8 +1330,13 @@ final class ArmedAI {
                 w.emit(Sfx.RELOAD, e.x, e.y);
             }
             boolean launcher = soldier && e.role == Entity.ROLE_GRENADIER;
-            if (soldier && (e.role == Entity.ROLE_RIFLE || launcher) && e.grenades > 0 && e.grenadeCd <= 0 && d > (launcher ? 60 : 70)
-                    && d < (launcher ? 280 : 200) && (w.spatial.countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) || (launcher && t.type == Entity.GIANT)) && !w.spatial.peopleNear(t.x, t.y, 60)) {
+            // ((27.5) Every soldier who carries grenades throws them - special forces, Marines, the Guard and recon scouts
+            // carried theirs all fight long and never pulled a pin; only riflemen and grenadiers did. Not the mortar team:
+            // its "grenades" are its shells. And not indoors, theirs or the dead's: a grenade in a room is everyone's.)
+            boolean thrower = soldier && e.role != Entity.ROLE_MORTAR;
+            if (thrower && e.grenades > 0 && e.grenadeCd <= 0 && d > (launcher ? 60 : 70)
+                    && d < (launcher ? 280 : 200) && (w.spatial.countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) || (launcher && t.type == Entity.GIANT)) && !w.spatial.peopleNear(t.x, t.y, 60)
+                    && w.city.insideOf(e.x, e.y) == null && w.city.insideOf(t.x, t.y) == null) {
                 w.combat.throwGrenade(e, t.x, t.y);
                 // (A launcher reloads quicker than a man can pull another pin.)
                 if (launcher) {
@@ -1349,7 +1428,12 @@ final class ArmedAI {
                     e.onScene = true;
                     w.dispatch.onScene(e, inc);
                 }
-                if (!w.city.solidAt(px, py) && World.hypot(px - e.x, py - e.y) > 6) {
+                // ((27.5) The dead close by but round a corner or just out of pistol range: they stood on their
+                // spot on the ring and never fired a shot. They step in until they can see them, no nearer.)
+                int zd = w.city.fieldAt(w.city.zombieDist, e.x, e.y);
+                boolean closeIn = zd < 16 && (e.ammo > 0 || e.reserve > 0);
+                if (closeIn && zd > 3 && w.movement.followField(e, w.city.zombieDist, e.speed)) return true;
+                if (!closeIn && !w.city.solidAt(px, py) && World.hypot(px - e.x, py - e.y) > 6) {
                     w.wilds.walkToSpot(e, px, py, e.speed * 1.4f);
                     return true;
                 }
@@ -1368,7 +1452,10 @@ final class ArmedAI {
                 e.onScene = true;
                 w.dispatch.onScene(e, inc);
             }
-            if (w.city.fieldAt(w.city.zombieDist, e.x, e.y) < 10 && w.movement.followField(e, w.city.zombieDist, e.speed * 1.2f)) return true;
+            // ((27.5) On scene with the dead a street off and nothing in sight: they go to them (it was only 10
+            // tiles, and they stood at the cordon while the fight went on just out of range).
+            if (w.city.fieldAt(w.city.zombieDist, e.x, e.y) < 16 && (e.ammo > 0 || e.reserve > 0)
+                    && w.movement.followField(e, w.city.zombieDist, e.speed * 1.2f)) return true;
             if (!soldier) {
                 // Police throw a cordon round the scene: spread out in a ring, facing outwards.
                 float a = (e.callsign * 2.4f + e.member * 1.7f) % World.TAU, r = 38;
@@ -1725,6 +1812,7 @@ final class ArmedAI {
             o.rallyX = r[0];
             o.rallyY = r[1];
             o.rallyT = w.time + 9;
+            if (o.histN == 0 || w.time - o.histT[(o.histN - 1) % Entity.HIST] > 20) w.history(o, "fell back to " + w.city.placeName(r[0], r[1]));
             if (o != e) {
                 o.goal = World.A_FALLBACK;
                 o.goalCd = 1.5f;

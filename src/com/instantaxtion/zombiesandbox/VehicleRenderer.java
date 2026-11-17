@@ -50,6 +50,11 @@ final class VehicleRenderer {
         }
         boolean truck = v.type == Fleet.TRUCK, amb = v.type == Fleet.AMBULANCE;
         float hl = truck || amb ? 9.5f : 8f, hw = truck ? 5.2f : amb ? 4.9f : 4.4f;
+        // ((27.5) The army's armoured ambulance: longer and broader.)
+        if (v.kind == Fleet.K_ARMD_AMB) {
+            hl = 10.5f;
+            hw = 5.5f;
+        }
         if (v.kind == Fleet.K_APC) {
             hl = 11;
             hw = 5.6f;
@@ -105,7 +110,7 @@ final class VehicleRenderer {
         Country land0 = gv.world.city.country;
         int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.kind == Fleet.K_ARMY_POST ? 0xFF4F5A33 : v.recon ? 0xFF9C8A5E
                 : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
-                : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? 0xFFF2F2F2
+                : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? (v.kind == Fleet.K_ARMD_AMB ? 0xFF5F6B40 : 0xFFF2F2F2)
                 : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
         if (v.burnt) body = 0xFF2B2623;
         else if (v.broken) body = City.darken(body, 0.65f);
@@ -442,6 +447,23 @@ final class VehicleRenderer {
 
     /** ((27.3) From drawVehicleKind.) An ambulance. */
     void drawAmbulance(Canvas c, Fleet.Vehicle v, float hl, float hw) {
+        if (v.kind == Fleet.K_ARMD_AMB) {
+            // ((27.5) The army's armoured ambulance: olive drab, the slit windscreen, and a red cross on a white square on
+            // its roof.)
+            gv.fill.setColor(0xFF2A2E22);
+            c.drawRect(hl * 0.55f, -hw + 1.2f, hl * 0.72f, hw - 1.2f, gv.fill);
+            gv.fill.setColor(0xFF4B5534);
+            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.45f, hw - 0.8f, gv.fill);
+            gv.fill.setColor(0xFFF0F0EC);
+            c.drawRect(-4.2f, -3.2f, 1.2f, 3.2f, gv.fill);
+            gv.fill.setColor(0xFFD83A3A);
+            c.drawRect(-3.6f, -0.8f, 0.6f, 0.8f, gv.fill);
+            c.drawRect(-2.3f, -2.4f, -0.7f, 2.4f, gv.fill);
+            boolean on = v.lightsOn() && ((int) (v.anim * 6)) % 2 == 0;
+            gv.fill.setColor(on ? 0xFF4A8AFF : 0xFF26324A);
+            c.drawRect(hl * 0.46f, -hw + 0.6f, hl * 0.52f, -hw + 1.6f, gv.fill);
+            return;
+        }
         gv.fill.setColor(0xFF1E2A33);
         c.drawRect(hl * 0.55f, -hw + 1, hl * 0.78f, hw - 1, gv.fill);
         gv.fill.setColor(0xFFD83A3A);
@@ -940,48 +962,157 @@ final class VehicleRenderer {
         }
     }
 
-    /** A police motorcycle: the bike, its officer in a white helmet, and lights front and back. */
+    /** ((27.5) How far each motorcycle is leaning into its turn, worked out from how fast it is turning: {angle, anim, lean}.) */
+    private final java.util.WeakHashMap<Fleet.Vehicle, float[]> bikeLean = new java.util.WeakHashMap<Fleet.Vehicle, float[]>();
+
+    /** How far a motorcycle leans now (-1 hard left .. 1 hard right), eased in and out as it turns. */
+    private float bikeLean(Fleet.Vehicle v) {
+        float[] s = bikeLean.get(v);
+        if (s == null) {
+            bikeLean.put(v, new float[]{v.angle, v.anim, 0});
+            return 0;
+        }
+        float dt = v.anim - s[1];
+        if (dt > 0) {
+            float da = v.angle - s[0];
+            while (da > Math.PI) da -= (float) Math.PI * 2;
+            while (da < -Math.PI) da += (float) Math.PI * 2;
+            // (A jump - teleported, or long unseen - is no turn.)
+            float target = dt > 0.5f || v.parked || v.crew.isEmpty() ? 0 : Math.max(-1, Math.min(1, da / dt * 0.55f));
+            s[2] += (target - s[2]) * Math.min(1, dt * 7);
+            s[0] = v.angle;
+            s[1] = v.anim;
+        }
+        return s[2];
+    }
+
+    /**
+     * ((27.5) A police motorcycle, drawn properly: its shadow, two tyres, the frame, the tank in the force's colours
+     * with its stripe, the seat, the fairing and windscreen, handlebars with mirrors, panniers and the strobes front
+     * and back; the officer astride it in a helmet in police colours, arms out to the bars, leaning into the turns;
+     * on a call the red and blue flashing with a glow on the road. Zoomed out, just its shape and the lights.
+     */
     void drawBike(Canvas c, Fleet.Vehicle v) {
+        Country land = gv.world.city.country;
+        int paint = v.broken ? 0xFF6A6A6A : land.cruiserBody == 0xFF1C1D22 ? 0xFFF2F2F2 : land.cruiserBody;
+        int stripe = land.cruiserDoor == paint ? 0xFF23408E : land.cruiserDoor;
+        boolean ridden = !v.crew.isEmpty() && !v.parked, lights = v.lightsOn();
+        boolean blink = ((int) (v.anim * 8)) % 2 == 0;
+        float lean = bikeLean(v);
+        // Its shadow, down and to the right like every other vehicle's (wider with the rider up on it).
         c.save();
-        c.translate(v.x + 1, v.y + 1.4f);
+        c.translate(v.x + 1.6f, v.y + 2.2f);
         c.rotate((float) Math.toDegrees(v.angle));
-        gv.fill.setColor(0x40000000);
-        gv.oval.set(-5, -1.8f, 5, 1.8f);
-        c.drawOval(gv.oval, gv.fill);
+        gv.fill.setColor(0x48000000);
+        gv.oval.set(-5.4f, ridden ? -2.3f : -1.9f, 5.4f, ridden ? 2.3f : 1.9f);
+        c.drawRoundRect(gv.oval, 1.8f, 1.8f, gv.fill);
         c.restore();
         c.save();
         c.translate(v.x, v.y);
         c.rotate((float) Math.toDegrees(v.angle));
-        gv.fill.setColor(0xFF111214);
-        c.drawRect(-5, -0.7f, -3, 0.7f, gv.fill);
-        c.drawRect(3, -0.6f, 5, 0.6f, gv.fill);
-        gv.fill.setColor(v.broken ? 0xFF6A6A6A : gv.world.city.country.cruiserBody == 0xFF1C1D22 ? 0xFFF2F2F2 : gv.world.city.country.cruiserBody);
-        gv.oval.set(-4, -1.5f, 4, 1.5f);
-        c.drawRoundRect(gv.oval, 1.2f, 1.2f, gv.fill);
-        gv.fill.setColor(gv.world.city.country.cruiserDoor);
-        c.drawRect(-3.5f, -1.6f, -1.5f, 1.6f, gv.fill);
-        // (10.44) Handlebars with their mirrors, a windscreen, and the panniers either side of the back wheel.
-        gv.fill.setColor(0xFF1A1B1E);
-        c.drawRect(2.2f, -2.4f, 2.8f, 2.4f, gv.fill);
-        c.drawRect(2.4f, -2.9f, 3.0f, -2.3f, gv.fill);
-        c.drawRect(2.4f, 2.3f, 3.0f, 2.9f, gv.fill);
-        gv.fill.setColor(0x99A8C8E0);
-        c.drawRect(3.0f, -1.3f, 3.6f, 1.3f, gv.fill);
-        gv.fill.setColor(v.broken ? 0xFF6A6A6A : 0xFFE8E8E8);
-        c.drawRect(-4.6f, -2.6f, -2.4f, -1.5f, gv.fill);
-        c.drawRect(-4.6f, 1.5f, -2.4f, 2.6f, gv.fill);
-        if (!v.crew.isEmpty() && !v.parked) {
-            gv.fill.setColor(0xFF23408E);
-            c.drawCircle(-0.5f, 0, 1.9f, gv.fill);
-            gv.fill.setColor(0xFFF2F2F2);
-            c.drawCircle(-0.3f, 0, 1.2f, gv.fill);
+        if (gv.scale < 0.9f) {
+            // Zoomed out: the bike and rider as a shape, and the lights.
+            gv.fill.setColor(paint);
+            gv.oval.set(-4.8f, -1.4f, 4.8f, 1.4f);
+            c.drawRoundRect(gv.oval, 1.2f, 1.2f, gv.fill);
+            if (ridden) {
+                gv.fill.setColor(0xFF1E2A4A);
+                c.drawCircle(-0.8f, 0, 1.6f, gv.fill);
+            }
+            if (lights) {
+                gv.fill.setColor(blink ? 0xFFFF3A30 : 0xFF3A7BFF);
+                c.drawCircle(4.4f, 0, 1.1f, gv.fill);
+            }
+            c.restore();
+            return;
         }
-        if (v.lightsOn()) {
-            boolean blink = ((int) (v.anim * 8)) % 2 == 0;
-            gv.fill.setColor(blink ? 0xFFFF3A30 : 0xFF3A7BFF);
-            c.drawCircle(4.2f, 0, 0.8f, gv.fill);
-            gv.fill.setColor(blink ? 0xFF3A7BFF : 0xFFFF3A30);
-            c.drawCircle(-4.6f, 0, 0.7f, gv.fill);
+        // Tyres, front and back, and the frame between them.
+        gv.fill.setColor(0xFF111214);
+        gv.oval.set(-5.3f, -0.8f, -2.5f, 0.8f);
+        c.drawRoundRect(gv.oval, 0.7f, 0.7f, gv.fill);
+        gv.oval.set(2.7f, -0.7f, 5.3f, 0.7f);
+        c.drawRoundRect(gv.oval, 0.6f, 0.6f, gv.fill);
+        gv.fill.setColor(0xFF3A3C40);
+        c.drawRect(-4.6f, -0.2f, -3.2f, 0.2f, gv.fill);
+        c.drawRect(3.4f, -0.2f, 4.7f, 0.2f, gv.fill);
+        gv.fill.setColor(0xFF2A2C30);
+        c.drawRect(-3.2f, -0.8f, 3.0f, 0.8f, gv.fill);
+        // The panniers either side of the back wheel, in the force's colours, a strobe on each.
+        gv.fill.setColor(paint);
+        gv.oval.set(-4.7f, -2.5f, -2.0f, -1.1f);
+        c.drawRoundRect(gv.oval, 0.5f, 0.5f, gv.fill);
+        gv.oval.set(-4.7f, 1.1f, -2.0f, 2.5f);
+        c.drawRoundRect(gv.oval, 0.5f, 0.5f, gv.fill);
+        gv.fill.setColor(stripe);
+        c.drawRect(-4.0f, -2.5f, -3.3f, -1.1f, gv.fill);
+        c.drawRect(-4.0f, 1.1f, -3.3f, 2.5f, gv.fill);
+        // The tank in front of the seat, the stripe across it, and the fairing round the front.
+        gv.fill.setColor(paint);
+        gv.oval.set(-0.6f, -1.45f, 3.4f, 1.45f);
+        c.drawOval(gv.oval, gv.fill);
+        gv.fill.setColor(0x30FFFFFF);
+        gv.oval.set(0.2f, -1.2f, 2.8f, -0.3f);
+        c.drawOval(gv.oval, gv.fill);
+        gv.fill.setColor(stripe);
+        c.drawRect(0.9f, -1.42f, 1.5f, 1.42f, gv.fill);
+        gv.fill.setColor(v.broken ? 0xFF555555 : 0xFF99B8D0);
+        gv.oval.set(2.9f, -1.2f, 4.0f, 1.2f);
+        c.drawOval(gv.oval, gv.fill);
+        // The seat (and a pillion pad behind it).
+        gv.fill.setColor(0xFF15161A);
+        gv.oval.set(-3.1f, -1.05f, 0.2f, 1.05f);
+        c.drawRoundRect(gv.oval, 0.9f, 0.9f, gv.fill);
+        // The handlebars, grips and mirrors.
+        gv.stroke.setColor(0xFF1A1B1E);
+        gv.stroke.setStrokeWidth(0.45f);
+        c.drawLine(2.3f, -2.5f, 2.6f, 2.5f, gv.stroke);
+        gv.fill.setColor(0xFF0C0C0E);
+        c.drawRect(2.0f, -2.9f, 2.7f, -2.3f, gv.fill);
+        c.drawRect(2.2f, 2.3f, 2.9f, 2.9f, gv.fill);
+        gv.fill.setColor(0xFFB8BEC4);
+        c.drawCircle(2.9f, -3.1f, 0.35f, gv.fill);
+        c.drawCircle(3.1f, 3.1f, 0.35f, gv.fill);
+        // The strobes: a pair either side of the headlamp, and on the panniers' poles at the back.
+        int red = lights ? (blink ? 0xFFFF3A30 : 0xFF7A2420) : 0xFF6A2420, blue = lights ? (blink ? 0xFF2A3C7A : 0xFF4A8AFF) : 0xFF22346A;
+        gv.fill.setColor(lights ? 0xFFFFF4C8 : 0xFFD8D4C0);
+        c.drawCircle(4.35f, 0, 0.45f, gv.fill);
+        gv.fill.setColor(red);
+        c.drawCircle(4.1f, -0.95f, 0.38f, gv.fill);
+        c.drawCircle(-4.85f, -1.8f, 0.42f, gv.fill);
+        gv.fill.setColor(blue);
+        c.drawCircle(4.1f, 0.95f, 0.38f, gv.fill);
+        c.drawCircle(-4.85f, 1.8f, 0.42f, gv.fill);
+        if (ridden) {
+            // The officer: leaning into the turn, arms out to the grips, in a helmet with the force's band round it.
+            float ly = lean * 1.4f;
+            int jacket = v.crew.get(0).body != 0 ? v.crew.get(0).body : 0xFF23408E;
+            gv.stroke.setColor(City.darken(jacket, 0.9f));
+            gv.stroke.setStrokeWidth(0.55f);
+            c.drawLine(-1.0f, -1.4f + ly * 0.6f, 2.2f, -2.5f, gv.stroke);
+            c.drawLine(-1.0f, 1.4f + ly * 0.6f, 2.4f, 2.5f, gv.stroke);
+            gv.fill.setColor(jacket);
+            gv.oval.set(-2.4f, -1.75f + ly * 0.6f, 0.3f, 1.75f + ly * 0.6f);
+            c.drawOval(gv.oval, gv.fill);
+            // Hi-vis across the shoulders.
+            gv.fill.setColor(0xFFD8E84A);
+            c.drawRect(-1.5f, -1.6f + ly * 0.6f, -1.0f, 1.6f + ly * 0.6f, gv.fill);
+            gv.fill.setColor(0xFFF4F4F2);
+            c.drawCircle(-0.8f, ly, 1.12f, gv.fill);
+            // The band round the helmet, and a stripe over its crown front to back.
+            gv.stroke.setColor(stripe == 0xFFEDEDED ? 0xFF23408E : stripe);
+            gv.stroke.setStrokeWidth(0.28f);
+            c.drawCircle(-0.8f, ly, 0.92f, gv.stroke);
+            gv.fill.setColor(stripe == 0xFFEDEDED ? 0xFF23408E : stripe);
+            c.drawRect(-1.7f, -0.16f + ly, 0.1f, 0.16f + ly, gv.fill);
+            gv.fill.setColor(0xFF1A1E26);
+            gv.oval.set(-0.2f, -0.75f + ly, 0.35f, 0.75f + ly);
+            c.drawOval(gv.oval, gv.fill);
+        }
+        if (lights) {
+            // Their glow on the road round it.
+            gv.fill.setColor(blink ? 0x38FF4A3A : 0x384A8AFF);
+            c.drawCircle(4.1f, blink ? -0.95f : 0.95f, 1.7f, gv.fill);
+            c.drawCircle(-4.85f, blink ? -1.8f : 1.8f, 1.4f, gv.fill);
         }
         c.restore();
     }

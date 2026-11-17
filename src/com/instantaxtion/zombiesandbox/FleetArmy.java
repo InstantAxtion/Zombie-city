@@ -654,7 +654,6 @@ final class FleetArmy {
     }
 
     void stockBases() {
-        fleet.fireSupport.stock();
         for (City.Facility f : city.facilities) {
             if (f.kind != City.FACILITY_BASE || f.fallen) continue;
             float rad = Math.max(260, f.r * 2.5f);

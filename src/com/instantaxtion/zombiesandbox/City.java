@@ -1745,7 +1745,9 @@ final class City {
 
     // ------------------------------------------------------------------ neighbourhoods
 
-    static final int NB_CLOSES = 0, NB_CRESCENT = 1, NB_GREEN = 2, NB_ESTATE = 3, NB_ACRES = 4, NB_GATED = 5, NB_WORKS = 6, NB_WINDING = 7;
+    static final int NB_CLOSES = 0, NB_CRESCENT = 1, NB_GREEN = 2, NB_ESTATE = 3, NB_ACRES = 4, NB_GATED = 5, NB_WORKS = 6, NB_WINDING = 7,
+    // ((27.5) Map version 40.)
+            NB_TRAILERS = 8, NB_TOWERS = 9, NB_MARKET = 10, NB_QUAD = 11, NB_CIRCUS = 12, NB_TERRACES = 13, NB_LOFTS = 14;
 
     boolean roadNear(int x, int y, int r) {
         for (int j = y - r; j <= y + r; j++)
@@ -2088,6 +2090,26 @@ final class City {
                 int i = end * 2, o = 2 - i;
                 float ddx = q[i] - ex, ddy = q[i + 1] - ey;
                 if (ddx * ddx + ddy * ddy >= keep * keep) continue;
+                float lx = q[o] - q[i], ly = q[o + 1] - q[i + 1], len = (float) Math.sqrt(lx * lx + ly * ly);
+                if (len < 14) {
+                    q = null;
+                    break;
+                }
+                q[i] += lx / len * 11;
+                q[i + 1] += ly / len * 11;
+            }
+            // ((27.5) Nor one that ends in the middle of a doorway between two rooms - a later wall meeting the one
+            // with the doorway right at its gap, and splitting it into two gaps too narrow for anyone: people pressed
+            // into it for good. Left short of it too.)
+            for (int end = 0; end < 2 && q != null; end++) {
+                int i = end * 2, o = 2 - i;
+                boolean inGap = false;
+                for (int k = 0, n = p.rooms.size(); k < n && !inGap; k++) {
+                    float[] rm = p.rooms.get(k);
+                    float ddx = q[i] - rm[5], ddy = q[i + 1] - rm[6];
+                    inGap = ddx * ddx + ddy * ddy < (Interiors.DOORWAY / 2 - 0.5f) * (Interiors.DOORWAY / 2 - 0.5f);
+                }
+                if (!inGap) continue;
                 float lx = q[o] - q[i], ly = q[o + 1] - q[i + 1], len = (float) Math.sqrt(lx * lx + ly * ly);
                 if (len < 14) {
                     q = null;

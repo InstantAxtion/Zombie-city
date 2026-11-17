@@ -583,9 +583,10 @@ final class Population {
                 e.radius = 3.8f;
                 e.speed = 22;
                 e.runSpeed = 40;
-                // A 15-round pistol and three spare magazines.
+                // A 15-round pistol and ((27.5) four) spare magazines: a duty belt's worth (three ran dry halfway through a fight
+                // with a dozen of the dead).
                 e.magSize = 15;
-                e.reserve = 45;
+                e.reserve = 60;
                 e.body = 0xFF23408E;
                 e.head = 0xFF141C38;
                 break;
@@ -869,6 +870,23 @@ final class Population {
                 e.mass = 3.5f;
                 break;
             case Entity.ROLE_TRAFFIC:
+                break;
+            case Entity.ROLE_VOLUNTEER:
+                // ((27.5) A civilian signed up: no armour, fewer rounds, no grenades. Police auxiliaries in a hi-vis vest,
+                // army volunteers in plain khaki with no helmet.)
+                e.armored = false;
+                e.grenades = 0;
+                if (e.type == Entity.COP) {
+                    e.hp = e.maxHp = 50;
+                    e.reserve = 30;
+                    e.body = 0xFFD9E021;
+                    e.head = 0xFF2A2C30;
+                } else {
+                    e.hp = e.maxHp = 80;
+                    e.reserve = 90;
+                    e.body = 0xFF8C8A5E;
+                    e.head = 0xFF5A4A3A;
+                }
                 break;
             case Entity.ROLE_MORTAR:
                 // ((14.0) A carbine for close in, and the tube and its rounds on their back.)

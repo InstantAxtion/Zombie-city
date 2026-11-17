@@ -221,7 +221,9 @@ final class CityConfig implements OptionSet {
         // (The real cities went in 10.28.)
         // (Downtown, Village and Lakeside went in 10.50.)
         if (option == OPT_PRESET) return value == 0 || value == 1 || value == 3 || value == 4 || value == 5 || value == 6 || value == 7
-                || value == 9 || value == 12 || value == 13 || removed(value);
+                || value == 9 || value == 12 || value == 13
+                // ((27.5) And three more maps went in 27.5: 10, 11 and 16. Their cities still build for old saves and codes.)
+                || value == 10 || value == 11 || value == 16 || removed(value);
         // (The number of zombies at the start isn't a choice any more: the game starts quiet.)
         if (option == OPT_ZOMBIES) return value != 0;
         // ((13.0) Large and Massive are gone too: Default, Gigantic and the new Colossal.)
@@ -231,7 +233,12 @@ final class CityConfig implements OptionSet {
         if (option == OPT_RESERVES) return value == 1 || value == 2;
         return false;
     }
-    long seed = new Random().nextInt(1000000);
+    /**
+     * The city's seed: a new one each launch (the time-seeded Random) and on every visit to the New Game screen (Menu calls
+     * newSeed). ((27.5) From a billion, not a million: codes and saves already carry any long.)
+     */
+    long seed = new Random().nextInt(SEEDS);
+    static final int SEEDS = 1000000000;
     /** Start the next game on the city from {@link #code()} instead of a new random one. */
     boolean keepCity;
     /**
@@ -256,9 +263,9 @@ final class CityConfig implements OptionSet {
      * 2 and the National Guard armory (10.5), 3 the bigger maps of 10.10 with hills, mountains, lakes, streams
      * and nature parks out in the country, 4 the wilds of 10.14 (streams you can wade, trails that cross the
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
-     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9). Saved games rebuild with what they had.
+     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods). Saved games rebuild with what they had.
      */
-    int civic = 39;
+    int civic = 40;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -502,7 +509,7 @@ final class CityConfig implements OptionSet {
     /** Picks a new random city (keeping the options). */
     void newSeed(Random r) {
         edits.clear();
-        seed = r.nextInt(1000000);
+        seed = r.nextInt(SEEDS);
         // (A real city stays the same.)
         normalize();
     }

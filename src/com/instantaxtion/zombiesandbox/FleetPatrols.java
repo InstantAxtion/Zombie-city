@@ -413,7 +413,7 @@ final class FleetPatrols {
     Vehicle seatedCar(City.Facility f) {
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Vehicle o = fleet.vehicles.get(i);
-            if (o.standby && o.type == CRUISER && !o.broken && !o.crew.isEmpty() && o.squad.isEmpty()
+            if (o.standby && o.type == CRUISER && !o.broken && !FleetMedevac.needsRepair(o) && !o.crew.isEmpty() && o.squad.isEmpty()
                     && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) return o;
         }
         return null;
@@ -475,7 +475,7 @@ final class FleetPatrols {
         float bd = Float.MAX_VALUE;
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Vehicle v = fleet.vehicles.get(i);
-            if (!v.patrol || v.state != PATROL || v.broken || v.parked || v.crew.isEmpty()) continue;
+            if (!v.patrol || v.state != PATROL || v.broken || v.parked || v.crew.isEmpty() || FleetMedevac.needsRepair(v)) continue;
             // Highway patrol and sheriffs keep to their own roads until the town is under attack; then they
             // come in as backup (when no town car is nearer). Rangers stay out in the country.
             boolean town = city.inTown(x, y) && !city.nearHighway(x, y, 300);

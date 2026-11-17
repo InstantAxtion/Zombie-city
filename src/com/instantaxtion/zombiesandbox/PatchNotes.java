@@ -157,7 +157,7 @@ final class PatchNotes {
                     "Every new city gets dozens of them; Big and Large get every one.",
                     "Far fewer blocks of car park.",
                     "New Squads button on the tool bar: fire team, rifle squad, sniper team, engineers, response and tactical teams, riot line, K9 patrol, survivors or a horde in one tap.",
-                    "River City: streets stop at a junction instead of running into the water, and the banks are smooth curves.",
+                    "Streets stop at a junction instead of running into the water, and river banks are smooth curves.",
             },
             {
                     "22.3  -  Tighter cities",
@@ -167,7 +167,7 @@ final class PatchNotes {
             },
             {
                     "22.2  -  A real river",
-                    "River City's river now winds and bends, wider in places, and runs across or down the map - different every time.",
+                    "Rivers now wind and bend, wider in places - different every time.",
                     "Only a few bridges, each carrying a real street straight across.",
                     "Every bridge is different: stone, steel, concrete, and a wooden footbridge between the riverside parks.",
             },
@@ -182,7 +182,7 @@ final class PatchNotes {
                     "Less lag: the screen only redraws as often as the city changes, and slow phones take longer steps instead of falling behind.",
                     "New games load faster: a third of the map drawing work.",
                     "Zombies follow loud vehicles; idle hordes drift between districts.",
-                    "New event: Mega horde. New map: River City.",
+                    "New event: Mega horde.",
                     "New police: K9 unit (sniffs out hidden zombies and bites) and Motorcycle cop (scouts hordes).",
                     "Soldiers pass mags to teammates running low and fall back to their base when overrun.",
                     "Engineers dig in with sandbags on their own.",
@@ -434,7 +434,7 @@ final class PatchNotes {
             },
             {
                     "16.0  -  The airport, and boats out by water",
-                    "An airport on the Metropolis and Downtown Towers maps (new cities from now on): a fenced airfield.",
+                    "An airport on the Metropolis map (new cities from now on): a fenced airfield.",
                     "Evacuation flights: with people leaving the city, the airport is one of the places they go.",
                     "The army flies in: more often than not, the main body of the army's reinforcements comes.",
                     "The airport can fall: with the dead at the terminal for long enough there are no more flights.",
@@ -463,9 +463,8 @@ final class PatchNotes {
                     "When the dead overrun the guards (or the power fails), the prison falls: the gate opens.",
             },
             {
-                    "15.5  -  The Military Town map",
-                    "A new map, Military Town.",
-                    "A garrison of 450 to 700 soldiers, the army far outnumbering the town's small police force.",
+                    "15.5  -  A bigger garrison",
+                    "A garrison town where the army far outnumbers the small police force.",
             },
             {
                     "15.4  -  Mortars run out",
@@ -476,8 +475,7 @@ final class PatchNotes {
                     "The dead killed by a grenade now count as kills for whoever threw it.",
             },
             {
-                    "15.2  -  The Downtown Towers map",
-                    "A new map, Downtown Towers.",
+                    "15.2  -  Mounted officers",
                     "Mounted officers now look round from the horse whatever they're doing.",
             },
             {

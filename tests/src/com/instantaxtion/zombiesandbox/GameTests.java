@@ -1432,7 +1432,8 @@ public final class GameTests {
                 d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Main St! People are being trampled.", 0, 0);
                 d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Oak Ave! People are being trampled.", 0, 0);
                 check(d.messageCount == before + 1, "the same news twice in a row goes out once");
-                for (int f = 0; f < 30 * 16; f++) w.update(1 / 30f);
+                // ((27.5) Within half a minute it's counted onto the line already there instead.)
+                for (int f = 0; f < 30 * 32; f++) w.update(1 / 30f);
                 int at = d.messageCount;
                 d.say(Dispatch.WHO_INFO, null, "Info: Stampede on Elm Rd! People are being trampled.", 0, 0);
                 check(d.messageCount == at + 1, "and again once a while has passed");
@@ -4825,6 +4826,448 @@ public final class GameTests {
                         "and the car carries on to it, not back on patrol (" + (int) d0 + " -> " + (int) Math.hypot(lcar.x - li.x, lcar.y - li.y) + ")");
             }
         });
+        test("27.5: civilians volunteer for the police and the army", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 52;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // Not before the emergency broadcast.
+                w.outbreak = true;
+                w.peakZombies = 10;
+                w.alert = 1;
+                w.recruiting.volunteers();
+                int going = 0;
+                for (Entity e : w.entities) if (e.volunteering) going++;
+                check(going == 0, "nobody volunteers before the broadcast");
+                // After it: a few at a time, to the nearest station or base with kit, and only so many.
+                w.alert = 2;
+                for (int k = 0; k < 40; k++) w.recruiting.volunteers();
+                java.util.List<Entity> vols = new java.util.ArrayList<Entity>();
+                for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST) vols.add(e);
+                check(!vols.isEmpty() && vols.size() <= Recruitment.MAX_VOLUNTEERS, "some sign up, no more than the cap (" + vols.size() + ")");
+                boolean police = false, army = false;
+                for (Entity e : vols) {
+                    check(e.type == Entity.CIVILIAN && !e.infected && !e.inmate && e.base == null && e.enlistAt != null, "able adults only");
+                    if (e.enlistAt.kind == City.FACILITY_POLICE) police = true;
+                    else army = true;
+                }
+                // Each at the station or base: they come out in uniform, the same person.
+                java.util.Map<Entity, Integer> seeds = new java.util.HashMap<Entity, Integer>();
+                for (Entity e : vols) {
+                    seeds.put(e, e.nameSeed);
+                    e.x = e.enlistAt.x;
+                    e.y = e.enlistAt.y;
+                }
+                for (int f = 0; f < 30 * 10; f++) {
+                    for (Entity e : vols) if (!e.removed) {
+                        e.x = e.enlistAt != null ? e.enlistAt.x : e.x;
+                        e.y = e.enlistAt != null ? e.enlistAt.y : e.y;
+                    }
+                    w.update(1 / 30f);
+                }
+                int aux = 0, sol = 0;
+                for (Entity e : w.entities) {
+                    if (e.dead || e.role != Entity.ROLE_VOLUNTEER) continue;
+                    check(seeds.containsValue(e.nameSeed) && e.signedUpAt != null, "the same person, signed up at a station or base");
+                    if (e.type == Entity.COP) {
+                        aux++;
+                        check("Auxiliary".equals(Names.copRank(e)) && e.maxHp < 60 && e.isArmed(), "a police auxiliary: a pistol, less to them than an officer");
+                    } else {
+                        sol++;
+                        check("Volunteer".equals(Names.soldierRank(e)) && e.maxHp < 100 && e.grenades == 0, "an army volunteer: a rifle, no grenades");
+                    }
+                }
+                check(aux + sol >= 1 && (aux > 0 || !police) && (sol > 0 || !army), "they come out as auxiliaries and volunteers (" + aux + ", " + sol + ")");
+                check(w.volunteersPolice + w.volunteersArmy == aux + sol, "counted (" + w.volunteersPolice + " + " + w.volunteersArmy + ")");
+                // A fallen station or base takes nobody more.
+                for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_POLICE || f.kind == City.FACILITY_BASE) f.fallen = true;
+                for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN) e.asked = false;
+                for (int k = 0; k < 10; k++) w.recruiting.volunteers();
+                int more = 0;
+                for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST && !vols.contains(e)) more++;
+                check(more == 0, "none once the stations and bases have fallen");
+            }
+        });
+        test("27.5: unit history, overlays and a quieter radio", new Check() {
+            public void run() throws Exception {
+                GameView v = new GameView(new android.app.Activity());
+                int[] size = {1080, 2400};
+                v.layout(size[0], size[1]);
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 3;
+                v.startGame(c);
+                v.awaitLoad();
+                draw(v, size);
+                ((Menu) field(v, "menu")).screen = Menu.NONE;
+                World w = (World) field(v, "world");
+                for (int f = 0; f < 60; f++) w.update(1 / 30f);
+                // History: a kill by name, then the same thing twice running kept once; a bystander's isn't kept.
+                Entity cop = null, civ = null;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.type == Entity.COP && cop == null) cop = e;
+                    else if (!e.dead && e.type == Entity.CIVILIAN && !e.isArmed() && !e.hero() && civ == null) civ = e;
+                int had = cop.histN;
+                Entity brute = w.spawn(Entity.BRUTE, cop.x + 30, cop.y);
+                w.experience.killMade(cop, brute);
+                w.history(cop, "bitten");
+                w.history(cop, "bitten");
+                w.history(civ, "bitten");
+                boolean brute0 = false;
+                for (int k = had; k < cop.histN; k++) brute0 |= cop.hist[k % Entity.HIST].equals("killed a brute");
+                check(brute0 && cop.hist[(cop.histN - 1) % Entity.HIST].equals("bitten") && !cop.hist[(cop.histN - 2) % Entity.HIST].equals("bitten") && civ.histN == 0,
+                        "a unit's history kept, once for the same thing twice; a bystander's not (" + java.util.Arrays.toString(cop.hist) + ")");
+                v.follow = cop;
+                draw(v, size);
+                // Overlays: one at a time, each worked out from the grid and drawn.
+                Overlays o = v.overlays;
+                o.cycle();
+                draw(v, size);
+                check(o.mode == Overlays.HEAT && o.found > 0 && o.level != null, "infection heat from the dead on the grid (" + o.found + ")");
+                o.cycle();
+                draw(v, size);
+                int covered = 0;
+                for (byte b : o.level) if (b == 1) covered++;
+                check(o.mode == Overlays.REACH && o.found > 0 && covered > 0, "police/army reach from where they are (" + o.found + " cells, " + covered + " covered)");
+                o.cycle();
+                check(o.mode == Overlays.OFF, "and off again");
+                // Radio: three calls for backup from one fight make one line; lower-priority news is capped each minute.
+                Dispatch d = w.dispatch;
+                int at = d.messageCount;
+                for (int k = 0; k < 3; k++) d.say(Dispatch.WHO_POLICE, null, "Unit 5: Shots fired! Requesting backup!", 400, 400, true);
+                check(d.messageCount == at + 1 && d.log.get(d.log.size() - 1).text.endsWith("(3 times)"), "repeats merged into one line");
+                at = d.messageCount;
+                String[] spots = {"tower", "bridge", "mall", "school", "park", "dock", "depot", "yard", "plaza", "field", "garage", "church"};
+                for (String sp : spots) d.say(Dispatch.WHO_POLICE, null, "Patrols report movement by the " + sp + ".", 0, 0);
+                check(d.messageCount - at <= Dispatch.LOW_CAP && d.quietCapped > 0, "routine news capped (" + (d.messageCount - at) + ")");
+            }
+        });
+        test("27.5: nobody stands idle near a fight; nobody stays stuck on a corner", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 2751;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // A long straight street: a call at one end, the dead a little way past it, an officer on the ring on
+                // the near side - out of pistol range of them. They step in until they have them in their sights.
+                java.util.Random r = new java.util.Random(11);
+                float[] s0 = null;
+                float ux = 0, uy = 0;
+                for (int k = 0; k < 600 && s0 == null; k++) {
+                    float[] q = w.city.randomStreetSpot(r);
+                    if (q == null) continue;
+                    for (int dir = 0; dir < 2 && s0 == null; dir++) {
+                        float ax = dir == 0 ? 1 : 0, ay = dir == 1 ? 1 : 0;
+                        boolean clear = true;
+                        for (int u = -150; u <= 110 && clear; u += 6)
+                            for (int v = -8; v <= 8 && clear; v += 8)
+                                if (w.city.solidAt(q[0] + ax * u + ay * v, q[1] + ay * u + ax * v)) clear = false;
+                        if (clear) {
+                            s0 = q;
+                            ux = ax;
+                            uy = ay;
+                        }
+                    }
+                }
+                check(s0 != null, "a long straight street");
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 6; i++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, s0[0] + ux * (70 + i * 7) + uy * ((i % 2) * 6 - 3), s0[1] + uy * (70 + i * 7) + ux * ((i % 2) * 6 - 3));
+                    untouchable(z);
+                    pack.add(z);
+                }
+                final Entity cop = w.spawnCop(0, s0[0] - ux * 125, s0[1] - uy * 125);
+                Quiet q = empty(w, s0[0], s0[1], 500, cop, pack);
+                w.update(1 / 30f);
+                Dispatch.Incident inc = w.dispatch.sighting(s0[0], s0[1], null);
+                check(inc != null, "a call");
+                cop.task = Dispatch.T_RESPOND;
+                cop.incident = inc;
+                cop.onScene = true;
+                cop.ringOf = inc;
+                cop.ringA = (float) Math.atan2(-uy, -ux);
+                check(Math.hypot(pack.get(0).x - cop.x, pack.get(0).y - cop.y) > 190, "the dead out of pistol range of their place on the ring");
+                boolean fired = stepUntil(w, q, 15, new Cond() {
+                    public boolean done() {
+                        cop.ammo = Math.max(cop.ammo, 5);
+                        return cop.aiming;
+                    }
+                });
+                check(fired, "the officer on the ring steps in until they have them in their sights, not stands there (" + (int) Math.hypot(pack.get(0).x - cop.x, pack.get(0).y - cop.y) + " off)");
+                // Through buildings, from the first room to each of the others: everyone gets there - none pressed into a
+                // corner by a doorway, or a wall that ends in the middle of one, for good.
+                WM move = wm("move", Entity.class, float.class);
+                move.setAccessible(true);
+                int walks = 0, stuck = 0, buildings = 0;
+                String where = "";
+                for (City.Building o : w.city.buildings) {
+                    if (buildings >= 30) break;
+                    if (!w.city.enterable(o) || w.city.planOf(o).rooms.size() < 3) continue;
+                    buildings++;
+                    java.util.List<float[]> rooms = w.city.planOf(o).rooms;
+                    float ax = (rooms.get(0)[0] + rooms.get(0)[2]) / 2, ay = (rooms.get(0)[1] + rooms.get(0)[3]) / 2;
+                    if (w.city.circleBlocked(ax, ay, 4)) continue;
+                    for (int k = 1; k < rooms.size(); k++) {
+                        float bx = (rooms.get(k)[0] + rooms.get(k)[2]) / 2, by = (rooms.get(k)[1] + rooms.get(k)[3]) / 2;
+                        if (w.city.circleBlocked(bx, by, 4)) continue;
+                        Entity e = w.spawn(Entity.CIVILIAN, ax, ay);
+                        boolean got = false;
+                        for (int f = 0; f < 30 * 25 && !got; f++) {
+                            w.indoors.indoorMove(e, bx, by, e.speed);
+                            move.invoke(w, e, 1 / 30f);
+                            float d = (float) Math.hypot(e.x - bx, e.y - by);
+                            got = d < 5 || e.routeGiveUp && d < 12;
+                        }
+                        walks++;
+                        if (!got) {
+                            stuck++;
+                            where = " e.g. at " + (int) e.x + "," + (int) e.y + ", " + (int) Math.hypot(e.x - bx, e.y - by) + " short";
+                        }
+                        e.dead = e.removed = true;
+                    }
+                }
+                check(walks > 40, "walks room to room (" + walks + ")");
+                check(stuck == 0, "every one gets there (" + stuck + " of " + walks + " stuck" + where + ")");
+            }
+        });
+        test("27.5: bases raid to clear ground; raider bases rob convoys", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                World w = new World(c);
+                w.populate(c);
+                // Two bases a few blocks apart: survivors (a), raiders (b), each with armed guards.
+                SurvivorBases.Base a = null, b = null;
+                java.util.Random r = new java.util.Random(5);
+                for (int t = 0; t < 6000 && b == null; t++) {
+                    City.Building x = w.city.buildings.get(r.nextInt(w.city.buildings.size()));
+                    if (x.capacity == 0 || !w.city.enterable(x) || x.doorX <= 0) continue;
+                    if (a != null && (Math.hypot(a.b.doorX - x.doorX, a.b.doorY - x.doorY) < 380 || Math.hypot(a.b.doorX - x.doorX, a.b.doorY - x.doorY) > 650)) continue;
+                    w.baseFoundedAt = -999;
+                    SurvivorBases.Base s = w.baseLife.foundBase(x, false);
+                    if (s == null) continue;
+                    if (a == null) a = s;
+                    else b = s;
+                }
+                check(a != null && b != null, "two bases");
+                a.raiders = false;
+                b.raiders = true;
+                SurvivorBases.Base[] both = {a, b};
+                for (SurvivorBases.Base s : both) {
+                    s.walled = true;
+                    for (int i = 0; i < 6; i++) {
+                        Entity e = w.spawn(Entity.CIVILIAN, s.b.doorX + i * 4, s.b.doorY);
+                        w.armCivilian(e, 60);
+                        w.baseLife.joinBase(e, s, true);
+                    }
+                }
+                a.stash = 100;
+                b.raidCd = 9999;
+                // A few of the dead a block or two out from the survivors' base, away from the raiders'.
+                float dx = a.cx() - b.cx(), dy = a.cy() - b.cy(), l = (float) Math.hypot(dx, dy);
+                float[] p = w.city.findWalkable(a.cx() + dx / l * 260, a.cy() + dy / l * 260);
+                for (int i = 0; i < 4; i++) w.spawn(Entity.ZOMBIE, p[0] + i * 5, p[1]);
+                w.recount();
+                w.outbreak = true;
+                for (int f = 0; f < 30 * 150 && a.territory == 0; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(a.raids >= 1 && a.territory >= 1, "the survivors went out and cleared a block (raids " + a.raids + ", ground " + a.territory + ")");
+                check(w.zombieCount() < 4, "the dead out there were cleared (" + w.zombieCount() + " left)");
+                for (int f = 0; f < 30 * 120 && w.baseRaids.raidOf(a) != null; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(w.baseRaids.raidOf(a) == null, "and came home");
+                // A supply convoy for the survivors' base: the raiders go for it.
+                a.raidCd = 9999;
+                b.raidCd = 0;
+                int bStash = (int) b.stash;
+                check(w.convoys.supply(null, a, null, 120) != null, "a supply convoy sent");
+                for (int f = 0; f < 30 * 400 && b.robbed == 0; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                }
+                check(b.robbed >= 1 && b.stash > bStash, "the raiders held up a truck and took its load (" + b.robbed + ", " + bStash + " -> " + (int) b.stash + ")");
+                File file = File.createTempFile("zcr", ".dat");
+                SaveGame.save(w, file);
+                World ld = SaveGame.load(file);
+                file.delete();
+                SurvivorBases.Base la = null, lb = null;
+                for (SurvivorBases.Base s : ld.bases) {
+                    if (s.b.doorX == a.b.doorX && s.b.doorY == a.b.doorY) la = s;
+                    if (s.b.doorX == b.b.doorX && s.b.doorY == b.b.doorY) lb = s;
+                }
+                check(la != null && lb != null && lb.raiders && !la.raiders && la.territory == a.territory && lb.robbed == b.robbed, "kept in a save");
+            }
+        });
+        test("27.5: every city is its own", new Check() {
+            public void run() throws Exception {
+                // Four seeds of the same map: each its own town shape, downtown, district mix and neighbourhoods.
+                java.util.HashSet<String> sigs = new java.util.HashSet<String>(), shapes = new java.util.HashSet<String>();
+                int newKinds = 0;
+                for (int seed = 1; seed <= 4; seed++) {
+                    CityConfig c = new CityConfig();
+                    c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                    c.seed = seed;
+                    c.normalize();
+                    City city = new City(c, 0.1f);
+                    int[] dt = new int[City.DT_COUNT], nb = new int[City.NB_LOFTS + 1];
+                    for (City.District d : city.districts) dt[d.type]++;
+                    for (int[] b : city.blocks) if (b.length > 5 && b[4] == 3) nb[b[5]]++;
+                    for (int k = City.NB_TRAILERS; k <= City.NB_LOFTS; k++) newKinds += nb[k];
+                    String shape = city.townX0 + "," + city.townY0 + "-" + city.townX1 + "," + city.townY1;
+                    shapes.add(shape);
+                    sigs.add(shape + " " + (int) city.districts.get(0).x + "," + (int) city.districts.get(0).y + " " + java.util.Arrays.toString(dt) + " " + java.util.Arrays.toString(nb));
+                }
+                check(sigs.size() == 4, "four seeds, four different cities: " + sigs);
+                check(shapes.size() >= 3, "the towns are different shapes: " + shapes);
+                check(newKinds >= 2, "the new kinds of neighbourhood turn up (" + newKinds + ")");
+                // A city built on map version 39 is exactly the one it always was.
+                CityConfig old = new CityConfig();
+                old.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                old.seed = 1;
+                old.civic = 39;
+                old.normalize();
+                City o = new City(old, 0.1f);
+                long h = 1;
+                for (int i = 0; i < o.w * o.h; i++) h = h * 31 + o.tiles[i];
+                h = h * 31 + o.buildings.size();
+                check(h == 0xedeec66c78d75134L, "a version 39 map is unchanged: " + Long.toHexString(h));
+            }
+        });
+        test("27.5: the wounded are taken to hospital and come back; vehicles are repaired", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MEDIUM;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                c.civic = 39; // the map this was set up on
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                // An officer badly hurt a long walk from care (by a road), and a patrol car badly knocked about.
+                Entity cop = null;
+                float far = 0;
+                for (Entity e : w.entities) {
+                    if (e.dead || e.type != Entity.COP || e.ride != null || !w.city.roadNear(e.x, e.y, 2)) continue;
+                    float[] q = w.fleet.medevac.careFor(e, e.x, e.y);
+                    float d = q == null ? 0 : (float) Math.hypot(q[0] - e.x, q[1] - e.y);
+                    if (d > far) {
+                        far = d;
+                        cop = e;
+                    }
+                }
+                Fleet.Vehicle car = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    if (v.type == Fleet.CRUISER && v.patrol && v.state == Fleet.PATROL && !v.crew.isEmpty() && v.kind != Fleet.K_BIKE) car = v;
+                check(cop != null && far > ArmedAI.WALK_TO_CARE && car != null, "a wounded officer far from care, and a patrol car");
+                cop.hp = cop.maxHp * 0.3f;
+                car.hp = car.maxHp * 0.3f;
+                check(w.fleet.patrolFor(car.x, car.y) != car, "a badly damaged car takes no calls");
+                boolean waited = false, inCare = false, mending = false;
+                for (int f = 0; f < 30 * 200 && !(w.returnedToDuty > 0 && car.hp >= car.maxHp); f++) {
+                    w.update(1 / 30f);
+                    waited |= cop.waitPickup;
+                    inCare |= cop.inCare;
+                    mending |= w.fleet.status(car).contains("Repairing");
+                }
+                check(waited && w.fleet.medevac.pickups > 0, "an ambulance fetched them (" + w.fleet.medevac.pickups + ")");
+                check(inCare && w.returnedToDuty == 1 && cop.hp >= cop.maxHp && cop.task != Dispatch.T_HEAL && !cop.dead,
+                        "patched up in care and back on duty (" + (int) cop.hp + "/" + (int) cop.maxHp + ")");
+                check(mending && car.hp >= car.maxHp && !car.broken && w.fleet.medevac.repaired > 0, "the car mended at the station");
+                int armoured = 0;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_ARMD_AMB) armoured++;
+                check(armoured >= 2, "armoured ambulances at the base (" + armoured + ")");
+            }
+        });
+        test("27.5: police can hold their own; every soldier with grenades throws them", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                World w = new World(c);
+                w.setMaxPopulation(6000);
+                w.populate(c);
+                w.update(1 / 30f);
+                w.outbreak = true;
+                w.alert = 2;
+                // An open stretch of street, with a pack of the dead down it.
+                java.util.Random r = new java.util.Random(5);
+                float[] p = null, q = null;
+                for (int k = 0; k < 400 && q == null; k++) {
+                    p = w.city.randomStreetSpot(r);
+                    double a = r.nextFloat() * 6.283;
+                    float[] t = w.city.findWalkable(p[0] + (float) Math.cos(a) * 120, p[1] + (float) Math.sin(a) * 120);
+                    if (t != null && w.city.los(p[0], p[1], t[0], t[1]) && w.city.insideOf(p[0], p[1]) == null && w.city.insideOf(t[0], t[1]) == null) q = t;
+                }
+                check(q != null, "an open stretch of street");
+                // A service round in the body: real damage now, and it checks the one it hits.
+                Entity cop = w.spawnCop(0, p[0], p[1]);
+                cop.weapon = Entity.W_STD;
+                Entity z = w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                float hp = z.hp;
+                for (int k = 0; k < 40 && z.hp == hp; k++) {
+                    w.combat.fire(cop, z, (float) Math.hypot(z.x - cop.x, z.y - cop.y), 300);
+                    if (z.hp <= 0) z.hp = hp;
+                }
+                check(z.hp < hp && hp - z.hp >= Combat.POLICE_PISTOL * World.GUN_DAMAGE * 0.8f && z.stun > 0, "a police round hurts and checks one of the dead (" + (hp - z.hp) + ")");
+                z.dead = z.removed = true;
+                cop.dead = cop.removed = true;
+                // Two officers against ten: they put down at least half of them (most of the time all of them).
+                java.util.List<Entity> cops = new java.util.ArrayList<Entity>(), pack = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 2; i++) cops.add(w.spawnCop(0, p[0] + i * 8 - 4, p[1]));
+                for (int i = 0; i < 10; i++) {
+                    float[] s = w.city.findWalkable(q[0] + (i % 5) * 6 - 12, q[1] + (i / 5) * 6 - 3);
+                    pack.add(w.spawn(Entity.ZOMBIE, s != null ? s[0] : q[0], s != null ? s[1] : q[1]));
+                }
+                Quiet qt = empty(w, p[0], p[1], 600, cops, pack);
+                final java.util.List<Entity> fpack = pack;
+                boolean cleared = stepUntil(w, qt, 75, new Cond() {
+                    public boolean done() {
+                        for (Entity e : fpack) if (!e.dead && e.hp > 0) return false;
+                        return true;
+                    }
+                });
+                int kills = 0;
+                for (Entity e : pack) if (e.dead || e.hp <= 0) kills++;
+                check(cleared || kills >= 5, "two officers put down at least half a pack of ten (" + kills + ")");
+                for (Entity e : cops) e.dead = e.removed = true;
+                // Special forces, Marines, the Guard and recon throw what they carry (they never did); the mortar team keeps its shells.
+                int[] roles = {Entity.ROLE_SF, Entity.ROLE_MARINE, Entity.ROLE_GUARD, Entity.ROLE_RECON};
+                for (int role : roles) {
+                    Entity g = w.spawnSoldier(role, p[0], p[1]);
+                    int had = g.grenades;
+                    java.util.List<Entity> nades = new java.util.ArrayList<Entity>();
+                    for (int i = 0; i < 13; i++) {
+                        float[] s = w.city.findWalkable(q[0] + (i % 5) * 6 - 12, q[1] + (i / 5) * 6 - 6);
+                        nades.add(w.spawn(Entity.ZOMBIE, s != null ? s[0] : q[0], s != null ? s[1] : q[1]));
+                    }
+                    Quiet gq = empty(w, p[0], p[1], 600, g, nades);
+                    final Entity fg = g;
+                    final int fhad = had;
+                    stepUntil(w, gq, 20, new Cond() {
+                        public boolean done() {
+                            return fg.grenades < fhad;
+                        }
+                    });
+                    check(had > 0 && g.grenades < had, Entity.ROLE_NAMES[role] + " throws a grenade at a pack (" + had + " -> " + g.grenades + ")");
+                    g.dead = g.removed = true;
+                    for (Entity e : nades) e.dead = e.removed = true;
+                }
+            }
+        });
         test("27.5: commanders hold a line; the MRAP and fire support truck", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
@@ -4900,15 +5343,15 @@ public final class GameTests {
                 check(Fleet.mountedGun(m) && Fleet.gunManned(m) && Fleet.armoured(m) && m.maxHp >= 700, "the MRAP has a manned gun and armour");
                 check(w.fleet.describe(m).contains("MRAP"), "and is named");
                 // Fire support trucks parked at the bases; one goes out to a big fight and shells the pack, not the people.
-                Fleet.Vehicle fs = null;
-                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_FIRE_SUPPORT) fs = v;
-                check(fs != null && fs.state == Fleet.WAIT, "a fire support truck at the base");
+                City.Facility home = null;
+                for (City.Facility f : w.city.facilities) if (home == null && w.fleet.fireSupport.ready(f) > 0) home = f;
+                check(home != null, "a fire support truck in a base's garage");
                 for (Entity o : ours) o.dead = o.removed = true;
                 for (Entity z : pack) z.dead = z.removed = true;
                 float[] f0 = null;
                 for (int k = 0; k < 400 && f0 == null; k++) {
                     float[] g = w.city.randomStreetSpot(r);
-                    float d = (float) Math.hypot(g[0] - fs.homeX, g[1] - fs.homeY);
+                    float d = (float) Math.hypot(g[0] - home.x, g[1] - home.y);
                     boolean kept = false;
                     for (int i = 0; i < w.dispatch.zones.size(); i++) kept |= w.dispatch.zones.get(i).contains(g[0], g[1], 2.5f);
                     for (int i = 0; i < w.bases.size(); i++) kept |= w.bases.get(i).contains(g[0], g[1], 15);
@@ -4921,11 +5364,11 @@ public final class GameTests {
                 }
                 for (Entity z : fight) untouchable(z);
                 // (Two soldiers fighting them, out of the blast.)
-                float ex = fs.homeX - f0[0], ey = fs.homeY - f0[1], el = (float) Math.hypot(ex, ey);
+                float ex = home.x - f0[0], ey = home.y - f0[1], el = (float) Math.hypot(ex, ey);
                 float[] sp = w.city.findWalkable(f0[0] + ex / el * 220, f0[1] + ey / el * 220);
                 java.util.List<Entity> guns = new java.util.ArrayList<Entity>();
                 for (int k = 0; k < 2; k++) guns.add(w.spawnSoldier(Entity.ROLE_RIFLE, sp[0] + k * 6, sp[1]));
-                final Quiet q2 = quiet(w, f0[0], f0[1], 300, fight, guns, fs);
+                final Quiet q2 = quiet(w, f0[0], f0[1], 200, fight, guns);
                 final World fw = w;
                 final java.util.List<Entity> fg = guns, fz = fight;
                 boolean fired = stepUntil(w, q2, 90, new Cond() {
@@ -4935,7 +5378,9 @@ public final class GameTests {
                         return fw.fleet.fireSupport.salvos > 0;
                     }
                 });
-                check(fired, "the fire support truck drives out and fires (" + w.fleet.status(fs) + ", " + (int) Math.hypot(fs.x - fs.tx, fs.y - fs.ty) + " to go)");
+                Fleet.Vehicle fs = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_FIRE_SUPPORT) fs = v;
+                check(fired && fs != null, "the fire support truck comes out and fires (" + w.fleet.fireSupport.salvos + ")");
                 check(Math.hypot(fs.x - f0[0], fs.y - f0[1]) > 200, "from behind the lines, well back from the pack");
                 // Never on people: a pack with a soldier among it isn't a target.
                 Entity among = w.spawnSoldier(Entity.ROLE_RIFLE, fight.get(0).x, fight.get(0).y);

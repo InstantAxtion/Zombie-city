@@ -26,6 +26,7 @@ final class GameView extends View implements Menu.Host {
     final MapLabels mapLabels = new MapLabels(this);
     final Hud hud = new Hud(this);
     final Inspector inspector = new Inspector(this);
+    final Overlays overlays = new Overlays(this);
     final ToolBar toolBar = new ToolBar(this);
     final TouchInput touchInput = new TouchInput(this);
     final GameAudio audio = new GameAudio(this);
@@ -1547,6 +1548,8 @@ final class GameView extends View implements Menu.Host {
     /** The whole map full screen: where the dead are, the towns, bases, checkpoints, calls and help coming in. */
     boolean tactical, tacDown;
     final RectF tacBtn = new RectF(), tacRect = new RectF(), tacClose = new RectF();
+    /** ((27.5) The overlay button on the minimap's left edge, its legend below the minimap, and the chip with the minimap closed. */
+    final RectF overlayBtn = new RectF(), overlayKey = new RectF(), overlayChip = new RectF();
     android.graphics.Bitmap tacMap;
     World tacWorld;
     int tacCollapsed = -1;

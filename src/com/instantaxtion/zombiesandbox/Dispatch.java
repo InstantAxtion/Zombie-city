@@ -167,6 +167,9 @@ final class Dispatch {
         float age;
         /** ((12.0) When it was said (game time).) */
         float time;
+        /** ((27.5) A lower-priority line: its kind (for counting repeats onto it), and how many times it's been said. */
+        String kind;
+        int times = 1;
 
         Message(String who, String text, int color, float x, float y) {
             this.who = who;
@@ -480,10 +483,59 @@ final class Dispatch {
         return false;
     }
 
+    /**
+     * ((27.5) Lower-priority news: worth knowing, but it came in such numbers it buried what mattered - a base building
+     * its wall, a car on its way to pick people up, a squad mounting up, a new call on the board, the command post
+     * handing out magazines, a drone's sighting, a perimeter no longer the priority. (Any news, the same kind again within
+     * MERGE seconds, goes onto the line already there.) The same kind again within LOW_MERGE
+     * seconds goes onto the line already there ("(3 times)") instead of a new one; and only LOW_CAP new ones a minute.
+     * Never a call for help, someone down or bitten, a place overrun or fallen, or anything said with always set.)
+     */
+    private static final String[] LOW = {"coming out to", "to pick up", "mount up", "Patrols report", "isn't the priority now",
+            "Units free for", "is holding.", "Handing out magazines", "hostile on ", "hostiles on ", "command post is set up",
+            "Crew to the mobile command", "on the way to", "help get the wall up", "have dug in", "pushed cars across",
+            "filling sandbags", "workshop going", "bolted a gun", "a wall all the way round", "rebuilt its wall",
+            "walling themselves in", "is being reinforced", "Perimeter going up", "taken over a building", "Residents can go home",
+            "to wall it in", "recon vehicles out", "we're moving in", "is clear of them", "keeping watch", "has a wall",
+            "set up near", "on its way to", "(loudspeaker)"};
+    private static final String[] URGENT = {" down", "Down", "bitten", " bit ", "overrun", "Overrun", "lost", "Lost", "fallen", "falls",
+            "Requesting", "backup", "Backup", "help", "Help", "breach", "Breach", "giant", "Giant", "air strike", "Air strike", "crash",
+            "escaped", "riot", "trampled"};
+    static final float LOW_MERGE = 60, MERGE = 30;
+    static final int LOW_CAP = 8;
+    private final float[] lowTimes = new float[LOW_CAP];
+    private int lowAt;
+    /** ((27.5) Lines left off by the filters, for the record (probes, tests): routine, repeats, merged, over the cap.) */
+    int quietRoutine, quietRepeat, quietMerged, quietCapped;
+
+    static boolean low(String text) {
+        for (String u : URGENT) if (text.contains(u)) return false;
+        for (String r : LOW) if (text.contains(r)) return true;
+        return false;
+    }
+
+    /** ((27.5) A low-priority line of the same kind still in the log from the last LOW_MERGE seconds: it's counted on that one. */
+    private boolean mergeLow(String kind, String label, String text, int who, float x, float y, float within, boolean sameFight) {
+        for (int i = log.size() - 1; i >= 0; i--) {
+            Message m = log.get(i);
+            if (w.time - m.time > within) break;
+            if (m.kind == null || !m.kind.equals(kind)) continue;
+            if (sameFight && World.hypot(m.x - x, m.y - y) > 300) continue;
+            Message n = new Message(label, text + "  (" + (m.times + 1) + " times)", WHO_COLORS[who], x, y);
+            n.time = m.time;
+            n.kind = kind;
+            n.times = m.times + 1;
+            log.set(i, n);
+            return true;
+        }
+        return false;
+    }
+
     /** As above; always set, it goes out even if the same was just said (a call for backup from another fight). */
     void say(int who, Entity speaker, String text, float x, float y, boolean always) {
         if (routine(text)) {
             if (speaker != null) speaker.talkTimer = 2.5f;
+            quietRoutine++;
             return;
         }
         // ((13.8) The same kind of news again within a few seconds (a second "People are turning into monsters", a
@@ -492,8 +544,12 @@ final class Dispatch {
         Float last = lastSaid.get(kind);
         if (!always && last != null && w.time - last < REPEAT && w.time >= last) {
             if (speaker != null) speaker.talkTimer = 2.5f;
+            quietRepeat++;
             return;
         }
+        // ((27.5) The public's 911 calls and the news about survivor bases are lower-priority too: the calls are on
+        // the board and the bases on the map.)
+        boolean lowKind = !always && (low(text) || who == WHO_911 || text.startsWith("News: "));
         if (lastSaid.size() > 400) lastSaid.clear();
         lastSaid.put(kind, w.time);
         String label = who == WHO_911 ? "911" : who == WHO_POLICE ? "Police" : who == WHO_MILITARY ? "Military" : "Info";
@@ -508,8 +564,27 @@ final class Dispatch {
                 text = text.substring(colon + 2);
             }
         }
+        // ((27.5) The same kind of news again a little later (more calls for backup from the same fight, another
+        // stampede): onto the line already there, with how many times. Lower-priority news over a longer while, and left
+        // off once LOW_CAP have gone out this minute.)
+        // (Said with always - a call for help from a fight - it's only counted onto one from that same fight.)
+        if (mergeLow(kind, label, text, who, x, y, lowKind ? LOW_MERGE : MERGE, always)) {
+            if (speaker != null) speaker.talkTimer = 2.5f;
+            quietMerged++;
+            return;
+        }
+        if (lowKind) {
+            if (lowTimes[lowAt] > 0 && w.time - lowTimes[lowAt] < 60) {
+                if (speaker != null) speaker.talkTimer = 2.5f;
+                quietCapped++;
+                return;
+            }
+            lowTimes[lowAt] = Math.max(0.001f, w.time);
+            lowAt = (lowAt + 1) % LOW_CAP;
+        }
         Message m = new Message(label, text, WHO_COLORS[who], x, y);
         m.time = w.time;
+        m.kind = kind;
         log.add(m);
         if (log.size() > 200) log.remove(0);
         messageCount++;

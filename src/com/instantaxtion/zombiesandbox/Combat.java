@@ -334,7 +334,9 @@ final class Combat {
         if (e.role == Entity.ROLE_SNIPER) return 0.45f * World.TRAINED_HEADSHOT * ranked;
         if (e.role == Entity.ROLE_MARKSMAN) return 0.5f * World.TRAINED_HEADSHOT * ranked;
         if (e.weapon == Entity.W_SHOTGUN && d < 45) return 0.3f * World.TRAINED_HEADSHOT * ranked;
-        if (e.type == Entity.COP) base = e.role == Entity.ROLE_SWAT ? 0.42f : 0.3f;
+        // ((27.5) Aimed pistol fire at close quarters is what police train for: the closer it gets, the surer the shot to the
+        // head (at 1 to 3 in 100 a hit, a pair of officers could empty everything they carried into a dozen of them).)
+        if (e.type == Entity.COP) base = (e.role == Entity.ROLE_SWAT ? 0.42f : 0.3f) * (d < 70 ? POLICE_HEAD_CLOSE : POLICE_HEAD_FAR);
         else if (e.type == Entity.SOLDIER)
             base = e.role == Entity.ROLE_GUNNER ? 0.2f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
         else return World.HEADSHOT * ranked;
@@ -395,6 +397,11 @@ final class Combat {
 
     /** (What handling worked out for the shot being fired: see fire.) */
     private float shotDmg, shotAccuracy;
+
+    /** ((27.5) A police service round's damage (a civilian's pistol does 10), and how long a body hit checks one of the dead. */
+    static float POLICE_PISTOL = 22, POLICE_STAGGER = 0.15f, POLICE_SMG = 14, POLICE_CARBINE = 24;
+    /** ((27.5) How much surer police are of a shot to the head, close in (under 70) and further off. */
+    static float POLICE_HEAD_CLOSE = 4.2f, POLICE_HEAD_FAR = 1.8f;
 
     void fire(Entity e, Entity t, float d, float range) {
         e.shotAt = w.time;
@@ -463,7 +470,10 @@ final class Combat {
             // ((12.8) A service pistol in steady aimed fire, about two and a half a second (0.4 s, from 0.55); a
             // frightened civilian with one, 0.6 (from 0.8).)
             e.cooldown = e.hasGun ? 0.6f : 0.4f;
-            dmg = 10;
+            // ((27.5) A police officer's service pistol: a full-power duty round, not a civilian's (22, from 10): a body hit
+            // used to take one of the dead 2 of its 90, and a pair of officers could empty every magazine they had into a
+            // dozen of them and put down five.)
+            dmg = e.type == Entity.COP ? POLICE_PISTOL : 10;
         }
         // Picked-up guns.
         if (e.weapon == Entity.W_SHOTGUN) {
@@ -478,7 +488,8 @@ final class Combat {
             accuracy = 0.55f;
         } else if (e.weapon == Entity.W_PISTOL) {
             e.cooldown = 0.4f;
-            dmg = 10;
+            // ((27.5) An officer issued one carries the duty round in it too.)
+            dmg = e.type == Entity.COP ? POLICE_PISTOL : 10;
             accuracy = 0.7f;
         } else if (e.weapon == Entity.W_HUNTING) {
             // A bolt-action deer rifle: slow, but it hits hard and true a long way off.
@@ -511,6 +522,10 @@ final class Combat {
             dmg = 40;
             accuracy = 0.9f;
         }
+        // ((27.5) Police long guns carry duty rounds too: the feds' submachine guns (14, from 9) and the patrol and troopers'
+        // carbines (24, from 15) - a soldier's or a civilian's are as they were.)
+        if (e.type == Entity.COP && e.weapon == Entity.W_SMG) dmg = POLICE_SMG;
+        else if (e.type == Entity.COP && e.weapon == Entity.W_CARBINE) dmg = POLICE_CARBINE;
         shotDmg = dmg;
         shotAccuracy = accuracy;
     }
@@ -581,6 +596,9 @@ final class Combat {
             // ((10.32) Body armour on one of the dead takes most of a body shot.)
             t.hp -= t.isUndead() ? dmg * World.GUN_DAMAGE * Director.GUN[w.difficulty] * (t.armored ? 0.5f : 1) * (1 + w.zombieAI.rot(t)) : dmg * (t.armored ? 0.65f : 1);
             if (wasUp && t.hp <= 0) t.bodyShot = true;
+            // ((27.5) Stopping power: a police round in the body checks one of the dead for a moment - not the big ones,
+            // and not through armour.)
+            if (e.type == Entity.COP && t.isUndead() && !t.big() && !t.armored && t.hp > 0) t.stun = Math.max(t.stun, POLICE_STAGGER);
         }
         t.hurt = 1;
         if (wasUp && t.hp <= 0 && t.isZombie()) {

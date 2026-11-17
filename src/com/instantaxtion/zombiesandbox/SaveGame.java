@@ -20,7 +20,8 @@ final class SaveGame {
     // ((27.1) Still 78: 27.0 wrote saves at 78 (for a map since taken out again; a save on it is refused as a removed map).)
     // ((27.4) 79: the vehicles themselves (VehicleSave), at the very end.)
     // ((27.5) 80: the calls going on (CallSave), after the vehicles.)
-    private static final int VERSION = 80;
+    // ((27.5) 81: each base's raiding (raider base, ground cleared, raids, hold-ups, bases robbed), after the calls.)
+    private static final int VERSION = 81;
 
     private SaveGame() {
     }
@@ -519,6 +520,16 @@ final class SaveGame {
             VehicleSave.write(out, w, kept, keptIndex, index);
             // ((27.5) Version 80: the calls going on, and who and what was on its way to each.)
             CallSave.write(out, w, kept, index);
+            // ((27.5) Version 81: the bases' raiding, each by its building.)
+            out.writeInt(w.bases.size());
+            for (SurvivorBases.Base s : w.bases) {
+                out.writeInt(w.city.buildings.indexOf(s.b));
+                out.writeBoolean(s.raiders);
+                out.writeInt(s.territory);
+                out.writeInt(s.raids);
+                out.writeInt(s.robbed);
+                out.writeInt(s.struck);
+            }
         } finally {
             moved = null;
             homeIndex = null;
@@ -1190,6 +1201,23 @@ final class SaveGame {
                 VehicleSave.read(in, w, written);
                 // ((27.5) The calls, after the vehicles that were on their way to them.)
                 if (version >= 80) CallSave.read(in, w, new ArrayList<Fleet.Vehicle>(w.fleet.vehicles.subList(before, w.fleet.vehicles.size())), written);
+                if (version >= 81) {
+                    int nRaid = in.readInt();
+                    for (int i = 0; i < nRaid; i++) {
+                        int bi = in.readInt();
+                        boolean raiders = in.readBoolean();
+                        int territory = in.readInt(), raids = in.readInt(), robbed = in.readInt(), struck = in.readInt();
+                        SurvivorBases.Base s = null;
+                        for (int k = 0; k < w.bases.size() && s == null; k++)
+                            if (bi >= 0 && bi < w.city.buildings.size() && w.bases.get(k).b == w.city.buildings.get(bi)) s = w.bases.get(k);
+                        if (s == null) continue;
+                        s.raiders = raiders;
+                        s.territory = territory;
+                        s.raids = raids;
+                        s.robbed = robbed;
+                        s.struck = struck;
+                    }
+                }
             }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;

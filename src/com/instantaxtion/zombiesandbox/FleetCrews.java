@@ -171,6 +171,8 @@ final class FleetCrews {
 
     /** Someone climbs aboard (out of the world until they get out again). */
     void board(Vehicle v, Entity e) {
+        String what = vehicleWord(v);
+        w.history(e, ("aeiou".indexOf(what.charAt(0)) >= 0 ? "got into an " : "got into a ") + what);
         e.task = Dispatch.T_NONE;
         e.rig = v; note(e);
         e.dead = true;
@@ -192,6 +194,13 @@ final class FleetCrews {
         fleet.vehicles.remove(v);
     }
 
+    /** ((27.5) Just what it is ("police car", "armoured personnel carrier"), for a card's history. */
+    String vehicleWord(Vehicle v) {
+        String d = fleet.describe(v);
+        int cut = d.indexOf("  -  ");
+        return (cut > 0 ? d.substring(0, cut) : d).toLowerCase(java.util.Locale.ROOT);
+    }
+
     void crewOut(Vehicle v, boolean offDuty) {
         for (int i = 0; i < v.crew.size(); i++) {
             Entity e = v.crew.get(i);
@@ -201,6 +210,7 @@ final class FleetCrews {
             if (e.owner != null && e.owner.rig == v) e.owner = null;
             e.rig = offDuty ? null : v;
             if (!offDuty) note(e);
+            w.history(e, "got out of the " + vehicleWord(v));
             e.taskTimer = 0;
         }
         v.crew.clear();
@@ -243,7 +253,7 @@ final class FleetCrews {
             // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
             if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
-                int type = v.type == AMBULANCE ? Entity.CIVILIAN : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
+                int type = v.type == AMBULANCE ? (v.kind == K_ARMD_AMB ? Entity.SOLDIER : Entity.CIVILIAN) : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
                 // ((12.0) A driver from outside isn't on the city's roll: they used to take a callsign or a place in a
                 // squad, so the officers and squads after them were numbered with gaps and squads came up short.)
                 int cops = w.dispatch.copCount, soldiers = w.dispatch.soldierCount;

@@ -226,6 +226,8 @@ final class WorldRenderer {
         gv.buildingRenderer.drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
         if (!gv.world.overwatch.isEmpty()) gv.buildingRenderer.drawOverwatch(c, vx0, vy0, vx1, vy1, detailed);
         drawHaze(c, vx0, vy0, vx1, vy1);
+        // ((27.5) Infection heat or police/army reach, over the streets and roofs.)
+        gv.overlays.draw(c, gv.world, vx0, vy0, vx1, vy1);
         // ((19.5) Light, shockwaves, smoke, sparks and debris over it all.)
         gv.vfx.drawAbove(c, vx0, vy0, vx1, vy1);
         drawAircraft(c, vx0, vy0, vx1, vy1);
@@ -1103,8 +1105,19 @@ final class WorldRenderer {
     void drawBase(Canvas c, SurvivorBases.Base s, float vx0, float vy0, float vx1, float vy1) {
         float T = City.T;
         float x0 = s.tx0 * T, y0 = s.ty0 * T, x1 = (s.tx1 + 1) * T, y1 = (s.ty1 + 1) * T;
+        if (s.territory > 0) {
+            // ((27.5) The ground it's cleared round it: a faint ring, red for raiders.)
+            float r = BaseRaids.territoryR(s), mx = s.cx(), my = s.cy();
+            if (mx + r >= vx0 && mx - r <= vx1 && my + r >= vy0 && my - r <= vy1) {
+                gv.fill.setColor(s.raiders ? 0x0CC03020 : 0x0C60A040);
+                c.drawCircle(mx, my, r, gv.fill);
+                gv.stroke.setColor(s.raiders ? 0x40C03020 : 0x4060A040);
+                gv.stroke.setStrokeWidth(1.5f);
+                c.drawCircle(mx, my, r, gv.stroke);
+            }
+        }
         if (x1 < vx0 || x0 > vx1 || y1 < vy0 || y0 > vy1) return;
-        gv.fill.setColor(0x16C89A40);
+        gv.fill.setColor(s.raiders ? 0x18C04030 : 0x16C89A40);
         c.drawRect(x0 + T, y0 + T, x1 - T, y1 - T, gv.fill);
         for (int k = 0; k < s.towersUp && k < s.towers.length; k++) {
             float tx = s.towers[k][0], ty = s.towers[k][1];
@@ -1143,10 +1156,12 @@ final class WorldRenderer {
         gv.stroke.setColor(0xFF3A3A3A);
         gv.stroke.setStrokeWidth(1f);
         c.drawLine(fx, fy, fx, fy - 12, gv.stroke);
-        gv.fill.setColor(0xFFD8B04A);
+        // (A raider base flies black with a red bar; the others yellow with a red square.)
+        gv.fill.setColor(s.raiders ? 0xFF1E1E1E : 0xFFD8B04A);
         c.drawRect(fx, fy - 12, fx + 7, fy - 7.5f, gv.fill);
-        gv.fill.setColor(0xFF8E2E24);
-        c.drawRect(fx + 2.5f, fy - 11, fx + 4.5f, fy - 8.5f, gv.fill);
+        gv.fill.setColor(s.raiders ? 0xFFC42A1E : 0xFF8E2E24);
+        if (s.raiders) c.drawRect(fx, fy - 10.5f, fx + 7, fy - 9, gv.fill);
+        else c.drawRect(fx + 2.5f, fy - 11, fx + 4.5f, fy - 8.5f, gv.fill);
     }
 
     void drawHoldout(Canvas c, World.Holdout h) {

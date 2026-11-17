@@ -25,6 +25,98 @@ final class Recruitment {
         if (w.peakZombies < 5) return;
         w.policeDrive = drive(Entity.COP, City.FACILITY_POLICE, w.peakCops, w.policeDrive);
         w.armyDrive = drive(Entity.SOLDIER, City.FACILITY_BASE, w.peakSoldiers, w.armyDrive);
+        volunteers();
+    }
+
+    // ------------------------------------------------------------------ ((27.5) volunteers
+
+    /** Kit each station or base has for volunteers (vests and pistols, rifles and webbing): handed out once each. */
+    private final java.util.HashMap<City.Facility, int[]> kitOut = new java.util.HashMap<City.Facility, int[]>();
+    /** No more than this many volunteers about at once, however many stations and bases there are. */
+    static final int MAX_VOLUNTEERS = 36;
+
+    private int kitFor(City.Facility f) {
+        if (f.kind == City.FACILITY_BASE) return 10;
+        // (The police headquarters - the first station - has more to hand out.)
+        for (City.Facility o : w.city.facilities) if (o.kind == City.FACILITY_POLICE && !o.fed) return o == f ? 8 : 5;
+        return 5;
+    }
+
+    /**
+     * ((27.5) Once the emergency broadcast is out (and only in the sandbox: a mission has the force it's given), able
+     * adults sign up: a few each time round, at the nearest police station or army base with kit left to hand out and
+     * none of the dead at its door. Ex-soldiers and hunters most of all; never the bitten, inmates, or those already
+     * holding out in a survivor base or a safe zone. They come out a little later as police auxiliaries or army
+     * volunteers (see enlistWalk), and it stops when the kit's gone or the station or base falls.
+     */
+    /** (For comparing games with and without them: -Dzc.volunteers=off.) */
+    static final boolean VOLUNTEERS = !"off".equals(System.getProperty("zc.volunteers"));
+
+    void volunteers() {
+        if (!VOLUNTEERS || w.alert < 2 || w.city.cfg.mission >= 0 || w.peakZombies < 5) return;
+        int about = 0;
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead) continue;
+            if (e.role == Entity.ROLE_VOLUNTEER && (e.type == Entity.COP || e.type == Entity.SOLDIER)) about++;
+            else if (e.volunteering && e.task == Dispatch.T_ENLIST) about++;
+        }
+        if (about >= MAX_VOLUNTEERS) return;
+        ArrayList<City.Facility> open = new ArrayList<City.Facility>();
+        for (City.Facility f : w.city.facilities) {
+            if ((f.kind != City.FACILITY_POLICE && f.kind != City.FACILITY_BASE) || f.fed || f.fallen) continue;
+            int[] k = kitOut.get(f);
+            if (k == null) kitOut.put(f, k = new int[2]);
+            if (k[0] >= kitFor(f) || w.spatial.countZombiesNear(f.x, f.y, 220) > 0) continue;
+            open.add(f);
+            // The first time: the radio says so.
+            if (k[1] == 0) {
+                k[1] = 1;
+                if (f.kind == City.FACILITY_POLICE)
+                    w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: " + f.name + " is taking volunteers. Able adults, report to the front desk "
+                            + "for a vest and a sidearm.", f.x, f.y);
+                else
+                    w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Volunteers wanted at the gate of " + f.name + ". Basic kit and a rifle for "
+                            + "anyone who can use one.", f.x, f.y);
+            }
+        }
+        if (open.isEmpty()) return;
+        // (A few asked each time round: those not far from somewhere open, not in danger, with nothing better to do.)
+        int asks = 6, room = MAX_VOLUNTEERS - about;
+        for (int i = 0, n = w.entities.size(); i < n && asks > 0 && room > 0; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.type != Entity.CIVILIAN || e.asked || e.infected || e.inmate || e.fleeTimer > 0 || e == w.controlled) continue;
+            if (e.base != null || e.zone != null || e.leader != null || e.pilotReserve) continue;
+            if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_SEEK) continue;
+            City.Facility best = null;
+            float bd = 900;
+            for (int k = 0; k < open.size(); k++) {
+                City.Facility f = open.get(k);
+                float d = (float) World.hypot(e.x - f.x, e.y - f.y);
+                if (d < bd) {
+                    bd = d;
+                    best = f;
+                }
+            }
+            if (best == null || !w.city.reaches(w.city.field(best), e.x, e.y)) continue;
+            asks--;
+            e.asked = true;
+            int tr = e.trade();
+            float keen = willingness(e) * 0.5f + (tr == Entity.TR_VETERAN ? 0.45f : tr == Entity.TR_HUNTER ? 0.3f : 0);
+            if (w.rnd.nextFloat() >= keen) {
+                w.refused++;
+                continue;
+            }
+            int[] k = kitOut.get(best);
+            if (k[0] >= kitFor(best)) continue;
+            k[0]++;
+            room--;
+            e.task = Dispatch.T_ENLIST;
+            e.enlistAt = best;
+            e.volunteering = true;
+            e.taskTimer = 0;
+            e.talkTimer = 1.5f;
+        }
     }
 
     boolean drive(int type, int facilityKind, int peak, boolean active) {
@@ -239,6 +331,13 @@ final class Recruitment {
     /** Walks to the precinct or base, trains for a few seconds, then comes out in uniform. */
     void enlistWalk(Entity e, float dt) {
         City.Facility f = e.enlistAt;
+        // ((27.5) The station or base fallen on the way: nowhere to sign up now.)
+        if (f.fallen && e.volunteering) {
+            e.task = Dispatch.T_NONE;
+            e.enlistAt = null;
+            e.volunteering = false;
+            return;
+        }
         float ddx = f.x - e.x, ddy = f.y - e.y;
         // ((12.0) Once there and training, a step or two further out doesn't send them back to the start: drifting
         // about on the edge of the yard, in and out, kept the clock going back to nothing and they never signed up.)
@@ -259,12 +358,31 @@ final class Recruitment {
         Entity r = w.population.make(type, e.x, e.y, -1, 0);
         r.skin = e.skin;
         r.angle = e.angle;
+        if (e.volunteering) {
+            // ((27.5) A volunteer: the same person (their name, their skill), in a vest or khaki, an auxiliary or a volunteer.)
+            r.nameSeed = e.nameSeed;
+            r.level = e.level;
+            r.xp = e.xp;
+            r.kills = e.kills;
+            w.population.applyRole(r, Entity.ROLE_VOLUNTEER);
+            r.signedUpAt = f;
+            if (type == Entity.COP) w.volunteersPolice++;
+            else w.volunteersArmy++;
+        }
         e.dead = true;
         e.removed = true;
         for (int i = 0, n = w.entities.size(); i < n; i++) if (w.entities.get(i).leader == e) w.entities.get(i).leader = null;
         w.newRecruits.add(r);
-        w.recruits++;
+        if (!e.volunteering) w.recruits++;
+        e.volunteering = false;
         String where = f.name;
+        if (r.role == Entity.ROLE_VOLUNTEER) {
+            if (w.time - w.lastRecruitSay < 8) return;
+            w.lastRecruitSay = w.time;
+            w.dispatch.chatter(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, r, (type == Entity.COP ? "Auxiliary " : "Volunteer ")
+                    + Names.person(r.nameSeed) + ", signed up at " + where + ". Ready to help.", r.x, r.y);
+            return;
+        }
         // Keep the radio readable when lots join at once.
         if (w.time - w.lastRecruitSay < 8) return;
         w.lastRecruitSay = w.time;

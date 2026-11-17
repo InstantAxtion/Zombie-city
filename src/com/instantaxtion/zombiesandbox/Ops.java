@@ -1013,6 +1013,7 @@ final class Ops {
             int full = e.magSize * 5;
             if (e.reserve >= full) continue;
             e.reserve = Math.min(full, e.reserve + e.magSize * 2);
+            w.history(e, "resupplied at the command post");
             e.outOfAmmoSaid = false;
             e.scout = false;
             if (e.task == Dispatch.T_RESUPPLY) e.task = Dispatch.T_NONE;

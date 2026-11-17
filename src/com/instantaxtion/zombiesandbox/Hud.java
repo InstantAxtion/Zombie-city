@@ -130,6 +130,9 @@ final class Hud {
         gv.miniX.setEmpty();
         gv.mapChip.setEmpty();
         gv.tacBtn.setEmpty();
+        gv.overlayBtn.setEmpty();
+        gv.overlayKey.setEmpty();
+        gv.overlayChip.setEmpty();
         gv.hotBtn.setEmpty();
         gv.hotChip.setEmpty();
         gv.timeBtn.setEmpty();
@@ -307,6 +310,10 @@ final class Hud {
             // ((14.4) And the last corner, the timeline: a little clock.)
             gv.timeBtn.set(gv.miniRect.right - 16 * gv.dp, gv.miniRect.bottom - 16 * gv.dp, gv.miniRect.right + 2 * gv.dp, gv.miniRect.bottom + 2 * gv.dp);
             drawClockIcon(c, gv.timeBtn.centerX(), gv.timeBtn.centerY());
+            // ((27.5) Halfway down the left edge, the overlays: a tap goes on to the next (heat, reach, off), with its key below the minimap.)
+            gv.overlayBtn.set(gv.miniRect.left - 10 * gv.dp, gv.miniRect.centerY() - 9 * gv.dp, gv.miniRect.left + 8 * gv.dp, gv.miniRect.centerY() + 9 * gv.dp);
+            drawOverlayIcon(c, gv.overlayBtn.centerX(), gv.overlayBtn.centerY());
+            if (gv.overlays.mode != Overlays.OFF) drawOverlayKey(c, gv.miniRect.right, gv.miniRect.bottom + 6 * gv.dp);
             // A little x in the corner closes it.
             gv.miniX.set(gv.miniRect.right - 16 * gv.dp, gv.miniRect.top - 2 * gv.dp, gv.miniRect.right + 2 * gv.dp, gv.miniRect.top + 16 * gv.dp);
             gv.fill.setColor(0xE0101216);
@@ -342,7 +349,54 @@ final class Hud {
             c.drawRoundRect(gv.timeChip, 9 * gv.dp, 9 * gv.dp, gv.fill);
             gv.text.setColor(0xFFC8D8F0);
             c.drawText("Timeline", gv.timeChip.centerX(), gv.timeChip.centerY() + 4 * gv.dp, gv.text);
+            float ow = gv.text.measureText("Overlay") + 20 * gv.dp;
+            gv.overlayChip.set(gv.timeChip.left - 8 * gv.dp - ow, top, gv.timeChip.left - 8 * gv.dp, top + 28 * gv.dp);
+            gv.fill.setColor(gv.overlays.mode != Overlays.OFF ? 0xE0404650 : 0xE0202227);
+            c.drawRoundRect(gv.overlayChip, 9 * gv.dp, 9 * gv.dp, gv.fill);
+            gv.text.setColor(0xFFD8E8C8);
+            c.drawText("Overlay", gv.overlayChip.centerX(), gv.overlayChip.centerY() + 4 * gv.dp, gv.text);
+            if (gv.overlays.mode != Overlays.OFF) drawOverlayKey(c, gv.mapChip.right, top - 30 * gv.dp);
         }
+    }
+
+    /** ((27.5) Three stacked squares, the top one tinted when an overlay is on. */
+    void drawOverlayIcon(Canvas c, float x, float y) {
+        gv.fill.setColor(0xE0101216);
+        c.drawCircle(x, y, 9 * gv.dp, gv.fill);
+        float u = 3.2f * gv.dp;
+        gv.stroke.setColor(0xFFC8CCD2);
+        gv.stroke.setStrokeWidth(1.2f * gv.dp);
+        c.drawRect(x - u + 1.6f * gv.dp, y - u + 1.6f * gv.dp, x + u + 1.6f * gv.dp, y + u + 1.6f * gv.dp, gv.stroke);
+        gv.fill.setColor(gv.overlays.mode == Overlays.HEAT ? 0xFFE05030 : gv.overlays.mode == Overlays.REACH ? 0xFF58A8FF : 0xFF60646C);
+        c.drawRect(x - u - 1.2f * gv.dp, y - u - 1.2f * gv.dp, x + u - 1.2f * gv.dp, y + u - 1.2f * gv.dp, gv.fill);
+    }
+
+    /** ((27.5) The overlay's name and its shades, right-aligned at (right, top); a tap on it goes on to the next. */
+    void drawOverlayKey(Canvas c, float right, float top) {
+        int[] cols = gv.overlays.mode == Overlays.HEAT ? Overlays.HEAT_COL : Overlays.REACH_COL;
+        String name = Overlays.NAMES[gv.overlays.mode];
+        String lo = gv.overlays.mode == Overlays.HEAT ? "few" : "near", hi = gv.overlays.mode == Overlays.HEAT ? "many" : "nobody";
+        gv.text.setTextSize(11 * gv.dp);
+        gv.text.setTextAlign(Paint.Align.LEFT);
+        float sw = 11 * gv.dp, nw = gv.text.measureText(name), lw = gv.text.measureText(lo), hw = gv.text.measureText(hi);
+        float width = nw + lw + hw + 4 * sw + 34 * gv.dp, left = right - width;
+        gv.overlayKey.set(left, top, right, top + 22 * gv.dp);
+        gv.fill.setColor(0xE0101216);
+        c.drawRoundRect(gv.overlayKey, 8 * gv.dp, 8 * gv.dp, gv.fill);
+        float x = left + 8 * gv.dp, base = top + 15 * gv.dp;
+        gv.text.setColor(0xFFF2F2F2);
+        c.drawText(name, x, base, gv.text);
+        x += nw + 8 * gv.dp;
+        gv.text.setColor(0xFFA8ACB4);
+        c.drawText(lo, x, base, gv.text);
+        x += lw + 4 * gv.dp;
+        for (int i = 1; i <= 4; i++) {
+            gv.fill.setColor(cols[i] | 0xFF000000);
+            c.drawRect(x, top + 6 * gv.dp, x + sw - 1 * gv.dp, top + 16 * gv.dp, gv.fill);
+            x += sw;
+        }
+        x += 4 * gv.dp;
+        c.drawText(hi, x, base, gv.text);
     }
 
     void openHot() {
@@ -1217,7 +1271,8 @@ final class Hud {
             // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
             float lineRoom = gv.statsRect.width() - 24 * gv.dp;
             c.drawText(shrinkToFit("Turned " + gv.world.turned + "   Killed " + gv.world.zombiesKilled
-                    + (gv.world.recruits + gv.world.refused > 0 ? "   Recruits " + gv.world.recruits : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
+                    + (gv.world.recruits + gv.world.refused > 0 ? "   Recruits " + gv.world.recruits : "")
+                    + (gv.world.volunteersPolice + gv.world.volunteersArmy > 0 ? "   Volunteers " + (gv.world.volunteersPolice + gv.world.volunteersArmy) : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
             gv.text.setTextSize(11.5f * gv.dp);
             y += lh;
             // ((26.1) Only what's in use: no Hiding line (nobody hides out of sight any more), people aboard only when there are some.)

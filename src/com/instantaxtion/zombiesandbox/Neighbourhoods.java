@@ -367,6 +367,68 @@ final class Neighbourhoods {
         }
     }
 
+    // ((27.5) Map version 40: every city its own colours, and the new kinds of neighbourhood their own look.)
+    private static final int ALL = b(City.DT_DOWNTOWN, City.DT_MIDTOWN, City.DT_OLDTOWN, City.DT_SUBURB, City.DT_INDUSTRIAL,
+            City.DT_CAMPUS, City.DT_PARKSIDE);
+
+    /** The homes of a whole city, one of these: where no district has a look of its own, the city's own look. */
+    static final Theme[] PALETTES = {
+            new Theme("Terracotta & Stucco", ALL, false,
+                    c(0xFFB0583A, 0xFFC0683E, 0xFFA04E34, 0xFFC87A4A), c(0xFFF0E2C4, 0xFFE8D0A0, 0xFFF4EADA, 0xFFE0C48E),
+                    c(0xFFB0583A, 0xFFA04E34), c(0xFFF0E2C4, 0xFFE8C890), c(0xFFF0E2C4, 0xFFE0C48E, 0xFFE8D0A0), 0xFFD8C8B0, 0),
+            new Theme("Slate & Stone", ALL, false,
+                    c(0xFF3E4650, 0xFF4A525C, 0xFF353C44, 0xFF56606A), c(0xFFB8B4AA, 0xFFA8A49A, 0xFFC8C2B4, 0xFF9C9890),
+                    c(0xFF3E4650, 0xFF353C44), c(0xFFB8B4AA, 0xFFC8C2B4), c(0xFFB8B4AA, 0xFFA8A49A), 0xFFA8A8A4, 0),
+            new Theme("Red Brick", ALL, false,
+                    c(0xFF4A3A34, 0xFF5A3D35, 0xFF3E3A3A, 0xFF6A4A3A), c(0xFFA04A34, 0xFFB0583E, 0xFF8E4030, 0xFFB86A50),
+                    c(0xFF4A3A34, 0xFF2E2E30), c(0xFFA04A34, 0xFFB86A50), c(0xFFA04A34, 0xFF8E4030, 0xFFC8B8A0), 0, 0),
+            new Theme("Painted Clapboard", ALL, false,
+                    c(0xFF6A6E74, 0xFF8A8E94, 0xFF4E5A6A, 0xFF7A6A5A), c(0xFF8AB0D8, 0xFFF0D870, 0xFF9AD0B0, 0xFFF0A8A8, 0xFFF4F0E8, 0xFFC8A8E0),
+                    c(0xFF6A6E74, 0xFF4E5A6A), c(0xFF8AB0D8, 0xFFF0D870, 0xFFF0A8A8), c(0xFFF4F0E8, 0xFF8AB0D8, 0xFF9AD0B0), 0, 0),
+            new Theme("White Modern", ALL, false,
+                    c(0xFFD8DCDE, 0xFFC8CCD0, 0xFFB8BEC4, 0xFF9AA2AA), c(0xFFF8F8F6, 0xFFEEF0F0, 0xFFE4E6E8, 0xFFD8DCE0),
+                    c(0xFFD8DCDE, 0xFF9AA2AA), c(0xFFF8F8F6, 0xFFE4E6E8), c(0xFFF8F8F6, 0xFFD8E4EC, 0xFFB8D0E0), 0xFFE0E2E2, 0),
+            new Theme("Timber & Shingle", ALL, false,
+                    c(0xFF3E5A3A, 0xFF5A4A3A, 0xFF4A3E34, 0xFF2E4A40), c(0xFFB08A60, 0xFF9A7650, 0xFFC8A478, 0xFF8A6A48, 0xFFD8C8A8),
+                    c(0xFF3E5A3A, 0xFF5A4A3A), c(0xFFB08A60, 0xFFC8A478), c(0xFFB08A60, 0xFFD8C8A8), 0, 0),
+    };
+
+    /** The new kinds of neighbourhood's own looks, by City.NB_* less City.NB_TRAILERS. */
+    static final Theme[] NB_THEMES = {
+            new Theme("Trailer Park", ALL, false,
+                    c(0xFFC0C4C8, 0xFFA8B0B8, 0xFFD0D0C8, 0xFF9AA0A6), c(0xFFF0EEE6, 0xFFE0E8F0, 0xFFF0E0C8, 0xFFD8E8D8, 0xFFE8D8D8),
+                    c(0xFFC0C4C8), c(0xFFF0EEE6), c(0xFFF0EEE6), 0, 0),
+            new Theme("Tower Estate", ALL, false,
+                    c(0xFF7A7E82, 0xFF6A6E72, 0xFF8A8E90), c(0xFFB8B4AC, 0xFFC8C4BA, 0xFFA8A49C, 0xFFD0C8B8),
+                    c(0xFF6A6E72), c(0xFFC8C4BA), c(0xFFB8B4AC, 0xFFC8C4BA), 0xFFB0B0AC, 0),
+            new Theme("Market Quarter", ALL, false,
+                    c(0xFF8E2A22, 0xFF2E6E4E, 0xFFB8862A, 0xFF7A1E24), c(0xFFE8D8B0, 0xFFC84A3A, 0xFFE0C890, 0xFFF0E0B0),
+                    c(0xFF8E2A22, 0xFFB8862A, 0xFF2E6E4E), c(0xFFC8402E, 0xFFE8C860, 0xFFF0E0B0, 0xFFD85A3A),
+                    c(0xFFE0C890, 0xFFC84A3A), 0xFFB87A5A, 1, "Night Market", "Asian Supermarket", "Noodle Bar Arcade", "Dim Sum Palace"),
+            new Theme("College Quad", ALL, false,
+                    c(0xFF3E4650, 0xFF2F3A2E, 0xFF4E5560), c(0xFFA8543A, 0xFF9A4A38, 0xFFC8B8A0),
+                    c(0xFF3E4650, 0xFF2F3A2E), c(0xFFA8543A, 0xFFC8B8A0), c(0xFFA8543A, 0xFF9A4A38, 0xFFC8B8A0, 0xFFB86A48), 0xFFC0B4A0, 3,
+                    "University Quad", "Student Halls", "Public Library", "Music Conservatory"),
+            new Theme("The Circus", ALL, false,
+                    c(0xFF3E4650, 0xFF4A525C, 0xFF56606A), c(0xFFF2EAD8, 0xFFEADFC8, 0xFFF6F0E2, 0xFFE4D6BC),
+                    c(0xFF3E4650), c(0xFFF2EAD8, 0xFFE4D6BC), c(0xFFF2EAD8, 0xFFEADFC8), 0xFFD8D0BE, 2),
+            new Theme("Terraced Rows", ALL, false,
+                    c(0xFF4A525C, 0xFF3E4650, 0xFF5A3D35), c(0xFF9A4A38, 0xFFA8543A, 0xFFB86A48, 0xFF8E4434, 0xFFD8C8A8),
+                    c(0xFF3E4650), c(0xFFA8543A, 0xFFE8D8A0), c(0xFFA8543A, 0xFF9A4A38), 0, 0, "Worker Cottages", "Brownstone Row", "Irish Pub"),
+            new Theme("Loft Quarter", ALL, false,
+                    c(0xFF5E8A4A, 0xFF4E7A3E, 0xFF3A3A3E, 0xFF6E9A5A), c(0xFF8E4434, 0xFF9A6A50, 0xFF7C6A5A, 0xFFA8543A),
+                    c(0xFF3A3A3E, 0xFF5E8A4A), c(0xFF9A6A50, 0xFFA8543A), c(0xFF8E4434, 0xFF9A6A50, 0xFF7C6A5A, 0xFFA8543A), 0xFF908478, 2,
+                    "Riverside Lofts", "Printing Works", "Glassworks"),
+    };
+
+    /** ((27.5) The city's own look for every district without one of its own (on map version 40). */
+    static void paint(City city, int palette) {
+        if (city.cfg.desert() || city.cfg.themePark() || city.cfg.spaceCenter()) return;
+        Theme p = PALETTES[palette];
+        for (City.District d : city.districts)
+            if (d.theme == null && d.type != City.DT_DOWNTOWN && d.type != City.DT_INDUSTRIAL) d.theme = p;
+    }
+
     static int pick(int[] cols, Random r) {
         return cols[r.nextInt(cols.length)];
     }
