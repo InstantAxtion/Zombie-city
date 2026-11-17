@@ -1180,7 +1180,7 @@ public final class GameTests {
                         "a truck mustering at the base waits in the yard, off the gateway");
             }
         });
-        test("10.46: infection zones round the dead - perimeter, army checkpoints on the roads in, worst first, lifted once clear", new Check() {
+        test("10.46: infection zones round the dead - perimeter (no checkpoints on the roads in), worst first, lifted once clear", new Check() {
             public void run() {
                 CityConfig c = new CityConfig();
                 c.v[CityConfig.OPT_PRESET] = 0;
@@ -1243,9 +1243,9 @@ public final class GameTests {
                     perimeter = Math.max(perimeter, n);
                 }
                 check(declared, "an infection zone is declared round the bunch of the dead");
-                check(checkpoints >= 1 && roads, "the army closes the roads into it (" + checkpoints + " checkpoints, all on the road)");
+                // ((27.5) No checkpoints put up on the roads in, in the middle of a game, any more.)
+                check(checkpoints == 0 && roads, "no checkpoints put up on the roads into it (" + checkpoints + ")");
                 check(perimeter >= 4, "police on its perimeter, not called there by anyone (" + perimeter + ")");
-                check(sent, "soldiers are sent out to man the checkpoints");
                 check(invariant, "the worst zone is held first; the others wait, with nobody on them, till there's someone for them");
                 // Not lifted while any of them are about; lifted, roads and all, once they're gone.
                 boolean any = !w.infection.isEmpty();

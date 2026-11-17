@@ -267,8 +267,11 @@ final class Containment {
             if (!z.critical) {
                 // (Waiting its turn: nobody on its perimeter, and its roads open again for now.)
                 for (int p = 0; p < World.CORDON_POSTS; p++) closeCall(z.postCall, p);
-                if (!z.checkpoints.isEmpty()) removeCheckpoints(z);
-            } else if (z.checkpoints.isEmpty()) placeZone(z, z.x, z.y, z.r);
+                if (z.ringUp) {
+                    removeCheckpoints(z);
+                    z.ringUp = false;
+                }
+            } else if (!z.ringUp) placeZone(z, z.x, z.y, z.r);
         }
         // Who's on which line now.
         for (World.InfectionZone z : w.infection) java.util.Arrays.fill(z.manned, 0);
@@ -483,30 +486,9 @@ final class Containment {
             oldCalls[k] = null;
             moved++;
         }
-        for (int k = 0; k < 32 && z.checkpoints.size() < World.MAX_CHECKPOINTS; k++) {
-            float a = World.TAU * k / 32, ux = (float) Math.cos(a), uy = (float) Math.sin(a);
-            float px = cx + ux * (r + 70), py = cy + uy * (r + 70);
-            int tx = (int) (px / City.T), ty = (int) (py / City.T);
-            if (tx < 2 || ty < 2 || tx >= w.city.w - 2 || ty >= w.city.h - 2) continue;
-            int i = ty * w.city.w + tx;
-            if (w.city.tiles[i] != City.ROAD || (w.city.oneWay != null && w.city.oneWay[i] != 0) || (w.city.slipWay != null && w.city.slipWay[i] != 0)
-                    || w.city.junctionAt(tx, ty)) continue;
-            int dir = w.city.roadDirAt(tx, ty);
-            boolean radial = (dir == 1 && Math.abs(uy) > 0.7f) || (dir == 2 && Math.abs(ux) > 0.7f);
-            if (!radial) continue;
-            boolean near = false;
-            for (float[] o : z.checkpoints) if (World.hypot(o[0] - px, o[1] - py) < 220) near = true;
-            for (float[] o : w.city.checkpoints) if (World.hypot(o[0] - px, o[1] - py) < 120) near = true;
-            if (near) continue;
-            float ang = dir == 1 ? (uy > 0 ? 1.5708f : -1.5708f) : (ux > 0 ? 0 : 3.1416f);
-            float[] cp = {(tx + 0.5f) * City.T, (ty + 0.5f) * City.T, ang};
-            z.checkpoints.add(cp);
-            w.city.checkpoints.add(cp);
-            for (int sd = -1; sd <= 1; sd += 2) {
-                float[] q = w.city.findWalkable(cp[0] - (float) Math.sin(ang) * sd * 2.4f * City.T, cp[1] + (float) Math.cos(ang) * sd * 2.4f * City.T);
-                z.guardSpots.add(q != null ? q : new float[]{cp[0], cp[1]});
-            }
-        }
+        // ((27.5) No checkpoints put up on the roads into a zone in the middle of a game any more: the perimeter posts are
+        // enough. (The army's checkpoints on the road to the base, part of the map from the start, stay.)
+        z.ringUp = true;
         for (int k = 0; k < z.guards.length; k++) {
             Entity g = z.guards[k];
             if (g == null) continue;

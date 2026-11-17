@@ -3055,8 +3055,12 @@ final class World {
         final float[] post = new float[CORDON_POSTS * 2];
         final int[] manned = new int[CORDON_POSTS];
         final Dispatch.Incident[] postCall = new Dispatch.Incident[CORDON_POSTS];
-        /** Army checkpoints on the roads in: {x, y, angle} (also in city.checkpoints while the zone stands). */
+        /**
+         * Army checkpoints on the roads in: {x, y, angle} (also in city.checkpoints while the zone stands). ((27.5) None put
+         * up any more - the list stays, always empty - and whether the zone's ring is up is ringUp.)
+         */
         final ArrayList<float[]> checkpoints = new ArrayList<float[]>();
+        boolean ringUp;
         /** Two guard spots at each checkpoint, and the soldiers on them (or on their way). */
         final ArrayList<float[]> guardSpots = new ArrayList<float[]>();
         final Entity[] guards = new Entity[MAX_CHECKPOINTS * 2];
