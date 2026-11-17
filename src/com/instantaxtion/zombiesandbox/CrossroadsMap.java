@@ -26,7 +26,7 @@ final class CrossroadsMap extends RegionMap {
     boolean hwyVertical;
     /** The second highway: its streets, where it runs (k0, k0 + W across it), and the roadside stops' parcels. */
     final List<Street> route = new ArrayList<Street>();
-    int k2 = -1, W = 5;
+    int k2 = -1, W = 7;
     final List<int[]> stops = new ArrayList<int[]>();
     static final int TRUCK = 0, MOTEL = 1, GARAGE = 2, FUEL = 3, WEIGH = 4;
     static final int[] ORDER = {TRUCK, MOTEL, FUEL, GARAGE, WEIGH, MOTEL, GARAGE, FUEL, MOTEL, GARAGE};
@@ -96,7 +96,7 @@ final class CrossroadsMap extends RegionMap {
         for (int[] sp : spots) {
             if (next >= want) break;
             int type = ORDER[next];
-            int lr = type == TRUCK ? 30 : type == MOTEL ? 24 : type == WEIGH ? 20 : 16, dk = type == TRUCK ? 22 : type == MOTEL ? 16 : 13;
+            int lr = type == TRUCK ? 32 : type == MOTEL ? 24 : type == WEIGH ? 20 : 16, dk = type == TRUCK ? 26 : type == MOTEL ? 16 : 13;
             Landmarks.Def m = CityGenerator.landmarkNamed("Motel");
             if (type == MOTEL && m != null) {
                 lr = Math.max(lr, m.minL + 4);
@@ -123,8 +123,6 @@ final class CrossroadsMap extends RegionMap {
 
     @Override
     void places(boolean[] used) {
-        // A grass median down the second highway, each side one way, open where anything joins it.
-        for (Street st : route) median(st);
         if (gen.lmRnd == null) {
             gen.lmRnd = new Random(city.cfg.seed * 7919L + 35);
             gen.lmCount = new int[Landmarks.all().size()];
@@ -146,10 +144,10 @@ final class CrossroadsMap extends RegionMap {
                     break;
                 case TRUCK: {
                     // The fuel canopy by the road, the truck stop's building and its lot for the rigs behind.
-                    int[] f = strip(ix, iy, iw, ih, face, 9);
+                    int[] f = strip(ix, iy, iw, ih, face, 13);
                     lotGen.gasStation(f[0], f[1], f[2], f[3]);
                     int[] b = strip(ix, iy, iw, ih, face, -1);
-                    int[] rest = shrinkFrom(b, face, 10);
+                    int[] rest = shrinkFrom(b, face, 14);
                     city.fill(rest[0], rest[1], rest[2], rest[3], LOT);
                     int bw = Math.min(10, rest[2] - 2), bh = Math.min(6, rest[3] - 2);
                     if (bw >= 4 && bh >= 3) city.natureLot(rest[0] + 1, rest[1] + 1, bw, bh, OFFICE, 1, 0xFF8A3A2E, 0xFFD8C8A8, "Truck Stop", -1);
@@ -197,36 +195,6 @@ final class CrossroadsMap extends RegionMap {
             case 1: return new int[]{x + d, y, w - d, h};
             case 2: return new int[]{x, y, w, h - d};
             default: return new int[]{x, y + d, w, h - d};
-        }
-    }
-
-    /** A grass median down the middle of a street five across, each side one way (as CityGenerator.plantMedians). */
-    void median(Street st) {
-        if (st.width != 5) return;
-        int n = st.vertical ? st.y1 - st.y0 : st.x1 - st.x0;
-        for (int k = 0; k < n; k++) {
-            boolean clear = true;
-            for (int a = 0; a < 5 && clear; a++)
-                for (int e = -1; e <= 1 && clear; e++) {
-                    int x = st.vertical ? st.x0 + a : st.x0 + k + e, y = st.vertical ? st.y0 + k + e : st.y0 + a;
-                    if (x < 0 || y < 0 || x >= city.w || y >= city.h || city.tiles[y * city.w + x] != ROAD || city.roadDir[y * city.w + x] != (st.vertical ? 1 : 2)) clear = false;
-                }
-            for (int a = -1; a <= 5 && clear; a += 6)
-                for (int e = -3; e <= 3 && clear; e++) {
-                    int x = st.vertical ? st.x0 + a : st.x0 + k + e, y = st.vertical ? st.y0 + k + e : st.y0 + a;
-                    if (gen.isRoad(x, y)) clear = false;
-                }
-            if (!clear) continue;
-            int x = st.vertical ? st.x0 + 2 : st.x0 + k, y = st.vertical ? st.y0 + k : st.y0 + 2;
-            city.tiles[y * city.w + x] = GRASS;
-            city.roadDir[y * city.w + x] = 0;
-            if (city.divided == null) city.divided = new byte[city.w * city.h];
-            for (int a = 0; a < 5; a++) {
-                if (a == 2) continue;
-                int lx = st.vertical ? st.x0 + a : st.x0 + k, ly = st.vertical ? st.y0 + k : st.y0 + a;
-                boolean neg = a < 2;
-                city.divided[ly * city.w + lx] = (byte) (st.vertical ? (neg ? 3 : 4) : (neg ? 2 : 1));
-            }
         }
     }
 

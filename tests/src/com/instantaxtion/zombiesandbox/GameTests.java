@@ -5449,6 +5449,92 @@ public final class GameTests {
                 check(l.counts[Entity.ARMOURED] == w.counts[Entity.ARMOURED] && l.counts[Entity.ARMOURED] >= 1 && Entity.current(Entity.SCREAMER) == Entity.ZOMBIE, "kept in a save; a screamer in an older save loads as a zombie");
             }
         });
+        test("28.0: Highway Crossroads, Canyon Town and Frozen North - each its own place, one road network, base and police on it", new Check() {
+            public void run() throws Exception {
+                for (int preset : new int[]{CityConfig.CROSSROADS, CityConfig.CANYON, CityConfig.FROZEN_NORTH})
+                    for (long seed : new long[]{3, 11}) {
+                        CityConfig c = new CityConfig();
+                        c.v[CityConfig.OPT_PRESET] = preset;
+                        c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                        c.seed = seed;
+                        c.normalize();
+                        check(c.preset() == preset && !CityConfig.retired(CityConfig.OPT_PRESET, preset), CityConfig.PRESETS[preset] + " is offered");
+                        City city = new City(c, 0.05f);
+                        String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
+                        int w = city.w, h = city.h, n = w * h;
+                        byte[] t = city.tiles;
+                        // One road network.
+                        int[] comp = new int[n];
+                        java.util.Arrays.fill(comp, -1);
+                        int[] q = new int[n];
+                        java.util.List<Integer> sizes = new java.util.ArrayList<Integer>();
+                        for (int i = 0; i < n; i++) {
+                            if (comp[i] >= 0 || !(t[i] == City.ROAD || t[i] == City.DIRT)) continue;
+                            int id = sizes.size(), hd = 0, tl = 0;
+                            q[tl++] = i;
+                            comp[i] = id;
+                            while (hd < tl) {
+                                int cc = q[hd++], x = cc % w, y = cc / w;
+                                for (int k = 0; k < 4; k++) {
+                                    int nx = x + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = y + (k == 2 ? 1 : k == 3 ? -1 : 0);
+                                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                    int j = ny * w + nx;
+                                    if (comp[j] >= 0 || !(t[j] == City.ROAD || t[j] == City.DIRT || t[j] == City.CAR || t[j] == City.LOT)) continue;
+                                    comp[j] = id;
+                                    q[tl++] = j;
+                                }
+                            }
+                            sizes.add(tl);
+                        }
+                        int main = 0, stray = 0;
+                        for (int k = 1; k < sizes.size(); k++) if (sizes.get(k) > sizes.get(main)) main = k;
+                        for (int k = 0; k < sizes.size(); k++) if (k != main && sizes.get(k) >= 4) stray++;
+                        check(stray == 0, m + "the roads are one network (" + stray + " bits apart)");
+                        // The base and the police stations by a road of it.
+                        check(city.mainBase() != null, m + "has an army base");
+                        int police = 0, off = 0;
+                        for (City.Facility f : city.facilities) {
+                            if (f.kind != City.FACILITY_BASE && f.kind != City.FACILITY_POLICE) continue;
+                            if (f.kind == City.FACILITY_POLICE) police++;
+                            float fx = f.kind == City.FACILITY_BASE ? f.gateX : f.x, fy = f.kind == City.FACILITY_BASE ? f.gateY : f.y;
+                            boolean near = false;
+                            for (int dy = -14; dy <= 14 && !near; dy++)
+                                for (int dx = -14; dx <= 14 && !near; dx++) {
+                                    int x = (int) (fx / City.T) + dx, y = (int) (fy / City.T) + dy;
+                                    if (x >= 0 && y >= 0 && x < w && y < h && comp[y * w + x] == main) near = true;
+                                }
+                            if (!near) off++;
+                        }
+                        check(police > 0 && off == 0, m + "police (" + police + ") and the base by the road network (" + off + " not)");
+                        int water = 0, rock = 0, pines = 0, trees = 0;
+                        for (int i = 0; i < n; i++) {
+                            if (t[i] == City.WATER) water++;
+                            if (t[i] == City.ROCK) rock++;
+                            if (t[i] == City.TREE) {
+                                trees++;
+                                if (city.treeKindAt(i) == Country.TK_PINE) pines++;
+                            }
+                        }
+                        if (preset == CityConfig.CROSSROADS) {
+                            CrossroadsMap x = (CrossroadsMap) city.region;
+                            check(city.hwyAxis >= 0 && x.interchange && !city.overpasses.isEmpty() && city.hwyExits.size() >= 1, m + "the second highway crosses the first over an interchange");
+                            check(x.built[CrossroadsMap.TRUCK] >= 1 && x.built[CrossroadsMap.MOTEL] >= 1 && x.built[CrossroadsMap.FUEL] >= 1, m + "a truck stop, a motel and fuel by the road (" + x + ")");
+                            check((city.townX1 - city.townX0) * (city.townY1 - city.townY0) < w * h / 4, m + "a small town in open country");
+                        } else if (preset == CityConfig.CANYON) {
+                            CanyonMap x = (CanyonMap) city.region;
+                            check(x.bridges >= 1 && x.switchbacks >= 1 && x.rocks.size() >= 1, m + "bridges over the gorge, switchbacks down the cliff, buttes (" + x + ")");
+                            check(rock > n / 25, m + "a cliff and a gorge of rock (" + rock + ")");
+                            check((city.region.ground(10, 10) >> 16 & 255) > (city.region.ground(10, 10) >> 8 & 255), m + "red ground");
+                        } else {
+                            FrozenNorthMap x = (FrozenNorthMap) city.region;
+                            check(x.airstrip && city.airport != null && x.station && x.cabins >= 2 && x.piers >= 1, m + "an airstrip, the radar station, cabins and piers (" + x + ")");
+                            check(water > n / 40, m + "a frozen bay (" + water + ")");
+                            check(pines == trees, m + "every tree a pine");
+                            check((city.region.ground(10, 10) & 255) > 200, m + "snowy ground");
+                        }
+                    }
+            }
+        });
         test("26.1: every map has an army base; the Archipelago's outer islands are palm-fringed villages, unlike the Islands", new Check() {
             public void run() throws Exception {
                 for (int preset : new int[]{CityConfig.THEME_PARK, CityConfig.SPACE_CENTER, 9}) {
