@@ -710,8 +710,11 @@ final class City {
     /** Packs a whole-map walking field (FAR for out of reach) into a WalkField. */
     WalkField packField(int[] dist) {
         int x0 = w, y0 = h, x1 = -1, y1 = -1;
-        for (int y = 0, i = 0; y < h; y++)
-            for (int x = 0; x < w; x++, i++)
+        // ((27.4) Fresh from a way on foot in the scratch array: only its box can hold anything (see walkClean).)
+        boolean box = dist == fieldTmp && walkClean;
+        int sy0 = box ? walkY0 : 0, sy1 = box ? walkY1 : h - 1, sx0 = box ? walkX0 : 0, sx1 = box ? walkX1 : w - 1;
+        for (int y = sy0; y <= sy1; y++)
+            for (int x = sx0, i = y * w + sx0; x <= sx1; x++, i++)
                 if (dist[i] < FAR_C) {
                     if (x < x0) x0 = x;
                     if (x > x1) x1 = x;
@@ -768,15 +771,28 @@ final class City {
      */
     int[] scratch() {
         if (fieldTmp == null) fieldTmp = new int[w * h];
+        // (Whoever has it may write anything in it.)
+        walkClean = false;
         return fieldTmp;
     }
 
     /** The scratch array for a way on foot, which leaves all of it written: the next route search clears it all. */
     int[] walkScratch() {
+        boolean clean = walkClean;
         int[] a = scratch();
+        walkClean = clean;
         if (dfLast == a) dfTouchedN = -1;
         return a;
     }
+
+    /**
+     * ((27.4) The scratch array holds the last way on foot worked out in it and nothing else: FAR everywhere but the box
+     * of tiles (walkX0, walkY0)-(walkX1, walkY1) it reached. Then the next one need only put that box back, and packing
+     * it up only look in the box - not the whole map, twice over, for every new call (a few hundred thousand tiles each
+     * time, a call reaching a few thousand).
+     */
+    boolean walkClean;
+    int walkX0, walkY0, walkX1 = -1, walkY1 = -1;
     /** While drawing a close-up: only this region (in tiles, with a margin). */
     boolean regionOnly;
     int rx0, ry0, rx1, ry1;
@@ -2350,16 +2366,38 @@ final class City {
         return true;
     }
 
+    /** ((27.4) i / (float) n for every i under n, for each n up to 256: the steps along a line of sight. */
+    static final float[][] LOS_FRAC = new float[257][];
+
+    static {
+        for (int n = 1; n < LOS_FRAC.length; n++) {
+            float[] a = new float[n];
+            for (int i = 0; i < n; i++) a[i] = i / (float) n;
+            LOS_FRAC[n] = a;
+        }
+    }
+
     boolean los(float x0, float y0, float x1, float y1) {
         float dx = x1 - x0, dy = y1 - y0;
         float len = (float) Math.sqrt(dx * dx + dy * dy);
         int steps = (int) (len / 5f) + 1;
         Building seen = null;
+        // ((27.4) A step still on the tile the step before was on is passed over: the same tile gives the same answer
+        // (and a building's walls were only looked at once per building in any case). Several steps fall on each tile.)
+        int last = -1;
+        // ((27.4) Each step's fraction of the way from a table worked out once, not divided out again (the same
+        // numbers exactly); and off the map below nought by its own sign: a tile under nought, however rounded.)
+        final float[] frac = steps < LOS_FRAC.length ? LOS_FRAC[steps] : null;
         for (int i = 1; i < steps; i++) {
-            float f = i / (float) steps;
-            int tx = City.fl((x0 + dx * f) / T), ty = City.fl((y0 + dy * f) / T);
-            if (tx < 0 || ty < 0 || tx >= w || ty >= h) return false;
-            if (opaque[ty * w + tx]) {
+            float f = frac != null ? frac[i] : i / (float) steps;
+            float vx = (x0 + dx * f) / T, vy = (y0 + dy * f) / T;
+            if (vx < 0 || vy < 0) return false;
+            int tx = (int) vx, ty = (int) vy;
+            if (tx >= w || ty >= h) return false;
+            int ti = ty * w + tx;
+            if (ti == last) continue;
+            last = ti;
+            if (opaque[ti]) {
                 // ((17.1) Into, out of or across a building people can walk into: through its doorways, not its walls.)
                 Building b = enterableTile(tx, ty);
                 if (b == null) return false;
@@ -2832,6 +2870,8 @@ final class City {
     }
 
     boolean driveField(int[] dist, float x, float y, boolean strict, int from) {
+        // ((27.4) Written all over now: no longer just a way on foot's (see walkClean).)
+        if (dist == fieldTmp) walkClean = false;
         // ((11.5) Only the tiles the last search reached are put back, not the whole map: a search for a trip
         // across town touches a small part of it.)
         if (dist == dfLast && dfTouchedN >= 0) {
@@ -3485,10 +3525,24 @@ final class City {
         walkFieldFromPoints(dist, xs, ys, n, FAR);
     }
 
+    /** ((27.4) Into the walk search's queue for cost nd (growing it as it must); 1. */
+    private int walkQueue(int[] sizes, int nd, int nb) {
+        int b2 = nd % 9;
+        if (sizes[b2] == walkBuckets[b2].length) walkBuckets[b2] = Arrays.copyOf(walkBuckets[b2], Math.min(w * h * 4, sizes[b2] * 2));
+        walkBuckets[b2][sizes[b2]++] = nb;
+        return 1;
+    }
+
     /** As above, but only out to a walking distance of limit (in steps of cost). */
     void walkFieldFromPoints(int[] dist, float[] xs, float[] ys, int n, int limit) {
         if (walkCost == null) computeWalkCost();
-        Arrays.fill(dist, FAR);
+        // ((27.4) The scratch array with only the last way on foot in it: just that one's box put back (see walkClean).)
+        boolean mine = dist == fieldTmp;
+        if (mine && walkClean) {
+            for (int y = walkY0; y <= walkY1; y++) Arrays.fill(dist, y * w + walkX0, y * w + walkX1 + 1, FAR);
+        } else Arrays.fill(dist, FAR);
+        // (The box of tiles this one reaches.)
+        int bx0 = w, by0 = h, bx1 = -1, by1 = -1;
         // ((10.31) Each starts small and grows as needed: nine whole-map arrays were 36MB on a Gigantic map.)
         if (walkBuckets == null) walkBuckets = new int[9][Math.max(1024, w * h / 16)];
         int[] sizes = new int[9];
@@ -3497,10 +3551,19 @@ final class City {
             int t = tileIndex(xs[i], ys[i]);
             if (dist[t] != 0) {
                 dist[t] = 0;
+                int tx = t % w, ty = t / w;
+                if (tx < bx0) bx0 = tx;
+                if (tx > bx1) bx1 = tx;
+                if (ty < by0) by0 = ty;
+                if (ty > by1) by1 = ty;
                 walkBuckets[0][sizes[0]++] = t;
                 pending++;
             }
         }
+        // ((27.4) What it works through held here, and the four ways on from each tile written out in the same order.)
+        final boolean[] sol = solid;
+        final byte[] cost = walkCost;
+        final int W = w, H = h;
         for (int d = 0; pending > 0; d++) {
             int bi = d % 9;
             if (d > limit) {
@@ -3513,25 +3576,69 @@ final class City {
             for (int k = 0; k < size; k++) {
                 int t = bk[k];
                 if (dist[t] != d) continue;
-                int tx = t % w, ty = t / w;
-                for (int q = 0; q < 4; q++) {
-                    int nb;
-                    if (q == 0) { if (tx == 0) continue; nb = t - 1; }
-                    else if (q == 1) { if (tx == w - 1) continue; nb = t + 1; }
-                    else if (q == 2) { if (ty == 0) continue; nb = t - w; }
-                    else { if (ty == h - 1) continue; nb = t + w; }
-                    if (solid[nb]) continue;
-                    int nd = d + walkCost[nb];
-                    if (nd >= dist[nb]) continue;
-                    dist[nb] = nd;
-                    int b2 = nd % 9;
-                    if (sizes[b2] == walkBuckets[b2].length) walkBuckets[b2] = Arrays.copyOf(walkBuckets[b2], Math.min(w * h * 4, sizes[b2] * 2));
-                    walkBuckets[b2][sizes[b2]++] = nb;
-                    pending++;
+                int tx = t % W, ty = t / W;
+                if (tx != 0) {
+                    int nb = t - 1;
+                    if (!sol[nb]) {
+                        int nd = d + cost[nb];
+                        if (nd < dist[nb]) {
+                            dist[nb] = nd;
+                            if (tx - 1 < bx0) bx0 = tx - 1;
+                            if (ty < by0) by0 = ty;
+                            if (ty > by1) by1 = ty;
+                            pending += walkQueue(sizes, nd, nb);
+                        }
+                    }
+                }
+                if (tx != W - 1) {
+                    int nb = t + 1;
+                    if (!sol[nb]) {
+                        int nd = d + cost[nb];
+                        if (nd < dist[nb]) {
+                            dist[nb] = nd;
+                            if (tx + 1 > bx1) bx1 = tx + 1;
+                            if (ty < by0) by0 = ty;
+                            if (ty > by1) by1 = ty;
+                            pending += walkQueue(sizes, nd, nb);
+                        }
+                    }
+                }
+                if (ty != 0) {
+                    int nb = t - W;
+                    if (!sol[nb]) {
+                        int nd = d + cost[nb];
+                        if (nd < dist[nb]) {
+                            dist[nb] = nd;
+                            if (tx < bx0) bx0 = tx;
+                            if (tx > bx1) bx1 = tx;
+                            if (ty - 1 < by0) by0 = ty - 1;
+                            pending += walkQueue(sizes, nd, nb);
+                        }
+                    }
+                }
+                if (ty != H - 1) {
+                    int nb = t + W;
+                    if (!sol[nb]) {
+                        int nd = d + cost[nb];
+                        if (nd < dist[nb]) {
+                            dist[nb] = nd;
+                            if (tx < bx0) bx0 = tx;
+                            if (tx > bx1) bx1 = tx;
+                            if (ty + 1 > by1) by1 = ty + 1;
+                            pending += walkQueue(sizes, nd, nb);
+                        }
+                    }
                 }
             }
             pending -= size;
             sizes[bi] = 0;
+        }
+        if (mine) {
+            walkClean = true;
+            walkX0 = bx0;
+            walkY0 = by0;
+            walkX1 = bx1;
+            walkY1 = by1;
         }
     }
 

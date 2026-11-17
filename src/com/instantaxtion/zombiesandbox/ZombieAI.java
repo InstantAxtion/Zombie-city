@@ -1257,7 +1257,7 @@ final class ZombieAI {
             tx = (int) (p[0] / City.T);
             ty = (int) (p[1] / City.T);
         }
-        if (f == null) f = new World.Lure();
+        if (f == null) f = w.spareLures.isEmpty() ? new World.Lure() : w.spareLures.remove(w.spareLures.size() - 1);
         f.made = w.time;
         f.x0 = tx - World.LURE_R;
         f.y0 = ty - World.LURE_R;

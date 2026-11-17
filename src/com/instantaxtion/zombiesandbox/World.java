@@ -2281,9 +2281,16 @@ final class World {
     final java.util.LinkedHashMap<Integer, Lure> lures = new java.util.LinkedHashMap<Integer, Lure>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(java.util.Map.Entry<Integer, Lure> eldest) {
-            return size() > 40;
+            // ((27.4) Kept to be used again for the next one (it's worked out afresh, every tile): each is 26 KB, and
+            // a big horde roaming the streets made and dropped dozens a second.)
+            if (size() > 40) {
+                if (spareLures.size() < 8) spareLures.add(eldest.getValue());
+                return true;
+            }
+            return false;
         }
     };
+    final java.util.ArrayList<Lure> spareLures = new java.util.ArrayList<Lure>();
     int[][] lureBuckets;
     int luresMade;
 

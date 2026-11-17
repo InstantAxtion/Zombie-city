@@ -170,19 +170,41 @@ final class Spatial {
         float fx = from.x, fy = from.y, reach2 = (radius + World.GRID_SLACK) * (radius + World.GRID_SLACK);
         int cx0 = Math.max(0, (int) ((from.x - radius) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((from.x + radius) / World.CELL));
         int cy0 = Math.max(0, (int) ((from.y - radius) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((from.y + radius) / World.CELL));
+        // ((27.4) The grid's arrays held here, not looked up again for every one in every cell; and a cell wholly out
+        // of reach (the corners of the square round a long look) passed over without going through who's in it.
+        // Everyone in a cell is inside it - but on the edge of the map, where those off it are kept in the edge cells -
+        // so none of them could have been close enough: the same ones are found, in the same order.)
+        final Entity[] sorted = w.sorted;
+        final float[] sX = w.sortedX, sY = w.sortedY;
+        final int[] start = w.cellStart, zc = w.zCount, cc = w.cellCount;
+        final int gw = w.gw, gh = w.gh;
+        final boolean fromZombie = from.isZombie();
         for (int cy = cy0; cy <= cy1; cy++) {
+            float dy = 0;
+            boolean edgeY = cy == 0 || cy == gh - 1;
+            if (!edgeY) {
+                float y0 = cy * World.CELL, y1 = (cy + 1) * World.CELL;
+                dy = fy < y0 ? y0 - fy : fy > y1 ? fy - y1 : 0;
+            }
             for (int cx = cx0; cx <= cx1; cx++) {
-                int c = cy * w.gw + cx;
-                for (int k = wantZombie ? w.cellStart[c] : w.cellStart[c] + w.zCount[c], end = wantZombie ? w.cellStart[c] + w.zCount[c] : w.cellStart[c] + w.cellCount[c]; k < end; k++) {
+                int c = cy * gw + cx;
+                int k = wantZombie ? start[c] : start[c] + zc[c], end = wantZombie ? start[c] + zc[c] : start[c] + cc[c];
+                if (k >= end) continue;
+                if (!edgeY && cx != 0 && cx != gw - 1) {
+                    float x0 = cx * World.CELL, x1 = (cx + 1) * World.CELL;
+                    float dx = fx < x0 ? x0 - fx : fx > x1 ? fx - x1 : 0;
+                    if (dx * dx + dy * dy > reach2) continue;
+                }
+                for (; k < end; k++) {
                     // ((13.5) From where they were when the grid was made first (side by side in memory), with room for
                     // the few steps since: only those that could be close enough are looked at themselves.)
-                    float px = w.sortedX[k] - fx, py = w.sortedY[k] - fy;
+                    float px = sX[k] - fx, py = sY[k] - fy;
                     if (px * px + py * py > reach2) continue;
-                    Entity o = w.sorted[k];
+                    Entity o = sorted[k];
                     // ((12.0) Not one already finished off this moment, waiting to be cleared away.)
                     if (o.dead || o.hp <= 0 || o.isZombie() != wantZombie || o == from) continue;
                     // ((27.0) Up on a roof: out of the dead's reach, and their sight.)
-                    if (!wantZombie && o.roof != null && o.onTower && from.isZombie()) continue;
+                    if (!wantZombie && o.roof != null && o.onTower && fromZombie) continue;
                     float ddx = o.x - from.x, ddy = o.y - from.y, d2 = ddx * ddx + ddy * ddy;
                     if (d2 >= best) continue;
                     if (needLos) {
@@ -200,18 +222,27 @@ final class Spatial {
                 }
             }
         }
-        while (w.nearN > 0) {
+        // ((27.4) Nearest first, in the same order as ever: the lists held here.)
+        int nn = w.nearN;
+        final float[] nd = w.nearD;
+        final Entity[] ne = w.nearE;
+        while (nn > 0) {
             int bi = 0;
-            for (int i = 1; i < w.nearN; i++) if (w.nearD[i] < w.nearD[bi]) bi = i;
-            Entity o = w.nearE[bi];
-            w.nearD[bi] = w.nearD[--w.nearN];
-            w.nearE[bi] = w.nearE[w.nearN];
+            float bd = nd[0];
+            for (int i = 1; i < nn; i++) if (nd[i] < bd) {
+                bd = nd[i];
+                bi = i;
+            }
+            Entity o = ne[bi];
+            nd[bi] = nd[--nn];
+            ne[bi] = ne[nn];
             if (w.city.los(from.x, from.y, o.x, o.y)) {
                 res = o;
                 break;
             }
         }
-        while (w.nearN > 0) w.nearE[--w.nearN] = null;
+        while (nn > 0) ne[--nn] = null;
+        w.nearN = 0;
         return res;
     }
 
@@ -241,14 +272,19 @@ final class Spatial {
         float reach2 = (radius + World.GRID_SLACK) * (radius + World.GRID_SLACK);
         int cx0 = Math.max(0, (int) ((x - radius) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((x + radius) / World.CELL));
         int cy0 = Math.max(0, (int) ((y - radius) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((y + radius) / World.CELL));
+        // ((27.4) The grid's arrays held here.)
+        final Entity[] sorted = w.sorted;
+        final float[] sX = w.sortedX, sY = w.sortedY;
+        final int[] start = w.cellStart, zc = w.zCount;
+        final int gw = w.gw;
         for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++) {
-                int c = cy * w.gw + cx;
-                for (int k = w.cellStart[c], end = w.cellStart[c] + w.zCount[c]; k < end; k++) {
+                int c = cy * gw + cx;
+                for (int k = start[c], end = start[c] + zc[c]; k < end; k++) {
                     // ((13.5) Only those that could be close enough looked at themselves (see nearest).)
-                    float px = w.sortedX[k] - x, py = w.sortedY[k] - y;
+                    float px = sX[k] - x, py = sY[k] - y;
                     if (px * px + py * py > reach2) continue;
-                    Entity o = w.sorted[k];
+                    Entity o = sorted[k];
                     if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - x, ddy = o.y - y;
                     if (ddx * ddx + ddy * ddy < radius * radius) count++;

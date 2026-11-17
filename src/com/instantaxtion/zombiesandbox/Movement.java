@@ -796,15 +796,20 @@ final class Movement {
             int cx0 = Math.max(0, (int) ((e.x - reach) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((e.x + reach) / World.CELL));
             int cy0 = Math.max(0, (int) ((e.y - reach) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((e.y + reach) / World.CELL));
             float pushX = 0, pushY = 0, ex = e.x, ey = e.y, er = e.radius;
+            // ((27.4) The grid's arrays held here, not looked up again for each of everyone near.)
+            final Entity[] sorted = w.sorted;
+            final float[] sX = w.sortedX, sY = w.sortedY, sR = w.sortedR;
+            final int[] start = w.cellStart, count = w.cellCount;
+            final int gw = w.gw;
             for (int cy = cy0; cy <= cy1; cy++) {
                 for (int cx = cx0; cx <= cx1; cx++) {
-                    int c = cy * w.gw + cx;
-                    for (int k = w.cellStart[c], end = w.cellStart[c] + w.cellCount[c]; k < end; k++) {
+                    int c = cy * gw + cx;
+                    for (int k = start[c], end = start[c] + count[c]; k < end; k++) {
                         // ((13.1) Where they were when the grid was made, with a little to spare for this frame's
                         // steps: only the few that close are looked at properly.)
-                        float sx = ex - w.sortedX[k], sy = ey - w.sortedY[k], sm = er + w.sortedR[k] + 4;
+                        float sx = ex - sX[k], sy = ey - sY[k], sm = er + sR[k] + 4;
                         if (sx * sx + sy * sy >= sm * sm) continue;
-                        Entity o = w.sorted[k];
+                        Entity o = sorted[k];
                         if (o == e || o.dead) continue;
                         float ddx = e.x - o.x, ddy = e.y - o.y;
                         float min = e.radius + o.radius;
