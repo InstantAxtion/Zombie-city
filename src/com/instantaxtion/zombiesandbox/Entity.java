@@ -84,6 +84,8 @@ final class Entity {
     transient float goneAt = -1;
     /** ((24.0) The one of the dead they last picked to shoot. */
     transient Entity aimPick;
+    /** ((27.4) Falling back with the others: where they're all making for, and until when. */
+    transient float rallyX, rallyY, rallyT;
     /** ((24.0) Turned away from a full zone: not to try again until then. */
     transient float refusedUntil;
     /** ((24.0) The safe zone they're making for. */

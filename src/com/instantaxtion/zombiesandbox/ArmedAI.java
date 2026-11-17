@@ -101,7 +101,9 @@ final class ArmedAI {
         if (e.ride != null || e.rig != null) return false;
         sense(e);
         // A lull, with a gun getting low: reload now, not with the dead on top of them.
-        if (e.reload <= 0 && e.reserve > 0 && e.ammo > 0 && e.ammo <= Math.max(2, e.magSize * 0.4f) && e.tNear > 85) {
+        // ((27.4) Not all at once: with someone alongside already reloading, the rest keep their guns up a moment.)
+        if (e.reload <= 0 && e.reserve > 0 && e.ammo > 0 && e.ammo <= Math.max(2, e.magSize * 0.4f) && e.tNear > 85
+                && (e.ammo <= 2 || !w.combat.mateReloading(e, Combat.MATE_R))) {
             e.reload = w.combat.reloadTime(e);
             w.emit(Sfx.RELOAD, e.x, e.y);
         }
@@ -1199,8 +1201,10 @@ final class ArmedAI {
                 else w.movement.steer(e, 0, 0, 0);
             } else if (pressed && (guarding == null || World.inside(e, guarding, 1f)))
                 // Too close, reloading or outnumbered: fall back while shooting. ((21.2) Away from all of them, by the
-                // open side - not straight back from the nearest into the rest.)
-                w.movement.flee(e, awayX(e, ddx, d), awayY(e, ddy, d), World.backOff(e, swarmed));
+                // open side - not straight back from the nearest into the rest.) ((27.4) Reloading, with no aim to keep
+                // steady, they open the gap properly: backing off at a walk, one of the dead running at them caught them
+                // with an empty gun.)
+                w.movement.flee(e, awayX(e, ddx, d), awayY(e, ddy, d), e.reload > 0 && d < 70 ? Math.max(World.backOff(e, swarmed), e.runSpeed * 0.85f) : World.backOff(e, swarmed));
             else if (pressed && guarding != null)
                 // ((11.5) On the gate outside the walls and the dead are on them: back inside, not stood there.)
                 w.wilds.walkToSpot(e, guarding.x, guarding.y, e.runSpeed * 0.9f);
@@ -1218,6 +1222,13 @@ final class ArmedAI {
                 // Someone in the line of fire: step sideways for a clear shot.
                 float side = (e.callsign + e.member) % 2 == 0 ? 1 : -1;
                 w.movement.steer(e, -ddy / d * side, ddx / d * side, e.speed);
+            }
+            // ((27.4) Getting low, with the nearest of them not on top of them and someone alongside with a full gun to
+            // cover them (and not reloading too): change the magazine now, not when it clicks empty with the dead close.)
+            if (e.reload <= 0 && e.reserve > 0 && e.ammo > 0 && e.ammo <= Math.max(2, e.magSize * 0.3f) && d > 60
+                    && w.combat.mateCovering(e, 60) && !w.combat.mateReloading(e, Combat.MATE_R)) {
+                e.reload = w.combat.reloadTime(e);
+                w.emit(Sfx.RELOAD, e.x, e.y);
             }
             boolean launcher = soldier && e.role == Entity.ROLE_GRENADIER;
             if (soldier && (e.role == Entity.ROLE_RIFLE || launcher) && e.grenades > 0 && e.grenadeCd <= 0 && d > (launcher ? 60 : 70)
@@ -1545,13 +1556,27 @@ final class ArmedAI {
                 }
             }
         } else if (e.task == Dispatch.T_NONE && e.fear > 0 && (e.ammo > 0 || e.reserve > 0)) w.armedScore[World.A_SEARCH] = 0.5f;
+        // ((27.4) About to be overrun: far more of the dead than there are guns here, and the guns running low - time to
+        // go, together, while they still can, not fight on until the last magazine. (Soldiers sent in close take a good
+        // deal more.)
+        if (t != null && free && e.role != Entity.ROLE_PILOT && e.goal != World.A_FALLBACK && stock < 0.3f) {
+            int near = w.spatial.countZombiesNear(e.x, e.y, 110);
+            float pressure = near / (float) Math.max(1, w.spatial.armedNear(e.x, e.y, 130));
+            float limit = soldier ? (e.task == Dispatch.T_RESPOND ? 9 : 7) : 3.5f + World.rank(e) * 0.5f + (w.ops.boosts(e) ? 1.5f : 0);
+            if (near >= 6 && pressure >= limit) w.armedScore[World.A_FALLBACK] = Math.max(w.armedScore[World.A_FALLBACK], 0.9f);
+        }
+        // ((27.4) The others alongside are falling back to somewhere: they go with them, while the dead are close.)
+        if (t != null && free && e.rallyT > w.time && e.role != Entity.ROLE_PILOT && w.spatial.countZombiesNear(e.x, e.y, 120) >= 3)
+            w.armedScore[World.A_FALLBACK] = Math.max(w.armedScore[World.A_FALLBACK], 0.8f);
         if (posted && t != null) w.armedScore[World.A_FALLBACK] = -1;
         if (e.goal >= 0 && e.goal < World.A_COUNT && w.armedScore[e.goal] > 0) w.armedScore[e.goal] += 0.15f;
         int best = World.A_DUTY;
         for (int g = 0; g < World.A_COUNT; g++) if (w.armedScore[g] > w.armedScore[best]) best = g;
         if (best != e.goal) {
             e.goalTime = 0;
-            if (best == World.A_FALLBACK && w.rnd.nextFloat() < 0.35f)
+            // ((27.4) Not each on their own: the ones alongside fall back with them, to the same place.)
+            if (best == World.A_FALLBACK && e.rallyT <= w.time && t != null) fallBackTogether(e, t, soldier);
+            else if (best == World.A_FALLBACK && w.rnd.nextFloat() < 0.35f)
                 w.dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
                         w.rnd.nextBoolean() ? "Too many of them! Falling back!" : "We can't hold here! Pull back to the others!", e.x, e.y);
         }
@@ -1622,13 +1647,134 @@ final class ArmedAI {
             }
         }
         if (!overrun) e.fallbackSaid = false;
+        // ((27.4) Falling back together: all of them for the same place (the command post, a safe zone, their vehicle,
+        // the station), the two nearest the dead hanging back to cover the rest.)
+        boolean rear = false;
+        if (e.rallyT > w.time) {
+            float rx = e.rallyX - e.x, ry = e.rallyY - e.y, rd = (float) Math.sqrt(rx * rx + ry * ry) + 0.001f;
+            if (rd < 40) e.rallyT = 0;
+            else if ((rx * ax + ry * ay) / rd > -0.5f) {
+                gx = rx / rd * 1.4f;
+                gy = ry / rd * 1.4f;
+            }
+            rear = rearGuard(e, c);
+        }
         float tx = t.x - e.x, ty = t.y - e.y, td = (float) Math.sqrt(tx * tx + ty * ty) + 0.001f;
         float mx = ax * 0.6f + gx * 0.4f, my = ay * 0.6f + gy * 0.4f, ml = (float) Math.sqrt(mx * mx + my * my) + 0.001f;
-        // Turning to fire: when one gets close, or they've opened a gap and can afford to.
-        boolean shoot = td < 45 || (td > 70 && td < range && e.reload <= 0);
-        w.movement.flee(e, mx / ml, my / ml, e.runSpeed * (shoot ? 0.75f : 0.95f));
+        // Turning to fire: when one gets close, or they've opened a gap and can afford to. ((27.4) The rear guard keeps
+        // firing as it goes, a little slower; the rest run for it.)
+        boolean shoot = rear ? td < range && e.reload <= 0 : td < 45 || (e.rallyT <= w.time && td > 70 && td < range && e.reload <= 0);
+        w.movement.flee(e, mx / ml, my / ml, e.runSpeed * (rear ? 0.7f : shoot ? 0.75f : 0.95f));
         if (shoot) w.combat.aimAndFire(e, t, td, range, dt);
         else e.aiming = false;
+    }
+
+    /** ((27.4) Groups that have fallen back together, and when it was last said on the radio. */
+    int groupFallbacks;
+    float groupFallbackSaidAt = -99;
+
+    /**
+     * ((27.4) Too many of the dead for them: e and the others alongside (of their own, free to go, not dug in) fall back
+     * together to one place - their side's command post, a safe zone, their vehicle or the station - rather than each
+     * running alone.
+     */
+    void fallBackTogether(Entity e, Entity t, boolean soldier) {
+        float[] c = w.spatial.zombieCentre(e.x, e.y, 120);
+        float[] r = rallyPoint(e, c[0], c[1]);
+        if (r == null) {
+            float ax = e.x - c[0], ay = e.y - c[1], ad = (float) Math.sqrt(ax * ax + ay * ay);
+            if (ad < 1) {
+                ax = e.x - t.x;
+                ay = e.y - t.y;
+                ad = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
+            }
+            r = w.city.findWalkable(e.x + ax / ad * 260, e.y + ay / ad * 260);
+            if (r == null) return;
+        }
+        int n = 0;
+        for (int i = 0, m = w.combat.mates(e, Combat.MATE_R); i <= m; i++) {
+            Entity o = i == m ? e : w.combat.mateAt(i);
+            if (o.type != e.type || o == w.controlled || (o.task != Dispatch.T_NONE && o.task != Dispatch.T_RESPOND) || dugIn(o)) continue;
+            o.rallyX = r[0];
+            o.rallyY = r[1];
+            o.rallyT = w.time + 9;
+            if (o != e) {
+                o.goal = World.A_FALLBACK;
+                o.goalCd = 1.5f;
+                o.goalTime = 0;
+                n++;
+            }
+        }
+        groupFallbacks++;
+        if (w.time - groupFallbackSaidAt > 10) {
+            groupFallbackSaidAt = w.time;
+            w.dispatch.chatter(soldier ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, (n > 0 ? "On me! Fall back together to " : "Falling back to ")
+                    + w.city.placeName(r[0], r[1]) + "!", e.x, e.y);
+        }
+    }
+
+    /**
+     * ((27.4) Where a group falling back makes for: the nearest of their side's command post (set up), an open safe zone,
+     * their own vehicle and their station or base - not one on the far side of the dead (cx, cy) - or null.
+     */
+    float[] rallyPoint(Entity e, float cx, float cy) {
+        float best = 900 * 900, bx = 0, by = 0;
+        boolean got = false;
+        Ops.Post p = e.type == Entity.COP ? w.ops.police : e.type == Entity.SOLDIER ? w.ops.army : null;
+        for (int k = 0; k < 4; k++) {
+            float x, y;
+            if (k == 0) {
+                if (p == null || !p.up) continue;
+                x = p.x;
+                y = p.y;
+            } else if (k == 1) {
+                Dispatch.SafeZone z = null;
+                float zd = Float.MAX_VALUE;
+                for (int i = 0; i < w.dispatch.zones.size(); i++) {
+                    Dispatch.SafeZone o = w.dispatch.zones.get(i);
+                    if (o.removed || !o.open || o.fallingBack) continue;
+                    float d = (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y);
+                    if (d < zd) {
+                        zd = d;
+                        z = o;
+                    }
+                }
+                if (z == null) continue;
+                x = z.x;
+                y = z.y;
+            } else if (k == 2) {
+                if (e.rig == null || e.rig.broken || e.rig.removedFromFleet) continue;
+                x = e.rig.x;
+                y = e.rig.y;
+            } else {
+                City.Facility f = w.ammo.restockPoint(e);
+                if (f == null) continue;
+                x = f.x;
+                y = f.y;
+            }
+            float dx = x - e.x, dy = y - e.y, d2 = dx * dx + dy * dy;
+            if (d2 < 60 * 60 || d2 >= best) continue;
+            // (Not through them: away from the dead, or at least not towards them.)
+            float zx = cx - e.x, zy = cy - e.y, zl = (float) Math.sqrt(zx * zx + zy * zy) + 0.001f, dl = (float) Math.sqrt(d2);
+            if ((dx * zx + dy * zy) / (dl * zl) > 0.3f || w.spatial.countZombiesNear(x, y, 80) >= 3) continue;
+            best = d2;
+            bx = x;
+            by = y;
+            got = true;
+        }
+        return got ? new float[]{bx, by} : null;
+    }
+
+    /** ((27.4) One of the two of a group falling back nearest the dead (at c): they cover the others. */
+    boolean rearGuard(Entity e, float[] c) {
+        float mine = (e.x - c[0]) * (e.x - c[0]) + (e.y - c[1]) * (e.y - c[1]);
+        int closer = 0;
+        for (int i = 0, m = w.combat.mates(e, Combat.MATE_R); i < m && closer < 2; i++) {
+            Entity o = w.combat.mateAt(i);
+            if (o.type != e.type || o.rallyT <= w.time) continue;
+            if ((o.x - c[0]) * (o.x - c[0]) + (o.y - c[1]) * (o.y - c[1]) < mine) closer++;
+        }
+        return closer < 2;
     }
 
     /** Radios a sighting: other police and soldiers nearby with nothing in view come to look. */

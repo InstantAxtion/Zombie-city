@@ -187,6 +187,9 @@ final class Combat {
     Entity pickTarget(Entity e, float range) {
         float best = Float.MAX_VALUE, blockedBest = Float.MAX_VALUE;
         Entity res = null, blocked = null;
+        // ((27.4) The others fighting alongside: what threatens any of them counts, and one of them reloading with the
+        // dead coming gets covered first.)
+        int nm = e.raider ? 0 : mates(e, MATE_R);
         int cx0 = Math.max(0, (int) ((e.x - range) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((e.x + range) / World.CELL));
         int cy0 = Math.max(0, (int) ((e.y - range) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((e.y + range) / World.CELL));
         for (int cy = cy0; cy <= cy1; cy++)
@@ -206,6 +209,7 @@ final class Combat {
                         if (facing < -0.2f) continue;
                     }
                     if (o.biteCd > 0) score -= 60;
+                    if (nm > 0) score = groupScore(e, o, score, nm);
                     // ((21.0) The alpha first, for anyone with a scope; the rest of them know to go for it too.)
                     if (o.alpha) score -= e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e.weapon == Entity.W_DMR ? 200 : 45;
                     if (o.type == Entity.RUNNER) score -= 25;
@@ -263,6 +267,59 @@ final class Combat {
         return res;
     }
 
+    /** ((27.4) How far round them others count as fighting alongside them. */
+    static final float MATE_R = 90;
+    /** (Those others, found by mates.) */
+    private final Entity[] mateBuf = new Entity[12];
+
+    /** ((27.4) The living with guns fighting alongside e (within r), into mateBuf; how many. */
+    int mates(Entity e, float r) {
+        int n = 0;
+        for (int i = 0, m = w.spatial.gatherArmed(e.x, e.y, r); i < m && n < mateBuf.length; i++) {
+            Entity o = w.gathered[i];
+            if (o == e || o.dead || o.raider || o.isZombie() || !(o.isArmed() || o.hasGun)) continue;
+            float dx = o.x - e.x, dy = o.y - e.y;
+            if (dx * dx + dy * dy > r * r) continue;
+            mateBuf[n++] = o;
+        }
+        return n;
+    }
+
+    /**
+     * ((27.4) Fighting together: one of the dead reaching any of them is as pressing as one reaching this one; one
+     * closing on someone who's reloading is taken first (covering them); one coming straight at them is taken before
+     * one shambling past; and one that's all but down, with someone else already on it, is left to them.
+     */
+    private float groupScore(Entity e, Entity o, float score, int nm) {
+        for (int i = 0; i < nm; i++) {
+            Entity m = mateBuf[i];
+            float dx = o.x - m.x, dy = o.y - m.y, dm = (float) Math.sqrt(dx * dx + dy * dy);
+            if (dm + 12 < score) score = dm + 12;
+            if (m.reload > 0 && dm < 55) score -= 40;
+        }
+        float ex = e.x - o.x, ey = e.y - o.y, ed = (float) Math.sqrt(ex * ex + ey * ey) + 0.001f;
+        if (ed < 110 && (o.vx * ex + o.vy * ey) / ed > o.speed * 0.6f) score -= 15;
+        if (o.hp <= 8 && o.aimT > w.time && o.aimN >= 1 && o != e.aimPick && ed > 30) score += 35;
+        return score;
+    }
+
+    /** ((27.4) The i'th of those mates found. */
+    Entity mateAt(int i) {
+        return mateBuf[i];
+    }
+
+    /** ((27.4) Someone alongside e (within r) reloading now. */
+    boolean mateReloading(Entity e, float r) {
+        for (int i = 0, n = mates(e, r); i < n; i++) if (mateBuf[i].reload > 0) return true;
+        return false;
+    }
+
+    /** ((27.4) Someone alongside e (within r) with rounds in their gun, ready to cover a reload. */
+    boolean mateCovering(Entity e, float r) {
+        for (int i = 0, n = mates(e, r); i < n; i++) if (mateBuf[i].reload <= 0 && mateBuf[i].ammo > 2) return true;
+        return false;
+    }
+
     /**
      * How likely a hit is to be a stopping shot to the head. Police and soldiers are trained to aim for it,
      * and at close range they usually manage; a frightened civilian rarely does. Harder at range and on a
@@ -295,12 +352,19 @@ final class Combat {
      * wait for a better shot (or for it to come to them).
      */
     boolean holdFire(Entity e, Entity t, float d, float range) {
-        if (e.type != Entity.COP && e.type != Entity.SOLDIER) return false;
+        // ((27.4) Someone armed but untrained doesn't spray at the dead a street away either: they wait until it's close, or
+        // on someone.)
+        if (e.type != Entity.COP && e.type != Entity.SOLDIER)
+            return e.hasGun && !e.raider && e != w.controlled && t.isUndead() && e.weapon != Entity.W_HUNTING && e.weapon != Entity.W_CROSSBOW
+                    && d > 85 && t.biteCd <= 0 && !w.spatial.peopleNear(t.x, t.y, 45);
         if (e.role == Entity.ROLE_SNIPER || e.role == Entity.ROLE_MARKSMAN || e == w.controlled || !t.isUndead()) return false;
         // ((11.7) Before anyone knows what this is, an officer facing one of them sees a violent suspect, not a monster:
         // they shout warnings and hold fire until it's right on them or on someone else.)
         if (w.alert == 0 && e.type == Entity.COP && e.role != Entity.ROLE_SWAT && d > 34 && !w.spatial.peopleNear(t.x, t.y, 22)) return true;
-        float effective = e.type == Entity.COP ? (e.role == Entity.ROLE_SWAT ? 150 : 110) : 165;
+        // ((27.4) An officer with a pistol waits until they're closer still: rounds fired a street off rarely find a
+        // head, and an empty magazine as the first of them arrives gets officers bitten. Not for a runner: that one is
+        // coming anyway.)
+        float effective = e.type == Entity.COP ? (e.role == Entity.ROLE_SWAT ? 150 : t.type == Entity.RUNNER ? 110 : 85) : 165;
         // ((14.3) Further off on one a drone has marked.)
         if (t.spottedUntil > w.time) effective *= 1.3f;
         return d > effective && t.biteCd <= 0 && !w.spatial.peopleNear(t.x, t.y, 45);

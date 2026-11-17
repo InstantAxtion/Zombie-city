@@ -4735,6 +4735,98 @@ public final class GameTests {
                 check(Math.hypot(lcar.x - x0, lcar.y - y0) > 20 || lcar.state != Fleet.PATROL, "and they carry on (" + (int) Math.hypot(lcar.x - x0, lcar.y - y0) + ")");
             }
         });
+        test("27.4: squads focus fire and fall back together", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 274;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                w.outbreak = true;
+                w.alert = 2;
+                // A straight stretch of street to line them up on.
+                java.util.Random r = new java.util.Random(7);
+                float[] s0 = null;
+                float ux = 0, uy = 0;
+                for (int k = 0; k < 400 && s0 == null; k++) {
+                    float[] q = w.city.randomStreetSpot(r);
+                    if (q == null) continue;
+                    for (int dir = 0; dir < 2 && s0 == null; dir++) {
+                        float ax = dir == 0 ? 1 : 0, ay = dir == 1 ? 1 : 0;
+                        boolean clear = true;
+                        for (int u = -140; u <= 140 && clear; u += 6)
+                            for (int v = -14; v <= 28 && clear; v += 7)
+                                if (w.city.solidAt(q[0] + ax * u + ay * v, q[1] + ay * u + ax * v)) clear = false;
+                        if (clear && w.city.los(q[0] - ax * 140, q[1] - ay * 140, q[0] + ax * 140, q[1] + ay * 140)) {
+                            s0 = q;
+                            ux = ax;
+                            uy = ay;
+                        }
+                    }
+                }
+                check(s0 != null, "a straight stretch of street");
+                // Covering a reload: B with one of the dead 50 off on its own side, and one 80 off that's 30 from A, who's
+                // reloading. B takes the one going for A. (A and that one a step to the side: not in B's line of fire.)
+                Entity b = w.spawnSoldier(Entity.ROLE_RIFLE, s0[0], s0[1]);
+                Entity a = w.spawnSoldier(Entity.ROLE_RIFLE, s0[0] + ux * 50 + uy * 20, s0[1] + uy * 50 + ux * 20);
+                Entity z1 = w.spawn(Entity.ZOMBIE, s0[0] + ux * 80 + uy * 20, s0[1] + uy * 80 + ux * 20);
+                Entity z2 = w.spawn(Entity.ZOMBIE, s0[0] - ux * 50, s0[1] - uy * 50);
+                Quiet q = empty(w, s0[0], s0[1], 400, a, b, z1, z2);
+                for (Entity z : new Entity[]{z1, z2}) untouchable(z);
+                w.update(1 / 30f);
+                b.fear = 20;
+                a.reload = 2;
+                check(w.combat.mateReloading(b, Combat.MATE_R), "B sees A reloading");
+                Entity pick = w.combat.pickTarget(b, 230);
+                check(pick == z1, "with A reloading, B covers A: shoots the one going for A, not the nearer one (" + (pick == z1 ? "z1" : pick == z2 ? "z2" : "none") + ")");
+                // Not both reloading at once: a lull with A reloading doesn't start B's.
+                check(!w.combat.mateCovering(b, 60) || w.combat.mateReloading(b, Combat.MATE_R), "a reload is covered only by someone not reloading");
+                for (Entity o : new Entity[]{a, b, z1, z2}) o.dead = o.removed = true;
+                // Falling back together: three officers running low on rounds, a pack of sixteen closing. They all go, to
+                // one place.
+                java.util.List<Entity> cops = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 3; i++) {
+                    Entity o = w.spawnCop(0, s0[0] + uy * (i - 1) * 10, s0[1] + ux * (i - 1) * 10);
+                    o.task = Dispatch.T_NONE;
+                    o.ammo = 5;
+                    o.reserve = 6;
+                    cops.add(o);
+                }
+                java.util.List<Entity> pack = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 16; i++) {
+                    float[] p = w.city.findWalkable(s0[0] + ux * (32 + (i % 4) * 7) + uy * ((i / 4) * 7 - 10), s0[1] + uy * (32 + (i % 4) * 7) + ux * ((i / 4) * 7 - 10));
+                    if (p != null) pack.add(w.spawn(Entity.ZOMBIE, p[0], p[1]));
+                }
+                q = empty(w, s0[0], s0[1], 600, cops, pack);
+                final java.util.List<Entity> cs = cops;
+                final World fw = w;
+                boolean together = stepUntil(w, q, 6, new Cond() {
+                    public boolean done() {
+                        Entity c0 = cs.get(0);
+                        if (c0.rallyT <= fw.time) return false;
+                        for (Entity o : cs) if (o.dead || o.rallyT <= fw.time || o.rallyX != c0.rallyX || o.rallyY != c0.rallyY) return false;
+                        return true;
+                    }
+                });
+                check(together, "all three fall back, and to the same place (" + w.armedAI.groupFallbacks + ")");
+                float[] zc = w.spatial.zombieCentre(s0[0] + ux * 45, s0[1] + uy * 45, 200);
+                float before = 0;
+                for (Entity o : cops) before += (float) Math.hypot(o.x - zc[0], o.y - zc[1]);
+                for (int f = 0; f < 30 * 3; f++) step(w, q);
+                float after = 0, spread = 0;
+                int up = 0;
+                for (Entity o : cops) {
+                    if (o.dead || o.infected) continue;
+                    up++;
+                    after += (float) Math.hypot(o.x - zc[0], o.y - zc[1]);
+                    for (Entity p : cops) if (!p.dead && !p.infected) spread = Math.max(spread, (float) Math.hypot(o.x - p.x, o.y - p.y));
+                }
+                check(up >= 2 && after / up > before / cops.size() + 40, "they open the gap from the pack (" + (int) (before / cops.size()) + " -> " + (int) (after / Math.max(1, up)) + ", " + up + " up)");
+                check(spread < 160, "and keep together while they go (" + (int) spread + ")");
+            }
+        });
         test("27.0: the armoured dead", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
