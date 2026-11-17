@@ -6,6 +6,16 @@ import java.util.ArrayList;
  * Vehicles: police cruisers and army trucks that drive reinforcements from the precinct or base along the
  * roads (running over zombies on the way), fire engines, ordinary traffic and the helicopter that flies in
  * for air support. Cars take damage from zombies, crashes and blasts, and break down when it is too much.
+ *
+ * <p>((27.3) Fleet itself is the front of the vehicle code: the Vehicle type and its constants, the list of vehicles and
+ * the state every part shares, the step (update) that hands each vehicle to the part that drives its kind, damage,
+ * names and status lines, and one-line methods passing the rest of the game's calls on. The work is in the parts:
+ * FleetRouting (destinations and route searches), FleetDriving (driving along a route: corridors, junctions, queues,
+ * collisions), FleetTraffic (everyday cars), FleetPatrols (police patrol cars), FleetService (cars and trucks sent to a
+ * call, and wrecks), FleetArmy (troop trucks, base patrols, supply, recon, bulldozers, tanks), FleetHelis, FleetBoats,
+ * FleetAircraft, FleetTrains, FleetAmbulances, FleetPickups (survivors' pickups and convoy vehicles), FleetCommand
+ * (command post trucks), FleetCrews (who's aboard what), FleetEvac (evacuation buses) and FleetPlayer (you driving).
+ * A part reaches the shared state as fleet.x and another part as fleet.part.method(...).)
  */
 final class Fleet {
     /** (10.42) Points in a vehicle's planned line ahead. */
@@ -28,10 +38,10 @@ final class Fleet {
     static final int WAIT = 0, DRIVE = 1, RETURN = 2, FLY_IN = 3, CIRCLE = 4, FLY_OUT = 5, CRUISE = 6,
             ABANDONED = 7, SPOOL = 9, LAND = 10, ENGAGE = 11, LOAD = 12, BLOCK = 13,
             PATROL = 14, SCENE = 15, RECALL = 16, IDLE = 17, MUSTER = 18, HOVER = 19, STANDBY = 20, DROP = 21, PICKUP = 22;
-    private static final int[] CAR_COLORS = {0xFFB03A2E, 0xFF2E5FB0, 0xFFE0E0E0, 0xFF222428, 0xFFD4A21C, 0xFF3C8A4E,
+    static final int[] CAR_COLORS = {0xFFB03A2E, 0xFF2E5FB0, 0xFFE0E0E0, 0xFF222428, 0xFFD4A21C, 0xFF3C8A4E,
             0xFF8A8F96, 0xFF6B2E8A, 0xFFE07A2E};
     // ((17.6) A helicopter can be shot down now: 220, from 1 - nothing could hurt one before.)
-    private static final float[] MAX_HP = {160, 260, 220, 100, 240, 700, 160, 1, 1, 1};
+    static final float[] MAX_HP = {160, 260, 220, 100, 240, 700, 160, 1, 1, 1};
     /** Most people a car will squeeze in. */
     static final int SEATS = 4;
     /** ((26.1) A Humvee carries six.) */
@@ -169,7 +179,7 @@ final class Fleet {
         boolean parked;
         /** (10.48) A patrol car taken over by other officers: back on patrol once they're aboard. */
         boolean wasPatrol;
-        private float reclaimCd;
+        float reclaimCd;
         /** Damage: smoking below half, broken down (and maybe burning) at zero. */
         float hp, maxHp, crashCd, hailCd, waitTimer;
         boolean broken, burnt;
@@ -390,10 +400,10 @@ final class Fleet {
     String describe(Vehicle v) {
         switch (v.type) {
             case CRUISER:
-                if (v.kind == K_BIKE) return "Police motorcycle  -  " + callsign(v);
-                if (v.agency == 3) return "Park rangers' truck  -  " + callsign(v);
+                if (v.kind == K_BIKE) return "Police motorcycle  -  " + patrols.callsign(v);
+                if (v.agency == 3) return "Park rangers' truck  -  " + patrols.callsign(v);
                 String car = "Police car";
-                return v.number > 0 ? car + "  -  " + callsign(v) : car;
+                return v.number > 0 ? car + "  -  " + patrols.callsign(v) : car;
             case TRUCK:
                 if (v.kind == K_APC) return "Armoured personnel carrier" + (v.guardUnit ? "  -  " + Country.guard()[1] : "");
                 if (v.kind == K_IFV) return "Infantry fighting vehicle";
@@ -425,7 +435,7 @@ final class Fleet {
             case HELI:
                 if (v.state == IDLE) {
                     String who = v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + v.number;
-                    return who + ": " + (v.refuel > 0 ? "Refuelling on the pad (" + (int) v.refuel + "s)" : livePilot(v) == null ? "Grounded, no pilot" : "On the pad, ready");
+                    return who + ": " + (v.refuel > 0 ? "Refuelling on the pad (" + (int) v.refuel + "s)" : helis.livePilot(v) == null ? "Grounded, no pilot" : "On the pad, ready");
                 }
                 if (v.state == MUSTER) return (v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + v.number)
                         + ": Crew boarding (" + v.crew.size() + "/" + v.crewWanted + ")";
@@ -526,20 +536,55 @@ final class Fleet {
         }
     }
 
-    private final World w;
-    private final City city;
+    final World w;
+    final City city;
     final ArrayList<Vehicle> vehicles = new ArrayList<Vehicle>();
-    private int unitCount;
+    int unitCount;
     /** How many patrol cars the police keep on the streets. */
     int patrolTarget;
     /** ((11.4) Patrol cars on the streets, counted once a frame.) */
     int patrolCount;
-    private float staffCd;
+    float staffCd;
 
     Fleet(World w) {
         this.w = w;
         this.city = w.city;
+        routing = new FleetRouting(this);
+        driving = new FleetDriving(this);
+        cars = new FleetTraffic(this);
+        patrols = new FleetPatrols(this);
+        service = new FleetService(this);
+        armyUnits = new FleetArmy(this);
+        helis = new FleetHelis(this);
+        boats = new FleetBoats(this);
+        aircraft = new FleetAircraft(this);
+        trains = new FleetTrains(this);
+        ambulances = new FleetAmbulances(this);
+        convoyUnits = new FleetPickups(this);
+        commandTrucks = new FleetCommand(this);
+        crews = new FleetCrews(this);
+        evacBuses = new FleetEvac(this);
+        playerDriving = new FleetPlayer(this);
     }
+
+    // ((27.3) The parts the vehicle code is in: Fleet keeps the vehicles themselves, what every part shares, and the
+    // step that hands each vehicle to the part that drives it.)
+    final FleetRouting routing;
+    final FleetDriving driving;
+    final FleetTraffic cars;
+    final FleetPatrols patrols;
+    final FleetService service;
+    final FleetArmy armyUnits;
+    final FleetHelis helis;
+    final FleetBoats boats;
+    final FleetAircraft aircraft;
+    final FleetTrains trains;
+    final FleetAmbulances ambulances;
+    final FleetPickups convoyUnits;
+    final FleetCommand commandTrucks;
+    final FleetCrews crews;
+    final FleetEvac evacBuses;
+    final FleetPlayer playerDriving;
 
     void clear() {
         vehicles.clear();
@@ -564,11 +609,11 @@ final class Fleet {
     }
 
     /** (11.1) The lane a vehicle keeps to: on a call, the inside one, to get by. */
-    private static int laneOf(Vehicle v) {
+    static int laneOf(Vehicle v) {
         return v.lightsOn() ? 0 : v.lane;
     }
 
-    private Vehicle make(int type) {
+    Vehicle make(int type) {
         Vehicle v = new Vehicle();
         v.type = type;
         // ((11.1) A third keep to the inside lane, the rest (and every truck and bus) to the outside.)
@@ -583,96 +628,8 @@ final class Fleet {
     static final float CAR_RANGE = 22000;
     /** Fuel left in each gas pump (in full tanks), and the radio about pumps running dry. */
     float[] pumpFuel;
-    private boolean drySaid;
+    boolean drySaid;
     int ranDry;
-
-    float[] pumpFuel() {
-        if (pumpFuel == null) {
-            pumpFuel = new float[city.pumps.size()];
-            java.util.Arrays.fill(pumpFuel, 6);
-        }
-        return pumpFuel;
-    }
-
-    /**
-     * (10.32) Ordinary cars burn fuel as they go. Running low, a driver pulls in at the nearest pump that has any
-     * (once things are bad, everyone tops up, and the pumps run dry); run out and the car is left where it stops.
-     * Returns true while it's stopped at a pump filling up (or has just run dry).
-     */
-    private boolean fuel(Vehicle v, float dt) {
-        if (v.type != CAR || v.player != null || v.model == M_BUS) return false;
-        v.fuel -= Math.abs(v.speed) * dt / CAR_RANGE;
-        v.refuelCd -= dt;
-        // (Before the emergency nobody runs dry: they fill up somewhere along the way.)
-        if (v.fuel <= 0.05f && w.alert < 2) v.fuel = 0.6f;
-        if (v.fuel <= 0) {
-            v.fuel = 0;
-            ranDry++;
-            // (They get out where it stopped, fleeing or not.)
-            dropRiders(v, true);
-            v.parked = true;
-            v.speed = 0;
-            v.field = null;
-            v.pumpAt = -1;
-            pullOver(v);
-            return true;
-        }
-        float[] pf = pumpFuel();
-        if (v.pumpAt >= 0 && v.pumpAt < pf.length) {
-            float[] p = city.pumps.get(v.pumpAt);
-            if (World.hypot(p[0] - v.x, p[1] - v.y) < 30) {
-                v.speed = Math.max(0, v.speed - dt * 160);
-                v.refuelT += dt;
-                if (v.refuelT > 3.5f) {
-                    float take = Math.min(1 - v.fuel, pf[v.pumpAt]);
-                    v.fuel += take;
-                    pf[v.pumpAt] -= take;
-                    v.pumpAt = -1;
-                    v.refuelT = 0;
-                    v.field = null;
-                    v.destCd = 0;
-                    if (!newDestination(v)) v.stuckTimer = Math.max(v.stuckTimer, 5);
-                    if (!drySaid) {
-                        float left = 0, all = 0;
-                        for (float f : pf) left += f;
-                        all = pf.length * 6;
-                        if (pf.length > 0 && left < all * 0.25f) {
-                            drySaid = true;
-                            w.dispatch.say(Dispatch.WHO_INFO, null, "Gas stations across town are running dry.", v.x, v.y);
-                            w.timeline("The gas stations are running dry");
-                        }
-                    }
-                }
-                return true;
-            }
-            if (pf[v.pumpAt] < 0.05f) v.pumpAt = -1;
-            return false;
-        }
-        float want = w.alert >= 2 ? 0.55f : 0.12f;
-        if (v.fuel < want && v.refuelCd <= 0 && !v.through) {
-            v.refuelCd = 25;
-            int best = -1;
-            float bd = 2600;
-            for (int i = 0; i < pf.length; i++) {
-                if (pf[i] < 0.3f || city.pumps.get(i)[2] <= 0) continue;
-                float[] p = city.pumps.get(i);
-                float d = (float) World.hypot(p[0] - v.x, p[1] - v.y);
-                if (d < bd) {
-                    bd = d;
-                    best = i;
-                }
-            }
-            if (best >= 0) {
-                float[] p = city.pumps.get(best);
-                float[] at = city.nearestDrivable(p[0], p[1]);
-                if (at != null && route(v, at[0], at[1])) {
-                    v.pumpAt = best;
-                    v.refuelT = 0;
-                }
-            }
-        }
-        return false;
-    }
 
     /** Makes a truck, police car or helicopter into one of its other kinds (K_APC...). */
     void setKind(Vehicle v, int kind) {
@@ -781,301 +738,8 @@ final class Fleet {
             } else v.gunCd = v.burst % 5 == 0 ? 1.1f : 0.14f;
         } else v.gunCd = 0.4f;
     }
-
-    // ------------------------------------------------------------------ (26.0) survivors' armed pickups
-
-    int pickups() {
-        int n = 0;
-        for (int i = 0; i < vehicles.size(); i++) if (vehicles.get(i).kind == K_PICKUP && !vehicles.get(i).broken && !vehicles.get(i).parked) n++;
-        return n;
-    }
-
-    int pickupsOf(SurvivorBases.Base b) {
-        int n = 0;
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.kind == K_PICKUP && v.pbase == b && !v.broken && !v.parked) n++;
-        }
-        return n;
-    }
-
-    /** A pickup with a gun in the bed, at (x, y), for base b (or none: a roaming crew), with crew aboard. */
-    Vehicle makePickup(float x, float y, float angle, SurvivorBases.Base b, java.util.List<Entity> crew) {
-        Vehicle v = make(CAR);
-        v.kind = K_PICKUP;
-        v.model = M_PICKUP;
-        v.color = 0xFF6E6248;
-        v.x = x;
-        v.y = y;
-        v.homeX = x;
-        v.homeY = y;
-        v.angle = angle;
-        v.hp = v.maxHp = MAX_HP[CAR] * 1.6f;
-        v.fuel = 1;
-        v.state = CRUISE;
-        v.pbase = b;
-        v.pmode = b != null ? PK_HOME : PK_ROAM;
-        v.pTimer = 5;
-        v.number = ++unitCount;
-        for (int i = 0; i < crew.size(); i++) board(v, crew.get(i));
-        vehicles.add(v);
-        return v;
-    }
-
-    // ------------------------------------------------------------------ (26.0) convoy columns (see Convoys)
-
-    /** One vehicle of a convoy column, at (x, y): an escort (a Humvee, or a BearCat for the police), a supply truck, a bus. */
-    Vehicle convoyVehicle(int role, float x, float y, float angle, Convoys.Column c) {
-        Vehicle v;
-        if (role == Convoys.V_BUS) {
-            v = make(CAR);
-            v.model = M_BUS;
-            v.color = 0xFFE8B030;
-            v.hp = v.maxHp = MAX_HP[CAR] * 2.5f;
-        } else if (role == Convoys.V_POLICE) {
-            v = make(CRUISER);
-            setKind(v, K_BEARCAT);
-        } else {
-            v = make(TRUCK);
-            if (role == Convoys.V_ESCORT) setKind(v, K_HUMVEE);
-        }
-        v.x = x;
-        v.y = y;
-        v.homeX = x;
-        v.homeY = y;
-        v.angle = angle;
-        v.fuel = 1;
-        v.state = DRIVE;
-        v.convoy = c;
-        v.convoyRole = role;
-        v.number = ++unitCount;
-        v.reinforcement = true;
-        v.place = c.place;
-        vehicles.add(v);
-        return v;
-    }
-
-    boolean routeTo(Vehicle v, float x, float y) {
-        return pickupRoute(v, x, y);
-    }
-
-    /** A convoy vehicle's drive: along its way at no more than max, through the dead in the road. */
-    boolean convoyDrive(Vehicle v, float dt, float max) {
-        boolean going = driveStep(v, dt, max, carAhead(v) ? 0.5f : 1f);
-        if (going) hit(v, w.runOver(v.x, v.y, 9, v.speed, v.angle));
-        return going;
-    }
-
-    /** A convoy's escort firing its mounted gun. */
-    void convoyGun(Vehicle v, float dt) {
-        if (v.convoyRole == Convoys.V_ESCORT || v.convoyRole == Convoys.V_POLICE) turret(v, dt);
-    }
-
-    /** Turns a parked car into a roaming crew's armed pickup. */
-    void takeAsPickup(Vehicle v, java.util.List<Entity> crew) {
-        v.kind = K_PICKUP;
-        v.model = M_PICKUP;
-        v.parked = false;
-        v.standby = false;
-        v.state = CRUISE;
-        v.pbase = null;
-        v.pmode = PK_ROAM;
-        v.pTimer = 2;
-        v.fuel = Math.max(v.fuel, 0.6f);
-        for (int i = 0; i < crew.size(); i++) board(v, crew.get(i));
-    }
-
-    /** The gunner in the back (the last aboard), firing at the nearest of the dead from the bed, with their own rounds. */
-    private void pickupGun(Vehicle v, float dt) {
-        v.gunCd -= dt;
-        if (v.gunCd > 0 || v.crew.size() < 2) return;
-        Entity g = v.crew.get(v.crew.size() - 1);
-        if (g.ammo + g.reserve <= 0) return;
-        Entity z = w.nearestZombie(v.x, v.y, 170);
-        if (z == null) {
-            v.gunCd = 0.5f;
-            return;
-        }
-        v.turret = (float) Math.atan2(z.y - v.y, z.x - v.x);
-        if (g.ammo > 0) g.ammo--;
-        else g.reserve--;
-        if (w.turretShot(v.x, v.y, z, 16)) {
-            v.burst++;
-            v.gunCd = v.burst % 6 == 0 ? 1f : 0.16f;
-        } else v.gunCd = 0.4f;
-    }
-
-    private boolean pickupDrive(Vehicle v, float dt) {
-        boolean going = driveStep(v, dt, 80, carAhead(v) ? 0.5f : 1f);
-        if (going) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        return going;
-    }
-
-    private boolean pickupRoute(Vehicle v, float x, float y) {
-        float[] p = city.nearestDrivable(x, y);
-        return p != null && route(v, p[0], p[1]);
-    }
-
-    /**
-     * An armed pickup: a base's goes out after the dead near it, runs rounds to a base short of them, and comes back;
-     * a roaming crew's drives from one lot of the dead to the next. Out of rounds, or down to one aboard, it's left.
-     */
-    private boolean updatePickup(Vehicle v, float dt) {
-        if (v.broken || v.crew.isEmpty()) {
-            if (!v.crew.isEmpty()) crewOut(v, false);
-            v.parked = true;
-            v.speed = 0;
-            return false;
-        }
-        pickupGun(v, dt);
-        Entity g = v.crew.get(v.crew.size() - 1);
-        if (v.pbase != null && v.pbase.fallen) {
-            v.pbase = null;
-            v.pmode = PK_ROAM;
-        }
-        // Nothing left to shoot with: they leave it and go on foot.
-        if (g.ammo + g.reserve <= 0 && (v.pbase == null || v.pmode != PK_BACK)) {
-            if (v.pbase == null) {
-                crewOut(v, false);
-                v.parked = true;
-                v.speed = 0;
-                return false;
-            }
-            v.pmode = PK_BACK;
-            pickupRoute(v, v.homeX, v.homeY);
-        }
-        v.pTimer -= dt;
-        switch (v.pmode) {
-            case PK_HOME: {
-                v.speed = Math.max(0, v.speed - dt * 150);
-                // (Topped up from the base's workshop while it's home.)
-                if (v.pbase != null && g.reserve < 40 && v.pbase.stash >= 20) {
-                    v.pbase.stash -= 20;
-                    g.reserve += 20;
-                }
-                if (v.pTimer > 0) return false;
-                v.pTimer = 12 + w.rnd.nextFloat() * 10;
-                SurvivorBases.Base b = v.pbase;
-                // A base short of rounds, and this one with plenty: a supply run.
-                SurvivorBases.Base poor = null;
-                if (b.stash >= 100)
-                    for (int i = 0; i < w.bases.size(); i++) {
-                        SurvivorBases.Base o = w.bases.get(i);
-                        if (o != b && !o.fallen && o.stash < 40 && (poor == null || o.stash < poor.stash)) poor = o;
-                    }
-                if (poor != null && pickupRoute(v, poor.b.doorX, poor.b.doorY)) {
-                    v.pCargo = 60;
-                    b.stash -= 60;
-                    v.ptarget = poor;
-                    v.pmode = PK_CONVOY;
-                    w.dispatch.chatter(Dispatch.WHO_INFO, null, b.name + ": Supply run heading out to " + poor.name + ".", v.x, v.y);
-                    return false;
-                }
-                // The dead gathering near the base: out after them.
-                Entity z = w.nearestZombie(b.cx(), b.cy(), 650);
-                if (z != null && World.hypot(z.x - b.cx(), z.y - b.cy()) > 120 && pickupRoute(v, z.x, z.y)) {
-                    v.pmode = PK_SORTIE;
-                    v.pTimer = 40;
-                }
-                return false;
-            }
-            case PK_SORTIE: {
-                Entity z = w.nearestZombie(v.x, v.y, 70);
-                // In among them: stop and let the gunner work.
-                if (z != null && v.pTimer > 0) {
-                    v.speed = Math.max(0, v.speed - dt * 200);
-                    return false;
-                }
-                if (!pickupDrive(v, dt) || v.pTimer <= 0) {
-                    if (w.nearestZombie(v.x, v.y, 150) != null && v.pTimer > -15) {
-                        v.speed = 0;
-                        return false;
-                    }
-                    v.pmode = PK_BACK;
-                    if (!pickupRoute(v, v.homeX, v.homeY)) v.pmode = PK_HOME;
-                }
-                return false;
-            }
-            case PK_BACK:
-            case PK_CONVOY: {
-                if (pickupDrive(v, dt) && v.pTimer > -120) return false;
-                if (v.pmode == PK_CONVOY) {
-                    SurvivorBases.Base t = v.ptarget;
-                    if (t != null && !t.fallen) {
-                        t.stash += v.pCargo;
-                        w.dispatch.chatter(Dispatch.WHO_INFO, null, t.name + ": The supply run's here - " + (int) v.pCargo + " rounds. Thank you!", v.x, v.y);
-                    }
-                    v.pCargo = 0;
-                    v.ptarget = null;
-                    v.pmode = PK_BACK;
-                    v.pTimer = 0;
-                    if (!pickupRoute(v, v.homeX, v.homeY)) v.pmode = PK_HOME;
-                    return false;
-                }
-                v.pmode = v.pbase != null ? PK_HOME : PK_ROAM;
-                v.pTimer = 15 + w.rnd.nextFloat() * 10;
-                v.speed = 0;
-                return false;
-            }
-            default: {
-                // Roaming: from one lot of the dead to the next.
-                if (w.nearestZombie(v.x, v.y, 90) != null) {
-                    v.speed = Math.max(0, v.speed - dt * 200);
-                    return false;
-                }
-                if (v.pTimer <= 0) {
-                    v.pTimer = 25;
-                    Entity z = w.nearestZombie(v.x, v.y, 1200);
-                    if (z != null) pickupRoute(v, z.x, z.y);
-                }
-                if (!pickupDrive(v, dt)) v.speed = 0;
-                return false;
-            }
-        }
-    }
     /** ((26.0) Rounds fired from mounted guns, all told (for the tests). */
     int shotsFrom;
-
-    /** Ordinary traffic: cars driving around town between random spots on the roads. */
-    void spawnTraffic(int n) {
-        int buses = 0;
-        for (int i = 0; i < n; i++) {
-            // Some of it is through traffic on the highway, end to end (spread along it, not queued at the ends).
-            if (city.hwyAxis >= 0 && w.rnd.nextFloat() < 0.3f && throughTraffic() < throughTarget() * 1.3f) {
-                spawnThrough(true);
-                continue;
-            }
-            float[] start = randomRoad();
-            // New cars turn up out of sight, not out of thin air in front of you.
-            for (int k = 0; k < 8 && start != null && inView(start[0], start[1]); k++) start = randomRoad();
-            if (start == null || inView(start[0], start[1])) continue;
-            Vehicle v = make(CAR);
-            v.state = CRUISE;
-            v.x = start[0];
-            v.y = start[1];
-            pickModel(v, buses < Math.max(1, n / 14));
-            if (v.model == M_BUS) buses++;
-            v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
-            if (!newDestination(v)) continue;
-            vehicles.add(v);
-        }
-    }
-
-    /** Cars out on the highway. */
-    int throughTraffic() {
-        int n = 0;
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type == CAR && !v.parked && city.onHighway(v.x, v.y)) n++;
-        }
-        return n;
-    }
-
-    /** (10.29) How many cars the highway carries while things are calm: one every couple of dozen tiles. */
-    int throughTarget() {
-        if (city.hwyAxis < 0) return 0;
-        return Math.max(4, Math.round((city.hwyAxis == 0 ? city.w : city.h) / 24f * Math.max(0.4f, trafficScale)));
-    }
 
     /**
      * A car on the highway: anywhere along its carriageway (at the start), or coming on at the far end of it.
@@ -1084,137 +748,10 @@ final class Fleet {
     /** (10.32) The evacuation: cars still coming, and whether it has started. */
     int evacLeft;
     boolean evacStarted;
-    private float evacTimer;
-
-    /** A family car leaving town for the highway (and off the end of it), out of sight when it sets off. */
-    private void spawnEvacuee() {
-        float[] start = null;
-        for (int k = 0; k < 12; k++) {
-            float[] s = randomRoad();
-            if (s != null && city.inTown(s[0], s[1]) && !inView(s[0], s[1])) {
-                start = s;
-                break;
-            }
-        }
-        float[] run = city.highwayRun(w.rnd);
-        if (start == null || run == null) return;
-        Vehicle v = make(CAR);
-        v.state = CRUISE;
-        v.x = start[0];
-        v.y = start[1];
-        pickModel(v, false);
-        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
-        v.fleeing = true;
-        v.through = true;
-        if (route(v, run[2], run[3])) vehicles.add(v);
-    }
-
-    private void spawnThrough(boolean anywhere) {
-        float[] run = city.highwayRun(w.rnd);
-        if (run == null) return;
-        float t = anywhere ? w.rnd.nextFloat() * 0.85f : 0;
-        float sx = run[0] + (run[2] - run[0]) * t, sy = run[1] + (run[3] - run[1]) * t;
-        if (inView(sx, sy)) return;
-        // (Not on top of a car already there.)
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle o = vehicles.get(i);
-            if (Math.abs(o.x - sx) < 3 * City.T && Math.abs(o.y - sy) < 3 * City.T) return;
-        }
-        Vehicle v = make(CAR);
-        v.state = CRUISE;
-        v.x = sx;
-        v.y = sy;
-        pickModel(v, false);
-        v.angle = (float) Math.atan2(run[3] - run[1], run[2] - run[0]);
-        v.through = true;
-        if (w.rnd.nextFloat() < 0.3f) {
-            float[] d = randomRoad();
-            if (d != null && city.inTown(d[0], d[1]) && route(v, d[0], d[1])) {
-                v.through = false;
-                vehicles.add(v);
-                return;
-            }
-        }
-        if (route(v, run[2], run[3])) vehicles.add(v);
-    }
-
-    /** What kind of car this is, and its paint, as the country's streets would have them. */
-    private void pickModel(Vehicle v, boolean busOk) {
-        Country c = city.country;
-        int m = c.carModels[w.rnd.nextInt(c.carModels.length)];
-        if (m == M_BUS && !busOk) m = M_SEDAN;
-        v.model = m;
-        v.color = m == M_TAXI ? c.taxiColor : m == M_BUS ? c.busColor : (w.city.cfg.variety() ? c.carColors37 : c.carColors)[w.rnd.nextInt((w.city.cfg.variety() ? c.carColors37 : c.carColors).length)];
-    }
-
-    /** (10.33) A road somewhere in town (for an army patrol through the streets), or null. */
-    float[] randomTownRoad() {
-        int x0 = city.townX0, y0 = city.townY0, x1 = Math.max(x0 + 1, city.townX1), y1 = Math.max(y0 + 1, city.townY1);
-        for (int k = 0; k < 100; k++) {
-            int tx = x0 + w.rnd.nextInt(x1 - x0), ty = y0 + w.rnd.nextInt(y1 - y0);
-            if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) continue;
-            if (city.tiles[ty * city.w + tx] == City.ROAD && (city.oneWay == null || city.oneWay[ty * city.w + tx] == 0))
-                return new float[]{tx * City.T + City.T / 2f, ty * City.T + City.T / 2f};
-        }
-        return null;
-    }
-
-    /**
-     * ((16.8) A road (or, for country, a lane outside town) somewhere between rmin and rmax from (x, y), or null.
-     * Trips were picked from anywhere on the map and only then turned down for being too far: on the Large map a
-     * random road is within reach of a car one time in a hundred, so after its ten tries almost every patrol and
-     * everyday trip went right across the map anyway - a route search of hundreds of thousands of tiles each, the
-     * worst of the stutters on the big maps.)
-     */
-    private float[] randomRoadNear(float x, float y, float rmin, float rmax, boolean country) {
-        for (int k = 0; k < 120; k++) {
-            double a = w.rnd.nextDouble() * Math.PI * 2;
-            float r = rmin + w.rnd.nextFloat() * (rmax - rmin);
-            int tx = (int) ((x + (float) Math.cos(a) * r) / City.T), ty = (int) ((y + (float) Math.sin(a) * r) / City.T);
-            if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) continue;
-            int i = ty * city.w + tx;
-            if (country) {
-                if (tx >= city.townX0 && tx < city.townX1 && ty >= city.townY0 && ty < city.townY1) continue;
-                if (city.tiles[i] == City.DIRT) return new float[]{(tx + 0.5f) * City.T, (ty + 0.5f) * City.T};
-            } else if (city.tiles[i] == City.ROAD && (city.oneWay == null || city.oneWay[i] == 0))
-                return new float[]{(tx + 0.5f) * City.T, (ty + 0.5f) * City.T};
-        }
-        return null;
-    }
-
-    private float[] randomRoad() {
-        for (int k = 0; k < 200; k++) {
-            int tx = w.rnd.nextInt(city.w), ty = w.rnd.nextInt(city.h);
-            // (Nobody's trip ends on the highway.)
-            if (city.tiles[ty * city.w + tx] == City.ROAD && (city.oneWay == null || city.oneWay[ty * city.w + tx] == 0))
-                return new float[]{tx * City.T + City.T / 2f, ty * City.T + City.T / 2f};
-        }
-        return null;
-    }
-
-    /**
-     * A vehicle's route, kept compact: the distance to go on each tile of a corridor three tiles either side of
-     * the way from where it set off (everything else is off the route). A whole-map field per car took most of
-     * a phone's memory on the big maps.
-     */
-    /**
-     * ((13.3) Lets go of routes nothing will drive again: those of vehicles parked up, and old ones still held on to
-     * as the route a lane, a junction or a stretch of road was worked out from after the vehicle had a new one. On
-     * a Colossal map they came to a hundred megabytes, and phones ran out of memory.)
-     */
-    private void releaseRoutes() {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.parked && v.player == null && v.speed == 0) v.field = null;
-            if (v.pathField != v.field) v.pathField = null;
-            if (v.exitRoute != v.field) v.exitRoute = null;
-            if (v.corOf != v.field) v.corOf = null;
-            if (v.jaOf != v.field) v.jaOf = null;
-        }
-    }
+    float evacTimer;
 
     static final class Route {
-        private int[] keys;
+        int[] keys;
         /**
          * ((16.4) The distances, two bytes each - four only for a route that needs it, and few do: the routes the
          * vehicles carry were the biggest thing in a Large map's memory after the map itself.)
@@ -1294,260 +831,11 @@ final class Fleet {
         byte[] next;
     }
 
-    /**
-     * (10.60) The tiles v's route takes from where it is to where it's going (downhill along its route, a tile at a
-     * time), into out; how many. For the map to show the way a vehicle you're following will go.
-     */
-    int traceRoute(Vehicle v, int[] out) {
-        Route r = v.field;
-        if (r == null) return 0;
-        int w = city.w, h = city.h;
-        int t = city.tileIndex(v.x, v.y), cur = r.get(t), n = 0;
-        while (cur > 0 && cur < City.FAR && n < out.length) {
-            int x = t % w, y = t / w, best = -1, bv = cur;
-            for (int oy = -1; oy <= 1; oy++)
-                for (int ox = -1; ox <= 1; ox++) {
-                    int nx = x + ox, ny = y + oy;
-                    if ((ox == 0 && oy == 0) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                    int val = r.get(ny * w + nx);
-                    if (val < bv) {
-                        bv = val;
-                        best = ny * w + nx;
-                    }
-                }
-            if (best < 0) break;
-            t = best;
-            cur = bv;
-            // (Every other tile is plenty for a line.)
-            if ((n == 0 || (cur & 1) == 0)) out[n++] = t;
-        }
-        return n;
-    }
-
     /** One whole-map buffer the route searches share. */
-    private int[] scratch;
-
-    private int[] scratchField() {
-        // ((16.10) Shared with the ways on foot: see City.scratch.)
-        return city.scratch();
-    }
-
-    /** The corridor along the way down a full field from (x, y). */
-    private Route corridor(int[] field, float x, float y) {
-        int W = city.w, H = city.h, ti = city.tileIndex(x, y), tx0 = ti % W, ty0 = ti / W, t = ti, best = City.FAR;
-        // From its own tile if that's on the way (not the nearest low tile, which may be over the barrier on the
-        // other carriageway); otherwise from the best road beside it.
-        if (field[ti] >= City.FAR)
-            for (int j = ty0 - 2; j <= ty0 + 2; j++)
-                for (int i = tx0 - 2; i <= tx0 + 2; i++)
-                    if (i >= 0 && j >= 0 && i < W && j < H && field[j * W + i] < best) {
-                        best = field[j * W + i];
-                        t = j * W + i;
-                    }
-        int[] path = new int[64];
-        int n = 0;
-        path[n++] = ti;
-        for (int guard = 0; guard < W * H; guard++) {
-            if (n == path.length) path = java.util.Arrays.copyOf(path, n * 2);
-            path[n++] = t;
-            if (field[t] <= 4) break;
-            int next = downhillRaw(field, t);
-            if (next == t) break;
-            t = next;
-        }
-        Route r = new Route(n * 10 + 64);
-        for (int q = 0; q < n; q++) {
-            int px = path[q] % W, py = path[q] / W;
-            // (Along the highway, both carriageways and the verges: a car that ends up on the other side of the
-            // barrier must still know which way is on.)
-            // ((11.1) Four tiles either side elsewhere: the whole of a main road, both its lanes, from a route that
-            // runs down one side of it - at three, a car in the outside lane was off its route, and planned it again.)
-            int R = city.nearHighway((px + 0.5f) * City.T, (py + 0.5f) * City.T, 6 * City.T) ? 9 : 4;
-            for (int j = Math.max(0, py - R); j <= Math.min(H - 1, py + R); j++)
-                for (int i = Math.max(0, px - R); i <= Math.min(W - 1, px + R); i++) {
-                    int f = field[j * W + i];
-                    if (f < City.FAR) r.put(j * W + i, f);
-                }
-        }
-        return r;
-    }
-
-    /** The route's distance at (x, y), or from the road right next to it. */
-    private int nearField(int[] field, float x, float y) {
-        int ti = city.tileIndex(x, y), tx = ti % city.w, ty = ti / city.w, best = City.FAR;
-        for (int j = ty - 1; j <= ty + 1; j++)
-            for (int i = tx - 1; i <= tx + 1; i++)
-                if (i >= 0 && j >= 0 && i < city.w && j < city.h) best = Math.min(best, field[j * city.w + i]);
-        return best;
-    }
-
-    /** True if (x, y) is on the player's screen (or near it). */
-    /** ((11.5) Well away from the screen: further out than a car goes in a second or two.) */
-    private boolean farOff(Vehicle v) {
-        return v.x < w.viewX0 - 300 || v.x > w.viewX1 + 300 || v.y < w.viewY0 - 300 || v.y > w.viewY1 + 300;
-    }
-
-    boolean inView(float x, float y) {
-        return x > w.viewX0 - 60 && x < w.viewX1 + 60 && y > w.viewY0 - 60 && y < w.viewY1 + 60;
-    }
-
-    /**
-     * ((24.0) Waiting in a queue isn't being stuck - unless the queue hasn't moved in 40 seconds: then it's a knot, and
-     * the car looks for another way. One still knotted after 90 seconds where nobody's watching is lifted out onto
-     * the nearest open road (a hundred patrol cars had jammed a dirt track for good, each waiting on the next).)
-     */
-    private boolean gridlocked(Vehicle v) {
-        if (v.player != null || v.stillT < 40) return false;
-        if (v.stillT > 90 && !inView(v.x, v.y)) {
-            for (int tries = 0; tries < 6; tries++) {
-                float a = w.rnd.nextFloat() * 6.2832f, r = 120 + tries * 60;
-                float[] d = city.nearestDrivable(v.x + (float) Math.cos(a) * r, v.y + (float) Math.sin(a) * r);
-                if (d == null || inView(d[0], d[1]) || vehicleNear(d[0], d[1], 14, v)) continue;
-                v.x = d[0];
-                v.y = d[1];
-                v.speed = 0;
-                v.stillT = 0;
-                v.stuckTimer = 0;
-                v.destCd = 0;
-                break;
-            }
-        }
-        return true;
-    }
-
-    private boolean vehicleNear(float x, float y, float r, Vehicle self) {
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle o = vehicles.get(i);
-            if (o != self && !airborne(o) && Math.abs(o.x - x) < r && Math.abs(o.y - y) < r) return true;
-        }
-        return false;
-    }
-
-    private boolean newDestination(Vehicle v) {
-        if (v.destCd > 0) return false;
-        boolean ok = pickDestination(v);
-        if (!ok) v.destCd = 2 + w.rnd.nextFloat() * 2;
-        return ok;
-    }
-
-    private boolean pickDestination(Vehicle v) {
-        // (At most a few full route searches each time.)
-        int routes = 0;
-        // Highway patrol keeps to the highway, sheriffs to the country roads.
-        if (v.patrol && v.agency > 0 && v.state == PATROL)
-            for (int tries = 0; tries < 12; tries++) {
-                float[] d = v.agency == 1 ? city.randomHighway(w.rnd) : null;
-                // ((16.8) A sheriff's next stop picked within its own patch, not anywhere in the country.)
-                if (v.agency == 2 && tries < 10) d = randomRoadNear(v.x, v.y, 300, 1400, true);
-                if (v.agency != 1 && d == null) d = city.randomCountryRoad(w.rnd);
-                // (Highway patrol: on ahead along its own carriageway, so it never has to turn round.)
-                if (d != null && v.agency == 1 && city.onHighway(v.x, v.y)) {
-                    // On ahead to the far end; once there, round onto the other side and back.
-                    float[] mine = null, other = null;
-                    for (int q = 0; q < 8 && (mine == null || other == null); q++) {
-                        float[] run = city.highwayRun(w.rnd);
-                        if (run == null) break;
-                        if (Math.abs(city.hwyAxis == 0 ? run[1] - v.y : run[0] - v.x) < 3 * City.T) mine = run;
-                        else other = run;
-                    }
-                    if (mine == null || other == null) continue;
-                    float[] run = World.hypot(mine[2] - v.x, mine[3] - v.y) < 300 ? other : mine;
-                    d = new float[]{run[2], run[3]};
-                }
-                // (Sheriffs keep to their own patch of country rather than crossing town; rangers to the lanes
-                // round their park.)
-                if (d != null && v.agency == 2 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > 1400) continue;
-                if (d != null && v.agency == 3 && city.rangerLot != null && tries < 10
-                        && World.hypot(d[0] - city.rangerLot[0], d[1] - city.rangerLot[1]) > 1100) continue;
-                if (d != null && World.hypot(d[0] - v.x, d[1] - v.y) > 300) {
-                    if (route(v, d[0], d[1])) return true;
-                    if (++routes >= 3) break;
-                }
-            }
-        // (10.29) Now and then a trip out of town, by the highway: off the end of it and gone.
-        if (v.type == CAR && !v.patrol && v.player == null && v.riders.isEmpty() && !v.through && city.hwyAxis >= 0
-                && w.alert < 2 && w.rnd.nextFloat() < 0.04f) {
-            float[] run = city.highwayRun(w.rnd);
-            if (run != null && route(v, run[2], run[3])) {
-                v.through = true;
-                return true;
-            }
-            routes++;
-        }
-        // ((10.41) A country station's cars keep to their own patch of the country: somewhere round the station.)
-        if (v.patrol && v.agency == 0 && v.station != null && v.station.satellite)
-            for (int tries = 0; tries < 10; tries++) {
-                float a = w.rnd.nextFloat() * 6.2832f, r = 300 + w.rnd.nextFloat() * 1000;
-                float[] d = city.nearestDrivable(v.station.x + (float) Math.cos(a) * r, v.station.y + (float) Math.sin(a) * r);
-                if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < 250) continue;
-                if (route(v, d[0], d[1])) return true;
-                if (++routes >= 4) break;
-            }
-        // ((16.8) On the bigger maps, picked within reach to begin with (see randomRoadNear).)
-        float reach = city.w >= 900 ? 1800 : 2400;
-        boolean local = (v.type == CAR || v.patrol) && city.w >= 600;
-        // ((26.2) Parked off the road (a station's yard, facing in): the way out is behind it, so anywhere will do. It
-        // only ever looked on ahead - into the yard - and the patrol cars sat there with their officers in them.)
-        boolean offRoad = offTheRoad(v);
-        for (int tries = 0; tries < 12; tries++) {
-            float[] d = local && tries < 10 ? randomRoadNear(v.x, v.y, tries < 6 ? 400 : 160, reach, false) : randomRoad();
-            if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
-            // ((10.34) On the biggest maps everyday trips stay local: a drive right across one is a long search.)
-            // ((16.2) Closer again on the Default and bigger maps: each of those searches was a stutter of 20 to 40 ms.)
-            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > (city.w >= 900 ? 1800 : 2400)) continue;
-            // Somewhere on ahead, as a rule: a car doesn't spin round in the road for its next trip.
-            float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
-            if (!offRoad && tries < 8 && (d[0] - v.x) * hx + (d[1] - v.y) * hy < 0) continue;
-            if (route(v, d[0], d[1])) {
-                if (offRoad || tries >= 5 || (v.type != CAR && !v.patrol) || routes >= 3) return true;
-                // And the way there starts ahead too (not a U-turn across the lanes, as a patrol car
-                // turning round for every new beat would): no step back the way it came in the first few.
-                int t = city.tileIndex(v.x, v.y);
-                boolean back = false;
-                for (int k = 0; k < 5 && !back; k++) {
-                    int n = downhill(v.field, t);
-                    if (n == t) break;
-                    if ((n % city.w - t % city.w) * hx + (n / city.w - t / city.w) * hy < -0.5f) back = true;
-                    t = n;
-                }
-                if (!back) return true;
-            }
-            if (++routes >= 4) break;
-        }
-        return false;
-    }
+    int[] scratch;
 
     /** Road tiles on the edge of the map: the ways out of town. */
-    private int[] exits;
-
-    /** The nearest way out of town by road (a tile centre), or null. */
-    float[] exitNear(float x, float y) {
-        if (exits == null) {
-            java.util.ArrayList<Integer> list = new java.util.ArrayList<Integer>();
-            int W = city.w, H = city.h;
-            for (int i = 0; i < W; i += 1) {
-                if (city.tiles[i] == City.ROAD) list.add(i);
-                if (city.tiles[(H - 1) * W + i] == City.ROAD) list.add((H - 1) * W + i);
-            }
-            for (int j = 1; j < H - 1; j++) {
-                if (city.tiles[j * W] == City.ROAD) list.add(j * W);
-                if (city.tiles[j * W + W - 1] == City.ROAD) list.add(j * W + W - 1);
-            }
-            exits = new int[list.size()];
-            for (int i = 0; i < exits.length; i++) exits[i] = list.get(i);
-        }
-        float best = Float.MAX_VALUE;
-        int bt = -1;
-        for (int t : exits) {
-            float ex = (t % city.w + 0.5f) * City.T, ey = (t / city.w + 0.5f) * City.T;
-            float d = (ex - x) * (ex - x) + (ey - y) * (ey - y) + w.rnd.nextFloat() * 90000;
-            if (d < best) {
-                best = d;
-                bt = t;
-            }
-        }
-        return bt < 0 ? null : new float[]{(bt % city.w + 0.5f) * City.T, (bt / city.w + 0.5f) * City.T};
-    }
+    int[] exits;
 
     /** Points the vehicle at a new goal. Returns false if it can't be reached by road. */
     /**
@@ -1555,86 +843,13 @@ final class Fleet {
      * at once, they're spread over a few frames instead of one long stall (the rest try again a moment later).
      * Emergency services never wait.
      */
-    private int routeBudget = Integer.MAX_VALUE;
-
-    private boolean route(Vehicle v, float x, float y) {
-        // ((10.34) Patrol cars on their rounds share the budget too: there are a couple of hundred on a Gigantic map.)
-        if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null) {
-            if (routeBudget <= 0) return false;
-            routeBudget--;
-        }
-        // (10.45) Everyday traffic has no business inside an army base: it was driving in among the trucks at the gate.
-        if (v.type == CAR && v.player == null) {
-            for (City.Facility f : city.facilities)
-                if (f.kind == City.FACILITY_BASE && World.hypot(x - f.x, y - f.y) < f.r + City.T * 2) return false;
-        }
-        int[] field = scratchField();
-        // ((16.8) An everyday trip gives up on a search that's gone on far longer than a drive of its length takes:
-        // it can always go somewhere else. See City.searchCap.)
-        boolean casual = (v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null && v.convoy == null;
-        // ((26.2) Not from off the road - a station's yard, a lot: the search has to cross every paved tile to get back to
-        // it, gave up every time, and patrol cars sat in the yard with their officers in them for the whole game.)
-        if (casual && offTheRoad(v)) casual = false;
-        city.searchCap = casual ? 15000 : 0;
-        try {
-            return routeOn(v, x, y, field);
-        } finally {
-            city.searchCap = 0;
-        }
-    }
-
-    /** ((26.2) Standing on something that isn't a road or a lane - a lot, a station's yard, the pavement. */
-    private boolean offTheRoad(Vehicle v) {
-        int i = city.tileIndex(v.x, v.y);
-        return i >= 0 && city.tiles[i] != City.ROAD && city.tiles[i] != City.DIRT;
-    }
-
-    private boolean routeOn(Vehicle v, float x, float y, int[] field) {
-        // (Everyday traffic and patrol cars keep to the roads; emergencies cut across whatever's paved.)
-        // ((26.0) Not a convoy's bus: it keeps to the roads, but a long way in can't be given up on like a trip to the shops.)
-        boolean strict = (v.type == CAR || (v.patrol && v.state != DRIVE)) && v.convoy == null;
-        int from = city.tileIndex(v.x, v.y);
-        // ((16.2) Not when it isn't on a road itself (pulled up on a lot or a pavement): a roads-only search never got
-        // back to it, so it went right through every road on the map - up to 80 ms on the Big map - before trying the
-        // other way. Straight to the other way.)
-        if (strict && !city.roadBeside(from)) strict = false;
-        // (10.27) Four-wheel drive on an emergency: across open country where that's quicker.
-        // ((10.34) Only when the call isn't by a road anyway: a search across open country is costly.)
-        if (!strict && emergency(v) && allWheel(v) && !city.roadNear(x, y, 5) && city.offroadField(field, x, y, from) && nearField(field, v.x, v.y) < City.FAR) {
-            v.field = corridor(field, v.x, v.y);
-            v.tx = x;
-            v.ty = y;
-            v.lastDist = Float.MAX_VALUE;
-            v.spin = 0;
-            v.stuckTimer = 0;
-            return true;
-        }
-        if (!city.driveField(field, x, y, strict, from) || nearField(field, v.x, v.y) >= City.FAR) {
-            // Off the road (shoved onto the pavement, or parked on a lot): find the way back over whatever's paved.
-            // ((16.8) Not after an everyday search that gave up: the other way would only give up too.)
-            if (!strict || city.capped || !city.driveField(field, x, y, false, from) || nearField(field, v.x, v.y) >= City.FAR) return false;
-        }
-        v.field = corridor(field, v.x, v.y);
-        v.tx = x;
-        v.ty = y;
-        v.lastDist = Float.MAX_VALUE;
-        v.spin = 0;
-        v.stuckTimer = 0;
-        return true;
-    }
+    int routeBudget = Integer.MAX_VALUE;
 
     /** Four-wheel drive: army trucks, Humvees, APCs and tanks, and the sheriff's, rangers' and federal agents' SUVs. */
     static boolean allWheel(Vehicle v) {
         if (v.type == TRUCK) return !v.restock;
         if (v.type == TANK) return true;
         return v.type == CRUISER && (v.agency == 2 || v.agency == 3 || v.agency == 4);
-    }
-
-    /** On an emergency: to a call, picking up its people, or heading out on one, once the city knows. */
-    private boolean emergency(Vehicle v) {
-        if (v.incident != null && !v.incident.resolved) return true;
-        if (v.pickup || v.block != null) return true;
-        return w.alert >= 2 && v.state != RETURN && !v.parkHome && (v.passengers > 0 || !v.crew.isEmpty()) && !v.leaving;
     }
 
     int movingTraffic() {
@@ -1650,597 +865,17 @@ final class Fleet {
         return n;
     }
 
-    /**
-     * Sends units by road: cops in cruisers (two per car), soldiers in one truck. Returns false if there is
-     * no road route, in which case the caller lets them walk.
-     */
-    boolean send(int unitType, int count, float fromX, float fromY, float toX, float toY, Dispatch.Incident inc,
-                 Dispatch.SafeZone zone, String place) {
-        float[] start = null;
-        // An army truck from a base or the armory: one of the trucks parked there drives out.
-        // (10.24) First one of the cars or trucks parked back at the station or base after an earlier call.
-        if (fromParked) start = takeStandby(unitType == Entity.COP ? CRUISER : TRUCK, fromX, fromY, 300);
-        if (start == null && unitType == Entity.SOLDIER && fromParked) start = city.takeParkedTruck(fromX, fromY, 260);
-        if (start == null) start = city.nearestDrivable(fromX, fromY);
-        if (start == null) return false;
-        int[] full = scratchField();
-        if (!city.driveField(full, toX, toY, false, city.tileIndex(start[0], start[1]))
-                || full[city.tileIndex(start[0], start[1])] >= City.FAR) return false;
-        Route field = corridor(full, start[0], start[1]);
-        boolean cops = unitType == Entity.COP;
-        int cars = cops ? (count + 1) / 2 : 1;
-        for (int i = 0; i < cars; i++) {
-            Vehicle v = make(cops ? CRUISER : TRUCK);
-            v.state = WAIT;
-            v.timer = 1.5f + i * 1.2f;
-            v.x = start[0];
-            v.y = start[1];
-            v.homeX = start[0];
-            v.homeY = start[1];
-            v.tx = toX;
-            v.ty = toY;
-            v.field = field;
-            v.passengerType = unitType;
-            v.passengers = cops ? Math.min(2, count - i * 2) : count;
-            v.incident = inc;
-            v.zone = zone;
-            v.place = place;
-            v.lastDist = Float.MAX_VALUE;
-            v.spin = 0;
-            vehicles.add(v);
-        }
-        return true;
-    }
-
-    /**
-     * A civilian car sitting in the way of help coming onto the map (parked, wrecked or stopped for good, with
-     * nobody aboard) is cleared off the road. Returns true if it was.
-     */
-    boolean clearFromEntry(Vehicle o) {
-        if (o.type != CAR || o.player != null || !o.riders.isEmpty() || o.block != null) return false;
-        if (!(o.parked || o.broken || o.stillT > 3)) return false;
-        o.removedFromFleet = true;
-        vehicles.remove(o);
-        return true;
-    }
-
-    /** (10.52) How far it is to drive from one point to another (in the route's own units), or City.FAR. */
-    int driveCost(float fx, float fy, float tx, float ty) {
-        float[] start = city.nearestDrivable(fx, fy);
-        if (start == null) return City.FAR;
-        int[] full = scratchField();
-        int si = city.tileIndex(start[0], start[1]);
-        return city.driveField(full, tx, ty, false, si) ? full[si] : City.FAR;
-    }
-
-    /** Whether there's a way to drive from one point to another. */
-    boolean canDrive(float fx, float fy, float tx, float ty) {
-        float[] start = city.nearestDrivable(fx, fy);
-        if (start == null) return false;
-        int si = city.tileIndex(start[0], start[1]);
-        // ((16.2) Whether there's a way by road from one part of town to another hardly ever changes: asked again
-        // and again for the same stations and calls, it was a whole search each time (then another for the route).)
-        long key = ((long) (si / city.w / 8) << 48) | ((long) (si % city.w / 8) << 32) | ((long) ((int) (ty / City.T) / 8) << 16) | ((int) (tx / City.T) / 8);
-        float[] known = canDriveSeen.get(key);
-        if (known != null && w.time - known[0] < 10) return known[1] > 0;
-        int[] full = scratchField();
-        boolean ok = city.driveField(full, tx, ty, false, si) && full[si] < City.FAR;
-        if (canDriveSeen.size() > 4000) canDriveSeen.clear();
-        canDriveSeen.put(key, new float[]{w.time, ok ? 1 : 0});
-        return ok;
-    }
-
     /** (16.2) Recent answers to canDrive, by where from and to (eight-tile squares): {when, 1 if there's a way}. */
-    private final java.util.HashMap<Long, float[]> canDriveSeen = new java.util.HashMap<Long, float[]>();
+    final java.util.HashMap<Long, float[]> canDriveSeen = new java.util.HashMap<Long, float[]>();
 
     /** Trucks sent out take one of the army trucks parked nearby (not the SWAT van, which has its own). */
-    private boolean fromParked = true;
-
-    /**
-     * The SWAT van: one armoured truck carrying the team to an incident. ((12.9) The team standing by at the station,
-     * who climb in at the gate: before, six officers appeared out of the van when it got there.)
-     */
-    boolean sendSwat(City.Facility station, Dispatch.Incident inc) {
-        java.util.List<Entity> team = standby(station, Entity.COP, Entity.ROLE_SWAT, 6);
-        if (team.size() < 2 || !canDrive(station.gateX, station.gateY, inc.x, inc.y)) return false;
-        Vehicle v = musterUnit(team, station, inc, 0, Entity.COP);
-        if (v == null) return false;
-        v.swat = true;
-        return true;
-    }
-
-    /** (11.0) A BearCat: an armoured police truck with its tactical officers, for the worst of it; it drives on through. */
-    boolean sendBearCat(City.Facility station, Dispatch.Incident inc) {
-        java.util.List<Entity> team = standby(station, Entity.COP, Entity.ROLE_SWAT, 6);
-        if (team.size() < 2 || !canDrive(station.gateX, station.gateY, inc.x, inc.y)) return false;
-        return musterUnit(team, station, inc, K_BEARCAT, Entity.COP) != null;
-    }
-
-    /**
-     * (11.0) Army recon: a Humvee with two scouts that roams the whole town once it knows, radioing in every horde
-     * it comes across as a call for the others, and drives on rather than stopping to fight (its roof gun keeps the
-     * dead off it).
-     */
-    boolean startRecon(City.Facility base) {
-        // ((12.9) The base's own scouts, standing by there, get in: none are made up for it.)
-        java.util.List<Entity> scouts = standby(base, Entity.SOLDIER, Entity.ROLE_RECON, 2);
-        if (scouts.isEmpty()) return false;
-        Vehicle v = startReconAt(base.gateX > 0 ? base.gateX : base.x, base.gateY > 0 ? base.gateY : base.y, scouts);
-        return v != null;
-    }
-
-    /** (11.1) A recon Humvee starting from the nearest road to (x, y) (placed with the Place tool too). */
-    Vehicle startReconAt(float x, float y) {
-        return startReconAt(x, y, null);
-    }
-
-    /** ...with these scouts aboard (two new ones when null: the Place tool's). */
-    private Vehicle startReconAt(float x, float y, java.util.List<Entity> scouts) {
-        float[] g = city.nearestDrivable(x, y);
-        if (g == null) return null;
-        Vehicle v = make(TRUCK);
-        setKind(v, K_HUMVEE);
-        v.recon = true;
-        v.x = v.homeX = g[0];
-        v.y = v.homeY = g[1];
-        v.number = ++reconNumber;
-        v.state = DRIVE;
-        if (!reconDestination(v)) return null;
-        if (scouts != null) {
-            for (Entity e : scouts) {
-                e.task = Dispatch.T_NONE;
-                e.dead = true;
-                e.removed = true;
-                e.rig = v; note(e);
-                v.crew.add(e);
-            }
-        } else for (int k = 0; k < 2; k++) {
-            Entity e = w.create(Entity.SOLDIER, v.x, v.y);
-            w.applyRole(e, Entity.ROLE_RECON);
-            e.rig = v; note(e);
-            v.crew.add(e);
-        }
-        vehicles.add(v);
-        return v;
-    }
-
-    /**
-     * (11.1) The Place tool's BearCat: six tactical officers in their armoured truck, off from where it's put to
-     * the worst call going (or out on patrol if there isn't one).
-     */
-    Vehicle placeBearCat(float x, float y) {
-        Dispatch.Incident worst = null;
-        for (int i = 0; i < w.dispatch.incidents.size(); i++) {
-            Dispatch.Incident inc = w.dispatch.incidents.get(i);
-            if (!inc.resolved && (worst == null || inc.zombiesNear > worst.zombiesNear)) worst = inc;
-        }
-        float[] d = worst != null ? new float[]{worst.x, worst.y} : randomRoad();
-        if (d == null) return null;
-        int before = vehicles.size();
-        fromParked = false;
-        boolean sent = send(Entity.SOLDIER, 6, x, y, d[0], d[1], worst, null, city.placeName(d[0], d[1]));
-        fromParked = true;
-        if (!sent || vehicles.size() == before) return null;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
-        setKind(v, K_BEARCAT);
-        v.passengerType = Entity.COP;
-        v.timer = 0.3f;
-        return v;
-    }
+    boolean fromParked = true;
 
     /** ((22.0) The armoured vans parked as shelters, and how many people each takes. */
     final ArrayList<Vehicle> shelters = new ArrayList<Vehicle>();
     static final int SHELTER_SEATS = 12;
 
-    /**
-     * ((22.0) The Place tool's armoured police van: parked where it's put, doors open. People running from the dead
-     * nearby climb in, a dozen at most, and are safe inside until it's wrecked - or until someone drives them away.
-     */
-    Vehicle placeShelterVan(float x, float y) {
-        float[] p = city.nearestDrivable(x, y);
-        if (p == null) return null;
-        Vehicle v = make(TRUCK);
-        setKind(v, K_RIOT_VAN);
-        v.hp = v.maxHp = 700;
-        v.x = p[0];
-        v.y = p[1];
-        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
-        v.shelter = true;
-        v.parked = true;
-        v.state = IDLE;
-        v.speed = 0;
-        v.number = ++unitCount;
-        vehicles.add(v);
-        shelters.add(v);
-        return v;
-    }
-
-    // ------------------------------------------------------------------ (26.0) the command post and the police boats
-
-    /**
-     * ((26.0) The police's mobile command post truck, setting out from (sx, sy) for (tx, ty) with these officers aboard
-     * (it sets up there: see Ops). Null if there's no way there by road.
-     */
-    Vehicle commandPost(float sx, float sy, float tx, float ty, java.util.List<Entity> crew, int kind) {
-        float[] g = city.nearestDrivable(sx, sy);
-        if (g == null) return null;
-        Vehicle v = make(TRUCK);
-        setKind(v, kind);
-        v.x = v.homeX = g[0];
-        v.y = v.homeY = g[1];
-        v.angle = (float) Math.atan2(ty - g[1], tx - g[0]);
-        v.number = ++unitCount;
-        v.place = city.placeName(tx, ty);
-        v.passengerType = kind == K_ARMY_POST ? Entity.SOLDIER : Entity.COP;
-        if (World.hypot(tx - g[0], ty - g[1]) < 40) {
-            v.state = SCENE;
-            v.tx = g[0];
-            v.ty = g[1];
-        } else {
-            v.state = DRIVE;
-            if (!route(v, tx, ty)) return null;
-        }
-        if (crew != null) for (Entity e : crew) board(v, e);
-        vehicles.add(v);
-        return v;
-    }
-
-    /**
-     * ((26.1) A command post truck parked in the yard at the station or base f, waiting to be needed (see Ops). Null if
-     * there's no road by it.
-     */
-    Vehicle parkPost(City.Facility f, int kind) {
-        float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
-        if (g == null) return null;
-        float[] p = bay(g, f);
-        if (p == null) p = g;
-        Vehicle v = make(TRUCK);
-        setKind(v, kind);
-        v.x = p[0];
-        v.y = p[1];
-        v.homeX = g[0];
-        v.homeY = g[1];
-        v.angle = (float) Math.atan2(g[1] - p[1], g[0] - p[0]);
-        v.number = ++unitCount;
-        v.place = f.name;
-        v.passengerType = kind == K_ARMY_POST ? Entity.SOLDIER : Entity.COP;
-        v.state = WAIT;
-        vehicles.add(v);
-        return v;
-    }
-
-    /** ((26.1) A command post truck back home: into a bay in the yard, ((26.3) its crew staying in it, waiting.) */
-    void parkHome(Vehicle v, City.Facility f) {
-        if (f != null) {
-            float[] p = bay(new float[]{v.x, v.y}, f);
-            if (p != null && World.hypot(p[0] - v.x, p[1] - v.y) < City.T * 8) {
-                v.x = p[0];
-                v.y = p[1];
-            }
-        }
-        v.speed = 0;
-        v.state = WAIT;
-        v.place = f != null ? f.name : city.placeName(v.x, v.y);
-    }
-
-    /** ((26.3) A command post truck with its crew already in it drives off to (tx, ty). False if there's no way. */
-    boolean postGo(Vehicle v, float tx, float ty) {
-        v.tx = tx;
-        v.ty = ty;
-        v.place = city.placeName(tx, ty);
-        v.stuckTimer = 0;
-        v.state = DRIVE;
-        if (route(v, tx, ty)) return true;
-        v.state = WAIT;
-        return false;
-    }
-
-    /** ((26.3) Climbs into the parked command post truck, to wait there. */
-    void seat(Vehicle v, java.util.List<Entity> crew) {
-        for (Entity e : crew) board(v, e);
-    }
-
-    /** ((26.1) The crew walk over to the command post truck and climb in; then it drives them to (tx, ty). */
-    void musterPost(Vehicle v, java.util.List<Entity> crew, float tx, float ty) {
-        v.state = MUSTER;
-        v.timer = 0;
-        v.coming = -1;
-        v.speed = 0;
-        v.crewWanted = crew.size();
-        v.tx = tx;
-        v.ty = ty;
-        v.place = city.placeName(tx, ty);
-        for (Entity e : crew) {
-            e.rig = v;
-            note(e);
-            e.task = Dispatch.T_BOARD;
-        }
-    }
-
-    /** ((26.0) The command post: parked, its crew climbing in, driving there, then set up (Ops takes it from there). */
-    private boolean commandPostStep(Vehicle v, float dt) {
-        if (v.state == WAIT) {
-            v.speed = 0;
-            return false;
-        }
-        if (v.state == MUSTER) {
-            v.speed = 0;
-            float was = v.timer;
-            v.timer += dt;
-            if (v.coming < 0 || (int) v.timer != (int) was) v.coming = comingTo(v);
-            boolean ready = v.crew.size() >= v.crewWanted || (!v.crew.isEmpty() && v.coming == 0) || (v.timer > 60 && !v.crew.isEmpty());
-            if (ready) {
-                dropCrew(v);
-                v.stuckTimer = 0;
-                v.state = DRIVE;
-                if (!route(v, v.tx, v.ty)) {
-                    // (No way there: they get out again.)
-                    crewOut(v, true);
-                    v.state = WAIT;
-                    w.ops.postUnmanned(v);
-                }
-            } else if (v.timer > 90 || (v.timer > 3 && v.coming == 0 && v.crew.isEmpty())) {
-                dropCrew(v);
-                v.state = WAIT;
-                w.ops.postUnmanned(v);
-            }
-            return false;
-        }
-        if (v.state == SCENE) {
-            v.speed = Math.max(0, v.speed - dt * 200);
-            return false;
-        }
-        v.stuckTimer += dt;
-        // ((26.6) Eyes on the road: the dead on the road ahead, round the truck, or where it's going - it turns off for
-        // somewhere clear instead of driving on into them (it drove straight through a crowd of them and was torn apart).)
-        v.checkCd -= dt;
-        if (v.checkCd <= 0) {
-            v.checkCd = 0.4f;
-            float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
-            int ahead = w.countZombiesNear(v.x + hx * 70, v.y + hy * 70, 70) + w.countZombiesNear(v.x + hx * 150, v.y + hy * 150, 60)
-                    + w.countZombiesNear(v.x, v.y, 45);
-            boolean there = World.hypot(v.tx - v.x, v.ty - v.y) < 500 && w.countZombiesNear(v.tx, v.ty, 160) >= 2;
-            if ((ahead >= 2 || there) && w.ops.postBlocked(v, v.x + hx * 100, v.y + hy * 100)) return false;
-        }
-        boolean moving = driveStep(v, dt, 90, carAhead(v) ? 0.5f : 1f);
-        if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        float d = (float) World.hypot(v.tx - v.x, v.ty - v.y);
-        if (d < 36 || (!moving && d < 160) || (v.stuckTimer > 20 && d < 320)) {
-            v.speed = 0;
-            v.stuckTimer = 0;
-            v.state = SCENE;
-            w.ops.postArrived(v);
-            return false;
-        }
-        if (moving && Math.abs(v.speed) > 12) v.stuckTimer = 0;
-        else if (v.stuckTimer > 6) {
-            // Held up, or lost its way: a new route there, or (with none) it sets up where it is.
-            v.stuckTimer = 0;
-            if (!route(v, v.tx, v.ty)) {
-                v.speed = 0;
-                v.state = SCENE;
-                w.ops.postArrived(v);
-            }
-        }
-        return false;
-    }
-
-    /** ((26.0) The command post packs up and drives on to (tx, ty). False if there's no way there. */
-    boolean movePost(Vehicle v, float tx, float ty) {
-        v.state = DRIVE;
-        v.stuckTimer = 0;
-        v.place = city.placeName(tx, ty);
-        if (route(v, tx, ty)) return true;
-        v.state = SCENE;
-        return false;
-    }
-
-    /** ((26.0) A police boat on the water at (x, y), based at the landing (lx, ly). */
-    Vehicle policeBoat(float x, float y, float lx, float ly, int number) {
-        Vehicle v = make(BOAT);
-        setKind(v, K_POLICE_BOAT);
-        v.x = v.homeX = x;
-        v.y = v.homeY = y;
-        v.homeLandX = v.landX = lx;
-        v.homeLandY = v.landY = ly;
-        v.angle = (float) Math.atan2(y - ly, x - lx);
-        v.turret = v.angle;
-        v.boatNum = number;
-        v.boatJob = Ops.J_IDLE;
-        v.jobT = number * 2;
-        v.state = WAIT;
-        v.passengerType = Entity.COP;
-        vehicles.add(v);
-        return v;
-    }
-
-    private int reconNumber;
-
-    private boolean reconDestination(Vehicle v) {
-        for (int k = 0; k < 6; k++) {
-            float[] q = city.randomStreetSpot(w.rnd);
-            float[] p = q != null ? city.nearestDrivable(q[0], q[1]) : null;
-            if (p != null && World.hypot(p[0] - v.x, p[1] - v.y) > 400 && route(v, p[0], p[1])) return true;
-        }
-        return false;
-    }
-
-    private boolean reconStep(Vehicle v, float dt) {
-        if (v.crew.isEmpty()) {
-            v.parked = true;
-            v.state = ABANDONED;
-            return false;
-        }
-        turret(v, dt);
-        v.stuckTimer += dt;
-        boolean moving = driveStep(v, dt, 100, carAhead(v) ? 0.5f : 1f);
-        if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        if (!moving || World.hypot(v.tx - v.x, v.ty - v.y) < 40 || v.stuckTimer > 6) {
-            v.speed = 0;
-            v.stuckTimer = 0;
-            if (!reconDestination(v)) v.stuckTimer = 3;
-        }
-        v.reconCd -= dt;
-        if (v.reconCd <= 0) {
-            v.reconCd = 1;
-            int n = w.countZombiesNear(v.x, v.y, 190);
-            if (n >= 4) {
-                boolean covered = false;
-                for (int i = 0; i < w.dispatch.incidents.size() && !covered; i++) {
-                    Dispatch.Incident inc = w.dispatch.incidents.get(i);
-                    if (!inc.resolved && World.hypot(inc.x - v.x, inc.y - v.y) < 260) covered = true;
-                }
-                if (!covered) {
-                    Entity z = w.nearestZombie(v.x, v.y, 190);
-                    if (z != null) w.dispatch.sighting(z.x, z.y, null);
-                    if (w.time - v.reconSaid > 20) {
-                        v.reconSaid = w.time;
-                        w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Recon " + v.number + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "hostile", "hostiles"))
-                                + " on " + city.placeName(v.x, v.y) + ". Marked. Moving on.", v.x, v.y);
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * (11.0) Marines by boat (on the maps with water): landing craft come in off the sea or the river to the shore
-     * nearest the fighting, eight Marines to a boat, put them ashore, and pull back out. False if there's no way in by
-     * water.
-     */
-    /**
-     * ((15.9) From marineLanding, for the evacuation boats too.) The way in by water to the bit of open shore nearest
-     * (tx, ty) that has a way on foot to it: {the route of water tiles from just offshore, {the land tile, the last
-     * water tile}}, or null if there's none (no sea that reaches the edge of the map).
-     */
-    int[][] seaApproach(float tx, float ty) {
-        int w0 = city.w, h0 = city.h, n = w0 * h0;
-        int[] dist = new int[n];
-        java.util.Arrays.fill(dist, Integer.MAX_VALUE);
-        int[] q = new int[n];
-        int head = 0, tail = 0;
-        for (int x = 0; x < w0; x++)
-            for (int y : new int[]{0, h0 - 1}) {
-                int t = y * w0 + x;
-                if (city.tiles[t] == City.WATER && dist[t] == Integer.MAX_VALUE) {
-                    dist[t] = 0;
-                    q[tail++] = t;
-                }
-            }
-        for (int y = 0; y < h0; y++)
-            for (int x : new int[]{0, w0 - 1}) {
-                int t = y * w0 + x;
-                if (city.tiles[t] == City.WATER && dist[t] == Integer.MAX_VALUE) {
-                    dist[t] = 0;
-                    q[tail++] = t;
-                }
-            }
-        if (tail == 0) return null;
-        while (head < tail) {
-            int c = q[head++], x = c % w0, y = c / w0;
-            int[] nb = {x > 0 ? c - 1 : -1, x < w0 - 1 ? c + 1 : -1, y > 0 ? c - w0 : -1, y < h0 - 1 ? c + w0 : -1};
-            for (int j : nb)
-                // (Under the bridges too.)
-                if (j >= 0 && dist[j] == Integer.MAX_VALUE && (city.tiles[j] == City.WATER || (city.bridge != null && city.bridge[j]))) {
-                    dist[j] = dist[c] + 1;
-                    q[tail++] = j;
-                }
-        }
-        // The landing: the water beside a bit of open shore nearest the fighting.
-        // ((15.9) Looked for further and further out until there's one (a call deep inland on a big island had none
-        // within reach, and no Marines came); never a pier or a jetty, nor the prison island; and only a shore with
-        // a way on foot from it to the fighting - they were put ashore where they couldn't get anywhere.)
-        int best = -1, land = -1;
-        int tx0 = (int) (tx / City.T), ty0 = (int) (ty / City.T);
-        float[] goal = city.findWalkable(tx, ty);
-        for (int reach : new int[]{100, 250, Math.max(w0, h0)}) {
-            java.util.ArrayList<long[]> cands = new java.util.ArrayList<long[]>();
-            for (int y = Math.max(1, ty0 - reach); y < Math.min(h0 - 1, ty0 + reach); y++)
-                for (int x = Math.max(1, tx0 - reach); x < Math.min(w0 - 1, tx0 + reach); x++) {
-                    int t = y * w0 + x;
-                    if (dist[t] == Integer.MAX_VALUE || city.tiles[t] != City.WATER) continue;
-                    for (int j : new int[]{t - 1, t + 1, t - w0, t + w0}) {
-                        byte jt = city.tiles[j];
-                        if (jt == City.WATER || jt == City.PIER || city.solidTile(j % w0, j / w0) || (city.bridge != null && city.bridge[j])) continue;
-                        if (w.inPrison((j % w0 + 0.5f) * City.T, (j / w0 + 0.5f) * City.T)) continue;
-                        long dx = j % w0 - tx0, dy = j / w0 - ty0;
-                        cands.add(new long[]{dx * dx + dy * dy, t, j});
-                    }
-                }
-            if (cands.isEmpty()) continue;
-            java.util.Collections.sort(cands, new java.util.Comparator<long[]>() {
-                @Override
-                public int compare(long[] a, long[] b) {
-                    return Long.compare(a[0], b[0]);
-                }
-            });
-            // (The nearest few, until one has a way on foot to the call; spread out so it's not the same bit of
-            // beach tried eight times over.)
-            int tried = 0;
-            long lastD = -1;
-            for (int k = 0; k < cands.size() && tried < 8 && best < 0; k++) {
-                long[] cd = cands.get(k);
-                if (lastD >= 0 && cd[0] - lastD < 36) continue;
-                lastD = cd[0];
-                tried++;
-                int j = (int) cd[2];
-                float lx = (j % w0 + 0.5f) * City.T, ly = (j / w0 + 0.5f) * City.T;
-                if (goal == null || city.findPath(lx, ly, goal[0], goal[1], 60000) != null) {
-                    best = (int) cd[1];
-                    land = j;
-                }
-            }
-            if (best >= 0) break;
-        }
-        if (best < 0) return null;
-        // The way in: from the shore back out along the falling distances, then turned round.
-        java.util.ArrayList<Integer> path = new java.util.ArrayList<Integer>();
-        for (int c = best; ; ) {
-            path.add(c);
-            if (dist[c] == 0) break;
-            int x = c % w0, y = c / w0, next = -1;
-            for (int j : new int[]{x > 0 ? c - 1 : -1, x < w0 - 1 ? c + 1 : -1, y > 0 ? c - w0 : -1, y < h0 - 1 ? c + w0 : -1})
-                if (j >= 0 && dist[j] == dist[c] - 1) next = j;
-            if (next < 0) break;
-            c = next;
-        }
-        java.util.Collections.reverse(path);
-        // ((15.9) In from just offshore, not from the far edge of the map: on the big maps the boats were minutes
-        // out at sea before they got anywhere near.)
-        int skip = Math.max(0, path.size() - MARINE_RUN);
-        int[] route = new int[path.size() - skip];
-        for (int k = 0; k < route.length; k++) route[k] = path.get(k + skip);
-        return new int[][]{route, {land, best}};
-    }
-
-    boolean marineLanding(int count, float tx, float ty, String place, Dispatch.Incident inc) {
-        int[][] a = seaApproach(tx, ty);
-        if (a == null) return false;
-        int w0 = city.w;
-        int[] route = a[0];
-        int land = a[1][0];
-        int boats = (count + 7) / 8;
-        for (int b = 0; b < boats; b++) {
-            Vehicle v = make(BOAT);
-            v.boatPath = route;
-            v.boatAt = 0;
-            v.x = (route[0] % w0 + 0.5f) * City.T;
-            v.y = (route[0] / w0 + 0.5f) * City.T;
-            // (One behind the other, a few seconds apart.)
-            v.timer = -b * 4f;
-            v.tx = (land % w0 + 0.5f) * City.T;
-            v.ty = (land / w0 + 0.5f) * City.T;
-            v.passengers = Math.min(8, count - b * 8);
-            v.passengerType = Entity.SOLDIER;
-            v.incident = inc;
-            v.place = place;
-            v.reinforcement = true;
-            v.state = DRIVE;
-            vehicles.add(v);
-        }
-        return true;
-    }
+    int reconNumber;
 
     /** (15.9) How far out (tiles of water) the landing craft start their run in to the shore. */
     static final int MARINE_RUN = 70;
@@ -2249,199 +884,13 @@ final class Fleet {
     /** (15.9) How many an evacuation boat takes off. */
     static final int BOAT_SEATS = 24;
 
-    /** (15.9) An evacuation boat: in along the water to its dock, people aboard, then back out to sea with them. */
-    private boolean updateEvacBoat(Vehicle v, float dt) {
-        World.EvacStop st = v.evacStop < w.evacStops.size() ? w.evacStops.get(v.evacStop) : null;
-        int[] path = v.boatPath;
-        if (v.busPhase == 1) {
-            v.speed = 0;
-            v.timer += dt;
-            v.checkCd -= dt;
-            if (v.checkCd > 0) return false;
-            v.checkCd = 0.5f;
-            if (st != null) w.boardEvac(v, v.evacStop, st.x, st.y, World.STOP_REACH + 16, BOAT_SEATS - v.riders.size());
-            boolean full = v.riders.size() >= BOAT_SEATS, danger = st == null || w.countZombiesNear(st.x, st.y, 50) >= 2;
-            boolean nobody = st == null || w.waitingFor(v.evacStop, st.x, st.y, true) == 0;
-            if (full || danger || (v.timer > 20 && nobody) || v.timer > 70) {
-                v.busPhase = 2;
-                v.boatAt = path.length - 1;
-                if (st != null && st.bus == v) {
-                    st.bus = null;
-                    st.busCd = 4;
-                }
-                if (v.riders.size() >= 6 && st != null && w.rnd.nextFloat() < 0.6f)
-                    w.dispatch.say(Dispatch.WHO_INFO, null, "News: A boat has left " + st.place + " with " + v.riders.size() + " aboard.", v.x, v.y);
-            }
-            return false;
-        }
-        boolean in = v.busPhase == 0;
-        if (in && (st == null || st.closed)) {
-            v.busPhase = 2;
-            v.boatAt = Math.max(0, Math.min(path.length - 1, v.boatAt));
-            in = false;
-        }
-        if (in ? v.boatAt >= path.length : v.boatAt < 0) {
-            if (in) {
-                v.busPhase = 1;
-                v.timer = 0;
-                v.checkCd = 0;
-                return false;
-            }
-            // Out at sea: away with everyone aboard.
-            w.droveOut(v.riders);
-            return true;
-        }
-        int t = path[v.boatAt];
-        float gx = (t % city.w + 0.5f) * City.T, gy = (t / city.w + 0.5f) * City.T;
-        float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-        v.speed = Math.min(v.speed + dt * 50, 110);
-        if (d < 4) v.boatAt += in ? 1 : -1;
-        else {
-            float step = Math.min(d, v.speed * dt);
-            v.x += dx / d * step;
-            v.y += dy / d * step;
-            v.angle = turnTo(v.angle, (float) Math.atan2(dy, dx), dt * 3);
-        }
-        return false;
-    }
-
-    private boolean updateBoat(Vehicle v, float dt) {
-        if (v.kind == K_POLICE_BOAT) return w.ops.boatStep(v, dt);
-        if (v.evacStop >= 0) return updateEvacBoat(v, dt);
-        v.timer += dt;
-        if (v.timer < 0) return false;
-        if (v.state == DRIVE) {
-            int w0 = city.w;
-            if (v.boatAt >= v.boatPath.length) {
-                v.speed = 0;
-                // Ashore: everyone out on the bank.
-                float sx = v.x, sy = v.y;
-                v.x = v.tx;
-                v.y = v.ty;
-                unload(v, true);
-                v.x = sx;
-                v.y = sy;
-                v.passengers = 0;
-                v.state = SCENE;
-                v.timer = 0;
-                return false;
-            }
-            int t = v.boatPath[v.boatAt];
-            float gx = (t % w0 + 0.5f) * City.T, gy = (t / w0 + 0.5f) * City.T;
-            float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-            v.speed = Math.min(v.speed + dt * 60, 160);
-            if (d < 4) v.boatAt++;
-            else {
-                float step = Math.min(d, v.speed * dt);
-                v.x += dx / d * step;
-                v.y += dy / d * step;
-                v.angle = turnTo(v.angle, (float) Math.atan2(dy, dx), dt * 3);
-            }
-            return false;
-        }
-        // Covering the landing a while, then away.
-        v.speed = 0;
-        return v.timer > 25;
-    }
-
-    /** The riot van: six riot officers with shields, from the precinct to a big crowd of the dead. */
-    boolean sendRiotVan(City.Facility station, Dispatch.Incident inc) {
-        // ((12.9) The riot squad standing by at the station, not six who appeared when the van got there.)
-        java.util.List<Entity> squad = standby(station, Entity.COP, Entity.ROLE_RIOT, 6);
-        if (squad.size() < 2 || !canDrive(station.gateX, station.gateY, inc.x, inc.y)) return false;
-        return musterUnit(squad, station, inc, K_RIOT_VAN, Entity.COP) != null;
-    }
-
-    private int rescueNumber;
-
-    /** The park rangers' truck: out of the ranger station along the dirt lanes, one ranger at the wheel. */
-    Vehicle startRangerPatrol(City.Building station) {
-        float[] start = city.rangerLot != null ? city.nearestDrivable(city.rangerLot[0], city.rangerLot[1])
-                : city.nearestDrivable(station.doorX, station.doorY);
-        if (start == null) return null;
-        Vehicle v = make(CRUISER);
-        v.x = start[0];
-        v.y = start[1];
-        v.patrol = true;
-        v.agency = 3;
-        v.state = PATROL;
-        v.number = 30 + (++unitCount);
-        if (!newDestination(v)) return null;
-        Entity e = w.create(Entity.COP, v.x, v.y);
-        w.makeRanger(e);
-        e.rig = v; note(e);
-        v.crew.add(e);
-        vehicles.add(v);
-        return v;
-    }
+    int rescueNumber;
 
     /**
      * (13.9) The rounds an ammo truck takes out to a fight, from the base's armoury (enough to fill up four soldiers),
      * how many may be out at once, and what the base keeps back for itself.
      */
     static final int AMMO_TRUCK_CARGO = 800, AMMO_TRUCKS_OUT = 2, AMMO_KEEP = 2000;
-
-    /** (13.9) Ammo trucks out now (not on their way home). */
-    int ammoTrucksOut() {
-        int n = 0;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.ammoTruck && v.cargo > 0 && !v.broken && v.state != RETURN) n++;
-        }
-        return n;
-    }
-
-    /**
-     * (13.9) An army truck standing by with spare rounds within reach of (x, y): stopped, not wrecked, not a supply
-     * run to a safe zone. The nearest, or null.
-     */
-    Vehicle ammoTruckNear(float x, float y, float reach) {
-        Vehicle best = null;
-        float bd = reach;
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type != TRUCK || v.cargo <= 0 || v.broken || v.burnt || v.removedFromFleet || v.speed > 3 || v.supply > 0) continue;
-            float d = (float) World.hypot(v.x - x, v.y - y);
-            if (d < bd) {
-                bd = d;
-                best = v;
-            }
-        }
-        return best;
-    }
-
-    /** (13.9) An ammo truck already on its way to this call. */
-    boolean ammoTruckFor(Dispatch.Incident inc) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.ammoTruck && v.incident == inc && !v.broken && v.cargo > 0) return true;
-        }
-        return false;
-    }
-
-    /** (13.9) An ammo truck on its way to a fight within reach of (x, y), to wait for; or null. */
-    Vehicle ammoTruckComing(float x, float y, float reach) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.ammoTruck && v.cargo > 0 && !v.broken && !v.removedFromFleet && v.state != RETURN && World.hypot(v.tx - x, v.ty - y) < reach) return v;
-        }
-        return null;
-    }
-
-    /** (13.9) An army truck from the base with a load of ammunition for the soldiers at a fight, which waits there. */
-    Vehicle sendAmmoTruck(City.Facility from, Dispatch.Incident inc) {
-        int take = Math.min(AMMO_TRUCK_CARGO, from.ammo - AMMO_KEEP);
-        if (take <= 0) return null;
-        int before = vehicles.size();
-        if (!send(Entity.SOLDIER, 0, from.x, from.y, inc.x, inc.y, inc, null, inc.place) || vehicles.size() == before) return null;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
-        v.ammoTruck = true;
-        from.ammo -= take;
-        v.cargo = take;
-        v.incident = inc;
-        v.passengerType = Entity.SOLDIER;
-        return v;
-    }
 
     // ------------------------------------------------------------------ (14.0) the engineers' bulldozer
 
@@ -2451,493 +900,11 @@ final class Fleet {
     /** How long pushing a wreck off the road takes, and how far a bulldozer goes for one. */
     static final float DOZER_PUSH = 4, DOZER_REACH = 2500;
 
-    /** Each army base still standing has its bulldozer, parked in the yard (made again after a game is loaded). */
-    void ensureDozers() {
-        ensureDozers0();
-    }
-
-    /** (14.6) On or right beside a road (an open street for the gun truck). */
-    private boolean onRoad(float x, float y) {
-        int tx = (int) (x / City.T), ty = (int) (y / City.T);
-        for (int j = ty - 2; j <= ty + 2; j++)
-            for (int i = tx - 2; i <= tx + 2; i++)
-                if (i >= 0 && j >= 0 && i < city.w && j < city.h && city.tiles[j * city.w + i] == City.ROAD) return true;
-        return false;
-    }
-
-    private void ensureDozers0() {
-        for (City.Facility f : city.facilities) {
-            if (f.kind != City.FACILITY_BASE || f.fallen) continue;
-            boolean has = false;
-            for (int i = 0; i < vehicles.size() && !has; i++) has = vehicles.get(i).kind == K_DOZER && vehicles.get(i).dozerBase == f;
-            if (has) continue;
-            float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
-            if (g == null) continue;
-            float[] p = bay(g, f);
-            if (p == null) continue;
-            Vehicle v = make(TRUCK);
-            v.kind = K_DOZER;
-            v.dozerBase = f;
-            v.x = v.homeX = p[0];
-            v.y = v.homeY = p[1];
-            v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
-            v.state = IDLE;
-            v.parked = true;
-            v.speed = 0;
-            v.passengerType = Entity.SOLDIER;
-            vehicles.add(v);
-        }
-    }
-
-    /** A wreck or an abandoned vehicle left on a road in town, not already being seen to; the nearest to (x, y). */
-    private Vehicle wreckToClear(float x, float y, float reach) {
-        Vehicle best = null;
-        float bd = reach;
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o.removedFromFleet || o.kind == K_DOZER || o.player != null || o.standby || !o.riders.isEmpty()) continue;
-            if (o.type != CAR && o.type != CRUISER && o.type != TRUCK && o.type != AMBULANCE) continue;
-            if (!o.broken && !o.burnt && o.state != ABANDONED) continue;
-            int t = city.tileIndex(o.x, o.y);
-            if (t < 0 || city.tiles[t] != City.ROAD || !city.inTown(o.x, o.y)) continue;
-            boolean taken = false;
-            for (int k = 0; k < n && !taken; k++) taken = vehicles.get(k).clearing == o;
-            if (taken) continue;
-            float d = (float) World.hypot(o.x - x, o.y - y);
-            if (d < bd) {
-                bd = d;
-                best = o;
-            }
-        }
-        return best;
-    }
-
-    /** (14.0) Every few seconds: a bulldozer parked at its base goes out to the nearest wreck in the way, once the dead are about. */
-    private void dozers() {
-        if (w.alert < 1) return;
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.kind != K_DOZER || !v.parked || v.broken || v.burnt) continue;
-            if (v.dozerBase != null && v.dozerBase.fallen) continue;
-            Vehicle o = wreckToClear(v.x, v.y, DOZER_REACH);
-            if (o == null || !dozerTo(v, o)) continue;
-            w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Engineers are taking the bulldozer out to clear a wreck off "
-                    + city.placeName(o.x, o.y) + ".", o.x, o.y);
-        }
-    }
-
-    private boolean dozerTo(Vehicle v, Vehicle o) {
-        float[] p = city.nearestDrivable(o.x, o.y);
-        if (p == null) return false;
-        v.parked = false;
-        v.state = DRIVE;
-        v.stuckTimer = 0;
-        v.clearing = o;
-        if (!route(v, p[0], p[1])) {
-            v.clearing = null;
-            v.parked = true;
-            v.state = IDLE;
-            return false;
-        }
-        v.place = city.placeName(o.x, o.y);
-        return true;
-    }
-
-    /** At the end of a drive: at the wreck, push it; home, park. */
-    private boolean dozerArrived(Vehicle v) {
-        v.speed = 0;
-        Vehicle o = v.clearing;
-        if (v.state == DRIVE && o != null && !o.removedFromFleet && World.hypot(o.x - v.x, o.y - v.y) < 40) {
-            v.state = SCENE;
-            v.timer = DOZER_PUSH;
-            v.angle = (float) Math.atan2(o.y - v.y, o.x - v.x);
-            return false;
-        }
-        if (v.state == RETURN) {
-            v.state = IDLE;
-            v.parked = true;
-            v.clearing = null;
-            return false;
-        }
-        return dozerNext(v);
-    }
-
-    /** Pushing the wreck: a few seconds, then it's off the road for good. */
-    private boolean dozerPush(Vehicle v, float dt) {
-        Vehicle o = v.clearing;
-        v.speed = 0;
-        if (o == null || o.removedFromFleet) return dozerNext(v);
-        float dx = o.x - v.x, dy = o.y - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-        v.angle = (float) Math.atan2(dy, dx);
-        if (d > 20) {
-            // (Up to it, slowly, over whatever's in the way.)
-            float step = Math.min(d - 18, 18 * dt);
-            v.x += dx / d * step;
-            v.y += dy / d * step;
-            return false;
-        }
-        v.timer -= dt;
-        // (Shoving it along, a little at a time.)
-        float a = v.angle;
-        o.x += (float) Math.cos(a) * 4 * dt;
-        o.y += (float) Math.sin(a) * 4 * dt;
-        if (v.soundCd <= 0) {
-            v.soundCd = 1.2f;
-            w.emit(Sfx.CRASH, o.x, o.y);
-        }
-        if (v.timer > 0) return false;
-        discard(o);
-        dozerCleared++;
-        return dozerNext(v);
-    }
-
-    /** On to the next wreck near here, or back to base. */
-    private boolean dozerNext(Vehicle v) {
-        v.clearing = null;
-        Vehicle o = w.alert >= 1 ? wreckToClear(v.x, v.y, DOZER_REACH / 2) : null;
-        if (o != null && dozerTo(v, o)) return false;
-        v.state = RETURN;
-        v.stuckTimer = 0;
-        if (!route(v, v.homeX, v.homeY)) {
-            // (No way home from here: it waits where it is.)
-            v.state = IDLE;
-            v.parked = true;
-        }
-        return false;
-    }
-
-    /** An army truck carrying ammunition from an armoury to a safe zone. */
-    boolean sendSupply(City.Facility from, Dispatch.SafeZone z, int rounds) {
-        int before = vehicles.size();
-        if (!send(Entity.SOLDIER, 0, from.x, from.y, z.x, z.y, null, z, z.place) || vehicles.size() == before) return false;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
-        v.supply = rounds;
-        return true;
-    }
-
-    /**
-     * After the outbreak, a supply truck from outside: in from the edge of the map at (fromX, fromY) to a store
-     * or an armoury, unloads, and drives back out the way it came.
-     */
-    boolean sendRestock(float fromX, float fromY, City.Building b, City.Facility f) {
-        int before = vehicles.size();
-        fromParked = false;
-        float tx = b != null ? b.doorX : f.x, ty = b != null ? b.doorY : f.y;
-        boolean sent = send(Entity.SOLDIER, 0, fromX, fromY, tx, ty, null, null, b != null ? b.name : f.name);
-        fromParked = true;
-        if (!sent || vehicles.size() == before) return false;
-        Vehicle v = vehicles.get(vehicles.size() - 1);
-        v.restock = true;
-        v.restockShop = b;
-        v.restockFac = f;
-        v.reinforcement = true;
-        v.angle = (float) Math.atan2(ty - v.y, tx - v.x);
-        return true;
-    }
-
-    /** A strike jet: comes in from the nearest edge, drops a stick of bombs across the target, flies on. */
-    void sendJet(float tx, float ty) {
-        Vehicle v = make(JET);
-        float a = w.rnd.nextFloat() * (float) Math.PI * 2;
-        v.angle = a;
-        v.x = tx - (float) Math.cos(a) * 900;
-        v.y = ty - (float) Math.sin(a) * 900;
-        v.tx = tx;
-        v.ty = ty;
-        v.speed = 380;
-        v.alt = 1;
-        v.state = DRIVE;
-        vehicles.add(v);
-        w.emit(Sfx.JET, tx, ty);
-    }
-
     /** (15.10) How many an airliner takes out, and how many soldiers a transport brings. */
     static final int PLANE_SEATS = 120, TRANSPORT_LOAD = 60;
 
-    /** (15.10) An airliner in to the airport to take people out (the evacuation stop k). */
-    boolean sendAirliner(int k) {
-        if (city.runway == null || w.airportClosed) return false;
-        Vehicle v = make(JET);
-        setKind(v, K_AIRLINER);
-        v.evacStop = k;
-        startApproach(v);
-        vehicles.add(v);
-        return true;
-    }
-
-    /**
-     * (15.10) Soldiers flown in to the airport on transports, sixty to a plane, off and away to the call once they're
-     * down. False if there's no airport, or it's fallen.
-     */
-    boolean flyInTroops(int count, Dispatch.Incident inc, String place) {
-        if (city.runway == null || w.airportClosed) return false;
-        for (int b = 0; count > 0; b++, count -= TRANSPORT_LOAD) {
-            Vehicle v = make(JET);
-            setKind(v, K_TRANSPORT);
-            v.passengers = Math.min(TRANSPORT_LOAD, count);
-            v.passengerType = Entity.SOLDIER;
-            v.reinforcement = true;
-            v.incident = inc;
-            v.place = place;
-            startApproach(v);
-            v.x -= b * 900;
-            vehicles.add(v);
-        }
-        return true;
-    }
-
-    /** (15.10) A plane lined up on the runway from far out to the west, at height. */
-    private void startApproach(Vehicle v) {
-        float ry = (city.runway[1] + city.runway[3]) / 2;
-        v.x = Math.min(-200, city.runway[0] - 1400);
-        v.y = ry;
-        v.angle = 0;
-        v.alt = 1;
-        v.speed = 200;
-        v.busPhase = 0;
-        v.timer = 0;
-    }
-
-    /**
-     * (15.10) A plane at the airport: in on the approach, down onto the runway and slowing, along to its stand by the
-     * terminal; there, people board (an airliner) or the troops get off (a transport); then back to the end of the
-     * runway, the take-off run, and away - with everyone aboard counted as out of the city.
-     */
-    private boolean updatePlane(Vehicle v, float dt) {
-        float[] rw = city.runway, ap = city.apron;
-        float ry = (rw[1] + rw[3]) / 2, len = rw[2] - rw[0];
-        World.EvacStop st = v.evacStop >= 0 && v.evacStop < w.evacStops.size() ? w.evacStops.get(v.evacStop) : null;
-        float gx, gy, speed;
-        switch (v.busPhase) {
-            case 0: // The approach, coming down to the threshold.
-                gx = rw[0] + 30;
-                gy = ry;
-                speed = 200;
-                v.alt = Math.min(1, Math.max(0, (gx - v.x) / 900));
-                if (w.airportClosed) {
-                    // (The airport has fallen: it goes round and away again.)
-                    v.busPhase = 6;
-                    return false;
-                }
-                break;
-            case 1: // Down and slowing along the runway.
-                gx = rw[0] + len * 0.45f;
-                gy = ry;
-                speed = Math.max(60, v.speed - dt * 50);
-                v.alt = 0;
-                break;
-            case 2: // Taxiing to the stand.
-                gx = ap[0];
-                gy = ap[1];
-                speed = 45;
-                break;
-            case 3: { // At the stand.
-                v.speed = 0;
-                v.timer += dt;
-                v.checkCd -= dt;
-                if (v.kind == K_TRANSPORT) {
-                    if (v.passengers > 0 && v.timer > 2) {
-                        v.tx = v.x;
-                        v.ty = v.y;
-                        unload(v, true);
-                        v.passengers = 0;
-                    }
-                    if (v.timer > 8) v.busPhase = 4;
-                    return false;
-                }
-                if (v.checkCd > 0) return false;
-                v.checkCd = 0.5f;
-                if (st != null) w.boardEvac(v, v.evacStop, st.x, st.y, World.STOP_REACH + 40, PLANE_SEATS - v.riders.size());
-                boolean full = v.riders.size() >= PLANE_SEATS, danger = w.countZombiesNear(v.x, v.y, 120) >= 2 || w.airportClosed;
-                boolean nobody = st == null || w.waitingFor(v.evacStop, st.x, st.y, true) == 0;
-                if (full || danger || (v.timer > 25 && nobody) || v.timer > 90) {
-                    v.busPhase = 4;
-                    if (st != null && st.bus == v) {
-                        st.bus = null;
-                        st.busCd = 10;
-                    }
-                    if (v.riders.size() >= 10)
-                        w.dispatch.say(Dispatch.WHO_INFO, null, "News: An evacuation flight has taken off from the airport with " + v.riders.size() + " aboard.", v.x, v.y);
-                }
-                return false;
-            }
-            case 4: // Back to the end of the runway.
-                gx = rw[0] + 30;
-                gy = ry;
-                speed = 50;
-                break;
-            case 5: // The take-off run.
-                gx = rw[2] + 60;
-                gy = ry;
-                speed = Math.min(220, v.speed + dt * 70);
-                v.alt = Math.min(1, Math.max(0, (v.x - (rw[0] + len * 0.55f)) / (len * 0.45f)));
-                break;
-            default: // Away to the east.
-                gx = city.worldW() + 600;
-                gy = ry - 300;
-                speed = 220;
-                v.alt = 1;
-                break;
-        }
-        float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-        v.speed = speed;
-        if (d < Math.max(6, speed * dt)) {
-            if (v.busPhase == 6 || v.busPhase >= 7) {
-                w.droveOut(v.riders);
-                return true;
-            }
-            v.busPhase = v.busPhase == 0 ? 1 : v.busPhase == 1 ? 2 : v.busPhase == 2 ? 3 : v.busPhase == 4 ? 5 : 6;
-            v.timer = 0;
-            v.checkCd = 0;
-            return false;
-        }
-        v.x += dx / d * speed * dt;
-        v.y += dy / d * speed * dt;
-        v.angle = turnTo(v.angle, (float) Math.atan2(dy, dx), dt * (v.alt > 0.5f ? 1.5f : 3));
-        if (v.busPhase == 6 && v.x > city.worldW() + 500) {
-            w.droveOut(v.riders);
-            return true;
-        }
-        return false;
-    }
-
-    /** ((25.0) A passenger jet in trouble: in low from far off, an engine on fire, down on (tx, ty). */
-    void sendCrashingPlane(float tx, float ty) {
-        Vehicle v = make(JET);
-        setKind(v, K_CRASH);
-        float a = w.rnd.nextFloat() * (float) Math.PI * 2;
-        v.angle = a;
-        v.x = tx - (float) Math.cos(a) * CRASH_RUN;
-        v.y = ty - (float) Math.sin(a) * CRASH_RUN;
-        v.tx = tx;
-        v.ty = ty;
-        v.speed = 210;
-        v.alt = 0.6f;
-        v.state = DRIVE;
-        vehicles.add(v);
-        w.emit(Sfx.JET, tx, ty);
-    }
-
     /** ((25.0) How far out the crashing jet starts. */
     static final float CRASH_RUN = 1100;
-
-    private boolean updateCrash(Vehicle v, float dt) {
-        float dx = v.tx - v.x, dy = v.ty - v.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
-        if (d < v.speed * dt + 2) {
-            w.planeCrashed(v.tx, v.ty, v.angle);
-            return true;
-        }
-        v.x += dx / d * v.speed * dt;
-        v.y += dy / d * v.speed * dt;
-        v.alt = Math.min(0.6f, d / CRASH_RUN * 0.6f);
-        float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
-        // A wing (and its engine) on fire, and black smoke pouring off it.
-        float ex = v.x - ca * 6 - sa * 30, ey = v.y - sa * 6 + ca * 30;
-        if (w.rnd.nextFloat() < dt * 50) w.particle(ex, ey, -ca * 20, -sa * 20, 0.4f, 2.5f + w.rnd.nextFloat() * 2, 0xFFFF8A2A, World.P_FIRE);
-        if (w.rnd.nextFloat() < dt * 40) w.particle(ex - ca * 10, ey - sa * 10, 0, 0, 2.5f, 5 + w.rnd.nextFloat() * 4, 0xFF2E2E2E, World.P_SMOKE);
-        if ((v.soundCd -= dt) <= 0) {
-            v.soundCd = 1.2f;
-            w.emit(Sfx.JET, v.x, v.y);
-        }
-        return false;
-    }
-
-    /**
-     * ((25.0) An ambulance out to a disaster: from the hospital (or in from the edge of town) with its lights going; at
-     * the scene it waits a while patching up the hurt nearby, then goes back. False if it can't get there.
-     */
-    boolean sendAmbulance(float tx, float ty) {
-        City.Facility h = city.nearestFacility(City.FACILITY_HOSPITAL, tx, ty);
-        float[] start = h != null ? city.nearestDrivable(h.gateX, h.gateY) : null;
-        if (start == null) {
-            float[] e = city.edgeSpawn(tx, ty);
-            start = e != null ? city.nearestDrivable(e[0], e[1]) : null;
-        }
-        float[] to = city.nearestDrivable(tx, ty);
-        if (start == null || to == null) return false;
-        Vehicle v = make(AMBULANCE);
-        v.x = start[0];
-        v.y = start[1];
-        v.homeX = start[0];
-        v.homeY = start[1];
-        if (!route(v, to[0], to[1])) return false;
-        v.state = DRIVE;
-        v.timer = 0;
-        v.angle = (float) Math.atan2(to[1] - v.y, to[0] - v.x);
-        vehicles.add(v);
-        w.emit(Sfx.AMB_SIREN, v.x, v.y);
-        return true;
-    }
-
-    private boolean ambulanceStep(Vehicle v, float dt) {
-        if (v.state == SCENE) {
-            v.speed = 0;
-            v.timer -= dt;
-            if ((v.checkCd -= dt) <= 0) {
-                v.checkCd = 1;
-                for (int i = 0, n = w.entities.size(); i < n; i++) {
-                    Entity e = w.entities.get(i);
-                    if (e.dead || e.isZombie() || e.infected || Math.abs(e.x - v.x) > 70 || Math.abs(e.y - v.y) > 70) continue;
-                    e.hp = Math.min(e.maxHp, e.hp + 8);
-                }
-            }
-            if (v.timer <= 0 || w.countZombiesNear(v.x, v.y, 50) >= 3) {
-                v.state = RETURN;
-                v.stuckTimer = 0;
-                return !route(v, v.homeX, v.homeY);
-            }
-            return false;
-        }
-        v.timer += dt;
-        boolean moving = driveStep(v, dt, 45, 1);
-        if (v.state == DRIVE && (!moving || v.timer > 90)) {
-            v.state = SCENE;
-            v.timer = 45;
-            v.speed = 0;
-            w.dispatch.chatter(Dispatch.WHO_POLICE, null, "EMS: On scene at " + city.placeName(v.x, v.y) + ", treating the injured.", v.x, v.y);
-            return false;
-        }
-        return v.state == RETURN && (!moving || v.timer > 200);
-    }
-
-    private boolean updateJet(Vehicle v, float dt) {
-        if (v.kind == K_CRASH) return updateCrash(v, dt);
-        if (v.kind == K_AIRLINER || v.kind == K_TRANSPORT) return updatePlane(v, dt);
-        v.x += (float) Math.cos(v.angle) * v.speed * dt;
-        v.y += (float) Math.sin(v.angle) * v.speed * dt;
-        float d = (float) World.hypot(v.tx - v.x, v.ty - v.y);
-        v.gunCd -= dt;
-        boolean over = d < 120;
-        if (over && v.gunCd <= 0) {
-            v.gunCd = 0.12f;
-            v.timer = 1;
-            // The bombs take a moment to fall.
-            w.blastLater(v.x, v.y, 55, 280, 0.8f);
-        }
-        if (w.rnd.nextFloat() < dt * 40)
-            w.particle(v.x - (float) Math.cos(v.angle) * 14, v.y - (float) Math.sin(v.angle) * 14, 0, 0, 2.5f, 2.5f, 0xFFE8E8E8,
-                    World.P_SMOKE);
-        return World.hypot(v.x - v.tx, v.y - v.ty) > 1000 && v.timer > 0;
-    }
-
-    /** A tank rolls out of the base towards heavy fighting. */
-    boolean sendTank(float fromX, float fromY, float toX, float toY, String place) {
-        float[] start = city.nearestDrivable(fromX, fromY);
-        if (start == null) return false;
-        Vehicle v = make(TANK);
-        v.x = start[0];
-        v.y = start[1];
-        if (!route(v, toX, toY)) return false;
-        v.state = WAIT;
-        v.timer = 2;
-        v.homeX = start[0];
-        v.homeY = start[1];
-        v.place = place;
-        v.angle = v.turret = (float) Math.atan2(toY - v.y, toX - v.x);
-        vehicles.add(v);
-        w.tanksDeployed++;
-        return true;
-    }
 
     int count(int type) {
         int n = 0;
@@ -2945,168 +912,12 @@ final class Fleet {
         return n;
     }
 
-    /** A car dropped into traffic by the player. */
-    Vehicle placeCar(float x, float y) {
-        float[] p = city.nearestDrivable(x, y);
-        if (p == null) return null;
-        Vehicle v = make(CAR);
-        v.state = CRUISE;
-        v.x = p[0];
-        v.y = p[1];
-        pickModel(v, false);
-        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
-        if (!newDestination(v)) return null;
-        vehicles.add(v);
-        return v;
-    }
-
-    /** ((17.6) One of the city's helicopters shot down: spinning, losing height, and a fireball where it comes down. */
-    private boolean heliCrash(Vehicle v, float dt) {
-        v.angle += dt * 5;
-        v.x += (float) Math.cos(v.angle) * 20 * dt;
-        v.y += (float) Math.sin(v.angle) * 20 * dt;
-        v.alt = Math.max(0, v.alt - dt * 0.5f);
-        if (v.alt > 0) return false;
-        v.crew.clear();
-        v.riders.clear();
-        v.driver = null;
-        w.explode(v.x, v.y, 40, 150);
-        w.dispatch.say(Dispatch.WHO_MILITARY, null, (v.kind == K_POLICE_HELI || v.kind == K_RESCUE_HELI ? "Police: " : "Military: ")
-                + "Helicopter down on " + city.placeName(v.x, v.y) + "!", v.x, v.y, true);
-        w.timeline("Helicopter shot down", v.x, v.y);
-        return true;
-    }
-
-    /** A police car with two officers, setting off on patrol from here. */
-    Vehicle placePolice(float x, float y) {
-        for (int tries = 0; tries < 6; tries++) {
-            float[] d = randomRoad();
-            if (d == null || World.hypot(d[0] - x, d[1] - y) < 250) continue;
-            int before = vehicles.size();
-            if (send(Entity.COP, 2, x, y, d[0], d[1], null, null, city.placeName(d[0], d[1])) && vehicles.size() > before) {
-                Vehicle v = vehicles.get(vehicles.size() - 1);
-                v.timer = 0.3f;
-                return v;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Police close the main approaches to a new safe zone. For each side of the zone, the nearest road running
-     * towards it gets a cruiser sent from the precinct; on arrival it parks angled across the inbound lane with
-     * cones out and an officer posted beside it. Returns how many were sent.
-     */
-    int roadblocks(Dispatch.SafeZone z) {
-        City.Facility precinct = city.nearestFacility(City.FACILITY_POLICE, z.x, z.y);
-        if (precinct == null) return 0;
-        int tx0 = (int) (z.x / City.T), ty0 = (int) (z.y / City.T);
-        int rMin = (int) ((z.r + 30) / City.T), rMax = (int) ((z.r + 90) / City.T);
-        int sent = 0;
-        // North, south, west, east: walk outwards along a narrow band looking for a road heading into the zone.
-        int[][] dirs = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
-        for (int[] dv : dirs) {
-            if (sent >= 3) break;
-            float[] best = null;
-            for (int dist = rMin; dist <= rMax && best == null; dist++)
-                for (int side = -3; side <= 3 && best == null; side++) {
-                    int tx = tx0 + dv[0] * dist + (dv[0] == 0 ? side : 0), ty = ty0 + dv[1] * dist + (dv[1] == 0 ? side : 0);
-                    if (tx < 2 || ty < 2 || tx >= city.w - 2 || ty >= city.h - 2) continue;
-                    int dir = city.roadDirAt(tx, ty);
-                    // The road must run towards the zone (north-south above and below it, east-west to the sides).
-                    if (dir != (dv[0] == 0 ? 1 : 2)) continue;
-                    float x = tx * City.T + City.T / 2f, y = ty * City.T + City.T / 2f;
-                    boolean taken = false;
-                    for (int k = 0; k < vehicles.size() && !taken; k++)
-                        if (World.hypot(vehicles.get(k).x - x, vehicles.get(k).y - y) < 24) taken = true;
-                    if (!taken) best = new float[]{x, y, dir};
-                }
-            if (best == null) continue;
-            int before = vehicles.size();
-            if (!send(Entity.COP, 1, precinct.x, precinct.y, best[0], best[1], null, null, city.placeName(best[0], best[1])))
-                continue;
-            for (int k = before; k < vehicles.size(); k++) {
-                Vehicle v = vehicles.get(k);
-                v.block = z;
-                v.blockDir = (int) best[2];
-                v.timer = 1 + sent * 2;
-            }
-            sent++;
-        }
-        return sent;
-    }
-
-    /** A roadblock car has arrived: it parks angled across the lane, lights on, and its officer takes post. */
-    private void setUpRoadblock(Vehicle v) {
-        float along = v.blockDir == 1 ? (float) Math.PI / 2 : 0;
-        v.angle = along + (w.rnd.nextBoolean() ? 1 : -1) * 0.75f;
-        v.parked = true;
-        v.state = BLOCK;
-        v.speed = 0;
-        v.cones = true;
-        float nx = (float) Math.cos(v.angle + 1.57f), ny = (float) Math.sin(v.angle + 1.57f);
-        float[] p = city.findWalkable(v.x + nx * 10, v.y + ny * 10);
-        if (p != null && v.passengers > 0) {
-            Entity cop = w.spawn(Entity.COP, p[0], p[1]);
-            if (cop != null) {
-                cop.task = Dispatch.T_POST;
-                cop.postX = p[0];
-                cop.postY = p[1];
-                v.guard = cop;
-            }
-        }
-        v.passengers = 0;
-        if (v.block != null) putUpBarrier(v, v.block.x, v.block.y);
-    }
-
     /** (14.8) How much pushing (the dead's seconds against it) a line of crowd barriers takes before it goes over. */
     static final float BARRIER_HP = 45;
 
-    /**
-     * (14.8) Crowd barriers: a line of them across the road and the pavements either side, a little way out from the
-     * roadblock car on the side away from the zone (zx, zy), out to the buildings or fences each side.
-     */
-    void putUpBarrier(Vehicle v, float zx, float zy) {
-        boolean ns = v.blockDir == 1;
-        // The road runs north-south (ns) or east-west; the line goes across it.
-        float ax = ns ? 0 : 1, ay = ns ? 1 : 0;
-        float side = ((zx - v.x) * ax + (zy - v.y) * ay) >= 0 ? 1 : -1;
-        float cx = v.x - ax * side * 16, cy = v.y - ay * side * 16;
-        float px = ay, py = ax;
-        float lo = 0, hi = 0;
-        while (lo > -70 && !city.solidAt(cx + px * (lo - 4), cy + py * (lo - 4))) lo -= 4;
-        while (hi < 70 && !city.solidAt(cx + px * (hi + 4), cy + py * (hi + 4))) hi += 4;
-        if (hi - lo < 12) return;
-        v.barX0 = cx + px * lo;
-        v.barY0 = cy + py * lo;
-        v.barX1 = cx + px * hi;
-        v.barY1 = cy + py * hi;
-        v.barNx = ax;
-        v.barNy = ay;
-        v.barIn = (int) side;
-        v.barHp = BARRIER_HP;
-        v.barDown = false;
-    }
-    Vehicle placeTank(float x, float y) {
-        float[] p = city.nearestDrivable(x, y);
-        if (p == null) return null;
-        Vehicle v = make(TANK);
-        v.x = p[0];
-        v.y = p[1];
-        v.homeX = p[0];
-        v.homeY = p[1];
-        v.state = ENGAGE;
-        v.timer = 240;
-        v.place = city.placeName(p[0], p[1]);
-        v.angle = v.turret = w.rnd.nextInt(4) * (float) Math.PI / 2;
-        vehicles.add(v);
-        w.tanksDeployed++;
-        return v;
-    }
-
     // ------------------------------------------------------------------ helicopters on their pads (10.20)
 
-    private int airNumber;
+    int airNumber;
 
     /**
      * Every helipad has its helicopter, parked there from the start, with its flight crew standing by it: the
@@ -3114,508 +925,34 @@ final class Fleet {
      * Run now and then: a helicopter lost is not replaced, but a pilot who's been killed is (from whoever's
      * nearby, while there are any).
      */
-    private final java.util.HashSet<float[]> padStocked = new java.util.HashSet<float[]>();
-
-    void stationHelis() {
-        java.util.List<float[]> pads = city.helipads();
-        for (int k = 0; k < pads.size(); k++) {
-            float[] p = pads.get(k);
-            Vehicle v = null;
-            for (int i = 0; i < vehicles.size() && v == null; i++) if (vehicles.get(i).padAt == p) v = vehicles.get(i);
-            if (v == null) {
-                if (padLost.contains(p)) continue;
-                // ((18.0) In a mission a pad's helicopter is there once: one lost isn't replaced for free.)
-                if (w.city.cfg.mission >= 0 && !padStocked.add(p)) continue;
-                v = make(HELI);
-                v.padAt = p;
-                v.pad = true;
-                v.x = v.homeX = v.baseX = p[0];
-                v.y = v.homeY = v.baseY = p[1];
-                v.angle = -(float) Math.PI / 2;
-                v.alt = 0;
-                v.state = IDLE;
-                int kind = City.padKind(p);
-                if (kind == City.PAD_POLICE) setKind(v, K_POLICE_HELI);
-                else if (kind == City.PAD_RESCUE) {
-                    setKind(v, K_RESCUE_HELI);
-                    v.number = ++rescueNumber;
-                } else v.number = ++airNumber;
-                vehicles.add(v);
-            }
-            if (v.state != IDLE) continue;
-            // The flight crew, standing by on the pad.
-            for (int i = v.flight.size() - 1; i >= 0; i--) if (v.flight.get(i).dead && !v.crew.contains(v.flight.get(i))) v.flight.remove(i);
-            boolean army = v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI;
-            int want = v.kind == K_RESCUE_HELI ? 4 : 1;
-            // (After loading a saved game the crew are already standing about: they're taken back on, not doubled.)
-            while (v.flight.size() < want) {
-                boolean pilot = livePilot(v) == null;
-                Entity found = null;
-                float fd = Float.MAX_VALUE;
-                for (int i = 0, n = w.entities.size(); i < n; i++) {
-                    Entity e = w.entities.get(i);
-                    if (e.dead || (pilot ? e.role != Entity.ROLE_PILOT : e.role != Entity.ROLE_SAR) || e.type != (army ? Entity.SOLDIER : Entity.COP)) continue;
-                    float d = (float) World.hypot(e.x - p[0], e.y - p[1]);
-                    if (d >= fd || inFlight(e)) continue;
-                    fd = d;
-                    found = e;
-                }
-                if (found == null) break;
-                v.flight.add(found);
-            }
-            // ((11.0) Once the first crew's gone, a new pilot comes from those who signed up as reserve pilots, not
-            // from nowhere. With none left, it stays on the ground.)
-            if (livePilot(v) == null && v.crewSpawns > 0) {
-                if (v.pilotComing == null || v.pilotComing.dead || v.pilotComing.pilotFor != v) v.pilotComing = w.callReservePilot(v);
-                if (v.flight.isEmpty()) continue;
-            }
-            // ((18.0) In a mission, only the pad's first crew: no new pilots from nowhere once they're lost.)
-            while (v.flight.size() < want && v.crewSpawns < (w.city.cfg.mission >= 0 ? want : 8)) {
-                boolean pilot = livePilot(v) == null;
-                if (pilot && v.crewSpawns > 0) break;
-                v.crewSpawns++;
-                Entity e = pilot ? w.spawn(army ? Entity.SOLDIER : Entity.COP, p[0] + 30, p[1] + 10)
-                        : w.spawnCop(Entity.ROLE_SAR, p[0] + 30, p[1] + 10);
-                if (e == null) break;
-                if (pilot) {
-                    e.role = Entity.ROLE_PILOT;
-                    e.callsign = v.number;
-                } else {
-                    e.callsign = v.number;
-                    e.member = v.flight.size() - 1;
-                }
-                v.flight.add(e);
-            }
-            for (int i = 0; i < v.flight.size(); i++) {
-                Entity e = v.flight.get(i);
-                if (e.dead || e.task == Dispatch.T_POST || e.task == Dispatch.T_BOARD) continue;
-                if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_RESCUE) continue;
-                standBy(v, e, i);
-            }
-        }
-    }
-
-    private boolean inFlight(Entity e) {
-        for (int i = 0; i < vehicles.size(); i++) if (vehicles.get(i).flight.contains(e)) return true;
-        return false;
-    }
+    final java.util.HashSet<float[]> padStocked = new java.util.HashSet<float[]>();
 
     /** Helipads whose helicopter has been lost for good. */
-    private final java.util.HashSet<float[]> padLost = new java.util.HashSet<float[]>();
-
-    /** A member of the flight crew waits at the side of the pad. */
-    private void standBy(Vehicle v, Entity e, int i) {
-        e.task = Dispatch.T_POST;
-        e.rig = null;
-        e.postX = v.padAt[0] + 30 + (i % 2) * 8;
-        e.postY = v.padAt[1] - 8 + i * 9;
-    }
-
-    /** Helicopters of a kind (0 the army's) the city has. */
-    int helisOfKind(int kind) {
-        int n = 0;
-        for (int i = 0; i < vehicles.size(); i++) if (vehicles.get(i).type == HELI && vehicles.get(i).kind == kind) n++;
-        return n;
-    }
-
-    /** The helicopter's pilot, alive (on foot or aboard), or null: no pilot, no flight. */
-    Entity livePilot(Vehicle v) {
-        for (int i = 0; i < v.flight.size(); i++) {
-            Entity e = v.flight.get(i);
-            if (e.role == Entity.ROLE_PILOT && (!e.dead || v.crew.contains(e))) return e;
-        }
-        return null;
-    }
-
-    /** The nearest helicopter of a kind (0 the army's) sitting on its pad ready to go, or null. */
-    Vehicle readyHeli(int kind, float x, float y) {
-        Vehicle best = null;
-        float bd = Float.MAX_VALUE;
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type != HELI || v.kind != kind || v.state != IDLE || v.refuel > 0 || v.padAt == null || livePilot(v) == null) continue;
-            if (kind == K_RESCUE_HELI && sarOnFoot(v) == 0) continue;
-            float d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
-            if (d < bd) {
-                bd = d;
-                best = v;
-            }
-        }
-        return best;
-    }
-
-    private int sarOnFoot(Vehicle v) {
-        int n = 0;
-        for (Entity e : v.flight) if (!e.dead && e.role == Entity.ROLE_SAR) n++;
-        return n;
-    }
-
-    /**
-     * Sends a helicopter off its pad: the pilot (and the rescue team, door gunners from the base or a police
-     * marksman) walk out to it and climb aboard, it spins up, and only then does it take off. extra: how many
-     * more to take from the free units nearby (door gunners, troops).
-     */
-    boolean launchHeli(Vehicle v, float tx, float ty, String place, Dispatch.Incident inc, int extra) {
-        if (v == null || v.state != IDLE) return false;
-        Entity pilot = livePilot(v);
-        if (pilot == null) return false;
-        v.tx = tx;
-        v.ty = ty;
-        v.place = place;
-        v.incident = inc;
-        v.team = null;
-        v.pickup = false;
-        v.recall = false;
-        v.standby = false;
-        v.passengers = 0;
-        v.troops = 0;
-        v.state = MUSTER;
-        v.timer = 0;
-        int n = 0;
-        for (Entity e : v.flight) {
-            if (e.dead) continue;
-            e.task = Dispatch.T_BOARD;
-            e.rig = v; note(e);
-            n++;
-        }
-        int type = v.kind == K_POLICE_HELI || v.kind == K_RESCUE_HELI ? Entity.COP : Entity.SOLDIER;
-        for (int k = 0; k < extra; k++) {
-            Entity best = null;
-            float bd = 600 * 600;
-            for (int i = 0, m = w.entities.size(); i < m; i++) {
-                Entity e = w.entities.get(i);
-                if (e.dead || e.type != type || e.task != Dispatch.T_NONE || e.rig != null || e.agency != 0 || e.scout) continue;
-                if (e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_GUARD || e.ammo + e.reserve <= 0) continue;
-                float d = (e.x - v.x) * (e.x - v.x) + (e.y - v.y) * (e.y - v.y);
-                if (d < bd) {
-                    bd = d;
-                    best = e;
-                }
-            }
-            if (best == null) break;
-            best.task = Dispatch.T_BOARD;
-            best.rig = v; note(best);
-            n++;
-        }
-        v.crewWanted = n;
-        return true;
-    }
-
-    /**
-     * (10.52) Reinforcements by air: an army helicopter flies in from the edge of the map at (fx, fy) with a squad
-     * aboard, puts them down near (tx, ty), covers them for a minute with its door guns, and flies back out the way
-     * it came. Returns the soldiers (still aboard), or null if there's no room.
-     */
-    ArrayList<Entity> airlift(int count, float fx, float fy, float tx, float ty, String place, Dispatch.Incident inc) {
-        if (w.entities.size() + count + 3 > w.maxEntities + World.OVER_CAP) return null;
-        Vehicle v = make(HELI);
-        v.x = fx;
-        v.y = fy;
-        v.angle = (float) Math.atan2(ty - fy, tx - fx);
-        v.alt = 1;
-        v.state = FLY_IN;
-        v.tx = tx;
-        v.ty = ty;
-        v.place = place;
-        v.incident = inc;
-        v.padAt = null;
-        v.baseX = fx;
-        v.baseY = fy;
-        v.number = ++airNumber;
-        v.reinforcement = true;
-        ArrayList<Entity> squad = new ArrayList<Entity>();
-        for (int i = 0; i < count + 3; i++) {
-            Entity e = w.create(Entity.SOLDIER, fx, fy);
-            // (The pilot, the squad, and last the two door gunners, who stay aboard.)
-            if (i == 0) {
-                e.role = Entity.ROLE_PILOT;
-                v.flight.add(e);
-            } else if (i <= count) {
-                w.kitOut(e);
-                squad.add(e);
-            }
-            e.dead = true;
-            e.removed = true;
-            e.rig = v; note(e);
-            v.crew.add(e);
-        }
-        v.troops = count;
-        vehicles.add(v);
-        return squad;
-    }
-
-    /** Lands it back on its pad: everyone climbs out, the flight crew stand by, the rest go back to their duties. */
-    private void landed(Vehicle v) {
-        v.alt = 0;
-        v.hvx = v.hvy = v.speed = 0;
-        v.x = v.padAt[0];
-        v.y = v.padAt[1];
-        v.state = IDLE;
-        v.refuel = 40;
-        v.escort = null;
-        v.team = null;
-        v.incident = null;
-        ArrayList<Entity> out = new ArrayList<Entity>(v.crew);
-        crewOut(v, true);
-        for (Entity e : out) {
-            int i = v.flight.indexOf(e);
-            if (i >= 0 && !e.dead) standBy(v, e, i);
-        }
-    }
-
-    /**
-     * (10.27) A police or army helicopter checks its call is still live: once the call's over, or there's been
-     * nothing to shoot near it for a few seconds, it goes on to the nearest call that still has the dead at it,
-     * or (with none) stands down on its pad or flies home. True if it has just been sent home from the pad.
-     */
-    private boolean staleCall(Vehicle v, float dt) {
-        if (v.kind == K_RESCUE_HELI || v.escort != null) return false;
-        // ((10.52) Reinforcements flown in put their troops down whatever: it's the soldiers' call after that.)
-        if (v.reinforcement && v.troops > 0) return false;
-        if (v.state != MUSTER && v.state != SPOOL && v.state != FLY_IN && v.state != CIRCLE) return false;
-        v.quiet = w.countZombiesNear(v.tx, v.ty, 260) > 0 ? 0 : v.quiet + dt;
-        boolean over = v.incident != null && v.incident.resolved;
-        if (!over && v.quiet < (v.state == CIRCLE ? 12 : 6)) return false;
-        v.quiet = 0;
-        String was = v.place != null ? v.place : "the scene";
-        boolean police = v.kind == K_POLICE_HELI;
-        int who = police ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY;
-        String name = police ? "Police helicopter" : "Air " + Math.max(1, v.number);
-        Dispatch.Incident next = w.dispatch.liveCallNear(v.x, v.y, 1800, v.incident);
-        if (next != null) {
-            v.incident = next;
-            v.tx = next.x;
-            v.ty = next.y;
-            v.place = next.place;
-            if (v.state == CIRCLE) v.state = FLY_IN;
-            w.dispatch.say(who, null, name + ": Nothing left at " + was + ". Moving on to " + next.place + ".", v.x, v.y);
-            return false;
-        }
-        if (v.state == MUSTER || v.state == SPOOL) {
-            // Still on the pad: stand down.
-            for (int i = 0, n = w.entities.size(); i < n; i++) {
-                Entity e = w.entities.get(i);
-                if (!e.dead && e.rig == v && e.task == Dispatch.T_BOARD) {
-                    e.task = Dispatch.T_NONE;
-                    e.rig = null;
-                }
-            }
-            if (v.padAt != null) {
-                landed(v);
-                v.refuel = 5;
-                w.dispatch.say(who, null, name + ": Call's over at " + was + ". Standing down.", v.x, v.y);
-                return true;
-            }
-        }
-        v.state = FLY_OUT;
-        v.incident = null;
-        v.homeX = v.baseX;
-        v.homeY = v.baseY;
-        w.dispatch.say(who, null, name + ": All quiet at " + was + ". Heading back.", v.x, v.y);
-        return false;
-    }
+    final java.util.HashSet<float[]> padLost = new java.util.HashSet<float[]>();
 
     int trafficTarget;
     /** Less background traffic on a struggling phone. */
     float trafficScale = 1;
-    private float trafficTimer, trainTimer = 20, hwyTimer = 5;
-
-    /** A train is on the line near this car's crossing: wait. */
-    private boolean trainComing(Vehicle v) {
-        if (city.railY0 < 0 || city.underRailBridge((int) (v.x / City.T))) return false;
-        float ry = (city.railY0 + city.railRows / 2f) * City.T;
-        float dy = ry - v.y;
-        if (Math.abs(dy) > 60 || Math.abs(dy) < 26) return false;
-        // Only if heading towards the tracks.
-        if ((float) Math.sin(v.angle) * dy <= 0) return false;
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle t = vehicles.get(i);
-            if (t.type != TRAIN) continue;
-            float ahead = (v.x - t.x) * (float) Math.cos(t.angle);
-            if (ahead > -TRAIN_LENGTH - 20 && ahead < 260) return true;
-        }
-        return false;
-    }
-
-    private void spawnTrain() {
-        Vehicle v = make(TRAIN);
-        boolean east = w.rnd.nextBoolean();
-        v.state = DRIVE;
-        v.y = (city.railY0 + city.railRows / 2f) * City.T;
-        v.x = east ? -20 : city.worldW() + 20;
-        v.angle = east ? 0 : (float) Math.PI;
-        v.speed = 110;
-        vehicles.add(v);
-    }
-
-    /** A train is at, or about to reach, the level crossing at x: the barriers are down. */
-    boolean crossingClosed(float x) {
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle t = vehicles.get(i);
-            if (t.type != TRAIN) continue;
-            float ahead = (x - t.x) * (float) Math.cos(t.angle);
-            if (ahead > -TRAIN_LENGTH - 24 && ahead < 300) return true;
-        }
-        return false;
-    }
-
-    private boolean updateTrain(Vehicle v, float dt) {
-        float dir = (float) Math.cos(v.angle);
-        if (v.state == WAIT) {
-            // A short stop at the platform.
-            v.speed = 0;
-            v.timer -= dt;
-            float mid = v.x - dir * TRAIN_LENGTH / 2;
-            // (10.49) People leaving the city get on (a long stop, while there are more of them coming).
-            if (w.exodusOn() && w.byTransit()) {
-                v.checkCd -= dt;
-                if (v.checkCd <= 0) {
-                    v.checkCd = 0.5f;
-                    int got = w.boardEvac(v, World.STOP_TRAIN, city.stationX, city.stationY, TRAIN_LENGTH * 0.7f, TRAIN_SEATS - v.riders.size());
-                    if (!v.riders.isEmpty()) v.exodus = true;
-                    if (got > 0 || w.waitingFor(World.STOP_TRAIN, city.stationX, city.stationY, true) > 0) v.timer = Math.max(v.timer, 4);
-                    if (v.riders.size() >= TRAIN_SEATS) v.timer = 0;
-                    if (v.timer <= 0 && v.riders.size() >= 10 && !v.said) {
-                        v.said = true;
-                        w.dispatch.say(Dispatch.WHO_INFO, null, "News: An evacuation train has left " + city.stationName + " with "
-                                + v.riders.size() + " aboard.", v.x, v.y);
-                    }
-                }
-            }
-            if (v.timer <= 0 || w.countZombiesNear(mid, v.y, 80) > 2) {
-                v.state = DRIVE;
-                w.emit(Sfx.HORN, v.x, v.y);
-            }
-            return false;
-        }
-        float cruise = 110;
-        if (!v.pad && city.stationX >= 0) {
-            // Slow down for the station and stop with the train alongside the platform.
-            float ahead = (city.stationX + dir * TRAIN_LENGTH / 2 - v.x) * dir;
-            if (ahead < -4) v.pad = true;
-            else if (ahead < 340) {
-                boolean danger = w.countZombiesNear(city.stationX, v.y, 150) > 0;
-                if (danger) {
-                    v.pad = true;
-                } else {
-                    cruise = Math.max(5, ahead * 0.38f);
-                    if (ahead < 3) {
-                        v.state = WAIT;
-                        v.pad = true;
-                        v.speed = 0;
-                        v.passengers = 0;
-                        v.timer = 9;
-                        return false;
-                    }
-                }
-            }
-        }
-        v.speed += (cruise - v.speed) * Math.min(1, dt * (cruise < v.speed ? 1.2f : 0.35f));
-        v.x += dir * v.speed * dt;
-        // Anything on the line gets hit: zombies go flying, people are knocked aside, cars are wrecked.
-        // (Not on the bridge: the highway runs underneath.)
-        for (float k = 0; k < TRAIN_LENGTH; k += 16)
-            if (!city.underRailBridge((int) ((v.x - dir * k) / City.T))) w.runOver(v.x - dir * k, v.y, 9, v.speed, v.angle);
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle o = vehicles.get(i);
-            if (o == v || offRoad(o) || o.broken || city.underRailBridge((int) (o.x / City.T))) continue;
-            float along = (o.x - v.x) * dir;
-            if (along < 8 && along > -TRAIN_LENGTH && Math.abs(o.y - v.y) < 14) damage(o, 500, true);
-        }
-        if (v.soundCd <= 0) {
-            v.soundCd = 4;
-            w.emit(Sfx.HORN, v.x, v.y);
-        }
-        return v.x < -TRAIN_LENGTH - 40 || v.x > city.worldW() + TRAIN_LENGTH + 40;
-    }
+    float trafficTimer, trainTimer = 20, hwyTimer = 5;
 
     void update(float dt) {
         frameNo++;
-        if (frameNo % 30 == 0) releaseRoutes();
-        patrolCount = patrolCars();
-        staffPatrols(dt);
-        driverTimer -= dt;
-        if (driverTimer <= 0) {
-            driverTimer = 0.5f;
-            drivers();
-        }
-        // Keep the streets busy while the city is still calm; clear old wrecks.
-        reclaimTimer -= dt;
-        if (reclaimTimer <= 0) {
-            reclaimTimer = 3;
-            reclaim();
-        }
-        busTimer -= dt;
-        if (busTimer <= 0) {
-            busTimer = 2;
-            sendEvacBuses();
-            // (People waiting on the platform: the next train comes soon, and stops for them.)
-            if (city.railY0 >= 0 && city.stationX >= 0 && w.exodusOn() && w.byTransit()
-                    && w.waitingFor(World.STOP_TRAIN, city.stationX, city.stationY, false) >= 3) trainTimer = Math.min(trainTimer, 20);
-        }
-        trafficTimer -= dt;
-        trainTimer -= dt;
-        if (trainTimer <= 0 && city.railY0 >= 0) {
-            trainTimer = 70 + w.rnd.nextFloat() * 50;
-            spawnTrain();
-        }
-        // (10.32) The emergency broadcast: everyone with a car and somewhere to go makes for the highway at once.
-        if (w.alert >= 2 && !evacStarted) {
-            evacStarted = true;
-            // ((12.5) Only when civilians drive at all: none do now.)
-            evacLeft = city.hwyAxis >= 0 && trafficTarget > 0 ? Math.max(10, trafficTarget / 2) : 0;
-            if (evacLeft > 0) w.timeline("People fleeing the city: the roads out are jammed");
-        }
-        if (evacLeft > 0) {
-            evacTimer -= dt;
-            if (evacTimer <= 0) {
-                evacTimer = 1.2f + w.rnd.nextFloat();
-                evacLeft--;
-                spawnEvacuee();
-            }
-        }
-        // (Tankers keep the pumps topped up while things are normal.)
-        if (w.alert < 2 && pumpFuel != null) for (int i = 0; i < pumpFuel.length; i++) pumpFuel[i] = Math.min(6, pumpFuel[i] + dt * 0.01f);
-        // (10.29) The highway has traffic of its own, coming on at the ends, so it doesn't empty out.
-        hwyTimer -= dt;
-        if (hwyTimer <= 0) {
-            hwyTimer = 2;
-            if (city.hwyAxis >= 0 && w.alert < 2 && trafficTarget > 0 && throughTraffic() < throughTarget()) spawnThrough(false);
-        }
+        if (frameNo % 30 == 0) routing.releaseRoutes();
+        patrolCount = patrols.patrolCars();
+        patrols.staffPatrols(dt);
+        timers(dt);
         if (trafficTimer <= 0) {
             trafficTimer = 6;
-            dozers();
-            if (movingTraffic() < trafficTarget * trafficScale && w.zombieCount() < 10 && w.alert < 2) spawnTraffic(1);
-            int parked = 0;
-            // Old wrecks and parked cars are towed away, but never while you're watching.
-            for (int i = vehicles.size() - 1; i >= 0; i--) {
-                Vehicle o = vehicles.get(i);
-                // (A wreck left in the middle of a junction goes first.)
-                boolean blocking = o.parked && city.junctionIdAt(o.x, o.y) >= 0;
-                // ((12.0) Not a station's police cars or a base's trucks parked up ready on their lot - but anything left
-                // in a junction is, police car or army truck: one abandoned there locked the junction up for good.)
-                if (o.standby && !blocking) continue;
-                if (o.type != CAR && !blocking && o.state != ABANDONED && !o.broken) continue;
-                if (o.parked && o.block == null && o.riders.isEmpty() && o.player == null && (++parked > 25 || blocking)
-                        && !inView(o.x, o.y)) {
-                    o.removedFromFleet = true;
-                    vehicles.remove(i);
-                }
-            }
+            armyUnits.dozers();
+            if (movingTraffic() < trafficTarget * trafficScale && w.zombieCount() < 10 && w.alert < 2) cars.spawnTraffic(1);
+            towAway();
         }
-        buildGrid();
+        driving.buildGrid();
         // (10.32) A route on the biggest maps searches a lot more road: fewer of them a frame there.
         int area = city.w * city.h;
         // ((16.2) One a step on the biggest maps: a couple of hundred patrol cars need only a few new routes a second.)
         routeBudget = area > 600000 ? 1 : area > 300000 ? 3 : 6;
-        // Who's out with lights and sirens: everyone else gives way to them.
-        sirens.clear();
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle o = vehicles.get(i);
-            // ((10.51) Army trucks and tanks on their way to the fighting too: everyone pulls over for them.)
-            boolean army = (o.type == TRUCK || o.type == TANK) && o.state == DRIVE && emergency(o);
-            if (o.player == null && !airborne(o) && (o.lightsOn() || army) && Math.abs(o.speed) > 18) sirens.add(o);
-        }
+        findSirens();
         boolean lodOn = w.viewX1 >= 0 && w.viewX1 - w.viewX0 < 2000 && vehicles.size() > 120;
         // ((16.8) Every fourth step with over four hundred on the map, four steps' worth: under a tile's length, even
         // at highway speed.)
@@ -3626,60 +963,13 @@ final class Fleet {
             // rounds drive every other step, two steps' worth: nobody sees it, and the city has hundreds of cars.
             // Back near the screen they're worked out every step again, well before they come into view.)
             float vdt = dt;
-            if (lodOn && v.player == null && !airborne(v) && v.type != TRAIN && v.type != BOAT && farOff(v)) {
+            if (lodOn && v.player == null && !airborne(v) && v.type != TRAIN && v.type != BOAT && routing.farOff(v)) {
                 if (++v.lodTick < lodEvery) continue;
                 v.lodTick = 0;
                 vdt = dt * lodEvery;
             } else v.lodTick = 0;
-            // ((22.0) The dead blundering into a parked car can set it off.)
-            if (v.type == CAR && !v.alarmed && w.zombies > 0 && (v.parked || v.state == ABANDONED) && (v.engineCd -= vdt) <= 0) {
-                v.engineCd = 1;
-                if (w.countZombiesNear(v.x, v.y, 14) > 0) tripAlarm(v, 0.2f);
-            }
-            // ((26.0) The dead clawing at it, if it's stopped with people in it: four times a second.)
-            if ((v.clawAcc += vdt) >= 0.25f) {
-                if (w.zombies > 0) w.clawAt(v, v.clawAcc);
-                v.clawAcc = 0;
-            }
-            if (v.alarm > 0) {
-                // Whoop, whoop: every zombie for streets around comes to see.
-                v.alarm -= vdt;
-                if (v.broken || v.burnt) v.alarm = 0;
-                else if (((int) (v.alarm * 2)) != ((int) ((v.alarm + vdt) * 2))) {
-                    w.emit(Sfx.HORN, v.x, v.y);
-                    if (((int) v.alarm) % 4 == 0) w.noise(v.x, v.y, 180);
-                }
-            }
-            // ((22.0) The dead follow the sound of an engine: anything driving along draws those within earshot after
-            // it, a siren or a tank from furthest off. A horde can end up trailing a car down the street.)
-            if (w.zombies > 0 && v.type != HELI && v.type != TRAIN && v.type != BOAT && v.type != JET && !v.parked && !v.broken
-                    && Math.abs(v.speed) > 25 && (v.engineCd -= vdt) <= 0) {
-                v.engineCd = 2 + w.rnd.nextFloat();
-                w.engineLure(v.x, v.y, v.lightsOn() ? 230 : v.type == TANK ? 210 : v.type == TRUCK ? 150 : 110);
-            }
-            v.anim += vdt;
-            // (Time spent crawling: nudging back and forth in a jam still counts.)
-            if (Math.abs(v.speed) < 8) v.stillT += vdt;
-            else if (Math.abs(v.speed) > 15) v.stillT = 0;
-            v.soundCd -= vdt;
-            v.destCd -= vdt;
-            v.rerouteCd -= vdt;
-            v.holdSaidCd -= vdt;
-            v.crashCd -= vdt;
-            boolean done;
-            if (v.player != null) done = updatePlayerVehicle(v, vdt);
-            else if (v.type == HELI && v.broken) done = heliCrash(v, vdt);
-            else if (v.type == HELI) done = updateHeli(v, vdt);
-            else if (v.type == JET) done = updateJet(v, vdt);
-            else if (v.type == TRAIN) done = updateTrain(v, vdt);
-            else if (v.type == BOAT) done = updateBoat(v, vdt);
-            else if (v.kind == K_PICKUP && !v.parked) done = updatePickup(v, vdt);
-            else if (v.convoy != null && !v.broken) done = w.convoys.step(v, vdt);
-            else if (v.broken || v.parked) done = updateWreck(v, vdt);
-            else if (v.type == TANK) done = updateTank(v, vdt);
-            else if (v.type == CAR) done = v.evacStop >= 0 ? updateEvacBus(v, vdt) : updateTraffic(v, vdt);
-            else if (v.patrol) done = updatePatrol(v, vdt);
-            else done = updateCar(v, vdt);
+            wearAndNoise(v, vdt);
+            boolean done = step(v, vdt);
             // ((15.0) Lights and sirens coming up to a junction with a traffic officer on it: the officer holds the
             // rest of the traffic and waves it through.)
             if (!done && w.trafficPost != null && v.speed > 8 && !offRoad(v) && v.lightsOn() && ((i + (int) (w.time * 30)) & 7) == 0) {
@@ -3694,7 +984,7 @@ final class Fleet {
             }
             if (done) {
                 // ((12.0) One of the city's own officers or soldiers at the wheel gets out, rather vanishing.)
-                if (v.driver != null && v.realDriver) driverOut(v, false);
+                if (v.driver != null && v.realDriver) crews.driverOut(v, false);
                 // (10.48) Whoever was still aboard a car fleeing the city went with it.
                 if (v.exodus && !v.riders.isEmpty()) w.droveOut(v.riders);
                 v.removedFromFleet = true;
@@ -3703,139 +993,172 @@ final class Fleet {
             }
             // At a scene: in to the kerb, out of the traffic's way.
             if (((v.type == CRUISER && v.state == SCENE) || (v.type == AMBULANCE && v.state == LOAD)) && Math.abs(v.speed) < 1 && !v.broken)
-                kerbAtScene(v, vdt);
+                driving.kerbAtScene(v, vdt);
             else if (Math.abs(v.speed) > 10) v.kerbed = false;
             if (!airborne(v) && v.type != TRAIN && v.hp < v.maxHp * 0.5f) smoke(v, vdt);
         }
         routeBudget = Integer.MAX_VALUE;
-        buildGrid();
-        collide();
+        driving.buildGrid();
+        driving.collide();
         city.updateLights(dt);
     }
 
-    private final ArrayList<Vehicle> sirens = new ArrayList<Vehicle>();
-
     /**
-     * Everyday traffic gives way to lights and sirens: one coming up behind and the car pulls over to the
-     * kerb and slows to let it by; one crossing ahead (or racing up to the junction it's at) and it holds back.
+     * ((27.3) One step for one vehicle, by the part that drives its kind: the player's, helicopters, jets, trains, boats,
+     * survivors' pickups, convoy columns, wrecks and parked ones, tanks, everyday cars and evacuation buses, patrol cars,
+     * and the rest - cars and trucks sent somewhere (FleetService.updateCar, which hands on ambulances, bulldozers, recon
+     * Humvees and command trucks). True when it's gone from the map.
      */
-    private void giveWay(Vehicle v, float dt) {
-        if (v.yieldT > 0) v.yieldT -= dt;
-        if (sirens.isEmpty() || v.yieldT > 0.3f) return;
-        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
-        for (int i = 0; i < sirens.size(); i++) {
-            Vehicle o = sirens.get(i);
-            if (o == v) continue;
-            float dx = o.x - v.x, dy = o.y - v.y, d2 = dx * dx + dy * dy;
-            if (d2 > 200 * 200) continue;
-            float ahead = dx * fx + dy * fy;
-            float same = fx * (float) Math.cos(o.angle) + fy * (float) Math.sin(o.angle);
-            if (ahead < -8 && same > 0.6f) {
-                // Coming up behind in the same direction: over to the kerb, nearly stopped.
-                v.yieldT = 2.5f;
-                v.yieldStop = false;
-                return;
-            }
-            // (10.51) Coming the other way down the street: over to the kerb too, to leave it the middle.
-            if (ahead > 8 && same < -0.6f && d2 < 130 * 130) {
-                v.yieldT = 1.8f;
-                v.yieldStop = false;
-                return;
-            }
-            float ox = (float) Math.cos(o.angle), oy = (float) Math.sin(o.angle);
-            boolean closing = -dx * ox - dy * oy > 0;
-            if (d2 < 70 * 70 && closing && Math.abs(same) < 0.6f) {
-                // Coming across the junction ahead: hold back until it's through.
-                v.yieldT = 1.2f;
-                v.yieldStop = true;
-                return;
+    boolean step(Vehicle v, float vdt) {
+        boolean done;
+        if (v.player != null) done = playerDriving.updatePlayerVehicle(v, vdt);
+        else if (v.type == HELI && v.broken) done = helis.heliCrash(v, vdt);
+        else if (v.type == HELI) done = helis.updateHeli(v, vdt);
+        else if (v.type == JET) done = aircraft.updateJet(v, vdt);
+        else if (v.type == TRAIN) done = trains.updateTrain(v, vdt);
+        else if (v.type == BOAT) done = boats.updateBoat(v, vdt);
+        else if (v.kind == K_PICKUP && !v.parked) done = convoyUnits.updatePickup(v, vdt);
+        else if (v.convoy != null && !v.broken) done = w.convoys.step(v, vdt);
+        else if (v.broken || v.parked) done = service.updateWreck(v, vdt);
+        else if (v.type == TANK) done = armyUnits.updateTank(v, vdt);
+        else if (v.type == CAR) done = v.evacStop >= 0 ? evacBuses.updateEvacBus(v, vdt) : cars.updateTraffic(v, vdt);
+        else if (v.patrol) done = patrols.updatePatrol(v, vdt);
+        else done = service.updateCar(v, vdt);
+        return done;
+    }
+
+    /** ((27.3) A step of update.) Who's out with lights and sirens: everyone else gives way to them. */
+    void findSirens() {
+        // Who's out with lights and sirens: everyone else gives way to them.
+        sirens.clear();
+        for (int i = 0; i < vehicles.size(); i++) {
+            Vehicle o = vehicles.get(i);
+            // ((10.51) Army trucks and tanks on their way to the fighting too: everyone pulls over for them.)
+            boolean army = (o.type == TRUCK || o.type == TANK) && o.state == DRIVE && routing.emergency(o);
+            if (o.player == null && !airborne(o) && (o.lightsOn() || army) && Math.abs(o.speed) > 18) sirens.add(o);
+        }
+    }
+
+    /** ((27.3) A step of update.) Old wrecks and parked cars are towed away, but never while you're watching. */
+    void towAway() {
+        int parked = 0;
+        // Old wrecks and parked cars are towed away, but never while you're watching.
+        for (int i = vehicles.size() - 1; i >= 0; i--) {
+            Vehicle o = vehicles.get(i);
+            // (A wreck left in the middle of a junction goes first.)
+            boolean blocking = o.parked && city.junctionIdAt(o.x, o.y) >= 0;
+            // ((12.0) Not a station's police cars or a base's trucks parked up ready on their lot - but anything left
+            // in a junction is, police car or army truck: one abandoned there locked the junction up for good.)
+            if (o.standby && !blocking) continue;
+            if (o.type != CAR && !blocking && o.state != ABANDONED && !o.broken) continue;
+            if (o.parked && o.block == null && o.riders.isEmpty() && o.player == null && (++parked > 25 || blocking)
+                    && !routing.inView(o.x, o.y)) {
+                o.removedFromFleet = true;
+                vehicles.remove(i);
             }
         }
     }
 
-    /** (10.54) How far a car at (x, y) can move towards the kerb along (nx, ny) before its side is against it. */
-    private float kerbGap(float x, float y, float nx, float ny) {
-        for (int k = 1; k <= 30; k++) {
-            int tx = (int) ((x + nx * k) / City.T), ty = (int) ((y + ny * k) / City.T);
-            if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) return Math.max(0, k - 6.5f);
-            if (city.tiles[ty * city.w + tx] != City.ROAD || city.onHighway(x + nx * k, y + ny * k) != city.onHighway(x, y))
-                return Math.max(0, k - 6.5f);
+    /** ((27.3) A step of update.) What goes on with any vehicle, whatever it's doing: its alarm, the dead clawing at it, its engine drawing them, and its timers. */
+    void wearAndNoise(Vehicle v, float vdt) {
+        // ((22.0) The dead blundering into a parked car can set it off.)
+        if (v.type == CAR && !v.alarmed && w.zombies > 0 && (v.parked || v.state == ABANDONED) && (v.engineCd -= vdt) <= 0) {
+            v.engineCd = 1;
+            if (w.countZombiesNear(v.x, v.y, 14) > 0) cars.tripAlarm(v, 0.2f);
         }
-        return 23.5f;
+        // ((26.0) The dead clawing at it, if it's stopped with people in it: four times a second.)
+        if ((v.clawAcc += vdt) >= 0.25f) {
+            if (w.zombies > 0) w.clawAt(v, v.clawAcc);
+            v.clawAcc = 0;
+        }
+        if (v.alarm > 0) {
+            // Whoop, whoop: every zombie for streets around comes to see.
+            v.alarm -= vdt;
+            if (v.broken || v.burnt) v.alarm = 0;
+            else if (((int) (v.alarm * 2)) != ((int) ((v.alarm + vdt) * 2))) {
+                w.emit(Sfx.HORN, v.x, v.y);
+                if (((int) v.alarm) % 4 == 0) w.noise(v.x, v.y, 180);
+            }
+        }
+        // ((22.0) The dead follow the sound of an engine: anything driving along draws those within earshot after
+        // it, a siren or a tank from furthest off. A horde can end up trailing a car down the street.)
+        if (w.zombies > 0 && v.type != HELI && v.type != TRAIN && v.type != BOAT && v.type != JET && !v.parked && !v.broken
+                && Math.abs(v.speed) > 25 && (v.engineCd -= vdt) <= 0) {
+            v.engineCd = 2 + w.rnd.nextFloat();
+            w.engineLure(v.x, v.y, v.lightsOn() ? 230 : v.type == TANK ? 210 : v.type == TRUCK ? 150 : 110);
+        }
+        v.anim += vdt;
+        // (Time spent crawling: nudging back and forth in a jam still counts.)
+        if (Math.abs(v.speed) < 8) v.stillT += vdt;
+        else if (Math.abs(v.speed) > 15) v.stillT = 0;
+        v.soundCd -= vdt;
+        v.destCd -= vdt;
+        v.rerouteCd -= vdt;
+        v.holdSaidCd -= vdt;
+        v.crashCd -= vdt;
     }
 
-    /** Arrived at a scene: pull in to the kerb, nose angled in, rather than stopping in the middle of the lane. */
-    private void kerbAtScene(Vehicle v, float dt) {
-        if (!v.kerbed) {
-            v.kerbed = true;
-            float nx = (float) -Math.sin(v.angle), ny = (float) Math.cos(v.angle);
-            int hand = 1;
-            for (float s = 4; s <= 22; s += 3) {
-                float x = v.x + nx * s * hand, y = v.y + ny * s * hand;
-                int tx = (int) (x / City.T), ty = (int) (y / City.T);
-                if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) break;
-                byte t = city.tiles[ty * city.w + tx];
-                if (t == City.ROAD || t == City.CAR) continue;
-                v.pullX = x - nx * hand * 6.5f;
-                v.pullY = y - ny * hand * 6.5f;
-                v.pulling = true;
-                break;
+    /** ((27.3) A step of update.) The things done every so often: drivers, reclaiming vehicles, evacuation buses, trains, people driving out, the pumps, the highway's own traffic. */
+    void timers(float dt) {
+        driverTimer -= dt;
+        if (driverTimer <= 0) {
+            driverTimer = 0.5f;
+            crews.drivers();
+        }
+        // Keep the streets busy while the city is still calm; clear old wrecks.
+        reclaimTimer -= dt;
+        if (reclaimTimer <= 0) {
+            reclaimTimer = 3;
+            crews.reclaim();
+        }
+        busTimer -= dt;
+        if (busTimer <= 0) {
+            busTimer = 2;
+            evacBuses.sendEvacBuses();
+            // (People waiting on the platform: the next train comes soon, and stops for them.)
+            if (city.railY0 >= 0 && city.stationX >= 0 && w.exodusOn() && w.byTransit()
+                    && w.waitingFor(World.STOP_TRAIN, city.stationX, city.stationY, false) >= 3) trainTimer = Math.min(trainTimer, 20);
+        }
+        trafficTimer -= dt;
+        trainTimer -= dt;
+        if (trainTimer <= 0 && city.railY0 >= 0) {
+            trainTimer = 70 + w.rnd.nextFloat() * 50;
+            trains.spawnTrain();
+        }
+        // (10.32) The emergency broadcast: everyone with a car and somewhere to go makes for the highway at once.
+        if (w.alert >= 2 && !evacStarted) {
+            evacStarted = true;
+            // ((12.5) Only when civilians drive at all: none do now.)
+            evacLeft = city.hwyAxis >= 0 && trafficTarget > 0 ? Math.max(10, trafficTarget / 2) : 0;
+            if (evacLeft > 0) w.timeline("People fleeing the city: the roads out are jammed");
+        }
+        if (evacLeft > 0) {
+            evacTimer -= dt;
+            if (evacTimer <= 0) {
+                evacTimer = 1.2f + w.rnd.nextFloat();
+                evacLeft--;
+                cars.spawnEvacuee();
             }
         }
-        if (v.pulling) {
-            float dx = v.pullX - v.x, dy = v.pullY - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-            if (d < 0.5f || !city.drivable(v.pullX, v.pullY)) v.pulling = false;
-            else {
-                float step = Math.min(d, 18 * dt);
-                v.x += dx / d * step;
-                v.y += dy / d * step;
-                // Nose in towards the kerb a little.
-                v.angle += dt * 0.5f * Math.min(1, d / 4);
-            }
+        // (Tankers keep the pumps topped up while things are normal.)
+        if (w.alert < 2 && pumpFuel != null) for (int i = 0; i < pumpFuel.length; i++) pumpFuel[i] = Math.min(6, pumpFuel[i] + dt * 0.01f);
+        // (10.29) The highway has traffic of its own, coming on at the ends, so it doesn't empty out.
+        hwyTimer -= dt;
+        if (hwyTimer <= 0) {
+            hwyTimer = 2;
+            if (city.hwyAxis >= 0 && w.alert < 2 && trafficTarget > 0 && cars.throughTraffic() < cars.throughTarget()) cars.spawnThrough(false);
         }
     }
+
+    final ArrayList<Vehicle> sirens = new ArrayList<Vehicle>();
 
     // ------------------------------------------------------------------ who's near whom
 
     /** Vehicles on the ground bucketed by 128-unit square, rebuilt each step: who's near whom without asking everyone. */
-    private static final int GC = 128;
-    private Vehicle[] gridV = new Vehicle[64];
-    private int[] gridStart = new int[1], gridFill = new int[1];
-    private int gridW, gridH, gridN;
-
-    private void buildGrid() {
-        gridW = (int) (city.worldW() / GC) + 1;
-        gridH = (int) (city.worldH() / GC) + 1;
-        int cells = gridW * gridH;
-        if (gridStart.length != cells + 1) {
-            gridStart = new int[cells + 1];
-            gridFill = new int[cells];
-        }
-        java.util.Arrays.fill(gridStart, 0);
-        int n = vehicles.size();
-        if (gridV.length < n) gridV = new Vehicle[n * 2];
-        for (int i = 0; i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (offRoad(v)) continue;
-            gridStart[cellOf(v.x, v.y) + 1]++;
-        }
-        for (int c = 0; c < cells; c++) gridStart[c + 1] += gridStart[c];
-        System.arraycopy(gridStart, 0, gridFill, 0, cells);
-        gridN = 0;
-        for (int i = 0; i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (offRoad(v)) continue;
-            int c = cellOf(v.x, v.y);
-            v.gi = gridFill[c];
-            gridV[gridFill[c]++] = v;
-            gridN++;
-        }
-    }
-
-    private int cellOf(float x, float y) {
-        int cx = Math.max(0, Math.min(gridW - 1, (int) (x / GC))), cy = Math.max(0, Math.min(gridH - 1, (int) (y / GC)));
-        return cy * gridW + cx;
-    }
+    static final int GC = 128;
+    Vehicle[] gridV = new Vehicle[64];
+    int[] gridStart = new int[1], gridFill = new int[1];
+    int gridW, gridH, gridN;
 
     /**
      * ((11.5) The vehicles on the ground in the grid squares within r of (x, y), as of the last time the grid was
@@ -3843,22 +1166,6 @@ final class Fleet {
      * The caller checks how near each really is. Not to be asked again while going through the last answer.)
      */
     Vehicle[] found = new Vehicle[32];
-
-    int gather(float x, float y, float r) {
-        if (gridW == 0) return 0;
-        int n = 0;
-        int c0x = Math.max(0, (int) ((x - r) / GC)), c1x = Math.min(gridW - 1, (int) ((x + r) / GC));
-        int c0y = Math.max(0, (int) ((y - r) / GC)), c1y = Math.min(gridH - 1, (int) ((y + r) / GC));
-        for (int cy = c0y; cy <= c1y; cy++)
-            for (int cx = c0x; cx <= c1x; cx++)
-                for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
-                    Vehicle v = gridV[i];
-                    if (v.removedFromFleet) continue;
-                    if (n == found.length) found = java.util.Arrays.copyOf(found, n * 2);
-                    found[n++] = v;
-                }
-        return n;
-    }
 
     // ------------------------------------------------------------------ damage
 
@@ -3870,7 +1177,7 @@ final class Fleet {
         // (Armour: the dead can claw at an APC or the riot van all day.)
         if (!blast && (v.kind == K_APC || v.kind == K_RIOT_VAN)) amount *= 0.3f;
         v.hp -= amount;
-        tripAlarm(v, 0.6f);
+        cars.tripAlarm(v, 0.6f);
         if (v.broken) {
             if (!v.burnt && (blast || v.hp < -v.maxHp * 0.5f)) burn(v);
             return;
@@ -3880,8 +1187,8 @@ final class Fleet {
         v.parked = true;
         w.carsWrecked++;
         // The crew bails out (and the driver). ((17.6) Not from a helicopter in the air: they go down with it.)
-        if (v.type != HELI && !v.crew.isEmpty()) crewOut(v, true);
-        if (v.type != HELI && v.driver != null) driverOut(v, true);
+        if (v.type != HELI && !v.crew.isEmpty()) crews.crewOut(v, true);
+        if (v.type != HELI && v.driver != null) crews.driverOut(v, true);
         v.speed = 0;
         v.field = null;
         w.emit(Sfx.THUD, v.x, v.y);
@@ -3889,15 +1196,15 @@ final class Fleet {
             w.particle(v.x, v.y, w.rnd.nextFloat() * 40 - 20, w.rnd.nextFloat() * 40 - 20, 0.3f, 0.8f, 0xFFFFD27A, World.P_DOT);
         // Anyone still inside gets out and carries on on foot.
         if ((v.type == CRUISER || v.type == TRUCK) && v.state <= DRIVE && v.passengers > 0) {
-            unload(v, false);
+            crews.unload(v, false);
             v.passengers = 0;
         }
         if (v.type == CAR && v.state == CRUISE) {
             v.state = ABANDONED;
-            getOut(v, true);
-            pullOver(v);
+            crews.getOut(v, true);
+            driving.pullOver(v);
         }
-        dropRiders(v, true);
+        service.dropRiders(v, true);
         if (v.supply > 0) {
             w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: We've lost the supply truck on " + city.placeName(v.x, v.y)
                     + ". The ammo's gone.", v.x, v.y);
@@ -3917,7 +1224,7 @@ final class Fleet {
         if (blast || v.hp < -v.maxHp * 0.3f || w.rnd.nextFloat() < 0.3f) burn(v);
     }
 
-    private void burn(Vehicle v) {
+    void burn(Vehicle v) {
         v.burnt = true;
         // ((22.0) Half of them go up now (a third before), and close enough to catch the next one: a street of parked
         // cars can go one after another.)
@@ -3926,76 +1233,12 @@ final class Fleet {
 
     int alarms;
 
-    /**
-     * ((22.0) A parked car with nobody in it, knocked about: its alarm goes off (chance in a hundred: odds), whooping for
-     * twenty-five seconds and drawing every one of the dead for streets around. Once each.
-     */
-    void tripAlarm(Vehicle v, float odds) {
-        if (v.type != CAR || v.alarmed || v.burnt || v.driver != null || !v.riders.isEmpty() || !(v.parked || v.state == ABANDONED)) return;
-        if (w.rnd.nextFloat() >= odds) return;
-        v.alarmed = true;
-        v.alarm = 25;
-        alarms++;
-        w.noise(v.x, v.y, 220);
-    }
-
-    private void smoke(Vehicle v, float dt) {
+    void smoke(Vehicle v, float dt) {
         float f = 1 - Math.max(0, v.hp) / (v.maxHp * 0.5f);
         if (w.rnd.nextFloat() < dt * (2 + f * 6))
             w.particle(v.x + (float) Math.cos(v.angle) * v.length() * 0.6f, v.y + (float) Math.sin(v.angle) * v.length() * 0.6f,
                     4 + w.rnd.nextFloat() * 4, -8 - w.rnd.nextFloat() * 6, 1.5f + w.rnd.nextFloat(), 2 + w.rnd.nextFloat() * 2,
                     f > 0.8f ? 0xFF2A2A2A : 0xFF6A6A6A, World.P_SMOKE);
-    }
-
-    /** Vehicles bump into each other: hard hits damage both. */
-    private void collide() {
-        for (int i = 0; i < gridN; i++) {
-            Vehicle a = gridV[i];
-            int acx = Math.max(0, Math.min(gridW - 1, (int) (a.x / GC))), acy = Math.max(0, Math.min(gridH - 1, (int) (a.y / GC)));
-            for (int gy = Math.max(0, acy - 1); gy <= Math.min(gridH - 1, acy + 1); gy++)
-            for (int gx = Math.max(0, acx - 1); gx <= Math.min(gridW - 1, acx + 1); gx++)
-            for (int j = gridStart[gy * gridW + gx], je = gridStart[gy * gridW + gx + 1]; j < je; j++) {
-                if (j <= i) continue;
-                Vehicle b = gridV[j];
-                if (levels(a, b)) continue;
-                float dx = b.x - a.x, dy = b.y - a.y, reach = (a.length() + b.length()) * 0.62f;
-                float d2 = dx * dx + dy * dy;
-                if (d2 >= reach * reach) continue;
-                float d = (float) Math.sqrt(d2) + 0.001f, nx = dx / d, ny = dy / d;
-                // Closing speed along the line between them.
-                float va = a.speed * ((float) Math.cos(a.angle) * nx + (float) Math.sin(a.angle) * ny);
-                float vb = b.speed * ((float) Math.cos(b.angle) * nx + (float) Math.sin(b.angle) * ny);
-                float closing = va - vb;
-                float push = (reach - d) * 0.5f;
-                // Nobody is shoved off the road (onto grass, a kerb, a median): the other car takes the push.
-                boolean aOk = city.drivable(a.x - nx * push, a.y - ny * push), bOk = city.drivable(b.x + nx * push, b.y + ny * push);
-                float pa = aOk ? (bOk ? push : push * 2) : 0, pb = bOk ? (aOk ? push : push * 2) : 0;
-                if (pa > 0 && !city.drivable(a.x - nx * pa, a.y - ny * pa)) pa = push;
-                if (pb > 0 && !city.drivable(b.x + nx * pb, b.y + ny * pb)) pb = push;
-                a.x -= nx * pa;
-                a.y -= ny * pa;
-                b.x += nx * pb;
-                b.y += ny * pb;
-                // (A nudge in a queue is just a nudge: it takes a real impact to make a crash.)
-                // (A crash is the same real closing speed as before 10.20, now that everything drives faster.)
-                if (closing > 45 * DRIVE_SCALE && a.crashCd <= 0 && b.crashCd <= 0) {
-                    a.crashCd = b.crashCd = 0.6f;
-                    float dmg = closing * 0.35f / DRIVE_SCALE;
-                    damage(a, dmg, false);
-                    damage(b, dmg, false);
-                    w.skid(a.x, a.y, a.angle, Math.min(14, a.speed * 0.2f + 4));
-                    w.skid(b.x, b.y, b.angle, Math.min(14, b.speed * 0.2f + 4));
-                    a.speed *= 0.3f;
-                    b.speed *= 0.3f;
-                    float cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-                    w.emit(Sfx.CRASH, cx, cy);
-                    for (int k = 0; k < 8; k++)
-                        w.particle(cx, cy, w.rnd.nextFloat() * 60 - 30, w.rnd.nextFloat() * 60 - 30, 0.25f, 0.7f,
-                                0xFFFFD27A, World.P_DOT);
-                    w.noise(cx, cy, 160);
-                }
-            }
-        }
     }
 
     /**
@@ -4005,629 +1248,23 @@ final class Fleet {
      * fastest the car may go right now.
      */
     /** ((24.2) junctionRule for a police or army vehicle that isn't on a call: the everyday rules. */
-    private boolean calmRules;
-
-    private float junctionRule(Vehicle v, float dt) {
-        v.held = false;
-        // Lights and sirens (and anyone racing to a rescue) go through on red, but slow down for the junction
-        // and wait for anything already crossing it.
-        boolean emergency = !calmRules && ((v.type != CAR && !(v.patrol && v.state == PATROL)) || v.riders.size() > 0 && v.rescue);
-        if (emergency && v.type != CRUISER && v.type != AMBULANCE && v.type != TRUCK && v.type != CAR)
-            return Float.MAX_VALUE;
-        int here = city.junctionIdAt(v.x, v.y);
-        if (here >= 0) {
-            // Through: next time round it has to wait its turn again.
-            if (here == v.clearedJ) v.clearedJ = -1;
-            v.waitJ = -1;
-            return Float.MAX_VALUE;
-        }
-        // Follow the route from the car's own tile to the first junction tile: that step is the way in,
-        // and the line across the end of the tile before it is where the junction starts.
-        int id = -1, W = city.w, dirx = 0, diry = 0;
-        float dist = 0;
-        if (v.field != null && v.pathT >= 0) {
-            int prev = city.tileIndex(v.x, v.y), t = v.pathT;
-            // ((24.0) The junction ahead is the same as last time while it's on the same tile of the same route: looked
-            // for along the route only when that changes, not every step for every car.)
-            if (v.jaOf != v.field || v.jaFrom != prev || v.jaT != t || v.jaDx != v.pdx || v.jaDy != v.pdy) {
-                v.jaOf = v.field;
-                v.jaFrom = prev;
-                v.jaT = t;
-                v.jaDx = v.pdx;
-                v.jaDy = v.pdy;
-                v.jaId = -1;
-                for (int k = 0; k < 7; k++) {
-                    int nid = t == prev ? -1 : city.junctionIdAt((t % W + 0.5f) * City.T, (t / W + 0.5f) * City.T);
-                    if (nid >= 0) {
-                        int sx = t % W - prev % W, sy = t / W - prev / W;
-                        if (Math.abs(sx) + Math.abs(sy) == 1) {
-                            dirx = sx;
-                            diry = sy;
-                        } else {
-                            dirx = v.pdx;
-                            diry = v.pdy;
-                        }
-                        if (dirx == 0 && diry == 0) break;
-                        v.jaId = nid;
-                        v.jaTile = t;
-                        v.jaDirX = dirx;
-                        v.jaDirY = diry;
-                        break;
-                    }
-                    int next = downhill(v.field, t);
-                    if (next == t) break;
-                    prev = t;
-                    t = next;
-                }
-            }
-            if (v.jaId >= 0) {
-                t = v.jaTile;
-                dirx = v.jaDirX;
-                diry = v.jaDirY;
-                float ex = (t % W + 0.5f - dirx * 0.5f) * City.T, ey = (t / W + 0.5f - diry * 0.5f) * City.T;
-                dist = (ex - v.x) * dirx + (ey - v.y) * diry;
-                if (dist < 90) id = v.jaId;
-            } else dirx = diry = 0;
-        }
-        if (id < 0) {
-            v.clearedJ = -1;
-            v.waitJ = -1;
-            return Float.MAX_VALUE;
-        }
-        if (id == v.clearedJ) return Float.MAX_VALUE;
-        int[] j = city.junctions.get(id);
-        // ((15.0) A traffic officer on the junction: lights and sirens are waved straight through, and the rest held
-        // at the line while they go.)
-        if (dist < 90 && w.trafficOfficer(id) != null) {
-            if (emergency) {
-                w.holdJunction(id, v);
-                return Float.MAX_VALUE;
-            }
-            float stopLine = dist - City.T - v.length() - 1;
-            if (w.junctionHeldFor(id) && stopLine > -6 && v.player == null) {
-                v.held = stopLine < 6;
-                return Math.max(0, stopLine) * 1.8f;
-            }
-        }
-        // Stop with the front bumper at the line, before the zebra crossing.
-        float stopAt = dist - City.T - v.length() - 1;
-        float approach = Math.max(0, stopAt) * 1.8f;
-        boolean vertical = diry != 0;
-        // A bend: slow for the corner, but nobody stops.
-        if (j[4] == City.J_BEND) return Float.MAX_VALUE;
-        // (10.42) Don't block the box: whatever the lights say, nobody pulls into the junction until there's room
-        // on the far side to get out of it again (unless it's been waiting so long the queue must be going nowhere).
-        // (10.53) Already over the line, its nose in the junction: it carries on across once nothing's crossing in
-        // front. Stopping there for the red blocked the box, and the queue behind it sat for good, green or not.
-        if (stopAt < -6 && j[4] != City.J_ROUNDABOUT && crossClear(id, v, dirx, diry)) {
-            v.clearedJ = id;
-            return Float.MAX_VALUE;
-        }
-        if (!emergency && v.player == null && stopAt < 30 && v.stillT < 20 && exitBlocked(v, id)) {
-            v.held = stopAt < 6;
-            return approach;
-        }
-        if (emergency) {
-            if (!crossClear(id, v, dirx, diry)) {
-                v.held = stopAt < 6;
-                return approach;
-            }
-            return Math.max(35, stopAt * 1.8f);
-        }
-        if (j[4] == City.J_LIGHTS && !v.fleeing) {
-            city.lightDemand(id, vertical);
-            int light = city.lightState(id, vertical, w.time);
-            if (light == 0) {
-                // Green, but something is still crossing in front: let it clear first.
-                if (stopAt > 2 && !crossClear(id, v, dirx, diry)) {
-                    v.held = stopAt < 6;
-                    return approach;
-                }
-                return Float.MAX_VALUE;
-            }
-            // Amber: carry on only if it's too late to stop.
-            if (light == 1 && v.speed > 40 && stopAt < v.speed * 0.2f) {
-                v.clearedJ = id;
-                return Float.MAX_VALUE;
-            }
-            v.held = stopAt < 6;
-            return approach;
-        }
-        if (v.waitJ != id) {
-            if (j[4] == City.J_ROUNDABOUT) {
-                // ((10.53) Not for ever, though: after a few seconds at the line it edges on when its own way across
-                // is clear. Something stalled on the far side of the roundabout had the way in shut for good.)
-                if (stopAt < 10 && (junctionClear(id, v) || (v.stillT > 6 && crossClear(id, v, dirx, diry)))) {
-                    v.clearedJ = id;
-                    return Float.MAX_VALUE;
-                }
-                v.held = stopAt < 6;
-                return Math.max(approach, stopAt < 10 ? 0 : 25);
-            }
-            if (stopAt < 4 && v.speed < 6) {
-                v.waitJ = id;
-                v.waitT = 0;
-            }
-            v.held = stopAt < 6;
-            return Math.max(approach, 4);
-        }
-        v.waitT += dt;
-        v.held = true;
-        if (v.waitT > 1.2f && (junctionClear(id, v) || v.waitT > 7)) {
-            v.clearedJ = id;
-            v.waitJ = -1;
-            return Float.MAX_VALUE;
-        }
-        return 0;
-    }
-
-    /**
-     * (10.42) The line a vehicle is about to drive: from where it is, along the next steps of its route, each in
-     * its lane (and through a junction in the lane it will leave by), as points in v.cor.
-     */
-    private void buildCorridor(Vehicle v) {
-        // (10.49) The same as last time while it's on the same tile of the same route: it doesn't change.
-        if (v.field != null && v.corOf == v.field && v.corOfT == v.pathT && v.corOfDx == v.pdx && v.corOfDy == v.pdy) {
-            System.arraycopy(v.corTs, 0, corTiles, 0, COR);
-            corPi = v.corOfPi;
-            return;
-        }
-        corPi = 0;
-        buildCorridorNow(v);
-        v.corOf = v.field;
-        v.corOfT = v.pathT;
-        v.corOfDx = v.pdx;
-        v.corOfDy = v.pdy;
-        v.corOfPi = corPi;
-        System.arraycopy(corTiles, 0, v.corTs, 0, COR);
-    }
+    boolean calmRules;
 
     /** (11.3) The lane to be in on each tile of the corridor (-1 the car's own): see turnLanes. */
-    private final int[] corLane = new int[COR];
-
-    /**
-     * (11.3) Getting in lane for a turn, as drivers do: the last few tiles before a junction where the route turns
-     * right, over in the outside lane, and before a left turn the inside one (and round the corner into the
-     * matching lane on the far side). Straight on, each car keeps its own lane, so all of a wide road is used.
-     * Cars on a call keep to the inside lane throughout.
-     */
-    private void turnLanes(Vehicle v, int[] ts, int m) {
-        java.util.Arrays.fill(corLane, 0, m, -1);
-        if (v.lightsOn()) return;
-        int W = city.w, prevExit = -1;
-        for (int i = 1; i < m; i++) {
-            if (!city.junctionAt(ts[i] % W, ts[i] / W) || city.junctionAt(ts[i - 1] % W, ts[i - 1] / W)) continue;
-            int ax = Integer.signum(ts[i] % W - ts[i - 1] % W), ay = Integer.signum(ts[i] / W - ts[i - 1] / W);
-            int k = i;
-            while (k < m - 1 && city.junctionAt(ts[k] % W, ts[k] / W)) k++;
-            if (city.junctionAt(ts[k] % W, ts[k] / W)) break;
-            int ex = Integer.signum(ts[k] % W - ts[k - 1] % W), ey = Integer.signum(ts[k] / W - ts[k - 1] / W);
-            int cross = ax * ey - ay * ex;
-            int lane = cross > 0 ? 2 : cross < 0 ? 0 : -1;
-            // (y runs down the screen: turning clockwise is turning right.)
-            if (lane >= 0)
-                for (int j = Math.max(prevExit + 1, i - 6); j <= k - 1; j++) if (corLane[j] < 0) corLane[j] = lane;
-            prevExit = k;
-            i = k;
-        }
-    }
-
-    private void buildCorridorNow(Vehicle v) {
-        v.corN = 0;
-        if (v.field == null || v.pathT < 0) return;
-        int W = city.w;
-        // The tiles: one back along the way it came, then on down the route (up to a bridge).
-        int[] ts = corTiles;
-        int m = 0;
-        if (v.pdx != 0 || v.pdy != 0) {
-            int bx = v.pathT % W - v.pdx, by = v.pathT / W - v.pdy;
-            if (bx >= 0 && by >= 0 && bx < W && by < city.h) ts[m++] = by * W + bx;
-        }
-        corPi = m;
-        ts[m++] = v.pathT;
-        for (int t = v.pathT; m < COR; ) {
-            int nt = downhill(v.field, t);
-            if (nt == t || Math.abs(nt % W - t % W) + Math.abs(nt / W - t / W) > 1) break;
-            ts[m++] = nt;
-            t = nt;
-        }
-        if (m < 2) return;
-        turnLanes(v, ts, m);
-        float lastAlong = Float.NaN;
-        int lastAxisX = 0, lastAxisY = 0;
-        boolean lastJ = false;
-        jEntryL = Float.NaN;
-        for (int i = 0; i < m; i++) {
-            int t = ts[i], tx = t % W, ty = t / W;
-            // Its heading here: over the tiles either side (a staircase of steps is one diagonal, not a zig-zag).
-            int a = ts[Math.max(0, i - 1)], b = ts[Math.min(m - 1, i + 1)];
-            float dx = b % W - a % W, dy = b / W - a / W, dl = (float) Math.sqrt(dx * dx + dy * dy);
-            if (dl < 0.01f) {
-                dx = v.pdx;
-                dy = v.pdy;
-                dl = Math.max(1, (float) Math.sqrt(dx * dx + dy * dy));
-            }
-            dx /= dl;
-            dy /= dl;
-            int sx = Math.abs(dx) >= Math.abs(dy) ? (int) Math.signum(dx) : 0, sy = sx == 0 ? (int) Math.signum(dy) : 0;
-            float px, py;
-            boolean inJ = city.junctionAt(tx, ty);
-            if (inJ) {
-                // (10.42) Through a junction: along the lane it came in by to where that crosses the lane it leaves
-                // by (measured on the road beyond, not on the junction's own tiles), and out along that - the
-                // corner is cut smoothly by steering for a point ahead on the line.
-                int sdx = i + 1 < m ? Integer.signum(ts[i + 1] % W - tx) : lastAxisX, sdy = i + 1 < m ? Integer.signum(ts[i + 1] / W - ty) : lastAxisY;
-                int ex = sdx, ey = sdy, k = i, first = i;
-                while (first > 0 && city.junctionAt(ts[first - 1] % W, ts[first - 1] / W)) first--;
-                while (k < m - 1 && city.junctionAt(ts[k] % W, ts[k] / W)) {
-                    ex = Integer.signum(ts[k + 1] % W - ts[k] % W);
-                    ey = Integer.signum(ts[k + 1] / W - ts[k] / W);
-                    k++;
-                }
-                boolean out = !city.junctionAt(ts[k] % W, ts[k] / W) && Math.abs(ex) + Math.abs(ey) == 1;
-                float le = 0;
-                if (out) {
-                    int E = ts[k];
-                    float oe = city.laneOffset(E % W, E / W, ex, ey, corLane[first] >= 0 ? corLane[first] : laneOf(v));
-                    le = ex != 0 ? (E / W + 0.5f) * City.T + ex * oe : (E % W + 0.5f) * City.T - ey * oe;
-                }
-                int ax = jEntryX, ay = jEntryY;
-                if (i == first || Float.isNaN(jEntryL)) {
-                    ax = lastAxisX;
-                    ay = lastAxisY;
-                    jEntryX = ax;
-                    jEntryY = ay;
-                    jEntryL = Float.isNaN(lastAlong) || (ax == 0 && ay == 0) ? Float.NaN : lastAlong;
-                }
-                float li = jEntryL, cx = (tx + 0.5f) * City.T, cy = (ty + 0.5f) * City.T;
-                px = cx;
-                py = cy;
-                // (Only where the lines run over road the whole way: not across a roundabout's island.)
-                if (i == first) {
-                    jSmooth = false;
-                    // (10.51) A roundabout: round the island the way the traffic goes (anticlockwise where they
-                    // drive on the right), from where it came in to the lane it leaves by.
-                    rbOn = false;
-                    int jid = city.junctionIdAt(cx, cy);
-                    int[] jb = jid >= 0 ? city.junctions.get(jid) : null;
-                    if (jb != null && jb[4] == City.J_ROUNDABOUT && out && v.corN > 0) {
-                        rbCx = (jb[0] + jb[2] + 1) * City.T / 2f;
-                        rbCy = (jb[1] + jb[3] + 1) * City.T / 2f;
-                        rbR = (Math.min(jb[2] - jb[0], jb[3] - jb[1]) + 1) * City.T * 0.31f;
-                        int E = ts[k];
-                        float x2 = ex != 0 ? (E % W + 0.5f) * City.T : le, y2 = ex != 0 ? le : (E / W + 0.5f) * City.T;
-                        rbA0 = (float) Math.atan2(v.cor[v.corN * 2 - 1] - rbCy, v.cor[v.corN * 2 - 2] - rbCx);
-                        float a1 = (float) Math.atan2(y2 - rbCy, x2 - rbCx), d = a1 - rbA0;
-                        // ((11.5) Round the way the traffic goes, and no further: what's left of the way round once
-                        // it's partway there (worked out again on each tile) is just that - the old rule sent anyone
-                        // with less than a sixth of a turn to go right round again, over the island. Only a U-turn,
-                        // whose way out is just behind its way in, goes all the way round.)
-                        while (d > 0.25f) d -= (float) (Math.PI * 2);
-                        while (d <= -Math.PI * 2 + 0.25f) d += (float) (Math.PI * 2);
-                        rbD = d;
-                        rbOn = true;
-                    }
-                    if (out && !Float.isNaN(li) && v.corN > 0) {
-                        float x0 = v.cor[v.corN * 2 - 2], y0 = v.cor[v.corN * 2 - 1];
-                        int E = ts[k];
-                        float x2 = ex != 0 ? (E % W + 0.5f) * City.T : le, y2 = ex != 0 ? le : (E / W + 0.5f) * City.T;
-                        float x1 = x2, y1 = y2;
-                        if (ax * ex + ay * ey == 0) {
-                            x1 = ax != 0 ? le : li;
-                            y1 = ax != 0 ? li : le;
-                        }
-                        jSmooth = onRoute(v, x0, y0, x1, y1) && onRoute(v, x1, y1, x2, y2);
-                    }
-                }
-                if (rbOn) {
-                    float fr = (i - first + 1) / (float) (k - first + 1), ra = rbA0 + rbD * fr;
-                    px = rbCx + (float) Math.cos(ra) * rbR;
-                    py = rbCy + (float) Math.sin(ra) * rbR;
-                } else if (!jSmooth) {
-                    float o = city.laneOffset(tx, ty, sdx, sdy, laneOf(v));
-                    px = cx - sdy * o;
-                    py = cy + sdx * o;
-                } else if (out && !Float.isNaN(li) && ax * ex + ay * ey == 0) {
-                    // A turn: the corner where the two lanes cross.
-                    float kx = ax != 0 ? le : li, ky = ax != 0 ? li : le;
-                    // On the way in (up to the corner), or on the way out (from it): whichever is nearer.
-                    float inX = ax != 0 ? cx : li, inY = ax != 0 ? li : cy;
-                    if ((inX - kx) * ax + (inY - ky) * ay > 0) {
-                        inX = kx;
-                        inY = ky;
-                    }
-                    float outX = ex != 0 ? cx : le, outY = ex != 0 ? le : cy;
-                    if ((outX - kx) * ex + (outY - ky) * ey < 0) {
-                        outX = kx;
-                        outY = ky;
-                    }
-                    boolean useIn = World.hypot(inX - cx, inY - cy) <= World.hypot(outX - cx, outY - cy);
-                    px = useIn ? inX : outX;
-                    py = useIn ? inY : outY;
-                } else if (out && !Float.isNaN(li) && ax == ex && ay == ey) {
-                    // Straight over: from the one lane line to the other, a little at a time.
-                    // ((11.0) Where the street beyond doesn't line up, an easy S through the middle of the junction,
-                    // in its own lane in and its own lane out, rather than angling across from the moment it's in.)
-                    float fr = (i - first + 1) / (float) (k - first + 1);
-                    if (Math.abs(le - li) > City.T * 0.6f) fr = fr * fr * (3 - 2 * fr);
-                    float l = li + (le - li) * fr;
-                    if (ax == 0) px = l;
-                    else py = l;
-                } else if (out && sdx == ex && sdy == ey) {
-                    if (ex != 0) py = le;
-                    else px = le;
-                } else {
-                    float o = city.laneOffset(tx, ty, sdx, sdy, laneOf(v));
-                    px = cx - sdy * o;
-                    py = cy + sdx * o;
-                }
-                sx = sdx;
-                sy = sdy;
-            } else {
-                float off = city.laneOffset(tx, ty, sx, sy, corLane[i] >= 0 ? corLane[i] : laneOf(v));
-                // (On a diagonal, or a curved street: no lanes to measure across it; near the middle.)
-                // ((11.1) But on a curved street still on your own side of it, a lane's width from the one coming
-                // the other way: down the middle, they met head on.)
-                if (city.curveAt(tx, ty)) off = City.T * 0.27f;
-                else if (Math.min(Math.abs(dx), Math.abs(dy)) > 0.3f) off = Math.max(-City.T * 0.4f, Math.min(City.T * 0.4f, off));
-                px = (tx + 0.5f) * City.T - dy * off;
-                py = (ty + 0.5f) * City.T + dx * off;
-                // On along a straight bit of road: keep to the lane it's in (a route stepping from row to row of a
-                // wide road is a gentle drift across, not a swerve every tile).
-                // (Only where that keeps it on the route, though: not off the end of a slip road and on along the
-                // highway it should have left.)
-                if (i > 0 && sx == lastAxisX && sy == lastAxisY && !lastJ && !Float.isNaN(lastAlong)) {
-                    // ((11.1) Quicker into a lane over on the far side of a wide road: at a third of a tile a step it
-                    // was half a block on the wrong half of the road getting there.)
-                    float maxShift = City.T * (Math.abs((sx == 0 ? px : py) - lastAlong) > City.T * 1.2f ? 0.7f : 0.3f), qx = px, qy = py;
-                    if (sx == 0) qx = lastAlong + Math.max(-maxShift, Math.min(maxShift, px - lastAlong));
-                    else qy = lastAlong + Math.max(-maxShift, Math.min(maxShift, py - lastAlong));
-                    int q = city.tileIndex(qx, qy), fq = v.field.get(q);
-                    if (q == t || (fq < City.FAR && Math.abs(fq - v.field.get(t)) <= 6)) {
-                        px = qx;
-                        py = qy;
-                    }
-                }
-            }
-            lastJ = inJ;
-            lastAxisX = sx;
-            lastAxisY = sy;
-            lastAlong = sx == 0 ? px : py;
-            v.cor[v.corN * 2] = px;
-            v.cor[v.corN * 2 + 1] = py;
-            v.corN++;
-        }
-    }
+    final int[] corLane = new int[COR];
 
     /** Working space for buildCorridor: its tiles, where the path tile is among them, and the junction it's in. */
-    private final int[] corTiles = new int[COR];
-    private int corPi, jEntryX, jEntryY;
-    private float jEntryL;
-    private boolean jSmooth, rbOn;
-    private float rbCx, rbCy, rbR, rbA0, rbD;
-
-    /** Every tile under the line from one point to another is on the vehicle's route. */
-    private boolean onRoute(Vehicle v, float x0, float y0, float x1, float y1) {
-        float d = (float) World.hypot(x1 - x0, y1 - y0);
-        int n = Math.max(1, (int) (d / 4));
-        for (int s = 0; s <= n; s++) {
-            float f = s / (float) n;
-            if (v.field.get(city.tileIndex(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f)) >= City.FAR) return false;
-        }
-        return true;
-    }
-
-    /** The point dist along a vehicle's planned line on from the nearest point of it to the vehicle. */
-    private float[] pursuitPoint(Vehicle v, float dist) {
-        // Where it is on the line: the nearest point of the first few legs.
-        int seg0 = 1;
-        float best = Float.MAX_VALUE, f0 = 0;
-        for (int i = 1; i < Math.min(v.corN, 5); i++) {
-            float ax = v.cor[i * 2 - 2], ay = v.cor[i * 2 - 1], sx = v.cor[i * 2] - ax, sy = v.cor[i * 2 + 1] - ay;
-            float l2 = sx * sx + sy * sy;
-            float f = l2 < 0.001f ? 0 : Math.max(0, Math.min(1, ((v.x - ax) * sx + (v.y - ay) * sy) / l2));
-            float d = (float) World.hypot(ax + sx * f - v.x, ay + sy * f - v.y);
-            if (d < best) {
-                best = d;
-                seg0 = i;
-                f0 = f;
-            }
-        }
-        if (best > 40) return null;
-        float left = dist + f0 * (float) World.hypot(v.cor[seg0 * 2] - v.cor[seg0 * 2 - 2], v.cor[seg0 * 2 + 1] - v.cor[seg0 * 2 - 1]);
-        for (int i = seg0; i < v.corN; i++) {
-            float ax = v.cor[i * 2 - 2], ay = v.cor[i * 2 - 1], bx = v.cor[i * 2], by = v.cor[i * 2 + 1];
-            float seg = (float) World.hypot(bx - ax, by - ay);
-            if (seg >= left && seg > 0.001f) {
-                float f = left / seg;
-                return point(ax + (bx - ax) * f, ay + (by - ay) * f);
-            }
-            left -= seg;
-        }
-        return v.corN >= 2 ? point(v.cor[v.corN * 2 - 2], v.cor[v.corN * 2 - 1]) : null;
-    }
+    final int[] corTiles = new int[COR];
+    int corPi, jEntryX, jEntryY;
+    float jEntryL;
+    boolean jSmooth, rbOn;
+    float rbCx, rbCy, rbR, rbA0, rbD;
 
     /** ((11.5) The one point pursuitPoint hands back, reused: it's asked of every car every step.) */
-    private final float[] pursuit = new float[2];
-
-    private float[] point(float x, float y) {
-        pursuit[0] = x;
-        pursuit[1] = y;
-        return pursuit;
-    }
+    final float[] pursuit = new float[2];
 
     /** The way the line runs where alongCorridor last found something on it. */
-    private float hitDx, hitDy;
-
-    /**
-     * How far along a vehicle's planned line another one is, if it's on that line (within a lane's width of
-     * it); -1 if it isn't in the way.
-     */
-    private float alongCorridor(Vehicle v, Vehicle o, float width) {
-        // (From level with the vehicle: the first leg runs from a little behind it.)
-        float run = -(float) (((v.x - v.cor[0]) * Math.cos(v.angle)) + ((v.y - v.cor[1]) * Math.sin(v.angle)));
-        for (int i = 1; i < v.corN; i++) {
-            float ax = v.cor[i * 2 - 2], ay = v.cor[i * 2 - 1], bx = v.cor[i * 2], by = v.cor[i * 2 + 1];
-            float sx = bx - ax, sy = by - ay, l2 = sx * sx + sy * sy;
-            if (l2 < 0.001f) continue;
-            float f = ((o.x - ax) * sx + (o.y - ay) * sy) / l2;
-            float seg = (float) Math.sqrt(l2);
-            if (f >= 0 && f <= 1) {
-                float px = ax + sx * f, py = ay + sy * f;
-                if (World.hypot(o.x - px, o.y - py) < width) {
-                    hitDx = sx / seg;
-                    hitDy = sy / seg;
-                    return run + f * seg;
-                }
-            }
-            run += seg;
-        }
-        return -1;
-    }
-
-    /** The next tile down a route from tile t (t itself at the end). */
-    private int downhill(Route field, int t) {
-        int at = field.find(t);
-        if (at >= 0) {
-            if (field.next == null) field.next = new byte[field.keys.length];
-            int W = city.w, n = field.next[at];
-            if (n == 0) {
-                int bt = downhillOn(field, t);
-                field.next[at] = (byte) (bt == t ? 1 : bt == t + 1 ? 2 : bt == t - 1 ? 3 : bt == t + W ? 4 : bt == t - W ? 5 : 6);
-                return bt;
-            }
-            if (n == 1) return t;
-            if (n == 2) return t + 1;
-            if (n == 3) return t - 1;
-            if (n == 4) return t + W;
-            if (n == 5) return t - W;
-            int link = city.bridgeTo(t);
-            return link >= 0 ? link : t;
-        }
-        return downhillOn(field, t);
-    }
-
-    private int downhillOn(Route field, int t) {
-        int W = city.w, tx = t % W, ty = t / W, here = field.get(t), best = Integer.MAX_VALUE, bt = t;
-        boolean inJ = city.junctionAt(tx, ty);
-        for (int k = 0; k < 4; k++) {
-            int nx = tx + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = ty + (k == 2 ? 1 : k == 3 ? -1 : 0);
-            if (nx < 0 || ny < 0 || nx >= W || ny >= city.h) continue;
-            int d = field.get(ny * W + nx);
-            if (d >= here) continue;
-            // Downhill, but on a tie keep to the lane: a step across the road outside a junction only if
-            // it's really the shorter way.
-            int rd = city.roadDirAt(nx, ny);
-            if (!inJ && !city.junctionAt(nx, ny) && ((rd == 1 && k < 2) || (rd == 2 && k >= 2))) d += 14;
-            if (d < best) {
-                best = d;
-                bt = ny * W + nx;
-            }
-        }
-        // (10.32) Or over a bridge.
-        int link = city.bridgeTo(t);
-        if (link >= 0 && field.get(link) < here && field.get(link) < best) bt = link;
-        return bt;
-    }
-
-    private int downhillRaw(int[] field, int t) {
-        int W = city.w, tx = t % W, ty = t / W, here = field[t], best = Integer.MAX_VALUE, bt = t;
-        boolean inJ = city.junctionAt(tx, ty);
-        for (int k = 0; k < 4; k++) {
-            int nx = tx + (k == 0 ? 1 : k == 1 ? -1 : 0), ny = ty + (k == 2 ? 1 : k == 3 ? -1 : 0);
-            if (nx < 0 || ny < 0 || nx >= W || ny >= city.h) continue;
-            int d = field[ny * W + nx];
-            if (d >= here) continue;
-            // Downhill, but on a tie keep to the lane: a step across the road outside a junction only if
-            // it's really the shorter way.
-            int rd = city.roadDirAt(nx, ny);
-            if (!inJ && !city.junctionAt(nx, ny) && ((rd == 1 && k < 2) || (rd == 2 && k >= 2))) d += 14;
-            if (d < best) {
-                best = d;
-                bt = ny * W + nx;
-            }
-        }
-        // (10.32) Or over a bridge.
-        int link = city.bridgeTo(t);
-        if (link >= 0 && field[link] < here && field[link] < best) bt = link;
-        return bt;
-    }
-
-    /** The way out of junction id along a vehicle's route has a car stopped in it. */
-    private boolean exitBlocked(Vehicle v, int id) {
-        int W = city.w, t = v.pathT;
-        // ((12.0) Where it comes out of this junction is worked out once from where it is on its route, not again
-        // every moment it waits: fourteen steps down its route, for every car at every junction, every frame.)
-        if (v.exitJ != id || v.exitFrom != t || v.exitRoute != v.field) {
-            v.exitJ = id;
-            v.exitFrom = t;
-            v.exitRoute = v.field;
-            v.exitTile = -1;
-            boolean through = false;
-            for (int k = 0; k < 14; k++) {
-                boolean inJ = city.junctionIdAt((t % W + 0.5f) * City.T, (t / W + 0.5f) * City.T) == id;
-                if (inJ) through = true;
-                else if (through) {
-                    v.exitTile = t;
-                    break;
-                }
-                int n = downhill(v.field, t);
-                if (n == t) break;
-                t = n;
-            }
-        }
-        if (v.exitTile < 0) return false;
-        t = v.exitTile;
-        {
-            {
-                float ex = (t % W + 0.5f) * City.T, ey = (t / W + 0.5f) * City.T;
-                // ((11.5) Only those in the grid squares round the spot, not every vehicle on the map.)
-                int c0x = Math.max(0, (int) ((ex - City.T) / GC)), c1x = Math.min(gridW - 1, (int) ((ex + City.T) / GC));
-                int c0y = Math.max(0, (int) ((ey - City.T) / GC)), c1y = Math.min(gridH - 1, (int) ((ey + City.T) / GC));
-                for (int cy = c0y; cy <= c1y; cy++)
-                    for (int cx = c0x; cx <= c1x; cx++)
-                        for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
-                            Vehicle o = gridV[i];
-                            if (o == v || o.removedFromFleet || o.parked || offRoad(o) || Math.abs(o.speed) > 4) continue;
-                            if (Math.abs(o.x - ex) < City.T * 0.9f && Math.abs(o.y - ey) < City.T * 0.9f
-                                    && city.junctionIdAt(o.x, o.y) < 0) return true;
-                        }
-                return false;
-            }
-        }
-    }
-
-    /** Nobody else driving in the junction. */
-    /** Nothing moving across the junction in front of a vehicle coming in along (dx, dy). */
-    private boolean crossClear(int id, Vehicle self, int dx, int dy) {
-        int[] j = city.junctions.get(id);
-        int c0x = Math.max(0, (j[0] - 1) * City.T / GC), c1x = Math.min(gridW - 1, (j[2] + 2) * City.T / GC);
-        int c0y = Math.max(0, (j[1] - 1) * City.T / GC), c1y = Math.min(gridH - 1, (j[3] + 2) * City.T / GC);
-        for (int cy = c0y; cy <= c1y; cy++)
-            for (int cx = c0x; cx <= c1x; cx++)
-                for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
-                    Vehicle o = gridV[i];
-                    if (o == self || o.removedFromFleet || offRoad(o) || o.parked || Math.abs(o.speed) < 5) continue;
-                    if (city.junctionIdAt(o.x, o.y) != id) continue;
-                    if (Math.abs((float) Math.cos(o.angle) * dx + (float) Math.sin(o.angle) * dy) < 0.6f) return false;
-                }
-        return true;
-    }
-
-    private boolean junctionClear(int id, Vehicle self) {
-        // ((11.5) Only the grid squares over the junction's box.)
-        int[] j = city.junctions.get(id);
-        int c0x = Math.max(0, (j[0] - 1) * City.T / GC), c1x = Math.min(gridW - 1, (j[2] + 2) * City.T / GC);
-        int c0y = Math.max(0, (j[1] - 1) * City.T / GC), c1y = Math.min(gridH - 1, (j[3] + 2) * City.T / GC);
-        for (int cy = c0y; cy <= c1y; cy++)
-            for (int cx = c0x; cx <= c1x; cx++)
-                for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
-                    Vehicle o = gridV[i];
-                    if (o == self || o.removedFromFleet || offRoad(o) || o.parked) continue;
-                    if (city.junctionIdAt(o.x, o.y) == id) return false;
-                }
-        return true;
-    }
+    float hitDx, hitDy;
 
     /** Someone else's car close in front: time to brake. */
     /**
@@ -4637,2748 +1274,24 @@ final class Fleet {
     /** How much quicker than the old open-road speeds vehicles drive (10.20). */
     static final float DRIVE_SCALE = 1.8f;
 
-    private float followLimit(Vehicle v) {
-        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
-        float look = 30 + Math.abs(v.speed) * 1.6f, limit = Float.MAX_VALUE;
-        v.queued = false;
-        int depth = 0;
-        // ((12.0) On a roundabout the traffic already going round has the right of way: nobody on it stops for one
-        // waiting at the entry to come on - they were each waiting on the other, and the roundabout locked solid.)
-        int ring = city.junctionIdAt(v.x, v.y);
-        if (ring >= 0 && city.junctions.get(ring)[4] != City.J_ROUNDABOUT) ring = -1;
-        int c0x = Math.max(0, (int) ((v.x - look) / GC)), c1x = Math.min(gridW - 1, (int) ((v.x + look) / GC));
-        int c0y = Math.max(0, (int) ((v.y - look) / GC)), c1y = Math.min(gridH - 1, (int) ((v.y + look) / GC));
-        for (int cy = c0y; cy <= c1y; cy++)
-        for (int cx = c0x; cx <= c1x; cx++)
-        for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
-            Vehicle o = gridV[i];
-            if (o == v || o.removedFromFleet || levels(v, o)) continue;
-            if (ring >= 0 && Math.abs(o.speed) < 3 && !o.parked && !o.broken && city.junctionIdAt(o.x, o.y) != ring) continue;
-            float dx = o.x - v.x, dy = o.y - v.y;
-            float ahead = dx * fx + dy * fy;
-            float side = Math.abs(dx * -fy + dy * fx);
-            // (10.42) Two that have ended up on top of one another, each waiting for the other to move: one of
-            // them (whichever, so long as it's always the same one) drives out from under.
-            if (dx * dx + dy * dy < 64 && v.stillT > 3 && o.stillT > 3 && v.x * 7 + v.y < o.x * 7 + o.y) continue;
-            // (Likewise two stuck facing each other's sides in the middle of a junction, each queued behind the
-            // other: the knot only comes undone if one of them goes first.)
-            if (v.stillT > 3 && o.stillT > 3 && o.queued && v.player == null && city.junctionIdAt(v.x, v.y) >= 0
-                    && city.junctionIdAt(v.x, v.y) == city.junctionIdAt(o.x, o.y) && v.x * 7 + v.y < o.x * 7 + o.y) continue;
-            // (10.42) In the way only if it's on the line this one is about to drive (round the bend or across
-            // the junction too), not just somewhere in front of its bonnet: a car beside it in a junction,
-            // turning across behind it or waiting in the next lane isn't in its way. (Right up against the front
-            // of it, anything is.)
-            // ((12.0) Stopped and waiting on one stopped behind it: it's the front of the queue, and nothing is in its
-            // way. (A route turning back on itself ran its line back through the queue, and the front car waited on
-            // the cars waiting on it.))
-            if (ahead < -2 && v.stillT > 3 && o.stillT > 1 && v.player == null) continue;
-            if (v.corN >= 3 && v.player == null) {
-                float along = alongCorridor(v, o, 9 + o.length() * 0.15f);
-                boolean nose = ahead > 0 && ahead < (v.length() + o.length()) * 0.5f + 8 && side < 8;
-                if (along < 0 && !nose) continue;
-                if (along >= 0) ahead = along;
-                if (ahead <= 0 || ahead > look) continue;
-                // (Crossing its line further on, through a junction: the junction's rules sort out who goes
-                // first. Only one right across its bonnet is something to stop for here - and not to queue behind.)
-                // (Stopped across it, it's in the way like anything else.)
-                if (along >= 0 && !nose && o.player == null && Math.abs(o.speed) >= 3
-                        && Math.abs((float) Math.cos(o.angle) * hitDx + (float) Math.sin(o.angle) * hitDy) < 0.5f) {
-                    float g = ahead - (v.length() + o.length()) * 0.5f;
-                    if (g > 12) continue;
-                    limit = Math.min(limit, Math.max(0, g - 4) * 2);
-                    continue;
-                }
-            } else {
-                if (ahead <= 0 || ahead > look) continue;
-                if (side > 9) continue;
-            }
-            // How fast it's going our way (oncoming or crossing counts as standing still).
-            float lead = Math.max(0, o.speed * ((float) Math.cos(o.angle) * fx + (float) Math.sin(o.angle) * fy));
-            float gap = ahead - (v.length() + o.length()) * 0.5f - 5;
-            // (10.32) In the panic, now and then someone runs right into the car in front.
-            if (gap < -3 && w.alert >= 2 && v.type == CAR && o.type == CAR && v.player == null && v.speed > 30 && !o.broken
-                    && w.rnd.nextFloat() < 0.04f) {
-                damage(v, v.maxHp * 0.7f, false);
-                damage(o, o.maxHp * 0.5f, false);
-                w.emit(Sfx.CRASH, v.x, v.y);
-                w.noise(v.x, v.y, 160);
-            }
-            // Something stopped for good in the lane (parked, wrecked, or stood there a while and not just
-            // queueing): pull out and go round it, slowly, rather than wait behind it for ever.
-            boolean stuckThere = o.parked || o.broken || (o.stillT > 5 && !o.held && !o.queued)
-                    // ((12.0) Nose to nose with one coming the other way in the same lane, both stopped: each waited
-                    // for the other for good. Both go round, each to its own side, and they pass.)
-                    || (gap < 16 && Math.abs(v.speed) < 3 && Math.abs(o.speed) < 3 && v.stillT > 1.5f && o.stillT > 1.5f && o.player == null
-                        && (float) Math.cos(v.angle - o.angle) < -0.7f)
-                    // ((12.0) A police car, army truck or ambulance stopped at a scene, loading, or waiting for its
-                    // crew (not a roadblock: that's there to stop them): it isn't going anywhere. Its "queued" was left over from before it stopped, so the
-                    // traffic behind it took it for a queue and sat there with it for good.)
-                    || ((o.type == CRUISER || o.type == TRUCK || o.type == AMBULANCE) && o.player == null && o.stillT > 3
-                        && (o.state == SCENE || o.state == RECALL || o.state == LOAD))
-                    || (o.yieldT > 0 && !o.yieldStop && v.lightsOn())
-                    // (Lights and sirens go round a queue sitting at a red light, too.)
-                    || (v.lightsOn() && o.type == CAR && o.player == null && o.stillT > 1f)
-                    // (10.46) An army truck on a call has no lights, but doesn't sit behind a stopped car either.
-                    || (v.type == TRUCK && v.state == DRIVE && v.incident != null && o.player == null && o.stillT > 2f)
-                    // (Gridlock, everyone waiting on everyone and nobody on a light: edge round and break it.)
-                    || (o.stillT > 6 && v.stillT > 6 && !o.held && !o.queuedHeld)
-                    // (10.42) Or a knot where everyone's waiting on everyone else at once: longer than any red
-                    // light lasts and it isn't a queue, it's stuck.
-                    || (o.stillT > 25 && v.stillT > 10 && o.type == CAR && o.player == null)
-                    // ((11.1) Police and army on a call don't sit behind another of their own stopped at a scene, a
-                    // roadblock or a pickup either - only one waiting at a red light.)
-                    || ((v.lightsOn() || (v.type == TRUCK && v.state == DRIVE && v.incident != null)) && o.type != CAR && o.player == null
-                        && !o.held && !o.queuedHeld && o.stillT > (o.state == DRIVE ? 4f : 1.5f));
-            if (stuckThere && v.player == null && v.type != TANK) {
-                if (gap < 40) v.passing = 1.4f;
-                limit = Math.min(limit, 30 + Math.max(0, gap));
-                continue;
-            }
-            // ((16.9) Overtaking: the army on a job, or anything on lights and sirens, doesn't trail behind slower
-            // traffic going the same way - a tank, an APC, a car that won't pull over. Out and past it, a little
-            // quicker than it's going, then back in. (Not in a junction, nor past one sat at a light.) Military
-            // convoys used to crawl along behind their slowest.)
-            boolean urgent = v.player == null && v.type != TANK && !v.parked
-                    && (v.lightsOn() || (army(v) && (v.state == DRIVE || v.state == RETURN) && v.incident != null));
-            if (urgent && lead > 2 && gap < 45 && !o.held && !o.queued && !o.parked && o.player == null
-                    && lead < 60 && city.junctionIdAt(v.x, v.y) < 0 && city.junctionIdAt(o.x, o.y) < 0) {
-                v.passing = 1.4f;
-                limit = Math.min(limit, Math.max(lead + 30, 45));
-                continue;
-            }
-            if (gap < 25 && lead < 5) {
-                v.queued = true;
-                int d = o.held ? 1 : o.holdDepth > 0 ? o.holdDepth + 1 : 0;
-                if (d > 0 && (depth == 0 || d < depth)) depth = d;
-            }
-            float ok = gap <= 0 ? 0 : Math.min(lead + gap * 1.2f, (float) Math.sqrt(2 * 260 * gap));
-            if (gap < 10) ok = Math.min(ok, lead * 0.8f);
-            limit = Math.min(limit, ok);
-        }
-        v.holdDepth = depth;
-        v.queuedHeld = depth > 0 && depth <= 15;
-        return limit;
-    }
-
-    private boolean carAhead(Vehicle v) {
-        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
-        int c0x = Math.max(0, (int) ((v.x - 24) / GC)), c1x = Math.min(gridW - 1, (int) ((v.x + 24) / GC));
-        int c0y = Math.max(0, (int) ((v.y - 24) / GC)), c1y = Math.min(gridH - 1, (int) ((v.y + 24) / GC));
-        for (int cy = c0y; cy <= c1y; cy++)
-        for (int cx = c0x; cx <= c1x; cx++)
-        for (int i = gridStart[cy * gridW + cx], ie = gridStart[cy * gridW + cx + 1]; i < ie; i++) {
-            Vehicle o = gridV[i];
-            // ((12.0) A queue is traffic: something parked, wrecked or left in the lane isn't one to sit behind. It
-            // kept the car's stuck timer down, so it never went round or found another way - it crept along behind
-            // the wreck for good.)
-            if (o == v || o.removedFromFleet || o.parked || o.broken || o.standby || o.state == ABANDONED) continue;
-            float dx = o.x - v.x, dy = o.y - v.y;
-            float ahead = dx * fx + dy * fy, side = Math.abs(dx * -fy + dy * fx);
-            if (ahead > 0 && ahead < 24 && side < 8) return true;
-        }
-        return false;
-    }
-
-    private boolean updateWreck(Vehicle v, float dt) {
-        v.speed = 0;
-        if (v.standby && !v.broken) {
-            if (v.pulling) {
-                float dx = v.pullX - v.x, dy = v.pullY - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-                if (d < 0.5f) v.pulling = false;
-                else {
-                    float step = Math.min(d, 20 * dt);
-                    v.x += dx / d * step;
-                    v.y += dy / d * step;
-                }
-            }
-            return standbyStep(v, dt);
-        }
-        if (v.block != null && !v.broken && v.block.removed) {
-            // The zone has closed: the officer gets back in, the cones come in and the car drives off.
-            v.block = null;
-            v.cones = false;
-            v.barHp = 0;
-            v.barX0 = v.barX1 = v.barY0 = v.barY1 = 0;
-            if (v.guard != null && !v.guard.dead && World.hypot(v.guard.x - v.x, v.guard.y - v.y) < 80) {
-                v.guard.dead = true;
-                v.guard.removed = true;
-            }
-            v.guard = null;
-            v.parked = false;
-            v.state = RETURN;
-            float[] home = randomRoad();
-            return home == null || !route(v, home[0], home[1]);
-        }
-        // ((14.8) Its crowd barriers holding the dead back.)
-        if (v.block != null && v.barHp > 0) w.barrierHold(v, dt);
-        // ((11.3) A car left parked out in the road - stopped where it was, its driver gone - is put by the kerb
-        // first, out of the lanes.)
-        if (v.type == CAR && !v.broken && !v.pulling && !v.pullTried && v.player == null) {
-            int t = city.tileIndex(v.x, v.y);
-            if (t >= 0 && city.tiles[t] == City.ROAD && !city.junctionAt((int) (v.x / City.T), (int) (v.y / City.T))) pullOver(v);
-            v.pullTried = true;
-        }
-        if (v.pulling) {
-            // Rolling to a stop against the kerb.
-            float dx = v.pullX - v.x, dy = v.pullY - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-            if (d < 0.5f) v.pulling = false;
-            else {
-                float step = Math.min(d, 20 * dt);
-                v.x += dx / d * step;
-                v.y += dy / d * step;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Where a stopped car ends up: the kerb to its right (across all the lanes its way, on a wide road - never
-     * left in the middle of one), or failing that a near one to its left.
-     */
-    private void pullOver(Vehicle v) {
-        if (v.type != CAR) return;
-        v.pullTried = true;
-        float nx = (float) -Math.sin(v.angle), ny = (float) Math.cos(v.angle);
-        for (int side = 1; side >= -1; side -= 2)
-            for (float s = 4; s <= (side > 0 ? City.T * 4.5f : 26); s += 3) {
-                float x = v.x + nx * s * side, y = v.y + ny * s * side;
-                int tx = (int) (x / City.T), ty = (int) (y / City.T);
-                if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) break;
-                byte t = city.tiles[ty * city.w + tx];
-                if (t == City.ROAD || t == City.CAR) continue;
-                v.pullX = x - nx * side * 6.5f;
-                v.pullY = y - ny * side * 6.5f;
-                v.pulling = true;
-                return;
-            }
-    }
-
-    // ------------------------------------------------------------------ driving
-
-    private boolean updateCar(Vehicle v, float dt) {
-        if (!v.parked) v.pullTried = false;
-        if (v.type == AMBULANCE) return ambulanceStep(v, dt);
-        if (v.kind == K_DOZER && v.state == SCENE) return dozerPush(v, dt);
-        // ((14.0) Close, and the traffic rules won't take it the last bit up to a stopped vehicle: it goes straight in.)
-        if (v.kind == K_DOZER && v.state == DRIVE && v.clearing != null && !v.clearing.removedFromFleet
-                && World.hypot(v.clearing.x - v.x, v.clearing.y - v.y) < 110 && (Math.abs(v.speed) < 6 || World.hypot(v.clearing.x - v.x, v.clearing.y - v.y) < 30)) {
-            v.state = SCENE;
-            v.timer = DOZER_PUSH;
-            v.speed = 0;
-            return false;
-        }
-        if (v.recon) return reconStep(v, dt);
-        if (isPost(v)) return commandPostStep(v, dt);
-        if (v.type == TRUCK) turret(v, dt);
-        if (v.state == PICKUP) return pickupStep(v, dt);
-        if (v.state == SCENE && v.type == CRUISER) {
-            // Parked up at the call, lights going, until it's over (or there's been nothing for a while).
-            v.speed = Math.max(0, v.speed - dt * 200);
-            v.timer += dt;
-            Dispatch.Incident inc = v.incident;
-            v.quiet = inc != null && w.countZombiesNear(inc.x, inc.y, 220) > 0 ? 0 : v.quiet + dt;
-            if (inc == null || inc.resolved || v.quiet > 25 || v.timer > 420) {
-                v.state = PICKUP;
-                v.timer = 0;
-                v.pickup = true;
-            }
-            return false;
-        }
-        // ((11.7) Out to pick people up: it heads for where they are now, not where they were when it set off.)
-        if (v.state == DRIVE && v.pickup && !v.squad.isEmpty() && (v.aimCd -= dt) <= 0) {
-            v.aimCd = 3;
-            float sx = 0, sy = 0;
-            int n = 0;
-            for (int i = 0; i < v.squad.size(); i++) {
-                Entity e = v.squad.get(i);
-                if (e.dead || e.removed || e.rig != v) continue;
-                sx += e.x;
-                sy += e.y;
-                n++;
-            }
-            if (n > 0) {
-                sx /= n;
-                sy /= n;
-                float[] spot = city.nearestDrivable(sx, sy);
-                if (spot != null && World.hypot(spot[0] - v.tx, spot[1] - v.ty) > 60 && World.hypot(sx - v.x, sy - v.y) > 90)
-                    route(v, spot[0], spot[1]);
-            }
-        }
-        if (v.state == DRIVE && v.pickup && v.stuckTimer > 12) {
-            v.state = PICKUP;
-            v.timer = 0;
-            v.speed = 0;
-            return false;
-        }
-        if (v.state == SCENE && v.type == TRUCK) {
-            // An APC that dropped its squad stays a while to cover them with its gun, then heads home.
-            v.speed = Math.max(0, v.speed - dt * 200);
-            v.timer -= dt;
-            v.quiet = w.countZombiesNear(v.x, v.y, 200) > 0 ? 0 : v.quiet + dt;
-            // ((13.9) An ammo truck goes once it's handed everything out.)
-            if (v.timer <= 0 || v.quiet > 20 || (v.ammoTruck && v.cargo <= 0)) {
-                v.state = RETURN;
-                v.speed = 0;
-                v.standby = false;
-                return !route(v, v.homeX, v.homeY);
-            }
-            return false;
-        }
-        if (v.state == MUSTER) {
-            // A troop truck at the gate, waiting for its squad to climb aboard.
-            v.speed = 0;
-            float was = v.timer;
-            v.timer += dt;
-            // ((13.7) Who's still on the way, once a second: a squad sent to a truck a few streets off takes most of a
-            // minute to run there, and the truck gave up after 45 seconds and left them to walk the whole way.)
-            if (v.coming < 0 || (int) v.timer != (int) was) v.coming = comingTo(v);
-            // (10.34: quicker off the mark: most of the squad aboard after a few seconds will do.)
-            // ((13.3) Longer for the rest: it used to go with two thirds aboard after six seconds, and leave the others
-            // behind to walk.)
-            // ((13.7) Off as soon as everyone still coming is aboard; the stragglers left behind only once the wait is long
-            // and most are in.)
-            // (Never with one of them almost there.)
-            boolean straggling = v.coming == 0 || v.comingNear > 120;
-            boolean ready = v.crew.size() >= v.crewWanted || (!v.crew.isEmpty() && v.coming == 0)
-                    || (straggling && v.timer > 30 && v.crew.size() * 3 >= v.crewWanted * 2) || (straggling && v.timer > 60 && !v.crew.isEmpty())
-                    || (v.timer > 90 && !v.crew.isEmpty());
-            if (!ready) {
-                // ((10.52) A car taking outside help home waits longer: the station it came from can be a walk away,
-                // and giving up only sent another, and another.)
-                // ((13.7) Any truck or car waits as long while its people are on their way, and not at all once nobody is.)
-                if (v.timer > 90 || (v.timer > 3 && v.coming == 0)) {
-                    dropCrew(v);
-                    // ((12.3) An army truck nobody came for goes back in its bay, or stays parked where it is: it
-                    // vanished before, and a base soon had none left to send anyone anywhere.)
-                    if (v.type == TRUCK && v.passengerType == Entity.SOLDIER && !v.leaving && !v.reinforcement && !v.broken && v.crew.isEmpty()) return backInPool(v);
-                    return true;
-                }
-                return false;
-            }
-            dropCrew(v);
-            Dispatch.Incident inc = v.incident;
-            if (v.leaving) {
-                // Outside help going home: out of the city the way they came.
-                if (!route(v, v.tx, v.ty)) {
-                    for (Entity e : new ArrayList<Entity>(v.crew)) e.rig = null;
-                    crewOut(v, true);
-                    return true;
-                }
-                v.state = RETURN;
-                v.homeX = v.tx;
-                v.homeY = v.ty;
-                v.stuckTimer = 0;
-                return false;
-            }
-            if (v.loop) {
-                // A patrol: off round the roads near the base.
-                if (!route(v, v.tx, v.ty)) {
-                    for (Entity e : new ArrayList<Entity>(v.crew)) e.rig = null;
-                    crewOut(v, true);
-                    return true;
-                }
-                v.state = DRIVE;
-                v.stuckTimer = 0;
-                w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Patrol mounted up. Sweeping " + v.place + ".", v.x, v.y);
-                return false;
-            }
-            if (inc == null || inc.resolved || !route(v, inc.x, inc.y)) {
-                for (Entity e : new ArrayList<Entity>(v.crew)) e.rig = null;
-                crewOut(v, true);
-                // ((12.3) The call over before they set off: the truck stays, back in the pool.)
-                if (v.type == TRUCK && v.passengerType == Entity.SOLDIER && !v.reinforcement && !v.broken) return backInPool(v);
-                return true;
-            }
-            v.state = DRIVE;
-            v.stuckTimer = 0;
-            w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. Rolling out to "
-                    + inc.place + ".", v.x, v.y);
-            return false;
-        }
-        if (v.state == WAIT) {
-            v.timer -= dt;
-            if (v.timer <= 0) {
-                v.state = DRIVE;
-                if (v.type == CRUISER) w.emit(Sfx.SIREN, v.x, v.y);
-            }
-            return false;
-        }
-        // On the way home empty: hold back rather than drive through a crowd of the dead, and if they don't
-        // move off, leave the car parked where it is.
-        if (v.state == RETURN && (v.type == CRUISER || v.type == TRUCK) && hordeAhead(v)) {
-            v.speed = Math.max(0, v.speed - dt * 220);
-            v.hold += dt;
-            v.stuckTimer = 0;
-            if (v.hold > 25) {
-                v.speed = 0;
-                v.parked = true;
-                v.state = ABANDONED;
-                // (Anyone still aboard gets out.)
-                if (!v.crew.isEmpty()) crewOut(v, true);
-            }
-            return false;
-        }
-        v.hold = 0;
-        v.stuckTimer += dt;
-        if (trainComing(v)) {
-            v.speed = Math.max(0, v.speed - dt * 150);
-            return false;
-        }
-        // ((10.60) Help from outside on its way to a call that's over: on to the one that needs it most instead.)
-        if (v.reinforcement && v.state == DRIVE && v.zone == null && v.incident != null && v.rerouteCd <= 0
-                && (v.incident.resolved || (v.incident.zombiesNear == 0 && v.incident.age > 20))) {
-            v.rerouteCd = 4;
-            Dispatch.Incident n = w.dispatch.neediest(v.x, v.y, v.incident);
-            if (n != null) {
-                float[] road = city.nearestDrivable(n.x, n.y);
-                if (road != null && route(v, road[0], road[1])) {
-                    v.incident = n;
-                    v.place = n.place;
-                    v.state = DRIVE;
-                }
-            }
-        }
-        // ((10.51) Quicker on a call, the army above all: the trucks used to trundle to a fight.)
-        boolean call = emergency(v) && v.state != RETURN;
-        float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100)
-                : v.kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
-        // ((24.2) Not on a call (going home, off to restock, empty): the lights and the junctions' rules, like
-        // everyone else - they went straight through red lights and across traffic. Waiting at one isn't being stuck.)
-        if (!call && v.player == null && v.type != TANK && v.kind != K_DOZER && w.alert < 2) {
-            calmRules = true;
-            try {
-                top = Math.min(top, junctionRule(v, dt));
-            } finally {
-                calmRules = false;
-            }
-            if (v.held) v.stuckTimer = Math.min(v.stuckTimer, 1);
-        }
-        boolean arrived = !driveStep(v, dt, top, carAhead(v) ? 0.5f : 1f);
-        // A patrol that comes on a crowd of the dead stops and lets the gunner work; the crew stay aboard.
-        if (v.loop && v.state == DRIVE && hordeAhead(v)) {
-            v.speed = Math.max(0, v.speed - dt * 200);
-            v.stuckTimer = 0;
-            v.idleTimer += dt;
-            if (v.idleTimer < 12) return false;
-            arrived = true;
-        }
-        // (10.45) The dead spotted on the way to a call: deal with them first.
-        if (v.state == DRIVE && !arrived && !v.loop && !v.pickup && !v.restock && v.zone == null && v.block == null) {
-            Dispatch.Incident here = spotOnTheWay(v, dt);
-            if (here != null) {
-                v.incident = here;
-                v.place = here.place;
-                arrived = true;
-                v.speed *= 0.3f;
-            }
-        }
-        // Don't drive into a horde: stop short and let the troops out (an APC drives on in: it's armoured).
-        if (v.state == DRIVE && !v.loop && v.kind != K_APC && v.kind != K_BEARCAT && (v.passengers > 0 || !v.crew.isEmpty()) && hordeAhead(v)) {
-            arrived = true;
-            v.speed *= 0.3f;
-        }
-        // Give up and stop where we are if the car hasn't made progress for a while.
-        // (Reinforcements on their long drive in wait a little longer in a jam before getting out to walk.)
-        // ((16.7) But an ammo truck has nobody aboard to walk the rest, and the fight it's for is waiting on it: held
-        // up, it plans its way again and keeps at it a good while before it gives up - it used to stop for good on
-        // an open road thousands of feet short after four seconds in a jam.)
-        if (v.ammoTruck && v.state == DRIVE && !arrived && v.stuckTimer > 4 && v.jamTries < 4 && v.rerouteCd <= 0 && route(v, v.tx, v.ty)) {
-            v.jamTries++;
-            v.rerouteCd = 5;
-            v.pathField = null;
-        } else if (v.stuckTimer > (v.reinforcement ? 12 : 4)) arrived = true;
-        if (arrived) {
-            if (v.kind == K_DOZER) return dozerArrived(v);
-            if (v.state == DRIVE && v.block != null) {
-                // A roadblock car: only set up if the zone still needs it and it got close to its spot.
-                if (v.block.removed || World.hypot(v.x - v.tx, v.y - v.ty) > 90) {
-                    v.block = null;
-                } else {
-                    setUpRoadblock(v);
-                    return false;
-                }
-            }
-            if (v.state == DRIVE && v.supply > 0 && v.zone != null) {
-                // The ammo gets through (if the truck reached the zone).
-                Dispatch.SafeZone z = v.zone;
-                z.supplyComing = false;
-                if (!z.removed && World.hypot(v.x - z.x, v.y - z.y) < z.r + 90) {
-                    z.ammo += v.supply;
-                    z.food = Math.min(z.foodMax, z.food + z.foodMax * 0.7f);
-                    w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Supply truck at " + z.place + ". " + v.supply
-                            + " rounds and food delivered.", v.x, v.y);
-                } else {
-                    w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: The supply truck couldn't get through to "
-                            + z.place + ". Turning back.", v.x, v.y);
-                }
-                v.supply = 0;
-            }
-            if (v.state == DRIVE && v.pickup) {
-                // Out where its people are: wait for them to climb in.
-                v.state = PICKUP;
-                v.timer = 0;
-                v.speed = 0;
-                return false;
-            }
-            if (v.state == RETURN && v.leaving) {
-                // Off the map: they're home, and back in the pool if they're needed again.
-                if (World.hypot(v.x - v.homeX, v.y - v.homeY) > 120) {
-                    // ((10.53) Not there yet: the way planned ran out short of the edge (or it was put off it).
-                    // Plan it again from here rather than put them out in the fields to be fetched all over again.)
-                    if (v.rerouteCd <= 0 && route(v, v.homeX, v.homeY)) {
-                        v.rerouteCd = 2;
-                        return false;
-                    }
-                    if (v.rerouteCd > 0) return false;
-                    if (!v.crew.isEmpty()) crewOut(v, true);
-                    return true;
-                }
-                w.dispatch.wentHome(v.passengerType, v.crew.size());
-                v.crew.clear();
-                return true;
-            }
-            if (v.state == RETURN && v.parkHome) {
-                // ((24.0) A jam on the way home isn't home: it parked up for good in the middle of the road, hundreds
-                // of feet short. Plan the way again; only a long way off and getting nowhere does it give up and stay.)
-                if (v.depot != null && World.hypot(v.x - v.depot.x, v.y - v.depot.y) > v.depot.r + City.T * 3) {
-                    if (v.jamTries < 6 && v.rerouteCd <= 0 && route(v, v.depot.gateX, v.depot.gateY)) {
-                        v.jamTries++;
-                        v.rerouteCd = 4;
-                        v.stuckTimer = 0;
-                        return false;
-                    }
-                    if (v.rerouteCd > 0 && v.jamTries < 6) {
-                        v.stuckTimer = 0;
-                        return false;
-                    }
-                }
-                v.jamTries = 0;
-                // Home: anyone aboard gets out (off duty), and it parks up ready for the next call. ((26.3) Two officers
-                // who drove a police car back stay in it, waiting for the next call.)
-                boolean wait = v.type == CRUISER && v.crew.size() <= 2 && v.squad.isEmpty() && v.depot != null && v.depot.kind == City.FACILITY_POLICE;
-                for (int i = 0; i < v.crew.size() && wait; i++) if (v.crew.get(i).type != Entity.COP || v.crew.get(i).role != Entity.ROLE_RIFLE) wait = false;
-                if (!v.crew.isEmpty() && !wait) crewOut(v, true);
-                parkUp(v);
-                return false;
-            }
-            if (v.state == DRIVE && v.restock) {
-                if (World.hypot(v.x - v.tx, v.y - v.ty) < 120) w.restocked(v);
-                v.state = RETURN;
-                v.speed = 0;
-                return !route(v, v.homeX, v.homeY);
-            }
-            if (v.state == DRIVE && v.loop) {
-                // The end of the patrol's sweep: back to base.
-                v.state = RETURN;
-                v.idleTimer = 0;
-                v.speed = 0;
-                return !route(v, v.homeX, v.homeY);
-            }
-            if (v.state == RETURN && v.loop) {
-                // Back at base: the patrol gets out.
-                crewOut(v, true);
-                city.parkTruck(v.homeX, v.homeY);
-                return true;
-            }
-            if (v.state == DRIVE && !v.crew.isEmpty()) {
-                // The squad jumps down and goes in; the truck heads back.
-                ArrayList<Entity> out = new ArrayList<Entity>(v.crew);
-                crewOut(v, true);
-                Dispatch.Incident inc = v.incident;
-                for (Entity e : out) {
-                    e.rig = null;
-                    if (inc != null && !inc.resolved) {
-                        e.task = Dispatch.T_RESPOND;
-                        e.incident = inc;
-                        e.onScene = false;
-                    }
-                }
-                v.squad.addAll(out);
-                if (!out.isEmpty() && v.place != null)
-                    w.dispatch.chatter(Dispatch.WHO_MILITARY, out.get(0), "On the ground at " + v.place + ". Moving in.", v.x, v.y);
-            }
-            if (v.state == DRIVE) {
-                unload(v, true);
-                v.passengers = 0;
-                if ((v.kind == K_APC || v.kind == K_IFV || v.kind == K_GUNTRUCK) && v.supply == 0) {
-                    // The APC stays to give its squad covering fire.
-                    v.state = SCENE;
-                    v.timer = 90;
-                    v.quiet = 0;
-                    v.speed = 0;
-                    v.standby = true;
-                    return false;
-                }
-                // ((10.56) A troop truck that's brought a squad into town waits near them for a while, standing by:
-                // when they're sent on to the next fight, they climb back in (Fleet.mountUp) instead of walking.)
-                if (v.type == TRUCK && v.supply == 0 && v.passengerType == Entity.SOLDIER && v.incident != null && city.inTown(v.x, v.y)) {
-                    v.state = SCENE;
-                    v.timer = v.ammoTruck ? 300 : 150;
-                    v.quiet = -40;
-                    v.speed = 0;
-                    v.standby = true;
-                    return false;
-                }
-                // (10.28) A police car waits at the scene while its officers deal with the call, then takes them home.
-                if (v.type == CRUISER && v.incident != null && !v.incident.resolved && !v.squad.isEmpty()) {
-                    v.state = SCENE;
-                    v.timer = 0;
-                    v.quiet = 0;
-                    v.speed = 0;
-                    return false;
-                }
-                if (headHome(v)) return false;
-                v.state = RETURN;
-                v.speed = 0;
-                return !route(v, v.homeX, v.homeY);
-            }
-            // ((13.9) Rounds it didn't hand out go back in the armoury.)
-            if (v.state == RETURN && v.type == TRUCK && v.cargo > 0 && World.hypot(v.x - v.homeX, v.y - v.homeY) < 200) {
-                City.Facility f = city.nearestFacility(City.FACILITY_BASE, v.x, v.y);
-                if (f != null) f.ammo += v.cargo;
-                v.cargo = 0;
-            }
-            // ((24.2) Held up in a jam on the way back isn't back: it vanished from the road into its bay across town,
-            // in plain sight. Plan the way again; only where nobody's watching does it give up and go straight home.)
-            if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !v.leaving
-                    && World.hypot(v.x - v.homeX, v.y - v.homeY) > 160 && inView(v.x, v.y)) {
-                if (v.rerouteCd <= 0 && v.jamTries < 8) {
-                    v.jamTries++;
-                    v.rerouteCd = 4;
-                    route(v, v.homeX, v.homeY);
-                }
-                if (v.jamTries < 8) {
-                    v.stuckTimer = 0;
-                    return false;
-                }
-            }
-            v.jamTries = 0;
-            // An army truck back at base parks in its bay again.
-            if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !w.peopleNear(v.homeX, v.homeY, 14)
-                    && w.countZombiesNear(v.homeX, v.homeY, 14) == 0)
-                city.parkTruck(v.homeX, v.homeY);
-            else if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !v.reinforcement && !v.leaving
-                    && city.tiles[city.tileIndex(v.x, v.y)] != City.ROAD) {
-                // ((12.3) Its bay taken (someone standing in it): into the base's garages, or parked where it is,
-                // not gone for good.)
-                if (!v.crew.isEmpty()) crewOut(v, true);
-                City.Facility f = yardOf(v.x, v.y);
-                if (f != null && f.kind == City.FACILITY_BASE) {
-                    f.spareTrucks++;
-                    return true;
-                }
-                v.state = IDLE;
-                v.speed = 0;
-                v.parked = true;
-                v.standby = true;
-                return false;
-            }
-            return true;
-        }
-        hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        if (v.type == CRUISER && v.soundCd <= 0 && v.state == DRIVE) {
-            v.soundCd = 3.5f;
-            w.emit(Sfx.SIREN, v.x, v.y);
-        }
-        return false;
-    }
-
     /** How many cars and trucks a station or base keeps parked before the rest go back where they came from. */
-    private static final int DEPOT_ROOM = 14;
+    static final int DEPOT_ROOM = 14;
 
-    /**
-     * Once its people are out (10.24), a police car or army truck heads back to the nearest police station or
-     * base to park, ready for the next call. Not a supply run, a roadblock car or one delivering to a safe zone.
-     */
-    private boolean headHome(Vehicle v) {
-        if (v.type != CRUISER && v.type != TRUCK) return false;
-        if (v.restock || v.zone != null || v.block != null || v.loop || v.broken || v.kind == K_APC) return false;
-        if (v.squad.isEmpty() && !v.pickup) return false;
-        if (!v.squad.isEmpty()) v.passengerType = v.squad.get(0).type;
-        City.Facility f = city.nearestFacility(v.passengerType == Entity.SOLDIER ? City.FACILITY_BASE : City.FACILITY_POLICE, v.x, v.y);
-        if (f == null) return false;
-        int there = 0;
-        for (int i = 0; i < vehicles.size(); i++) if (vehicles.get(i).depot == f && vehicles.get(i) != v) there++;
-        if (there >= DEPOT_ROOM) return false;
-        // (Not an emergency any more: home by road.)
-        v.incident = null;
-        v.parkHome = true;
-        if (!route(v, f.gateX, f.gateY)) {
-            v.parkHome = false;
-            return false;
-        }
-        v.depot = f;
-        v.parkHome = true;
-        v.pickup = false;
-        v.incident = null;
-        v.state = RETURN;
-        v.speed = 0;
-        v.stuckTimer = 0;
-        v.jamTries = 0;
-        return true;
-    }
-
-    /** Parked at its station or base, off the road on the lot or the yard, clear of the others. */
-    private void parkUp(Vehicle v) {
-        v.state = IDLE;
-        v.speed = 0;
-        v.parked = true;
-        v.standby = true;
-        v.parkHome = false;
-        v.stageCd = 4;
-        int tx = (int) (v.x / City.T), ty = (int) (v.y / City.T);
-        // (10.45) Not in the gateway, though: one after another they parked round the gate and blocked it, so
-        // nothing could get in or out. Well inside, in sight of where it is now.
-        City.Facility d = v.depot;
-        for (int r = 1; r <= 12; r++)
-            for (int dy = -r; dy <= r; dy++)
-                for (int dx = -r; dx <= r; dx++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) != r) continue;
-                    int x = tx + dx, y = ty + dy;
-                    if (x < 0 || y < 0 || x >= city.w || y >= city.h) continue;
-                    byte t = city.tiles[y * city.w + x];
-                    if (t != City.LOT && t != City.BASE && t != City.SIDEWALK && t != City.PLAZA) continue;
-                    float px = (x + 0.5f) * City.T, py = (y + 0.5f) * City.T;
-                    if (city.solidAt(px, py)) continue;
-                    if (d != null && d.gateX > 0 && World.hypot(px - d.gateX, py - d.gateY) < City.T * 3.2f) continue;
-                    if (d != null && r > 2 && !city.los(v.x, v.y, px, py)) continue;
-                    // (And not out on the pavement beyond the fence.)
-                    if (d != null && World.hypot(px - d.x, py - d.y) > d.r + City.T * 2) continue;
-                    boolean taken = false;
-                    for (int i = 0; i < vehicles.size() && !taken; i++) {
-                        Vehicle o = vehicles.get(i);
-                        if (o != v && !airborne(o) && Math.abs(o.x - px) < 12 && Math.abs(o.y - py) < 12) taken = true;
-                        if (o != v && o.standby && o.pulling && Math.abs(o.pullX - px) < 12 && Math.abs(o.pullY - py) < 12) taken = true;
-                    }
-                    if (taken) continue;
-                    v.pullX = px;
-                    v.pullY = py;
-                    v.pulling = true;
-                    return;
-                }
-    }
-
-    /** Parked and waiting: drives out to fetch its people once they're done and a long way off. */
-    private boolean standbyStep(Vehicle v, float dt) {
-        v.stageCd -= dt;
-        if (v.stageCd > 0) return false;
-        v.stageCd = 4;
-        float sx = 0, sy = 0;
-        int n = 0;
-        for (int i = v.squad.size() - 1; i >= 0; i--) {
-            Entity e = v.squad.get(i);
-            if (e.dead || e.removed || e.isZombie()) {
-                v.squad.remove(i);
-                continue;
-            }
-            if (e.task != Dispatch.T_NONE || e.aiming || e.rig != null) continue;
-            if (World.hypot(e.x - v.x, e.y - v.y) < 600 || w.countZombiesNear(e.x, e.y, 160) > 0) continue;
-            sx += e.x;
-            sy += e.y;
-            n++;
-        }
-        // (Wait until most of them are free, so it isn't back and forth for each one.)
-        if (n == 0 || n * 2 < v.squad.size()) return false;
-        float[] spot = city.nearestDrivable(sx / n, sy / n);
-        if (spot == null) return false;
-        v.parked = false;
-        v.pulling = false;
-        v.standby = false;
-        v.pickup = true;
-        if (!route(v, spot[0], spot[1])) {
-            v.parked = true;
-            v.standby = true;
-            v.pickup = false;
-            return false;
-        }
-        v.state = DRIVE;
-        v.stuckTimer = 0;
-        v.place = city.placeName(spot[0], spot[1]);
-        if (v.squad.size() > 0)
-            w.dispatch.chatter(v.passengerType == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, v.squad.get(0),
-                    (v.type == TRUCK ? "Truck" : "Car") + " coming out to " + v.place + " to pick us up.", v.x, v.y);
-        return false;
-    }
-
-    /** Out where its people are, waiting while they climb in; then back to the station or base. */
-    private boolean pickupStep(Vehicle v, float dt) {
-        v.speed = Math.max(0, v.speed - dt * 200);
-        v.timer += dt;
-        int walking = 0;
-        for (Entity e : v.squad) {
-            if (e.dead || e.removed || e.isZombie()) continue;
-            if (World.hypot(e.x - v.x, e.y - v.y) > 700 || (e.task != Dispatch.T_NONE && e.task != Dispatch.T_BOARD)) continue;
-            walking++;
-            if (e.task != Dispatch.T_BOARD) {
-                e.rig = v; note(e);
-                e.task = Dispatch.T_BOARD;
-            }
-        }
-        // ((13.3) A minute and a half for them to get there, not 45 seconds.)
-        if ((walking > 0 && v.timer < 90) || v.timer < 2) return false;
-        v.pickup = false;
-        for (Entity e : v.squad)
-            if (!e.dead && e.task == Dispatch.T_BOARD && e.rig == v) {
-                e.task = Dispatch.T_NONE;
-                e.rig = null;
-            }
-        // ((11.0) Picked up for a call: off to it.)
-        Dispatch.Incident to = v.pickupFor;
-        v.pickupFor = null;
-        if (to != null && !to.resolved && !v.crew.isEmpty()) {
-            v.squad.clear();
-            if (v.type == CRUISER) {
-                v.patrol = true;
-                if (respond(v, to)) return false;
-                v.state = PATROL;
-                if (!newDestination(v)) v.stuckTimer = 99;
-                return false;
-            }
-            float[] road = city.nearestDrivable(to.x, to.y);
-            if (road != null && route(v, road[0], road[1])) {
-                v.incident = to;
-                v.place = to.place;
-                v.state = DRIVE;
-                v.stuckTimer = 0;
-                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. On our way to " + to.place + ".", v.x, v.y);
-                return false;
-            }
-        }
-        if (v.wasPatrol && !v.crew.isEmpty()) {
-            // (10.48) A patrol car taken over: back out on patrol with its new crew.
-            v.wasPatrol = false;
-            v.patrol = true;
-            v.squad.clear();
-            v.state = PATROL;
-            v.incident = null;
-            if (!newDestination(v)) v.stuckTimer = 99;
-            return false;
-        }
-        if (headHome(v)) return false;
-        if (!v.crew.isEmpty()) crewOut(v, true);
-        v.state = RETURN;
-        return !route(v, v.homeX, v.homeY);
-    }
-
-    /**
-     * (10.27) Outside police or soldiers going home: one of the cars or trucks parked in town (or one that comes
-     * round for them) picks them up and drives out at (ex, ey). False if there's nothing to take them.
-     */
-    boolean sendHome(java.util.List<Entity> group, float ex, float ey) {
-        if (group.isEmpty()) return false;
-        boolean cops = group.get(0).type == Entity.COP;
-        float sx = 0, sy = 0;
-        for (Entity e : group) {
-            sx += e.x;
-            sy += e.y;
-        }
-        sx /= group.size();
-        sy /= group.size();
-        float[] p = takeStandby(cops ? CRUISER : TRUCK, sx, sy, 700);
-        if (p == null) p = city.nearestDrivable(sx, sy);
-        if (p == null) return false;
-        Vehicle v = make(cops ? CRUISER : TRUCK);
-        v.x = p[0];
-        v.y = p[1];
-        v.state = MUSTER;
-        v.leaving = true;
-        v.reinforcement = true;
-        v.crewWanted = group.size();
-        v.tx = ex;
-        v.ty = ey;
-        v.place = "home";
-        v.passengerType = cops ? Entity.COP : Entity.SOLDIER;
-        v.angle = (float) Math.atan2(ey - p[1], ex - p[0]);
-        for (Entity e : group) {
-            e.rig = v; note(e);
-            e.task = Dispatch.T_BOARD;
-        }
-        vehicles.add(v);
-        return true;
-    }
-
-    /** A car or truck parked at a station or base near (x, y), taken for a new call (removed; its spot returned). */
-    float[] takeStandby(int type, float x, float y, float radius) {
-        Vehicle best = null;
-        float bd = radius * radius;
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle v = vehicles.get(i);
-            if (!v.standby || v.type != type || v.broken) continue;
-            float d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
-            if (d < bd) {
-                bd = d;
-                best = v;
-            }
-        }
-        if (best == null) return null;
-        // ((26.3) Anyone sitting in it waiting gets out first: it's being taken for others.)
-        if (!best.crew.isEmpty()) crewOut(best, true);
-        best.removedFromFleet = true;
-        vehicles.remove(best);
-        return new float[]{best.x, best.y};
-    }
-
-    /**
-     * (10.32) The army's checkpoints on the road to the country base: anyone else pulls up at the line and waits
-     * to be waved through (and once things are bad, civilians are turned back). The army's own vehicles, and
-     * anything on lights and sirens, go straight through.
-     */
-    private float checkpointLimit(Vehicle v, float dt) {
-        if (v.player != null || v.type == TRUCK || v.type == TANK || v.lightsOn() || emergency(v)) return Float.MAX_VALUE;
-        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
-        for (int k = 0; k < city.checkpoints.size(); k++) {
-            if (v.cleared == k) continue;
-            float[] cp = city.checkpoints.get(k);
-            float rx = (float) Math.cos(cp[2]), ry = (float) Math.sin(cp[2]);
-            if (Math.abs(fx * rx + fy * ry) < 0.6f) continue;
-            float dx = cp[0] - v.x, dy = cp[1] - v.y;
-            float ahead = dx * fx + dy * fy, side = Math.abs(dx * -fy + dy * fx);
-            if (ahead < 0 || ahead > 140 || side > 26) continue;
-            float gap = ahead - 40 - v.length() * 0.5f;
-            if (gap > 3) return Math.max(6, (float) Math.sqrt(2 * 220 * gap));
-            v.cpWait += dt;
-            if (v.cpWait > 2.5f) {
-                v.cpWait = 0;
-                v.cleared = k;
-                // (Once it's on the news, the army turns civilians back.)
-                if (w.alert >= 2 && v.type == CAR && !v.fleeing) {
-                    v.field = null;
-                    v.destCd = 0;
-                    newDestination(v);
-                }
-            }
-            return 0;
-        }
-        return Float.MAX_VALUE;
-    }
-
-    /** (10.32) On a bridge over the highway and crossing it: up on the deck, above the traffic underneath. */
-    private boolean onDeck(Vehicle v) {
-        if (city.overpassAt(v.x, v.y) < 0) return false;
-        float along = city.hwyAxis == 0 ? Math.abs((float) Math.cos(v.angle)) : Math.abs((float) Math.sin(v.angle));
-        return along < 0.6f;
-    }
-
-    /** One on a bridge and the other on the highway under it: they pass without touching. */
-    private boolean levels(Vehicle a, Vehicle b) {
-        if (city.overpasses.isEmpty()) return false;
-        // ((12.0) Each car's level worked out once where it is, not again for every car near it.)
-        int da = deck(a), db = deck(b);
-        if (da < 0 && db < 0) return false;
-        return (da == 1) != (db == 1);
-    }
-
-    private int deck(Vehicle v) {
-        if (v.deck == -2 || v.deckX != v.x || v.deckY != v.y || v.deckA != v.angle) {
-            v.deckX = v.x;
-            v.deckY = v.y;
-            v.deckA = v.angle;
-            v.deck = city.overpassAt(v.x, v.y) < 0 ? -1 : onDeck(v) ? 1 : 0;
-        }
-        return v.deck;
-    }
-
-    boolean onBridge(Vehicle v) {
-        return !city.overpasses.isEmpty() && onDeck(v);
-    }
-
-    /** Running zombies over dents the car. */
-    private void hit(Vehicle v, float impact) {
-        if (impact > 0) damage(v, impact, false);
-    }
-
-    /**
-     * One step of driving downhill in the vehicle's field, keeping to the right-hand side of the road.
-     * Returns false once it has arrived (or has no route).
-     */
-    private boolean driveStep(Vehicle v, float dt, float max, float throttle) {
-        if (v.field == null) return false;
-        // (10.20) Open-road speeds are nearly twice what they were, next to people on foot (who walk briskly in
-        // this world): a car in town now covers ground like a car. Crawls, turns and queues are as before.
-        if (max > 40) max = 40 + (max - 40) * DRIVE_SCALE;
-        // (Off the road, across the grass: slower going.)
-        if (city.rough(v.x, v.y)) max *= 0.65f;
-        // Keep a safe distance behind whatever is ahead in the lane.
-        max = Math.min(max, followLimit(v));
-        // (10.32) And stop at an army checkpoint.
-        if (!city.checkpoints.isEmpty()) max = Math.min(max, checkpointLimit(v, dt));
-        // (Turned back there: it has a new way to go, or none yet.)
-        if (v.field == null) return false;
-        int W = city.w;
-        // Follow the route tile by tile (the "path tile"), and drive in the lane beside it.
-        // (10.32) Crossing a bridge, the route steps from one end of it to the other.
-        boolean crossing = v.pathT >= 0 && city.bridgeTo(v.pathT) >= 0 && city.overpassAt(v.x, v.y) >= 0;
-        if (v.pathField != v.field || v.pathT < 0 || v.field.get(v.pathT) >= City.FAR
-                || (!crossing && World.hypot((v.pathT % W + 0.5f) * City.T - v.x, (v.pathT / W + 0.5f) * City.T - v.y) > 44)) {
-            v.pathField = v.field;
-            v.pathT = -1;
-            int ti = city.tileIndex(v.x, v.y), tx0 = ti % W, ty0 = ti / W, bestV = City.FAR;
-            // On the route where it is: carry on from here. Knocked off the road: head back to the nearest bit.
-            if (v.field.get(ti) < City.FAR) v.pathT = ti;
-            for (int r = 0; r <= 2 && v.pathT < 0; r++)
-                for (int y = ty0 - r; y <= ty0 + r; y++)
-                    for (int x = tx0 - r; x <= tx0 + r; x++) {
-                        if (x < 0 || y < 0 || x >= W || y >= city.h) continue;
-                        int fv = v.field.get(y * W + x);
-                        if (fv < bestV) {
-                            bestV = fv;
-                            v.pathT = y * W + x;
-                        }
-                    }
-            byte under = city.tiles[ti];
-            if (v.pathT < 0 && v.rerouteCd <= 0 && under != City.ROAD && under != City.DIRT && under != City.CAR && under != City.LOT) {
-                // ((11.1) Right off the road - in a yard, a park, inside a block - with no road under it to find the
-                // way from: back onto the nearest road (it had nowhere else to drive from, and tried again for ever),
-                // then plan from there.)
-                for (int r = 1, found = 0; r <= 12 && found == 0; r++)
-                    for (int y = ty0 - r; y <= ty0 + r && found == 0; y++)
-                        for (int x = tx0 - r; x <= tx0 + r; x++) {
-                            if (Math.max(Math.abs(x - tx0), Math.abs(y - ty0)) != r || x < 0 || y < 0 || x >= W || y >= city.h) continue;
-                            if (city.tiles[y * W + x] != City.ROAD || (city.oneWay != null && city.oneWay[y * W + x] != 0)) continue;
-                            v.x = (x + 0.5f) * City.T;
-                            v.y = (y + 0.5f) * City.T;
-                            v.speed = 0;
-                            found = 1;
-                            break;
-                        }
-            }
-            if (v.pathT < 0) {
-                // Off the route's corridor altogether (shoved aside, or round something): plan it again from here.
-                // ((11.1) The wait before the next try whether or not this one finds a way: one that didn't was
-                // tried again every frame, a whole-city search each time.)
-                if (v.rerouteCd > 0) return false;
-                v.rerouteCd = 3;
-                if (!route(v, v.tx, v.ty)) return false;
-                v.pathField = null;
-                return driveStep(v, dt, max, throttle);
-            }
-        }
-        // Pushed over onto the far side of a barrier (or a kerb) from its route tile: carry on from where it is
-        // instead of driving along the barrier towards a lane it can't reach (the wrong way, on the highway).
-        if (!crossing) {
-            int own = city.tileIndex(v.x, v.y);
-            if (own != v.pathT) {
-                int mid = city.tileIndex(((v.pathT % W + 0.5f) * City.T + v.x) / 2, ((v.pathT / W + 0.5f) * City.T + v.y) / 2);
-                if (v.field.get(mid) >= City.FAR) {
-                    // (10.32) Not a slip road running the other way, though: back onto the route beside it.
-                    if (v.field.get(own) < City.FAR && v.field.get(own) <= v.field.get(v.pathT) + 30) v.pathT = own;
-                    // (Only a real barrier between: a kerb corner cut in a junction is nothing to plan round.)
-                    else if (v.rerouteCd <= 0 && (city.solidTile(mid % W, mid / W) || city.onHighway(v.x, v.y))
-                            && route(v, v.tx, v.ty)) {
-                        // (Off the route on the wrong side: plan the way again from where it is.)
-                        v.rerouteCd = 3;
-                        v.pathField = null;
-                        return driveStep(v, dt, max, throttle);
-                    }
-                }
-            }
-        }
-        // (10.42) Already on a tile further along the route than its path tile (cutting a corner on the line it
-        // planned): carry on from there, instead of going back round for the tile it skipped.
-        if (!crossing) {
-            int own = city.tileIndex(v.x, v.y), fo = v.field.get(own);
-            if (own != v.pathT && fo < v.field.get(v.pathT) && fo > 4
-                    && Math.abs(own % W - v.pathT % W) + Math.abs(own / W - v.pathT / W) <= 2) v.pathT = own;
-        }
-        int cur = v.field.get(v.pathT);
-        if (cur <= 4) return false;
-        int nt0 = downhill(v.field, v.pathT);
-        if (nt0 == v.pathT && cur > 40) {
-            // ((16.6) Nowhere lower beside it, a long way short of the end: a tile at the edge of its route's corridor,
-            // where it was pushed aside, whose way on lies just outside it. That was taken for arriving - an ammo truck
-            // stopped on an open road halfway to the fight and waited there. The lowest tile close by, or a new plan.)
-            int best = cur;
-            for (int y = v.pathT / W - 2; y <= v.pathT / W + 2; y++)
-                for (int x = v.pathT % W - 2; x <= v.pathT % W + 2; x++) {
-                    if (x < 0 || y < 0 || x >= W || y >= city.h) continue;
-                    int fv = v.field.get(y * W + x);
-                    if (fv < best && !city.solidTile(x, y)) {
-                        best = fv;
-                        nt0 = y * W + x;
-                    }
-                }
-            if (nt0 == v.pathT) {
-                if (v.rerouteCd <= 0 && route(v, v.tx, v.ty)) {
-                    v.rerouteCd = 3;
-                    v.pathField = null;
-                    return driveStep(v, dt, max, throttle);
-                }
-                return false;
-            }
-        }
-        int tx = v.pathT % W, ty = v.pathT / W, nt = nt0, bx = nt % W, by = nt / W;
-        if (bx == tx && by == ty) return false;
-        int ddx = Integer.signum(bx - tx), ddy = Integer.signum(by - ty);
-        // Keep to your own side of the road, in the middle of the lane.
-        float off = city.laneOffset(bx, by, ddx, ddy, laneOf(v));
-        if (v.careful > 0) v.careful -= dt;
-        // (Going round something stopped in the lane: out towards the middle of the road for a moment.)
-        if (v.passing > 0) {
-            v.passing -= dt;
-            // (In a junction only to get out of a jam: there a stopped car is usually just waiting to turn.)
-            if (city.junctionIdAt(v.x, v.y) < 0 || v.stillT > 0 || v.speed < 20) {
-                // ((11.1) Where there's more than one lane each way, round it by the next lane over, not the
-                // oncoming one.)
-                if (city.lanesEachWay(bx, by, ddx, ddy) > 1 && city.junctionIdAt(v.x, v.y) < 0)
-                    off = city.laneOffset(bx, by, ddx, ddy, laneOf(v) == 0 ? 2 : 0);
-                else {
-                    // ((12.0) Over to the other side of the route's tile, as before - unless that's off the road: where
-                    // the route ran along the road's outer tile it swung out over the edge, into the lake along a
-                    // lakeside road. Then it goes round by the other side.)
-                    float sw = off - (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
-                    float cx = (bx + 0.5f) * City.T - ddy * sw, cy = (by + 0.5f) * City.T + ddx * sw;
-                    if (!city.drivable(cx, cy)) sw = off + (off == 0 ? 1 : Math.signum(off)) * City.T * 1.1f;
-                    off = sw;
-                }
-            }
-        }
-        // Into a junction in your own lane (measured on the road you're on): the turn is made inside it,
-        // not by cutting across the lanes before the stop line.
-        if (ddx * v.pdx + ddy * v.pdy > 0 && city.junctionIdAt((bx + 0.5f) * City.T, (by + 0.5f) * City.T) >= 0
-                && city.junctionIdAt((tx + 0.5f) * City.T, (ty + 0.5f) * City.T) < 0)
-            off = city.laneOffset(tx, ty, ddx, ddy, laneOf(v));
-        // A step across the road outside a junction (a U-turn mid-block, or pulling out from the far kerb):
-        // straight over, slowly, not along a "lane" that runs the wrong way.
-        // ((10.49) Not along a curved road, though: there every step is half sideways.)
-        int rd = city.junctionIdAt(v.x, v.y) < 0 && city.junctionIdAt((bx + 0.5f) * City.T, (by + 0.5f) * City.T) < 0
-                && !city.curveAt(bx, by) ? city.roadDirAt(bx, by) : 0;
-        if ((rd == 1 && ddx != 0) || (rd == 2 && ddy != 0)) {
-            off = 0;
-            max = Math.min(max, 22);
-        }
-        if (v.pulled) {
-            // Pulled over by highway patrol: onto the shoulder, and stop.
-            off += City.T * 0.5f;
-            max = Math.min(max, Math.max(0, Math.abs(v.speed) - 3));
-        } else if (v.yieldT > 0 && v.type == CAR && v.player == null) {
-            // Giving way: over to the kerb and slow (or held back from the junction).
-            if (v.yieldStop) max = Math.min(max, city.junctionIdAt(v.x, v.y) >= 0 ? max : 2);
-            else {
-                // ((10.54) Right over against the kerb, however wide the road: a car only edging over left too
-                // little room, and the police car or army truck behind it still couldn't get by.)
-                int hand = 1;
-                float ln = (float) Math.sqrt(ddx * ddx + ddy * ddy);
-                float nx = -ddy / ln * hand, ny = ddx / ln * hand;
-                float lx = bx * City.T + City.T / 2f - ddy * off, ly = by * City.T + City.T / 2f + ddx * off;
-                off += hand * kerbGap(lx, ly, nx, ny);
-                // (And it slides over there now, not only once it's rolled forward enough to steer across.)
-                float here = kerbGap(v.x, v.y, (float) -Math.sin(v.angle) * hand, (float) Math.cos(v.angle) * hand);
-                if (here > 0.5f) {
-                    float step = Math.min(here, 18 * dt);
-                    float sx = (float) -Math.sin(v.angle) * hand * step, sy = (float) Math.cos(v.angle) * hand * step;
-                    if (city.drivable(v.x + sx, v.y + sy)) {
-                        v.x += sx;
-                        v.y += sy;
-                    }
-                }
-                max = Math.min(max, 7);
-            }
-        }
-        if (v.careful > 0) {
-            // Going round in circles: slowly, straight for the middle of each tile until it's back on track.
-            off = 0;
-            max = Math.min(max, 16);
-        }
-        float gx = bx * City.T + City.T / 2f - ddy * off, gy = by * City.T + City.T / 2f + ddx * off;
-        if (World.hypot(gx - v.x, gy - v.y) < 11 || ((v.x - (bx + 0.5f) * City.T) * ddx + (v.y - (by + 0.5f) * City.T) * ddy) > -2) {
-            v.pathT = by * W + bx;
-            // Only a step along the road counts as the way it's going, not a turn inside a junction.
-            if (city.junctionIdAt(v.x, v.y) < 0) {
-                v.pdx = ddx;
-                v.pdy = ddy;
-            }
-        }
-        // Slow down for a turn coming up on the route: round a corner at a walking-pace crawl, not at cruising speed.
-        // (Emergency vehicles take corners a little quicker, but still slow enough to keep to their own side:
-        // the faster it's going, the further ahead it looks for the turn.)
-        {
-            // ((10.49) Off or on to a slip road: a sweeping bend, not a street corner.)
-            float round = city.onSlip(v.x, v.y) ? 50 : v.type == CAR ? 26 : 31;
-            int t = v.pathT, steps = 0, look = Math.min(8, 4 + (int) (Math.abs(v.speed) / 30));
-            for (; steps < look; steps++) {
-                int n = downhill(v.field, t);
-                if (n == t) break;
-                int sx = Integer.signum(n % W - t % W), sy = Integer.signum(n / W - t / W);
-                if (sx != ddx || sy != ddy) {
-                    // (10.49) A curve (a slip road, a bend in the country) is a staircase of little turns, tile by
-                    // tile, that keeps coming back to the way it was going: not a corner to crawl round. Only a turn
-                    // that goes on the new way for a few tiles is one.
-                    int u = n, back = 0, kept = 0;
-                    for (int k = 0; k < 3; k++) {
-                        int m = downhill(v.field, u);
-                        if (m == u) break;
-                        int qx = Integer.signum(m % W - u % W), qy = Integer.signum(m / W - u / W);
-                        if (qx == ddx && qy == ddy) back++;
-                        else if (qx == sx && qy == sy) kept++;
-                        u = m;
-                    }
-                    // (On a slip road, any bend short of the junction at its end is taken at road speed.)
-                    boolean slipBend = city.onSlip(v.x, v.y) && city.onSlip((n % W + 0.5f) * City.T, (n / W + 0.5f) * City.T)
-                            && city.junctionIdAt((n % W + 0.5f) * City.T, (n / W + 0.5f) * City.T) < 0;
-                    if ((back > 0 && kept < 2) || slipBend) {
-                        // (Still a bend: a little slower the tighter the staircase, but at road speed.)
-                        max = Math.min(max, 70 + steps * City.T * 0.75f + back * 12);
-                        t = n;
-                        continue;
-                    }
-                    max = Math.min(max, round + steps * City.T * 0.75f);
-                    break;
-                }
-                t = n;
-            }
-        }
-        // (10.28) Through a junction the route steps across tile by tile, and the side of the lane flipped with
-        // every step: the car swung from side to side. Inside one, keep to the lane for the way out instead.
-        if (v.careful <= 0 && v.passing <= 0 && !v.pulled && city.junctionIdAt(v.x, v.y) >= 0
-                && city.junctionIdAt((bx + 0.5f) * City.T, (by + 0.5f) * City.T) >= 0) {
-            int t = nt;
-            for (int s = 0; s < 10; s++) {
-                int n = downhill(v.field, t);
-                if (n == t) break;
-                int sx = Integer.signum(n % W - t % W), sy = Integer.signum(n / W - t / W);
-                if (city.junctionIdAt((n % W + 0.5f) * City.T, (n / W + 0.5f) * City.T) < 0) {
-                    float o2 = city.laneOffset(bx, by, sx, sy, laneOf(v));
-                    gx = bx * City.T + City.T / 2f - sy * o2;
-                    gy = by * City.T + City.T / 2f + sx * o2;
-                    break;
-                }
-                t = n;
-            }
-        }
-        // (10.42) The line it's about to drive, and (driving normally) steering for a point on along it, further
-        // ahead the faster it's going: smooth through the bends and round the corners of a junction, instead of
-        // aiming tile to tile.
-        buildCorridor(v);
-        // (10.42) Driving the lane where the route's tiles lie across the road from it (a wide road, or a U-turn):
-        // reaching the line's point for the next tile or two counts as reaching those tiles.
-        if (v.corN > corPi + 1 && !crossing) {
-            for (int j = Math.min(v.corN - 1, corPi + 3); j > corPi; j--)
-                if (World.hypot(v.cor[j * 2] - v.x, v.cor[j * 2 + 1] - v.y) < City.T * 0.55f) {
-                    v.pathT = corTiles[j];
-                    int c2 = v.field.get(v.pathT);
-                    if (c2 < v.lastDist - 1) {
-                        v.lastDist = c2;
-                        v.stuckTimer = 0;
-                        v.spin = 0;
-                    }
-                    break;
-                }
-        }
-        if (v.careful <= 0 && v.passing <= 0 && !v.pulled && v.yieldT <= 0 && v.corN >= 3 && !crossing
-                && Math.abs(bx - tx) + Math.abs(by - ty) == 1) {
-            float[] p = pursuitPoint(v, 13 + Math.abs(v.speed) * 0.3f);
-            if (p != null) {
-                // (The line is planned afresh every moment, and can shift a little as it goes: ease the aim over.)
-                if (v.aiming && World.hypot(p[0] - v.aimX, p[1] - v.aimY) < City.T * 2) {
-                    float k = Math.min(1, dt * 6);
-                    v.aimX += (p[0] - v.aimX) * k;
-                    v.aimY += (p[1] - v.aimY) * k;
-                } else {
-                    v.aimX = p[0];
-                    v.aimY = p[1];
-                }
-                v.aiming = true;
-                gx = v.aimX;
-                gy = v.aimY;
-            } else v.aiming = false;
-        } else v.aiming = false;
-        float want = (float) Math.atan2(gy - v.y, gx - v.x);
-        float diff = want - v.angle;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        // Wheels only turn the car while it's moving.
-        // (Standing still, or as good as - held at a junction or in a jam - it doesn't turn on the spot.)
-        float steer = Math.abs(v.speed) < 1.5f ? 0 : dt * 5 * Math.min(1, 0.05f + Math.abs(v.speed) / 18f);
-        // (10.42) Following its line: ease the wheel round, rather than snapping onto every last fraction of a degree.
-        float turned = Math.max(-steer, Math.min(steer, v.aiming ? diff * Math.min(1, dt * 9) : diff));
-        v.angle += turned;
-        // A full circle and more without getting any nearer: it's missed its turn and is orbiting.
-        // (10.49) Not on a slip road, though: one that loops round under the highway isn't a car going in circles.
-        // ((20.0) A slip road's loop is allowed for, not ignored: a car that had overshot its turn at speed could go round
-        // and round one for good.)
-        boolean slip = city.onSlip(v.x, v.y);
-        v.spin += turned;
-        if (Math.abs(v.spin) > (slip ? 11f : 7.5f) && v.player == null) {
-            v.spin = 0;
-            // ((19.6) Round again while still flagged from the last time - a driver whose errand doesn't act on it,
-            // such as one on a call: longer at the careful crawl, which makes even a tight turn.)
-            v.careful = v.orbited ? 12 : 4;
-            v.orbited = true;
-            int own = city.tileIndex(v.x, v.y);
-            if (v.field.get(own) < City.FAR) v.pathT = own;
-        }
-        float target = max * throttle * (0.35f + 0.65f * Math.max(0, (float) Math.cos(diff)));
-        // ((20.0) Pointing well away from where it's going - a U-turn, a junction taken too fast: down to a crawl that
-        // turns inside a lane's width. A quick motorcycle used to swing wide, miss, and go round again.)
-        if (Math.abs(diff) > 1.1f && v.player == null) target = Math.min(target, 16);
-        // A badly damaged car limps along.
-        if (v.hp < v.maxHp * 0.3f) target *= 0.6f;
-        // Brake harder than you accelerate.
-        v.speed += (target - v.speed) * Math.min(1, dt * (target < v.speed ? 5f : 3.2f));
-        v.x += (float) Math.cos(v.angle) * v.speed * dt;
-        v.y += (float) Math.sin(v.angle) * v.speed * dt;
-        if (cur < v.lastDist - 1) {
-            v.lastDist = cur;
-            v.stuckTimer = 0;
-            v.spin = 0;
-        }
-        return true;
-    }
-
-    /**
-     * Traffic: drives around, brakes for people and other cars, ploughs through zombies, stops for people
-     * waving it down, and gets abandoned when the driver is surrounded.
-     */
-    private boolean updateTraffic(Vehicle v, float dt) {
-        if (v.parked) return false;
-        if (fuel(v, dt)) return false;
-        if (v.pulled) {
-            // (Waiting for the officer: not stuck, not a jam.)
-            v.stuckTimer = 0;
-            if (w.alert > 0) v.pulled = false;
-        }
-        giveWay(v, dt);
-        boolean zombiesClose = w.countZombiesNear(v.x, v.y, 30) >= 2;
-        v.waitTimer -= dt;
-        v.hailCd -= dt;
-        // Someone is waving: pick them up if there's room.
-        if (v.hailCd <= 0 && v.riders.size() < SEATS && !zombiesClose) {
-            v.hailCd = 0.5f;
-            if (w.hail(v)) v.waitTimer = 4;
-        }
-        v.timer += dt;
-        // Everyone knows: drop the errand and get out of town.
-        v.fleeCd -= dt;
-        // (Not through traffic, already on its way out, nor anyone on the highway: no turning round on it.)
-        if (w.alert >= 2 && !v.fleeing && !v.through && !v.rescue && v.player == null && v.fleeCd <= 0
-                && !city.onHighway(v.x, v.y)) {
-            v.fleeCd = 4 + w.rnd.nextFloat() * 3;
-            if (v.model == M_BUS) {
-                // Buses never leave town with people aboard: with a safe zone open the bus takes its passengers
-                // there; otherwise the service stops, and the driver pulls in and lets everyone off.
-                if (!v.riders.isEmpty()) boarded(v, v.riders.remove(v.riders.size() - 1));
-                if (!v.rescue) {
-                    dropRiders(v, false);
-                    v.parked = true;
-                    v.speed = 0;
-                    v.field = null;
-                    pullOver(v);
-                    getOut(v, false);
-                    return false;
-                }
-            } else {
-                float[] exit = exitNear(v.x, v.y);
-                if (exit != null && route(v, exit[0], exit[1])) v.fleeing = true;
-            }
-        }
-        float limit = junctionRule(v, dt);
-        boolean person = w.personAhead(v.x, v.y, v.angle) || trainComing(v);
-        if ((person && v.timer < 2.5f) || (v.waitTimer > 0 && !zombiesClose) || trainComing(v)) {
-            // Brake for pedestrians (then creep through, nudging them aside) or wait for someone to get in.
-            if (v.speed > 45 && person) w.skid(v.x, v.y, v.angle, 6);
-            v.speed = Math.max(0, v.speed - dt * 200);
-            if (!person) v.timer = 0;
-        } else {
-            if (!person) v.timer = 0;
-            v.stuckTimer += dt;
-            boolean queue = carAhead(v);
-            float throttle = queue && v.stuckTimer < 3 ? 0.15f : 1f;
-            // Waiting at a red light, a stop sign or behind a queue isn't being stuck.
-            if ((v.held || queue) && !gridlocked(v)) v.stuckTimer = Math.min(v.stuckTimer, 1);
-            // (On the highway: highway speeds.)
-            // (10.49) A slip road on or off the highway at nearly highway speed, not a town crawl.
-            float cruise = city.onHighway(v.x, v.y) ? 115 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 100 : v.fleeing ? 90 : 70;
-            boolean going = driveStep(v, dt, Math.min(limit, zombiesClose ? 60 : cruise), throttle);
-            // A panicking driver who's gone round in a circle gives up on that way out and goes somewhere else.
-            if (v.orbited) {
-                v.orbited = false;
-                if (v.fleeing) {
-                    v.fleeing = false;
-                    v.fleeCd = 20;
-                    if (!newDestination(v)) v.stuckTimer = Math.max(v.stuckTimer, 5);
-                } else if (!v.through && v.riders.isEmpty() && v.evacStop < 0) {
-                    // ((11.5) And anyone else just driving about: somewhere else.)
-                    v.destCd = 0;
-                    newDestination(v);
-                }
-            }
-            if (!going) {
-                arrive(v);
-                // Out of town (where nobody sees it go, or off the edge of the map): gone. (Waiting at the edge
-                // in sight, they used to block the way out for everyone behind.)
-                float edge = 3 * City.T;
-                boolean atEdge = v.x < edge || v.y < edge || v.x > city.worldW() - edge || v.y > city.worldH() - edge;
-                if ((v.fleeing || v.through) && (!inView(v.x, v.y) || atEdge)) {
-                    dropRiders(v, false);
-                    return true;
-                }
-                if (v.fleeing || v.through) {
-                    // (At the edge of town, in sight: pull in and wait.)
-                    dropRiders(v, false);
-                    v.parked = true;
-                    v.speed = 0;
-                    v.field = null;
-                    pullOver(v);
-                    return false;
-                }
-                // (Nowhere yet: wait a moment and look again before giving up.)
-                if (!newDestination(v)) v.stuckTimer = Math.max(v.stuckTimer, 5);
-            } else {
-                hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-                if (v.broken) return false;
-            }
-        }
-        if (v.stuckTimer > 8 && !zombiesClose && v.destCd <= 0) {
-            v.stuckTimer = 0;
-            if (!newDestination(v)) {
-                if (!inView(v.x, v.y)) {
-                    dropRiders(v, false);
-                    return true;
-                }
-                // Nowhere to go: pull in and park (it's towed later, out of sight).
-                dropRiders(v, false);
-                v.parked = true;
-                v.speed = 0;
-                v.field = null;
-                pullOver(v);
-            }
-        }
-        // Surrounded: the driver gets out and runs.
-        if (zombiesClose && v.speed < 12) {
-            v.parked = true;
-            v.state = ABANDONED;
-            v.speed = 0;
-            v.field = null;
-            pullOver(v);
-            getOut(v, true);
-            dropRiders(v, true);
-        }
-        return false;
-    }
-
-    // ------------------------------------------------------------------ the player driving
-
-    /** The player gets behind the wheel (anyone else in it stays aboard). */
-    void takeWheel(Vehicle v, Entity e) {
-        v.player = e;
-        v.parked = false;
-        v.pulling = false;
-        v.rescue = false;
-        // ((14.7) A helicopter: lifting off from its pad, yours to fly.)
-        v.state = v.type == HELI ? HOVER : DRIVE;
-        v.field = null;
-        v.alarm = 0;
-        e.ride = v;
-        v.riders.add(e);
-        w.emit(Sfx.ENGINE, v.x, v.y);
-    }
-
-    /** The player gets out; the car stays where it is, and anyone riding with them gets out too. */
-    void leaveWheel(Vehicle v, Entity e) {
-        v.player = null;
-        v.speed = 0;
-        if (v.type == HELI) {
-            // ((14.7) Down the rope where you are; it flies itself back to its pad.)
-            v.state = FLY_OUT;
-            v.homeX = v.baseX;
-            v.homeY = v.baseY;
-        } else {
-            v.parked = true;
-            v.state = ABANDONED;
-        }
-        v.riders.remove(e);
-        float sx = v.x + (float) Math.cos(v.angle + 1.57f) * 10, sy = v.y + (float) Math.sin(v.angle + 1.57f) * 10;
-        float[] p = city.findWalkable(sx, sy);
-        if (p == null) p = new float[]{v.x, v.y};
-        e.x = p[0];
-        e.y = p[1];
-        e.vx = e.vy = 0;
-        e.dead = false;
-        e.removed = false;
-        e.ride = null;
-        w.entities.add(e);
-        for (int i = 0; i < v.riders.size(); i++) w.release(v.riders.get(i), sx, sy);
-        v.riders.clear();
-    }
-
-    /**
-     * (14.7) Flying a helicopter: it lifts off, then goes wherever the stick points (over anything: it's in the air),
-     * nose first, and hovers when you let go. The door gunner fires at the dead below - faster with the button held.
-     */
-    private boolean playerHeli(Vehicle v, float dt) {
-        Entity e = v.player;
-        v.alt += (0.8f - v.alt) * Math.min(1, dt * 0.8f);
-        float jx = w.joyX, jy = w.joyY, mag = Math.min(1, (float) Math.sqrt(jx * jx + jy * jy));
-        float gx = v.x, gy = v.y, speed = 0, face = v.angle;
-        if (v.alt > 0.4f && mag > 0.15f) {
-            face = (float) Math.atan2(jy, jx);
-            gx = v.x + jx / mag * 220;
-            gy = v.y + jy / mag * 220;
-            speed = 135 * mag;
-        }
-        gx = Math.max(10, Math.min(city.worldW() - 10, gx));
-        gy = Math.max(10, Math.min(city.worldH() - 10, gy));
-        flyTo(v, gx, gy, Math.max(speed, 1), face, dt);
-        v.x = Math.max(5, Math.min(city.worldW() - 5, v.x));
-        v.y = Math.max(5, Math.min(city.worldH() - 5, v.y));
-        e.x = v.x;
-        e.y = v.y;
-        if (v.soundCd <= 0) {
-            v.soundCd = 0.6f;
-            w.emit(Sfx.ROTOR, v.x, v.y);
-        }
-        v.gunCd -= dt;
-        if (v.alt > 0.4f && v.gunCd <= 0) {
-            Entity z = w.nearestZombie(v.x, v.y, 210);
-            if (z != null) {
-                v.burst++;
-                v.gunCd = w.ctrlAttack ? (v.burst % 10 == 0 ? 0.6f : 0.08f) : (v.burst % 6 == 0 ? 1.4f : 0.13f);
-                w.airShot(v.x, v.y, z);
-            } else v.gunCd = 0.4f;
-        }
-        return false;
-    }
-
-    /** Driving: the stick says where to go (pull back to reverse); the button sounds the horn, or fires the cannon. */
-    private boolean updatePlayerVehicle(Vehicle v, float dt) {
-        Entity e = v.player;
-        if (v.type == HELI && !v.broken) return playerHeli(v, dt);
-        if (v.broken) {
-            // Wrecked: out you get.
-            if (v.riders.contains(e)) leaveWheel(v, e);
-            else v.player = null;
-            return false;
-        }
-        float jx = w.joyX, jy = w.joyY, mag = Math.min(1, (float) Math.sqrt(jx * jx + jy * jy));
-        float max = v.type == TANK ? 45 : v.type == CAR || v.type == CRUISER ? 125 : 95;
-        float target = 0;
-        if (mag > 0.15f) {
-            float want = (float) Math.atan2(jy, jx);
-            float diff = want - v.angle;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            float grip = Math.min(1, Math.abs(v.speed) / 30 + 0.35f) * (v.type == TANK ? 1.4f : 2.6f);
-            if (Math.abs(diff) > 2.4f) {
-                // Stick pulled back: reverse, steering the tail round.
-                float rd = diff > 0 ? diff - (float) Math.PI : diff + (float) Math.PI;
-                v.angle -= Math.max(-dt * grip, Math.min(dt * grip, rd));
-                target = -max * 0.35f * mag;
-            } else {
-                v.angle += Math.max(-dt * grip, Math.min(dt * grip, diff));
-                target = max * mag * (0.35f + 0.65f * Math.max(0, (float) Math.cos(diff)));
-            }
-        }
-        if (v.hp < v.maxHp * 0.3f) target *= 0.6f;
-        v.speed += (target - v.speed) * Math.min(1, dt * (Math.abs(target) < Math.abs(v.speed) ? 2.5f : 1.4f));
-        float nx = v.x + (float) Math.cos(v.angle) * v.speed * dt, ny = v.y + (float) Math.sin(v.angle) * v.speed * dt;
-        float r = v.type == TANK ? 8 : 5.5f;
-        // (A car pulled over against the kerb may start out touching something: let it drive away.)
-        // ((10.34) On a bridge it's over the highway's barrier, not up against it.)
-        if (!city.circleBlocked(v.x, v.y, r) && city.circleBlocked(nx, ny, r) && !(onBridge(v) && city.overpassAt(nx, ny) >= 0)) {
-            if (Math.abs(v.speed) > 35 && v.crashCd <= 0) {
-                v.crashCd = 0.5f;
-                damage(v, Math.abs(v.speed) * (v.type == TANK ? 0.03f : 0.25f), false);
-                w.emit(Sfx.CRASH, v.x, v.y);
-                w.shake = Math.max(w.shake, 0.4f);
-            }
-            v.speed *= -0.25f;
-        } else {
-            v.x = nx;
-            v.y = ny;
-        }
-        if (Math.abs(v.speed) > 8) w.runOver(v.x, v.y, v.length() * 0.5f + 2, Math.abs(v.speed), v.angle);
-        e.x = v.x;
-        e.y = v.y;
-        if (v.soundCd <= 0 && Math.abs(v.speed) > 20) {
-            v.soundCd = 1.2f;
-            w.emit(Sfx.ENGINE, v.x, v.y);
-        }
-        v.cannonCd -= dt;
-        if (w.ctrlAttack) {
-            if (v.type == TANK) {
-                Entity z = w.nearestVisibleZombie(v.x, v.y, 260);
-                if (z != null) {
-                    v.turret = turnTo(v.turret, (float) Math.atan2(z.y - v.y, z.x - v.x), dt * 2.5f);
-                    if (v.cannonCd <= 0) {
-                        v.cannonCd = 2.5f;
-                        w.tankShell(v.x + (float) Math.cos(v.turret) * 14, v.y + (float) Math.sin(v.turret) * 14, z.x, z.y);
-                    }
-                }
-            } else if (v.soundCd <= 0.6f) {
-                // The horn: every zombie for streets around comes to see.
-                v.soundCd = 1.2f;
-                w.emit(v.type == CRUISER ? Sfx.SIREN : Sfx.HORN, v.x, v.y);
-                w.noise(v.x, v.y, 260);
-            }
-        }
-        return false;
-    }
-
-    /** Called by World when someone climbs in. */
-    void boarded(Vehicle v, Entity e) {
-        v.riders.add(e);
-        if (v.rescue || v.type != CAR) return;
-        // Take them to a safe zone with room if there is one.
-        Dispatch.SafeZone best = null;
-        float bd = Float.MAX_VALUE;
-        for (int i = 0; i < w.dispatch.zones.size(); i++) {
-            Dispatch.SafeZone z = w.dispatch.zones.get(i);
-            if (z.full) continue;
-            float d = (z.x - v.x) * (z.x - v.x) + (z.y - v.y) * (z.y - v.y);
-            if (d < bd) {
-                bd = d;
-                best = z;
-            }
-        }
-        if (best != null && route(v, best.x, best.y)) {
-            v.rescue = true;
-            v.zone = best;
-        }
-    }
-
-    /**
-     * A crowd of the dead on the road ahead (up to about 160 units out) or already round the car: police
-     * and troops stop short there and go in on foot, rather than driving into the middle of them.
-     */
-    /**
-     * (10.45) Officers or soldiers on their way to a call keep an eye out: one of the dead in sight close by (and
-     * not part of the call they're going to) and they stop, radio it in and take it on there. The call there,
-     * or null. Only with people aboard to get out, and not on a car that's just set off from the scene.
-     */
-    private Dispatch.Incident spotOnTheWay(Vehicle v, float dt) {
-        v.reconCd -= dt;
-        if (v.spotCd > 0) return null;
-        v.spotCd = 0.6f;
-        // ((16.9) A police car or van with only its driver aboard is no different: the driver pulls up and takes them on.
-        // It used to drive straight past, as if there was nobody in it to get out.)
-        boolean lone = v.crew.isEmpty() && v.driver != null && (v.type == CRUISER || policeTruck(v)) && v.state == DRIVE;
-        if ((v.crew.isEmpty() && !lone) || v.player != null || (v.type != CRUISER && v.type != TRUCK)) return null;
-        Entity z = w.nearestZombie(v.x, v.y, 105);
-        if (z == null || !city.los(v.x, v.y, z.x, z.y)) return null;
-        Dispatch.Incident inc = v.incident;
-        if (inc != null && World.hypot(z.x - inc.x, z.y - inc.y) < 240) return null;
-        Entity who = lone ? v.driver : v.crew.get(0);
-        // (Out of rounds: nothing to fight with, so they drive on.)
-        boolean armed = false;
-        if (lone) armed = who.ammo + who.reserve > 0;
-        for (Entity e : v.crew) if (e.ammo + e.reserve > 0) armed = true;
-        if (!armed) return null;
-        Dispatch.Incident seen = w.dispatch.sighting(z.x, z.y, who);
-        if (seen != null && lone) {
-            // (The driver becomes the car's crew, and gets out with it like any crew.)
-            Entity d = v.driver;
-            v.driver = null;
-            v.realDriver = false;
-            d.rig = v; note(d);
-            d.dead = true;
-            d.removed = true;
-            v.crew.add(d);
-        }
-        return seen;
-    }
-
-    private boolean hordeAhead(Vehicle v) {
-        if (!w.zombieWithin(v.x, v.y, 200)) return false;
-        float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
-        for (float d = 45; d <= 125; d += 40)
-            if (w.countZombiesNear(v.x + ca * d, v.y + sa * d, 50) >= 4) return true;
-        return w.countZombiesNear(v.x, v.y, 45) >= 3;
-    }
-
-    /** At the end of a trip the riders get out (at the safe zone, if that's where they were going). */
-    private void arrive(Vehicle v) {
-        if (v.riders.isEmpty()) return;
-        boolean zone = v.rescue && v.zone != null && !v.zone.removed;
-        if (zone)
-            w.dispatch.say(Dispatch.WHO_INFO, null, "A driver dropped " + v.riders.size()
-                    + (v.riders.size() == 1 ? " person" : " people") + " at the " + v.zone.place + " safe zone.", v.x, v.y);
-        for (int i = 0; i < v.riders.size(); i++) {
-            Entity e = v.riders.get(i);
-            if (!w.release(e, v.x + (float) Math.cos(v.angle + 1.57f) * 9, v.y + (float) Math.sin(v.angle + 1.57f) * 9))
-                continue;
-            if (zone) e.task = Dispatch.T_SEEK;
-        }
-        v.riders.clear();
-        v.rescue = false;
-        v.zone = null;
-    }
-
-    private void dropRiders(Vehicle v, boolean panic) {
-        // (10.48) People fleeing the city who've got to the edge of the map (or out of sight on the way): gone.
-        float edge = 6 * City.T;
-        if (v.exodus && !panic && (!inView(v.x, v.y) || v.x < edge || v.y < edge || v.x > city.worldW() - edge || v.y > city.worldH() - edge)) {
-            w.droveOut(v.riders);
-            return;
-        }
-        for (int i = 0; i < v.riders.size(); i++) {
-            Entity e = v.riders.get(i);
-            float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
-            if (!w.release(e, v.x + (float) Math.cos(a) * 9, v.y + (float) Math.sin(a) * 9)) continue;
-            if (panic) {
-                e.fleeTimer = 3;
-                e.threatX = v.x;
-                e.threatY = v.y;
-            }
-        }
-        v.riders.clear();
-        v.rescue = false;
-    }
-
-    /**
-     * ((26.0) The dead have a window in: one of those aboard - a rider (never you), one of the crew, one of the squad
-     * it's carrying, the driver - is dragged out at (x, y). Who it was, or null if there was nobody they could reach.
-     */
-    Entity dragOut(Vehicle v, float x, float y) {
-        for (int i = v.riders.size() - 1; i >= 0; i--) {
-            Entity e = v.riders.get(i);
-            if (e == v.player || e == w.controlled) continue;
-            if (!w.release(e, x, y)) return null;
-            v.riders.remove(i);
-            return e;
-        }
-        if (!v.crew.isEmpty()) {
-            Entity e = v.crew.get(v.crew.size() - 1);
-            if (!w.release(e, x, y)) return null;
-            v.crew.remove(v.crew.size() - 1);
-            // (Still its crew, on foot.)
-            e.rig = v;
-            note(e);
-            e.taskTimer = 0;
-            return e;
-        }
-        if (v.passengers > 0 && (v.type == CRUISER || v.type == TRUCK)) {
-            Entity e = w.spawn(v.passengerType, x, y);
-            if (e == null) return null;
-            v.passengers--;
-            if (v.swat || v.kind == K_BEARCAT) w.applyRole(e, Entity.ROLE_SWAT);
-            else if (v.guardUnit) w.applyRole(e, Entity.ROLE_GUARD);
-            else if (v.passengerType == Entity.COP && v.agency > 0) w.makeAgency(e, v.agency);
-            v.squad.add(e);
-            return e;
-        }
-        if (v.driver != null && (v.type == CRUISER || v.type == TRUCK)) {
-            Entity d = v.driver, e = d;
-            if (v.realDriver) {
-                if (!w.release(d, x, y)) return null;
-                v.realDriver = false;
-                d.rig = null;
-            } else {
-                if (w.city.cfg.mission >= 0) return null;
-                e = w.spawn(d.type, x, y);
-                if (e == null) return null;
-                e.nameSeed = d.nameSeed;
-                if (d.agency > 0) w.makeAgency(e, d.agency);
-                if (d.role == Entity.ROLE_GUARD) w.applyRole(e, Entity.ROLE_GUARD);
-            }
-            // (Left where it is with nobody in it, for someone to take back later: see reclaim.)
-            v.driver = null;
-            v.parked = true;
-            v.state = ABANDONED;
-            v.speed = 0;
-            v.field = null;
-            return e;
-        }
-        // The driver of an everyday car, stopped in traffic: the car's left where it is.
-        if (v.type == CAR && !v.parked && v.state == CRUISE && v.model != M_BUS) {
-            Entity e = w.spawn(Entity.CIVILIAN, x, y);
-            if (e == null) return null;
-            v.parked = true;
-            v.state = ABANDONED;
-            v.speed = 0;
-            v.field = null;
-            pullOver(v);
-            return e;
-        }
-        return null;
-    }
-
-    private void getOut(Vehicle v, boolean panic) {
-        Entity driver = w.spawn(Entity.CIVILIAN, v.x + (float) Math.cos(v.angle + 1.57f) * 9,
-                v.y + (float) Math.sin(v.angle + 1.57f) * 9);
-        if (driver != null && panic) {
-            driver.fleeTimer = 3;
-            driver.threatX = v.x;
-            driver.threatY = v.y;
-        }
-    }
-
-    private void unload(Vehicle v, boolean announce) {
-        w.arriving = v.reinforcement || v.guardUnit;
-        try {
-            unloadAll(v, announce);
-        } finally {
-            w.arriving = false;
-        }
-    }
-
-    private void unloadAll(Vehicle v, boolean announce) {
-        Entity first = null;
-        for (int i = 0; i < v.passengers; i++) {
-            Entity e = w.spawn(v.passengerType, v.x + (float) Math.cos(v.angle + 1.57f) * (8 + i * 3),
-                    v.y + (float) Math.sin(v.angle + 1.57f) * (8 + i * 3));
-            if (e == null) continue;
-            if (first == null) first = e;
-            v.squad.add(e);
-            if (v.guardUnit) w.applyRole(e, Entity.ROLE_GUARD);
-            if (v.kind == K_RIOT_VAN) w.applyRole(e, Entity.ROLE_RIOT);
-            if (v.kind == K_BEARCAT) w.applyRole(e, Entity.ROLE_SWAT);
-            if (v.type == BOAT) w.applyRole(e, Entity.ROLE_MARINE);
-            // (Each SWAT team has a marksman with it.)
-            if (v.swat) w.applyRole(e, i == v.passengers - 1 && city.cfg.nature() ? Entity.ROLE_MARKSMAN : Entity.ROLE_SWAT);
-            else if (v.passengerType == Entity.SOLDIER && !v.guardUnit && v.type != BOAT && city.cfg.nature()) w.kitOut(e);
-            else if (v.passengerType == Entity.COP && v.agency > 0) w.makeAgency(e, v.agency);
-            if (v.reinforcement) {
-                if (!v.guardUnit && !v.restock) e.outsider = true;
-                w.reinforce(e);
-                w.dispatch.convoyUnloaded(v, e);
-            }
-            if (v.incident != null && !v.incident.resolved) {
-                e.task = Dispatch.T_RESPOND;
-                e.incident = v.incident;
-            } else if (v.zone != null && !v.zone.removed) {
-                e.task = Dispatch.T_GUARD;
-                e.zone = v.zone;
-            }
-        }
-        if (first == null) return;
-        int who = v.passengerType == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE;
-        if (announce && v.place != null)
-            w.dispatch.chatter(who, first, "On the ground at " + v.place + ". Moving in.", v.x, v.y);
-        else if (!announce)
-            w.dispatch.say(who, first, (v.type == TRUCK ? "Our truck is wrecked" : "Our car is wrecked")
-                    + " on " + city.placeName(v.x, v.y) + ". Continuing on foot.", v.x, v.y);
-    }
-
-    // ------------------------------------------------------------------ fire engines
-
-    // ------------------------------------------------------------------ crews
-
-    /** Someone climbs aboard (out of the world until they get out again). */
-    void board(Vehicle v, Entity e) {
-        e.task = Dispatch.T_NONE;
-        e.rig = v; note(e);
-        e.dead = true;
-        e.removed = true;
-        e.vx = e.vy = 0;
-        v.crew.add(e);
-    }
-
-    /** Everyone aboard gets out beside it. They stay its crew (unless it's home: then they're off duty). */
-    /**
-     * (12.0) Takes a vehicle off the map for good (a wreck towed away, one you undo): whoever was still in it gets
-     * out first, and anything still tied to it knows it's gone.
-     */
-    void discard(Vehicle v) {
-        if (!v.crew.isEmpty()) crewOut(v, true);
-        if (v.driver != null && v.realDriver) driverOut(v, false);
-        v.driver = null;
-        v.removedFromFleet = true;
-        vehicles.remove(v);
-    }
-
-    void crewOut(Vehicle v, boolean offDuty) {
-        for (int i = 0; i < v.crew.size(); i++) {
-            Entity e = v.crew.get(i);
-            float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
-            if (!w.release(e, v.x + (float) Math.cos(a) * (10 + i * 3), v.y + (float) Math.sin(a) * (10 + i * 3))) continue;
-            e.rig = offDuty ? null : v;
-            if (!offDuty) note(e);
-            e.taskTimer = 0;
-        }
-        v.crew.clear();
-    }
-
-    private float reclaimTimer, fetchSaidAt, busTimer, driverTimer;
-
-    /**
-     * (11.3) Every police car, army truck and ambulance on the road has someone driving it: one with nobody
-     * aboard gets its driver (an officer, a soldier or a paramedic), who stays with it until it's parked at
-     * home again.
-     */
-    private void drivers() {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type != CRUISER && v.type != TRUCK && v.type != AMBULANCE) continue;
-            if (v.removedFromFleet) {
-                if (v.driver != null && v.realDriver) driverOut(v, false);
-                v.driver = null;
-                continue;
-            }
-            if (v.broken) {
-                if (v.driver != null) driverOut(v, true);
-                continue;
-            }
-            boolean home = v.parked || v.standby || v.state == ABANDONED || v.player != null;
-            if (home) {
-                // ((11.7) One of the station's own goes back inside; a driver from outside goes with the vehicle.)
-                if (v.driver != null && v.realDriver) {
-                    float a = v.angle - 1.57f;
-                    w.release(v.driver, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);
-                    v.driver.rig = null;
-                }
-                v.driver = null;
-                v.realDriver = false;
-                continue;
-            }
-            // ((11.7) Waiting at the station for its crew to climb in: whoever gets in first drives.)
-            // ((26.0) Nor the command post set up at the scene: nobody needs to sit at its wheel.)
-            // ((26.1) Nor one parked in the yard at home.)
-            if (v.state == MUSTER || (isPost(v) && (v.state == SCENE || v.state == WAIT))) continue;
-            // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
-            if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
-            if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
-                int type = v.type == AMBULANCE ? Entity.CIVILIAN : v.type == CRUISER || policeTruck(v) ? Entity.COP : Entity.SOLDIER;
-                // ((12.0) A driver from outside isn't on the city's roll: they used to take a callsign or a place in a
-                // squad, so the officers and squads after them were numbered with gaps and squads came up short.)
-                int cops = w.dispatch.copCount, soldiers = w.dispatch.soldierCount;
-                Entity d = w.create(type, v.x, v.y);
-                w.dispatch.copCount = cops;
-                w.dispatch.soldierCount = soldiers;
-                if (type == Entity.COP && v.agency > 0) w.makeAgency(d, v.agency);
-                if (v.guardUnit) w.applyRole(d, Entity.ROLE_GUARD);
-                d.rig = v; note(d);
-                v.driver = d;
-            }
-        }
-    }
-
-    /** (11.3) The driver of a wrecked vehicle gets out and carries on on foot. */
-    /** The driver gets out: shaken and hurt if it's been wrecked. */
-    private void driverOut(Vehicle v, boolean hurt) {
-        Entity d = v.driver;
-        v.driver = null;
-        float a = v.angle - 1.57f;
-        if (v.realDriver) {
-            v.realDriver = false;
-            d.rig = null;
-            // ((12.0) Only hurt in a wreck: one just getting out at the end of the trip lost a third of their health.)
-            if (w.release(d, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10) && hurt) d.hp *= 0.7f;
-            return;
-        }
-        // ((18.0) In a mission a driver nobody sent doesn't climb out as one more officer or soldier.)
-        if (w.city.cfg.mission >= 0) return;
-        Entity e = w.spawn(d.type, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);
-        if (e == null) return;
-        e.nameSeed = d.nameSeed;
-        if (d.agency > 0) w.makeAgency(e, d.agency);
-        if (d.role == Entity.ROLE_GUARD) w.applyRole(e, Entity.ROLE_GUARD);
-        e.hp *= 0.7f;
-    }
-
-    /**
-     * (10.48) A police car or army truck left with nobody to drive it - its crew dead, or gone off elsewhere -
-     * is taken over by an officer (or soldier) standing about near it with nothing to do, who picks up the others
-     * nearby on foot as well: a patrol car goes back on patrol with them, anything else takes them back to the
-     * station or base (from where they're sent out again).
-     */
-    private void reclaim() {
-        // (How long each has been standing about.)
-        for (int k = 0, n = w.entities.size(); k < n; k++) {
-            Entity e = w.entities.get(k);
-            if (e.type != Entity.COP && e.type != Entity.SOLDIER) continue;
-            if (strandedUnit(e, e.type)) e.strandedFor += 3;
-            else if (e.strandedFor > 0) e.strandedFor = 0;
-        }
-        fetchStranded();
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle v = vehicles.get(i);
-            if ((v.type != CRUISER && v.type != TRUCK) || v.broken || v.burnt || v.player != null || v.standby || v.removedFromFleet
-                    || !v.crew.isEmpty() || v.block != null || v.zone != null || v.loop || v.shelter || v.leaving || v.state == PICKUP || v.state == MUSTER) continue;
-            if (!v.parked && v.state != ABANDONED) continue;
-            v.reclaimCd -= 3;
-            if (v.reclaimCd > 0 || crewOnFoot(v) > 0 || w.countZombiesNear(v.x, v.y, 120) > 0) continue;
-            int type = v.type == CRUISER ? Entity.COP : Entity.SOLDIER;
-            // ((11.3) A patrol car can be taken by officers on the beat: they carry on patrolling in it. Not
-            // otherwise - that would only take them back to the station.)
-            boolean beat = v.type == CRUISER && v.patrol;
-            // Someone free close by...
-            Entity first = null;
-            float bd = 350;
-            for (int k = 0, n = w.entities.size(); k < n; k++) {
-                Entity e = w.entities.get(k);
-                if (!(beat ? freeUnit(e, type) : strandedUnit(e, type))) continue;
-                float d = (float) World.hypot(e.x - v.x, e.y - v.y);
-                if (d < bd) {
-                    bd = d;
-                    first = e;
-                }
-            }
-            if (first == null) continue;
-            // ... and the others free nearby, as many as it holds.
-            int seats = v.type == CRUISER ? SEATS : 10;
-            ArrayList<Entity> group = new ArrayList<Entity>();
-            group.add(first);
-            for (int k = 0, n = w.entities.size(); k < n && group.size() < seats; k++) {
-                Entity e = w.entities.get(k);
-                if (e != first && (beat ? freeUnit(e, type) : strandedUnit(e, type)) && World.hypot(e.x - v.x, e.y - v.y) < 600) group.add(e);
-            }
-            v.reclaimCd = 30;
-            v.wasPatrol = v.patrol;
-            v.patrol = false;
-            v.parked = false;
-            v.state = PICKUP;
-            v.pickup = true;
-            v.timer = 0;
-            v.speed = 0;
-            v.incident = null;
-            v.squad.clear();
-            v.squad.addAll(group);
-            v.passengerType = type;
-            for (Entity e : group) {
-                e.rig = v; note(e);
-                e.task = Dispatch.T_BOARD;
-            }
-            w.dispatch.chatter(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, first, (v.type == CRUISER ? "Taking this car" : "Taking this truck")
-                    + " on " + city.placeName(v.x, v.y) + (group.size() > 1 ? ", picking up " + (group.size() - 1) + " more." : "."), v.x, v.y);
-        }
-    }
-
-    /**
-     * (10.48) Officers or soldiers left on foot with nothing to do, a long way from their station or base and no
-     * empty car or truck near them: one parked there drives out to fetch them.
-     */
-    private void fetchStranded() {
-        for (int t = 0; t < 2; t++) {
-            int type = t == 0 ? Entity.COP : Entity.SOLDIER;
-            for (int k = 0, n = w.entities.size(); k < n; k++) {
-                Entity e = w.entities.get(k);
-                // ((11.0) Sooner, and from nearer the station, than before: units were left standing about for long.)
-                if (!strandedUnit(e, type) || e.strandedFor < 9 || w.countZombiesNear(e.x, e.y, 250) > 0) continue;
-                City.Facility f = city.nearestFacility(type == Entity.COP ? City.FACILITY_POLICE : City.FACILITY_BASE, e.x, e.y);
-                if (f == null || World.hypot(f.x - e.x, f.y - e.y) < 600) continue;
-                // One parked at the station or base.
-                Vehicle v = null;
-                for (int i = 0; i < vehicles.size() && v == null; i++) {
-                    Vehicle o = vehicles.get(i);
-                    if (o.standby && o.type == (type == Entity.COP ? CRUISER : TRUCK) && !o.broken && o.kind != K_BIKE
-                            && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
-                }
-                // ((11.7) None there, or nobody there to drive it: they make their own way back.)
-                if (v == null || freeDriver(f, type, null) == null) continue;
-                ArrayList<Entity> group = new ArrayList<Entity>();
-                for (int j = 0; j < n && group.size() < (v.type == CRUISER ? SEATS : 10); j++) {
-                    Entity o = w.entities.get(j);
-                    if (strandedUnit(o, type) && World.hypot(o.x - e.x, o.y - e.y) < 400) group.add(o);
-                }
-                float[] spot = city.nearestDrivable(e.x, e.y);
-                if (spot == null) continue;
-                v.parked = false;
-                v.pulling = false;
-                v.standby = false;
-                v.pickup = true;
-                if (!route(v, spot[0], spot[1])) {
-                    v.parked = true;
-                    v.standby = true;
-                    v.pickup = false;
-                    continue;
-                }
-                v.squad.clear();
-                v.squad.addAll(group);
-                v.passengerType = type;
-                v.state = DRIVE;
-                v.stuckTimer = 0;
-                v.place = city.placeName(spot[0], spot[1]);
-                seatDriver(v, freeDriver(f, type, group));
-                // (They wait for it where they are.)
-                for (Entity o : group) o.strandedFor = -90;
-                // (Not on the radio every time: one in a while is enough to know it's happening.)
-                if (w.time > fetchSaidAt) {
-                    fetchSaidAt = w.time + 25;
-                    w.dispatch.say(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, e,
-                        (v.type == TRUCK ? "Truck" : "Car") + " coming out to " + v.place + " to pick up " + (type == Entity.COP ? World.count(group.size(), "officer", "officers") : World.count(group.size(), "soldier", "soldiers")) + ".", v.x, v.y);
-                }
-                return;
-            }
-        }
-    }
-
-    /**
-     * (10.49) It's over: an evacuation bus not yet on its way out lets its people off to walk home, and goes
-     * back to being an ordinary bus. (Those already leaving go, and come home with everyone else.)
-     */
-    void exodusOver() {
-        for (int i = 0; i < vehicles.size(); i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.evacStop < 0 || v.busPhase >= 2) continue;
-            v.evacStop = -1;
-            ArrayList<Entity> out = new ArrayList<Entity>(v.riders);
-            dropRiders(v, false);
-            for (Entity e : out) if (!e.dead && e.home != null) e.task = Dispatch.T_HOMECOMING;
-            v.state = CRUISE;
-            if (!newDestination(v)) v.stuckTimer = 5;
-        }
-    }
-
-    /** Evacuation buses: one to each stop where people are waiting (when it hasn't one already). */
-    private void sendEvacBuses() {
-        if (!w.exodusOn() || !w.byTransit()) return;
-        for (int k = 0; k < w.evacStops.size(); k++) {
-            World.EvacStop st = w.evacStops.get(k);
-            if (st.bus != null && (st.bus.removedFromFleet || st.bus.broken || st.bus.evacStop != k)) st.bus = null;
-            st.busCd -= 2;
-            if (st.airport && !st.closed && st.busCd <= 0) st.bus = null;
-            if (st.bus != null || st.closed || st.busCd > 0 || w.waitingFor(k, st.x, st.y, false) < 3) continue;
-            // ((15.10) The airport: an evacuation flight.)
-            if (st.airport) {
-                // (A second flight in at once when there's a crowd waiting.)
-                int planes = 0;
-                for (Vehicle o : vehicles) if (o.type == JET && o.evacStop == k) planes++;
-                int waiting = w.waitingFor(k, st.x, st.y, false);
-                if (planes < (waiting > PLANE_SEATS * 2 ? 2 : 1) && waiting >= 8 && sendAirliner(k)) {
-                    for (Vehicle o : vehicles) if (o.type == JET && o.evacStop == k) st.bus = o;
-                    st.busCd = 20;
-                }
-                continue;
-            }
-            // ((15.9) A dock: a boat in from offshore.)
-            if (st.dock) {
-                Vehicle b = make(BOAT);
-                b.boatPath = st.route;
-                b.boatAt = 0;
-                b.x = (st.route[0] % city.w + 0.5f) * City.T;
-                b.y = (st.route[0] / city.w + 0.5f) * City.T;
-                b.evacStop = k;
-                b.busPhase = 0;
-                b.state = DRIVE;
-                vehicles.add(b);
-                st.bus = b;
-                st.busCd = 6;
-                continue;
-            }
-            // In from the edge of the map, the nearest way in to the stop.
-            float[] in = exitNear(st.bx, st.by);
-            if (in == null) continue;
-            Vehicle v = make(CAR);
-            v.model = M_BUS;
-            v.color = city.country.busColor;
-            v.x = in[0];
-            v.y = in[1];
-            v.state = CRUISE;
-            v.evacStop = k;
-            v.busPhase = 0;
-            v.angle = (float) Math.atan2(st.by - in[1], st.bx - in[0]);
-            if (!route(v, st.bx, st.by)) {
-                st.busCd = 20;
-                continue;
-            }
-            vehicles.add(v);
-            st.bus = v;
-            st.busCd = 6;
-            // ((23.0) A big crowd waiting: a convoy - a second and third bus behind the first, and a police car with them
-            // to hold the stop while they load.)
-            int waiting = w.waitingFor(k, st.x, st.y, false);
-            int extra = waiting > 80 ? 2 : waiting > 40 ? 1 : 0;
-            float ca = (float) Math.cos(v.angle), sa = (float) Math.sin(v.angle);
-            for (int j = 1; j <= extra; j++) {
-                Vehicle b = make(CAR);
-                b.model = M_BUS;
-                b.color = city.country.busColor;
-                b.x = in[0] - ca * 34 * j;
-                b.y = in[1] - sa * 34 * j;
-                b.state = CRUISE;
-                b.evacStop = k;
-                b.busPhase = 0;
-                b.angle = v.angle;
-                if (route(b, st.bx, st.by)) vehicles.add(b);
-            }
-            if (extra > 0) {
-                send(Entity.COP, 2, in[0] - ca * 34 * (extra + 1), in[1] - sa * 34 * (extra + 1), st.bx, st.by, null, null, st.place);
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Evacuation convoy of " + (extra + 1) + " buses on its way to " + st.place + ", police escort with it.", st.bx, st.by);
-            }
-        }
-    }
+    float reclaimTimer, fetchSaidAt, busTimer, driverTimer;
 
     /** How many an evacuation bus takes. */
     static final int BUS_SEATS = 36;
-
-    /** An evacuation bus: in to its stop, waits while people get on, then out of the city with them. */
-    private boolean updateEvacBus(Vehicle v, float dt) {
-        World.EvacStop st = v.evacStop < w.evacStops.size() ? w.evacStops.get(v.evacStop) : null;
-        if (v.busPhase == 0) {
-            if (st == null || st.closed) {
-                leaveWithBus(v, st);
-                return false;
-            }
-            v.stuckTimer += dt;
-            boolean going = driveStep(v, dt, 75, carAhead(v) ? 0.4f : 1f);
-            if (going) hit(v, w.runOver(v.x, v.y, 9, v.speed, v.angle));
-            // ((24.0) The route running out short of the stop isn't arriving: it opened its doors wherever it was and
-            // the people at the stop never reached it. Planned again from there, a few times.)
-            if (!going && World.hypot(st.bx - v.x, st.by - v.y) > 60 && v.jamTries < 3 && route(v, st.bx, st.by)) {
-                v.jamTries++;
-                return false;
-            }
-            if (!going || World.hypot(st.bx - v.x, st.by - v.y) < 28) {
-                v.jamTries = 0;
-                v.busPhase = 1;
-                v.timer = 0;
-                v.checkCd = 0;
-            } else if (v.stuckTimer > 14) {
-                v.stuckTimer = 0;
-                if (!route(v, st.bx, st.by)) leaveWithBus(v, st);
-            }
-            return false;
-        }
-        if (v.busPhase == 1) {
-            v.speed = Math.max(0, v.speed - dt * 200);
-            v.timer += dt;
-            v.checkCd -= dt;
-            if (v.checkCd > 0) return false;
-            v.checkCd = 0.5f;
-            if (st != null) w.boardEvac(v, v.evacStop, st.x, st.y, World.STOP_REACH + 8, BUS_SEATS - v.riders.size());
-            boolean full = v.riders.size() >= BUS_SEATS, danger = w.countZombiesNear(v.x, v.y, 60) >= 2;
-            boolean nobody = st == null || w.waitingFor(v.evacStop, st.x, st.y, true) == 0;
-            // ((13.3) Longer at the stop for those still coming.)
-            if (full || danger || (v.timer > 20 && nobody) || v.timer > 70) leaveWithBus(v, st);
-            return false;
-        }
-        // On the way out.
-        v.stuckTimer += dt;
-        boolean going = driveStep(v, dt, 85, carAhead(v) ? 0.4f : 1f);
-        if (going) hit(v, w.runOver(v.x, v.y, 9, v.speed, v.angle));
-        float edge = 4 * City.T;
-        boolean atEdge = v.x < edge || v.y < edge || v.x > city.worldW() - edge || v.y > city.worldH() - edge;
-        if (!going || atEdge) {
-            if (atEdge || !inView(v.x, v.y)) {
-                w.droveOut(v.riders);
-                return true;
-            }
-            if (!exodusReroute(v)) v.stuckTimer = Math.max(v.stuckTimer, 5);
-        }
-        if (v.stuckTimer > 12) {
-            v.stuckTimer = 0;
-            exodusReroute(v);
-        }
-        // (Stuck for good somewhere nobody's watching: it gets out of town another way.)
-        if (v.stillT > 30 && !inView(v.x, v.y)) {
-            w.droveOut(v.riders);
-            return true;
-        }
-        return false;
-    }
-
-    private void leaveWithBus(Vehicle v, World.EvacStop st) {
-        if (st != null && st.bus == v) {
-            st.bus = null;
-            st.busCd = 4;
-        }
-        v.busPhase = 2;
-        v.exodus = true;
-        v.fleeing = true;
-        v.stuckTimer = 0;
-        float[] out = exitNear(v.x, v.y);
-        if (out == null || !route(v, out[0], out[1])) exodusReroute(v);
-        if (v.riders.size() >= 8 && st != null && w.rnd.nextFloat() < 0.5f)
-            w.dispatch.say(Dispatch.WHO_INFO, null, "News: An evacuation bus has left " + st.place + " with " + v.riders.size() + " aboard.", v.x, v.y);
-    }
-
-    /** (10.48) Stuck, or gone round in a circle, on the way out of the city: another way out (the nearest that's different). */
-    private boolean exodusReroute(Vehicle v) {
-        v.destCd = 3;
-        float[] exit = exitNear(v.x + (w.rnd.nextFloat() - 0.5f) * 1600, v.y + (w.rnd.nextFloat() - 0.5f) * 1600);
-        return exit != null && route(v, exit[0], exit[1]);
-    }
-
-    /** An officer or soldier on foot with no car of their own and nothing to do. */
-    private boolean strandedUnit(Entity e, int type) {
-        return freeUnit(e, type) && !w.onDuty(e);
-    }
-
-    /** (11.3) Free to take over a car: no call to answer (an officer on the beat counts). */
-    private boolean freeUnit(Entity e, int type) {
-        // (Not the park rangers, who keep to the wilds on foot.)
-        return !e.dead && !e.removed && e.type == type && e.rig == null && e.task == Dispatch.T_NONE && !e.aiming && e != w.controlled
-                && e.leader == null && e.role != Entity.ROLE_K9 && e.agency != 3;
-    }
-
-    /** Calls the crew on foot back aboard. Returns how many are still out. */
-    int recall(Vehicle v) {
-        int out = 0;
-        ArrayList<Entity> mine = onFoot(v);
-        for (int i = 0; i < mine.size(); i++) {
-            Entity e = mine.get(i);
-            if (e.dead || e.rig != v) continue;
-            out++;
-            if (e.task != Dispatch.T_BOARD) {
-                w.dispatch.releaseForResupply(e);
-                e.task = Dispatch.T_BOARD;
-            }
-        }
-        return out;
-    }
-
-    /** Crew members still on foot. */
-    int crewOnFoot(Vehicle v) {
-        int out = 0;
-        ArrayList<Entity> mine = onFoot(v);
-        for (int i = 0; i < mine.size(); i++) {
-            Entity e = mine.get(i);
-            if (!e.dead && e.rig == v) out++;
-        }
-        return out;
-    }
 
     /**
      * ((12.0) Who belongs to which vehicle while out of it, gathered in one look through everyone a frame.) ((21.3) Kept
      * on each vehicle (Vehicle.foot, stamped with the frame), not in a map looked up for each of thousands of officers
      * every frame.)
      */
-    private static final ArrayList<Entity> NOBODY = new ArrayList<Entity>();
-    private int frameNo, rigFrame = -1;
-
-    /**
-     * (12.0) Those out of v who belong to it (its crew on foot), as they were when first asked this frame: callers
-     * still check each one's rig, as someone sent off since will have had theirs cleared.
-     */
-    ArrayList<Entity> onFoot(Vehicle v) {
-        if (rigFrame != frameNo) {
-            rigFrame = frameNo;
-            // ((22.3) From the list of those given a vehicle, not by looking through everyone in the city each step:
-            // that was a thirtieth of each step in an outbreak. The whole city is still looked through once a second
-            // for anyone the list missed.)
-            if (frameNo % 30 == 0)
-                for (int i = 0, n = w.entities.size(); i < n; i++) {
-                    Entity e = w.entities.get(i);
-                    if (!e.dead && e.rig != null) note(e);
-                }
-            for (int i = rigged.size() - 1; i >= 0; i--) {
-                Entity e = rigged.get(i);
-                Vehicle r = e.rig;
-                if (r == null || (e.dead && (!e.removed || !r.crew.contains(e)))) {
-                    e.footGen = 0;
-                    int last = rigged.size() - 1;
-                    rigged.set(i, rigged.get(last));
-                    rigged.remove(last);
-                    continue;
-                }
-                if (e.dead) continue;
-                if (r.footFrame != frameNo) {
-                    r.footFrame = frameNo;
-                    r.foot.clear();
-                }
-                r.foot.add(e);
-            }
-        }
-        return v.footFrame == frameNo ? v.foot : NOBODY;
-    }
+    static final ArrayList<Entity> NOBODY = new ArrayList<Entity>();
+    int frameNo, rigFrame = -1;
 
     /** ((22.3) Everyone given a vehicle to belong to, for onFoot. */
-    private final ArrayList<Entity> rigged = new ArrayList<Entity>();
-
-    void note(Entity e) {
-        if (e.footGen == 1) return;
-        e.footGen = 1;
-        rigged.add(e);
-    }
-
-    /** People aboard vehicles, by type (they still count). */
-    void countCrews(int[] counts) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            ArrayList<Entity> c = v.crew;
-            for (int k = 0; k < c.size(); k++) counts[c.get(k).type]++;
-            // ((15.9) And the police and soldiers riding along, and reinforcements still aboard the trucks, cars,
-            // boats and helicopters bringing them in: they weren't counted till they climbed out.)
-            for (int k = 0; k < v.riders.size(); k++) {
-                int t = v.riders.get(k).type;
-                if (t == Entity.COP || t == Entity.SOLDIER) counts[t]++;
-            }
-            if (v.passengers > 0 && (v.passengerType == Entity.COP || v.passengerType == Entity.SOLDIER) && !v.removedFromFleet)
-                counts[v.passengerType] += v.passengers;
-        }
-    }
-
-    // ------------------------------------------------------------------ patrol cars
-
-    /** A patrol car out on the roads with two officers aboard (at the start of the game). */
-    Vehicle startPatrol(City.Facility station) {
-        float[] start = randomRoad();
-        // ((10.41) A country station's cars start out from it, on its own patch.)
-        if (station != null && station.satellite) {
-            float[] s = city.nearestDrivable(station.gateX > 0 ? station.gateX : station.x, station.gateY > 0 ? station.gateY : station.y);
-            if (s != null) start = s;
-        }
-        if (start == null) return null;
-        Vehicle v = make(CRUISER);
-        v.x = start[0];
-        v.y = start[1];
-        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
-        v.patrol = true;
-        v.station = station;
-        v.state = PATROL;
-        v.number = ++unitCount;
-        if (!newDestination(v)) return null;
-        // (Every fifth unit is a motorcycle officer, riding alone.)
-        boolean bike = city.cfg.nature() && v.number % 5 == 0;
-        if (bike) setKind(v, K_BIKE);
-        for (int k = 0; k < (bike ? 1 : 2); k++) {
-            Entity e = w.create(Entity.COP, v.x, v.y);
-            e.rig = v; note(e);
-            v.crew.add(e);
-        }
-        vehicles.add(v);
-        return v;
-    }
-
-    /** What a patrol car is called on the radio. */
-    String callsign(Vehicle v) {
-        Country c = city.country;
-        // ((12.0) A car out of the station with no number of its own yet gets one: on the radio it was "Car 0".)
-        if (v.number <= 0) v.number = ++unitCount;
-        return v.agency == 1 ? c.hpName + " " + v.number : v.agency == 2 ? c.ruralName + " " + v.number : v.agency == 3 ? "Ranger " + v.number
-                : v.agency == 4 ? Dispatch.federal(c) + " " + v.number : (v.kind == K_BIKE ? "Motor " : "Car ") + v.number;
-    }
-
-    /**
-     * A highway patrol car on the highway, or a sheriff's car out on the country roads, with its officer
-     * aboard (at the start of the game).
-     */
-    Vehicle startAgencyPatrol(int agency) {
-        float[] start = agency == 1 ? city.randomHighway(w.rnd) : city.randomCountryRoad(w.rnd);
-        if (start == null) return null;
-        Vehicle v = make(CRUISER);
-        v.x = start[0];
-        v.y = start[1];
-        v.patrol = true;
-        v.agency = agency;
-        v.state = PATROL;
-        v.number = agency * 10 + (++unitCount);
-        if (!newDestination(v)) return null;
-        Entity e = w.create(Entity.COP, v.x, v.y);
-        e.agency = agency;
-        Country c = city.country;
-        e.body = agency == 1 ? c.hpShirt : c.ruralShirt;
-        e.rig = v; note(e);
-        v.crew.add(e);
-        vehicles.add(v);
-        return v;
-    }
-
-    /**
-     * Highway patrol, while all is quiet, pulls the odd driver over: the car pulls onto the shoulder, the
-     * patrol car stops behind it with its lights going, and after a while both drive on. Returns true while
-     * it's stopped behind one.
-     */
-    private boolean trafficStop(Vehicle v, float dt) {
-        Vehicle c = v.stopping;
-        if (c != null) {
-            v.stopT += dt;
-            boolean over = c.removedFromFleet || c.broken || c.parked || v.stopT > 26 || w.alert > 0
-                    || World.hypot(c.x - v.x, c.y - v.y) > 220 || v.state != PATROL;
-            if (over) {
-                c.pulled = false;
-                v.stopping = null;
-                v.stopCd = 40 + w.rnd.nextFloat() * 50;
-                return false;
-            }
-            // Up behind it, then stop.
-            if (World.hypot(c.x - v.x, c.y - v.y) < 34 && Math.abs(c.speed) < 3) {
-                v.speed = Math.max(0, v.speed - dt * 120);
-                return true;
-            }
-            return false;
-        }
-        v.stopCd -= dt;
-        if (v.stopCd > 0 || w.alert > 0 || v.state != PATROL || !city.onHighway(v.x, v.y)) return false;
-        v.stopCd = 8;
-        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o.type != CAR || o.player != null || o.pulled || o.fleeing || o.parked || o.broken || !o.riders.isEmpty()) continue;
-            float dx = o.x - v.x, dy = o.y - v.y, ahead = dx * fx + dy * fy;
-            if (ahead < 30 || ahead > 170 || Math.abs(dx * fy - dy * fx) > 30) continue;
-            if (fx * (float) Math.cos(o.angle) + fy * (float) Math.sin(o.angle) < 0.8f || !city.onHighway(o.x, o.y)) continue;
-            o.pulled = true;
-            v.stopping = o;
-            v.stopT = 0;
-            w.emit(Sfx.SIREN, v.x, v.y);
-            return false;
-        }
-        return false;
-    }
-
-    /** Patrol cars on the streets (not wrecked or abandoned). */
-    int patrolCars() {
-        int n = 0;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.patrol && v.agency == 0 && !v.broken && !v.parked) n++;
-        }
-        return n;
-    }
-
-    /** Every so often a station puts another car on the streets if it has two officers free. */
-    /**
-     * ((24.3) A patrol car out on its own with one officer aboard (the other lost, or left at a scene) picks up a
-     * partner: an officer on foot nearby with nothing on. A fifth of the police cars about were going round alone.)
-     */
-    private void pairUp() {
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type != CRUISER || !v.patrol || v.state != PATROL || v.crew.size() != 1 || v.kind == K_BIKE || v.incident != null
-                    || v.player != null || v.pickupFor != null || v.broken) continue;
-            Entity best = null;
-            float bd = 320;
-            for (int k = 0, n = w.gatherArmed(v.x, v.y, bd); k < n; k++) {
-                Entity e = w.gathered[k];
-                if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null || e == w.controlled || World.footPatrol(e)
-                        || e.role == Entity.ROLE_K9 || e.role == Entity.ROLE_MARKSMAN || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_PILOT
-                        || e.ammo + e.reserve <= 0) continue;
-                float d = (float) World.hypot(e.x - v.x, e.y - v.y);
-                if (d < bd) {
-                    bd = d;
-                    best = e;
-                }
-            }
-            if (best == null) continue;
-            float[] spot = city.nearestDrivable(best.x, best.y);
-            if (spot == null || !route(v, spot[0], spot[1])) continue;
-            v.state = DRIVE;
-            v.stuckTimer = 0;
-            v.pickup = true;
-            v.wasPatrol = true;
-            v.patrol = false;
-            v.pickupFor = null;
-            v.squad.clear();
-            v.squad.add(best);
-            v.passengerType = Entity.COP;
-            best.rig = v;
-            note(best);
-            best.task = Dispatch.T_BOARD;
-            return;
-        }
-    }
-
-    private void staffPatrols(float dt) {
-        staffCd -= dt;
-        if (staffCd > 0) return;
-        staffCd = 4;
-        pairUp();
-        seatStandby(false);
-        // ((11.4) In quiet times every officer who isn't on a foot beat gets a car; under attack, only up to the
-        // target, the rest guarding the precinct.)
-        if (w.alert >= 1 && patrolCount >= patrolTarget) return;
-        for (City.Facility f : city.facilities) {
-            if (f.kind != City.FACILITY_POLICE || w.countZombiesNear(f.x, f.y, 120) > 0) continue;
-            // ((26.3) A car waiting there with its officers already in it goes out on patrol first (two always kept back).)
-            Vehicle seated = seatedCar(f);
-            if (seated != null && parkedAt(f) > 2 && launch(seated, f, null)) return;
-            boolean bike = city.cfg.nature() && (unitCount + 1) % 5 == 0;
-            int want = bike ? 1 : 2;
-            ArrayList<Entity> two = new ArrayList<Entity>();
-            for (int i = 0, n = w.entities.size(); i < n && two.size() < want; i++) {
-                Entity e = w.entities.get(i);
-                if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null) continue;
-                if (e.role == Entity.ROLE_MARKSMAN || e.role == Entity.ROLE_K9) continue;
-                // ((11.4) The foot patrols keep walking their beat.)
-                if (World.footPatrol(e) && w.alert < 1) continue;
-                if (patrolCount >= patrolTarget && (e.role != Entity.ROLE_RIFLE || e.agency != 0)) continue;
-                if (World.hypot(e.x - f.x, e.y - f.y) < 220) two.add(e);
-            }
-            if (two.size() < want) continue;
-            // ((11.7) Only the cars parked at the station, and two always kept back for calls: when the rest are out,
-            // officers walk their beat instead.)
-            int parked = 0;
-            for (int i = 0, n = vehicles.size(); i < n; i++) {
-                Vehicle o = vehicles.get(i);
-                if (o.standby && o.type == CRUISER && !o.broken && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) parked++;
-            }
-            if (parked <= 2) continue;
-            float[] p = takeStandby(CRUISER, f.x, f.y, f.r + 300);
-            if (p == null) continue;
-            Vehicle v = make(CRUISER);
-            v.x = p[0];
-            v.y = p[1];
-            v.angle = (float) Math.atan2(p[1] - f.y, p[0] - f.x);
-            v.patrol = true;
-            v.station = f;
-            v.state = MUSTER;
-            v.crewWanted = want;
-            v.number = ++unitCount;
-            if (bike) setKind(v, K_BIKE);
-            for (Entity e : two) {
-                e.rig = v; note(e);
-                e.task = Dispatch.T_BOARD;
-            }
-            vehicles.add(v);
-            return;
-        }
-    }
-
-    /**
-     * (10.41) Officers at a station sent to a call a long way off take one of its cars (two to a car), instead of
-     * walking there: it pulls up at the station's gate, they get in, and it drives to the call with the lights
-     * on. False if there's no road from the station.
-     */
-    boolean stationCar(java.util.List<Entity> officers, City.Facility f, Dispatch.Incident inc) {
-        if (officers.isEmpty() || inc == null) return false;
-        float[] p = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
-        if (p == null || !canDrive(p[0], p[1], inc.x, inc.y)) return false;
-        // ((26.3) A car with its officers already in it, waiting: it goes, lights on, and these two stay at the station.)
-        Vehicle seated = seatedCar(f);
-        if (seated != null && launch(seated, f, inc)) return true;
-        // ((11.7) One of the cars parked there, if there's one left: none appear out of nowhere.)
-        p = takeStandby(CRUISER, f.x, f.y, f.r + 300);
-        if (p == null) return false;
-        Vehicle v = make(CRUISER);
-        v.x = p[0];
-        v.y = p[1];
-        v.angle = (float) Math.atan2(inc.y - p[1], inc.x - p[0]);
-        v.patrol = true;
-        v.station = f;
-        // ((16.9) The FBI's own cars, from the field office.)
-        if (f.fed) v.agency = 4;
-        v.state = MUSTER;
-        v.crewWanted = officers.size();
-        v.incident = inc;
-        v.number = ++unitCount;
-        for (Entity e : officers) {
-            e.rig = v; note(e);
-            e.task = Dispatch.T_BOARD;
-        }
-        vehicles.add(v);
-        return true;
-    }
-
-    /** ((26.3) Police cars parked at station f, ready. */
-    private int parkedAt(City.Facility f) {
-        int n = 0;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o.standby && o.type == CRUISER && !o.broken && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) n++;
-        }
-        return n;
-    }
-
-    /** ((26.3) A car parked at station f with its officers sitting in it, waiting for a call, or null. */
-    private Vehicle seatedCar(City.Facility f) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o.standby && o.type == CRUISER && !o.broken && !o.crew.isEmpty() && o.squad.isEmpty()
-                    && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) return o;
-        }
-        return null;
-    }
-
-    /** ((26.3) A waiting car's officers drive it out: to the call (lights on), or with none, out on patrol. */
-    private boolean launch(Vehicle v, City.Facility f, Dispatch.Incident inc) {
-        v.standby = false;
-        v.parked = false;
-        v.patrol = true;
-        v.station = f;
-        if (f.fed) v.agency = 4;
-        if (v.number == 0) v.number = ++unitCount;
-        v.stuckTimer = 0;
-        if (inc != null ? respond(v, inc) : (v.state = PATROL) == PATROL && newDestination(v)) return true;
-        v.standby = true;
-        v.parked = true;
-        v.patrol = false;
-        v.state = IDLE;
-        v.incident = null;
-        return false;
-    }
-
-    /**
-     * ((26.3) The cars parked at each station have two officers sitting in them, waiting for a call - at the start (fill),
-     * free officers at the station, two always left on their feet; later, those who drove a car back - and they get out
-     * to fight if the dead come to the station.
-     */
-    private void seatStandby(boolean fill) {
-        for (City.Facility f : city.facilities) {
-            if (f.kind != City.FACILITY_POLICE || f.fallen) continue;
-            boolean danger = w.countZombiesNear(f.x, f.y, f.r + 200) > 0;
-            ArrayList<Vehicle> empty = new ArrayList<Vehicle>();
-            for (int i = 0, n = vehicles.size(); i < n; i++) {
-                Vehicle o = vehicles.get(i);
-                if (!o.standby || o.type != CRUISER || o.broken || !o.squad.isEmpty() || World.hypot(o.x - f.x, o.y - f.y) >= f.r + 300) continue;
-                if (danger && !o.crew.isEmpty()) crewOut(o, true);
-                else if (o.crew.isEmpty()) empty.add(o);
-            }
-            if (!fill || danger || empty.isEmpty()) continue;
-            ArrayList<Entity> free = new ArrayList<Entity>();
-            for (int i = 0, n = w.entities.size(); i < n; i++) {
-                Entity e = w.entities.get(i);
-                if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null || e.ride != null || e == w.controlled) continue;
-                if (e.role != Entity.ROLE_RIFLE || e.outsider || (e.agency == 4) != f.fed || World.footPatrol(e)) continue;
-                if (World.hypot(e.x - f.x, e.y - f.y) < 220) free.add(e);
-            }
-            for (int k = 0; k < empty.size() && free.size() >= 4; k++) {
-                Vehicle v = empty.get(k);
-                for (int j = 0; j < 2; j++) board(v, free.remove(free.size() - 1));
-                v.passengerType = Entity.COP;
-            }
-        }
-    }
-
-    /** The nearest patrol car free to answer a call. */
-    Vehicle patrolFor(float x, float y) {
-        Vehicle best = null;
-        float bd = Float.MAX_VALUE;
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (!v.patrol || v.state != PATROL || v.broken || v.parked || v.crew.isEmpty()) continue;
-            // Highway patrol and sheriffs keep to their own roads until the town is under attack; then they
-            // come in as backup (when no town car is nearer). Rangers stay out in the country.
-            boolean town = city.inTown(x, y) && !city.nearHighway(x, y, 300);
-            if (town && (v.agency == 3 || (v.agency > 0 && w.alert < 2))) continue;
-            float d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
-            if (town && v.agency > 0) d += 500 * 500;
-            if (d < bd) {
-                bd = d;
-                best = v;
-            }
-        }
-        return best;
-    }
-
-    /** Sends a patrol car to a call, lights and siren. */
-    /**
-     * (10.45) Shots fired close by, and someone in a fight with several of the dead: a patrol car on its rounds
-     * with officers aboard turns and goes to help.
-     */
-    void heardFight(float x, float y, float radius, float tx, float ty) {
-        Dispatch.Incident inc = null;
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type != CRUISER || !v.patrol || v.state != PATROL || v.crew.isEmpty() || v.broken || v.player != null) continue;
-            if ((v.x - x) * (v.x - x) + (v.y - y) * (v.y - y) > radius * radius) continue;
-            if (inc == null) inc = w.dispatch.sighting(tx, ty, null);
-            if (inc == null) return;
-            v.incident = inc;
-            if (respond(v, inc)) {
-                v.place = inc.place;
-                w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", shots fired at " + inc.place + ". Responding.", tx, ty);
-            } else v.incident = null;
-        }
-    }
-
-    /** (10.45) Everything on its way to one call goes on to another instead (where the dead have gone). */
-    void redirect(Dispatch.Incident from, Dispatch.Incident to) {
-        // ((16.2) Calls merge with one close by: those on their way keep the way they have, and arrive among it all
-        // the same. A new search each - a dozen in one frame - was a stutter of up to 80 ms.)
-        boolean near = World.hypot(from.x - to.x, from.y - to.y) < 400;
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.incident != from) continue;
-            v.incident = to;
-            v.place = to.place;
-            if (v.state == DRIVE && !near && !route(v, to.x, to.y)) v.incident = from;
-        }
-    }
-
-    boolean respond(Vehicle v, Dispatch.Incident inc) {
-        v.state = DRIVE;
-        if (!route(v, inc.x, inc.y)) {
-            v.state = PATROL;
-            return false;
-        }
-        v.incident = inc;
-        v.stuckTimer = 0;
-        w.emit(Sfx.SIREN, v.x, v.y);
-        w.dispatch.chatter(Dispatch.WHO_POLICE, null, "Dispatch: " + callsign(v) + ", respond to " + inc.place + ".", inc.x, inc.y);
-        if (!v.crew.isEmpty()) w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
-        return true;
-    }
+    final ArrayList<Entity> rigged = new ArrayList<Entity>();
 
     /**
      * A squad from the base mounts up: a truck pulls up at the gate, the soldiers climb aboard, and it drives
@@ -7393,1341 +1306,493 @@ final class Fleet {
         // (One of the trucks parked on the base, if there's one left; otherwise one comes round to the gate.)
         // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
         if (squad.isEmpty()) return false;
-        float[] p = baseTruck(base);
+        float[] p = armyUnits.baseTruck(base);
         if (p == null) return false;
         int kind = 0;
         if (city.cfg.nature()) {
             // An APC into a big fight (or from an armoured base), a Humvee for a fast run a long way out.
             float far = (float) World.hypot(inc.x - p[0], inc.y - p[1]);
             // ((14.6) The worst of it gets the IFV; a big pack out on the roads, the gun truck.)
-            kind = inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && onRoad(inc.x, inc.y) ? K_GUNTRUCK
+            kind = inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && routing.onRoad(inc.x, inc.y) ? K_GUNTRUCK
                     : inc.zombiesNear >= 10 || (base.baseType == City.BT_ARMOUR && inc.zombiesNear >= 5) ? K_APC
                     : far > 900 && squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0;
             if (forceKind >= 0) kind = forceKind;
         }
-        musterTruck(squad, p, inc, kind);
+        armyUnits.musterTruck(squad, p, inc, kind);
         return true;
-    }
-
-    /**
-     * (10.26) Soldiers go by road whenever they can: a squad sent to a call more than a short walk away first
-     * climbs into the nearest army truck parked near it (back at a base after an earlier run, or in a base's
-     * bays) and drives there. False if the call is close or there's no truck near them (they go on foot).
-     */
-    boolean mountUp(java.util.List<Entity> squad, Dispatch.Incident inc) {
-        if (squad.isEmpty() || inc == null) return false;
-        float sx = 0, sy = 0;
-        for (Entity e : squad) {
-            sx += e.x;
-            sy += e.y;
-        }
-        sx /= squad.size();
-        sy /= squad.size();
-        if (World.hypot(inc.x - sx, inc.y - sy) < 350) return false;
-        float[] p = takeStandby(TRUCK, sx, sy, 600);
-        if (p == null) p = city.takeParkedTruck(sx, sy, 600);
-        if (p == null) return false;
-        int kind = city.cfg.nature() ? (inc.zombiesNear >= 18 ? K_IFV : inc.zombiesNear >= 12 && onRoad(inc.x, inc.y) ? K_GUNTRUCK
-                : inc.zombiesNear >= 10 ? K_APC : squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0) : 0;
-        musterTruck(squad, p, inc, kind);
-        return true;
-    }
-
-    /**
-     * (10.45) A spot near p with no other vehicle on it: several trucks or cars mustering at the same gate used to
-     * be put on top of one another there, and blocked it. The nearest clear bit of road, yard or car park.
-     */
-    float[] clearSpot(float[] p) {
-        if (p == null || !occupied(p[0], p[1])) return p;
-        int tx = (int) (p[0] / City.T), ty = (int) (p[1] / City.T);
-        for (int r = 1; r <= 5; r++)
-            for (int dy = -r; dy <= r; dy++)
-                for (int dx = -r; dx <= r; dx++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) != r) continue;
-                    int x = tx + dx, y = ty + dy;
-                    if (x < 0 || y < 0 || x >= city.w || y >= city.h) continue;
-                    byte t = city.tiles[y * city.w + x];
-                    if (t != City.ROAD && t != City.LOT && t != City.BASE) continue;
-                    float px = (x + 0.5f) * City.T, py = (y + 0.5f) * City.T;
-                    if (city.solidAt(px, py) || occupied(px, py) || !city.los(p[0], p[1], px, py)) continue;
-                    return new float[]{px, py};
-                }
-        return p;
-    }
-
-    /**
-     * (10.45) Where a vehicle should wait for its people at a station or base: in the yard, off the gateway (so
-     * the ones coming and going can get by), as near the gate as that allows. Else just a clear spot near p.
-     */
-    float[] bay(float[] p, City.Facility f) {
-        if (p == null) return null;
-        if (f == null || f.gateX <= 0) return clearSpot(p);
-        float keep = f.kind == City.FACILITY_BASE ? City.T * 3.5f : City.T * 2.2f;
-        int tx = (int) (f.x / City.T), ty = (int) (f.y / City.T), rr = (int) (f.r / City.T) + 2;
-        float best = Float.MAX_VALUE;
-        float[] out = null;
-        for (int y = ty - rr; y <= ty + rr; y++)
-            for (int x = tx - rr; x <= tx + rr; x++) {
-                if (x < 0 || y < 0 || x >= city.w || y >= city.h) continue;
-                byte t = city.tiles[y * city.w + x];
-                if (t != City.LOT && t != City.BASE) continue;
-                float px = (x + 0.5f) * City.T, py = (y + 0.5f) * City.T;
-                float g = (float) World.hypot(px - f.gateX, py - f.gateY);
-                if (g < keep || g >= best || World.hypot(px - f.x, py - f.y) > f.r + City.T) continue;
-                if (city.solidAt(px, py) || occupied(px, py)) continue;
-                best = g;
-                out = new float[]{px, py};
-            }
-        return out != null ? out : clearSpot(p);
-    }
-
-    /** The station or base whose yard (x, y) is in, if any. */
-    private City.Facility yardOf(float x, float y) {
-        for (City.Facility f : city.facilities)
-            if ((f.kind == City.FACILITY_BASE || f.kind == City.FACILITY_POLICE)
-                    && (World.hypot(x - f.x, y - f.y) < f.r + City.T * 4 || (f.gateX > 0 && World.hypot(x - f.gateX, y - f.gateY) < City.T * 5))) return f;
-        return null;
-    }
-
-    private boolean occupied(float x, float y) {
-        for (int i = 0, n = vehicles.size(); i < n; i++) {
-            Vehicle o = vehicles.get(i);
-            if (offRoad(o)) continue;
-            if (Math.abs(o.x - x) < 13 && Math.abs(o.y - y) < 13) return true;
-        }
-        return false;
-    }
-
-    /** A truck at p waiting for this squad to climb in, then off to the call. */
-    private Vehicle musterTruck(java.util.List<Entity> squad, float[] p, Dispatch.Incident inc, int kind) {
-        p = bay(p, yardOf(p[0], p[1]));
-        Vehicle v = make(TRUCK);
-        v.x = p[0];
-        v.y = p[1];
-        v.homeX = p[0];
-        v.homeY = p[1];
-        if (kind != 0) setKind(v, kind);
-        v.angle = (float) Math.atan2(inc.y - p[1], inc.x - p[0]);
-        v.state = MUSTER;
-        v.crewWanted = squad.size();
-        v.incident = inc;
-        v.tx = inc.x;
-        v.ty = inc.y;
-        v.place = inc.place;
-        v.passengerType = Entity.SOLDIER;
-        for (Entity e : squad) {
-            e.rig = v; note(e);
-            e.task = Dispatch.T_BOARD;
-        }
-        vehicles.add(v);
-        return v;
-    }
-
-    /**
-     * (12.9) A special unit standing by at its station or base (see World.stationUnits): those of this kind and role
-     * on their posts there (the SWAT team's marksman with it), up to max.
-     */
-    java.util.List<Entity> standby(City.Facility f, int type, int role, int max) {
-        java.util.List<Entity> out = new ArrayList<Entity>();
-        for (int i = 0, n = w.entities.size(); i < n && out.size() < max; i++) {
-            Entity e = w.entities.get(i);
-            if (e.dead || e.type != type || e.task != Dispatch.T_POST || e == w.controlled) continue;
-            if (e.role != role && !(role == Entity.ROLE_SWAT && e.role == Entity.ROLE_MARKSMAN)) continue;
-            if (World.hypot(e.x - f.x, e.y - f.y) > f.r + 140) continue;
-            out.add(e);
-        }
-        return out;
-    }
-
-    /** (12.9) The unit's own officers climb into their vehicle at the gate and it drives them out. */
-    private Vehicle musterUnit(java.util.List<Entity> squad, City.Facility f, Dispatch.Incident inc, int kind, int type) {
-        float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
-        if (g == null || squad.isEmpty()) return null;
-        Vehicle v = musterTruck(squad, g, inc, kind);
-        v.passengerType = type;
-        return v;
-    }
-
-    /**
-     * A Humvee patrol from the base: the squad mounts up, drives out to (tx, ty) and back, its gunner firing on
-     * any of the dead it passes. They stay aboard unless the Humvee is wrecked.
-     */
-    boolean basePatrol(java.util.List<Entity> squad, City.Facility base, float tx, float ty) {
-        // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
-        float[] p = city.takeParkedTruck(base.x, base.y, Math.max(260, base.r * 2.5f));
-        if (p == null || squad.isEmpty()) return false;
-        p = bay(p, base);
-        Vehicle v = make(TRUCK);
-        setKind(v, K_HUMVEE);
-        v.loop = true;
-        v.x = p[0];
-        v.y = p[1];
-        v.homeX = p[0];
-        v.homeY = p[1];
-        v.angle = (float) Math.atan2(ty - p[1], tx - p[0]);
-        v.state = MUSTER;
-        v.crewWanted = squad.size();
-        v.tx = tx;
-        v.ty = ty;
-        v.place = city.placeName(tx, ty);
-        v.passengerType = Entity.SOLDIER;
-        for (Entity e : squad) {
-            e.rig = v; note(e);
-            e.task = Dispatch.T_BOARD;
-        }
-        vehicles.add(v);
-        return true;
-    }
-
-    /** Patrols out from this base now. */
-    int basePatrols(City.Facility base) {
-        int n = 0;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.loop && !v.broken && World.hypot(v.homeX - base.x, v.homeY - base.y) < Math.max(300, base.r * 3)) n++;
-        }
-        return n;
-    }
-
-    /** Soldiers mustering for, or riding to, this call in trucks. */
-    int inboundSoldiers(Dispatch.Incident inc) {
-        int n = 0;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.type == TRUCK && v.incident == inc && (v.state == MUSTER || v.state == DRIVE)) n += Math.max(v.crew.size(), v.crewWanted);
-            else if (v.pickupFor == inc && v.passengerType == Entity.SOLDIER) n += v.squad.size();
-        }
-        return n;
-    }
-
-    /**
-     * (11.7) Someone free at a station or base to drive one of its vehicles out: an officer or soldier with nothing
-     * to do, inside the grounds, not one of those it's going for. Null if there's nobody.
-     */
-    Entity freeDriver(City.Facility f, int type, java.util.List<Entity> not) {
-        if (f == null) return null;
-        Entity best = null;
-        float bd = f.r + 200;
-        for (int i = 0, n = w.entities.size(); i < n; i++) {
-            Entity e = w.entities.get(i);
-            if (e.dead || e.type != type || e.task != Dispatch.T_NONE || e.rig != null || e.ride != null || e.aiming || e == w.controlled) continue;
-            if (e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_MARKSMAN) continue;
-            if (not != null && not.contains(e)) continue;
-            float d = (float) World.hypot(e.x - f.x, e.y - f.y);
-            if (d < bd) {
-                bd = d;
-                best = e;
-            }
-        }
-        return best;
-    }
-
-    /** (11.7) Puts someone at the wheel: they're off the street, in the vehicle, until it's parked home again. */
-    private void seatDriver(Vehicle v, Entity d) {
-        if (d == null) return;
-        d.task = Dispatch.T_NONE;
-        d.rig = v; note(d);
-        d.dead = true;
-        d.removed = true;
-        d.vx = d.vy = 0;
-        v.driver = d;
-        v.realDriver = true;
-    }
-
-    /**
-     * (11.7) Each police station's spare cars, parked on its lot from the start (besides those out on patrol): one
-     * for every two of the officers based there, two at the least, eight at the most. Calls and new patrols take
-     * these; when they're all out, officers go on foot until one comes back.
-     */
-    /**
-     * (12.3) Each army base's motor pool, made up to strength when the game starts (and when one is loaded): a truck for
-     * every four of the soldiers based there, four at the least and 40 at the most, so a squad sent anywhere drives
-     * there. The trucks parked in the yard count towards it; the rest are in its garages.
-     */
-    /**
-     * (12.3) An army truck that isn't needed after all, still at its bay: parked in the bay again if it's free (true:
-     * the truck is a parked one on the map now), else left parked where it stands, standing by.
-     */
-    private boolean backInPool(Vehicle v) {
-        v.incident = null;
-        v.speed = 0;
-        if (city.tiles[city.tileIndex(v.homeX, v.homeY)] == City.BASE && !w.peopleNear(v.homeX, v.homeY, 10)) {
-            city.parkTruck(v.homeX, v.homeY);
-            return true;
-        }
-        City.Facility f = yardOf(v.x, v.y);
-        if (f != null && f.kind == City.FACILITY_BASE) {
-            f.spareTrucks++;
-            return true;
-        }
-        v.state = IDLE;
-        v.parked = true;
-        v.standby = true;
-        return false;
-    }
-
-    /**
-     * (12.3) Where one of the base's trucks starts from: one parked in the yard, else one out of its garages (by the
-     * gate), else null: they're all out.
-     */
-    float[] baseTruck(City.Facility f) {
-        // ((16.6) One standing ready in the yard first.)
-        float[] p = takeStandby(TRUCK, f.x, f.y, Math.max(260, f.r * 2.5f));
-        if (p != null) return p;
-        p = city.takeParkedTruck(f.x, f.y, Math.max(260, f.r * 2.5f));
-        if (p != null || f.spareTrucks <= 0 || f.fallen) return p;
-        float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
-        if (g == null) return null;
-        f.spareTrucks--;
-        return bay(g, f);
-    }
-
-    void stockBases() {
-        for (City.Facility f : city.facilities) {
-            if (f.kind != City.FACILITY_BASE || f.fallen) continue;
-            float rad = Math.max(260, f.r * 2.5f);
-            int soldiers = 0;
-            for (int i = 0, n = w.entities.size(); i < n; i++) {
-                Entity e = w.entities.get(i);
-                if (!e.dead && e.type == Entity.SOLDIER && World.hypot(e.x - f.x, e.y - f.y) < rad) soldiers++;
-            }
-            if (soldiers == 0) continue;
-            int have = city.parkedTrucks(f.x, f.y, rad);
-            for (int i = 0, n = vehicles.size(); i < n; i++) {
-                Vehicle v = vehicles.get(i);
-                if (v.type == TRUCK && v.standby && World.hypot(v.x - f.x, v.y - f.y) < rad) have++;
-            }
-            int want = Math.max(4, Math.min(40, (soldiers + 3) / 4));
-            f.spareTrucks = Math.max(0, want - have);
-            // ((16.6) A few of them out in the yard where they can be seen, parked and ready, when the base's layout
-            // left no room for any along its bottom row - an airfield or a vehicle park across it. The rest were all
-            // in the garages, and the base looked as if it had no vehicles at all.)
-            int show = Math.min(want, SHOWN_TRUCKS) - have;
-            float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
-            for (int k = 0; k < show && f.spareTrucks > 0 && g != null; k++) {
-                float[] p = bay(g, f);
-                if (p == null || World.hypot(p[0] - f.x, p[1] - f.y) > rad) break;
-                Vehicle v = make(TRUCK);
-                v.x = p[0];
-                v.y = p[1];
-                v.homeX = p[0];
-                v.homeY = p[1];
-                v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
-                v.depot = f;
-                v.state = IDLE;
-                v.speed = 0;
-                v.parked = true;
-                v.standby = true;
-                vehicles.add(v);
-                f.spareTrucks--;
-            }
-        }
     }
 
     /** ((16.6) Trucks a base has standing in its yard at the least, where it has them. */
     static final int SHOWN_TRUCKS = 4;
 
-    void stockStations() {
-        for (City.Facility f : city.facilities) {
-            if (f.kind != City.FACILITY_POLICE) continue;
-            int have = 0, officers = 0;
-            for (int i = 0, n = vehicles.size(); i < n; i++) {
-                Vehicle v = vehicles.get(i);
-                if (v.type == CRUISER && v.standby && World.hypot(v.x - f.x, v.y - f.y) < f.r + 300) have++;
-            }
-            for (int i = 0, n = w.entities.size(); i < n; i++) {
-                Entity e = w.entities.get(i);
-                if (!e.dead && e.type == Entity.COP && World.hypot(e.x - f.x, e.y - f.y) < f.r + 250) officers++;
-            }
-            int want = Math.max(2, Math.min(8, (officers + 1) / 2)) - have;
-            float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
-            for (int k = 0; k < want && g != null; k++) {
-                float[] p = bay(g, f);
-                if (p == null) break;
-                Vehicle v = make(CRUISER);
-                v.x = p[0];
-                v.y = p[1];
-                v.homeX = p[0];
-                v.homeY = p[1];
-                v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
-                v.depot = f;
-                if (f.fed) v.agency = 4;
-                v.state = IDLE;
-                v.speed = 0;
-                v.parked = true;
-                v.standby = true;
-                vehicles.add(v);
-            }
-        }
-        // ((26.3) And their officers in them, waiting.)
-        seatStandby(true);
-    }
-
-    /**
-     * (11.0) Officers or soldiers sent to a call a long way off don't walk it: an empty police car or army truck
-     * close by takes them, or with none, one comes out from the station or base to pick them up, and drives them
-     * there. False if there's nothing to take them (they go on foot). ((13.3) With no call, inc null: a lift back to
-     * the station or base.)
-     */
-    boolean driveTo(java.util.List<Entity> group, Dispatch.Incident inc) {
-        if (group.isEmpty()) return false;
-        int type = group.get(0).type, vtype = type == Entity.COP ? CRUISER : TRUCK;
-        float sx = 0, sy = 0;
-        for (Entity e : group) {
-            sx += e.x;
-            sy += e.y;
-        }
-        sx /= group.size();
-        sy /= group.size();
-        Vehicle v = null;
-        // ((11.7) An empty one a bit further off is still quicker than walking.)
-        float bd = 450;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle o = vehicles.get(i);
-            if (o.type != vtype || o.broken || o.burnt || o.player != null || o.removedFromFleet || !o.crew.isEmpty() || o.block != null
-                    || o.zone != null || o.loop || o.shelter || o.leaving || o.kind == K_BIKE || o.kind == K_DOZER || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
-            if (!o.standby && !o.parked && o.state != ABANDONED) continue;
-            float d = (float) World.hypot(o.x - sx, o.y - sy);
-            if (d < bd && w.countZombiesNear(o.x, o.y, 80) == 0) {
-                bd = d;
-                v = o;
-            }
-        }
-        boolean fetch = v == null;
-        if (fetch) {
-            City.Facility f = city.nearestFacility(type == Entity.COP ? City.FACILITY_POLICE : City.FACILITY_BASE, sx, sy);
-            // ((12.3) The army sends a truck from further off: driven, even a long way round beats the walk.)
-            boolean fromBase = f != null && (inc == null || World.hypot(f.x - sx, f.y - sy) <= World.hypot(inc.x - sx, inc.y - sy) * (type == Entity.SOLDIER ? 1.5f : 0.8f));
-            Entity drv = null;
-            if (fromBase) {
-                for (int i = 0; i < vehicles.size() && v == null; i++) {
-                    Vehicle o = vehicles.get(i);
-                    if (o.standby && o.type == vtype && !o.broken && o.kind != K_BIKE && o.pickupFor == null && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) v = o;
-                }
-                // ((11.7) Only a car or truck parked there, and only with someone there to drive it out: nothing comes
-                // out of a station or base with nobody in it, and none appear from nowhere when they're all out.)
-                drv = freeDriver(f, type, group);
-                // ((16.9) A base's trucks come out with one of the motor pool at the wheel when there's nobody else free
-                // to drive: soldiers far from base used to be left to walk it - most of them, late on, with everyone out.)
-                if (drv == null && !(type == Entity.SOLDIER && !f.fallen)) v = null;
-                else if (v == null && type == Entity.SOLDIER && !f.fallen) {
-                    // ((12.3) One of the trucks in the base's motor pool.)
-                    float[] p = baseTruck(f);
-                    if (p != null) {
-                        p = bay(p, f);
-                        v = make(TRUCK);
-                        v.x = p[0];
-                        v.y = p[1];
-                        v.homeX = p[0];
-                        v.homeY = p[1];
-                        v.angle = (float) Math.atan2(sy - p[1], sx - p[0]);
-                        v.state = IDLE;
-                        v.speed = 0;
-                        v.parked = true;
-                        v.standby = true;
-                        vehicles.add(v);
-                    }
-                }
-            }
-            if (v == null && type == Entity.COP) {
-                // ((24.3) Or a patrol car on its rounds nearby with seats to spare: it swings by for them and takes them
-                // all to the call, its own crew too. Officers far from their station walked to nearly every call.)
-                drv = null;
-                float best = 1500;
-                for (int i = 0, m = vehicles.size(); i < m; i++) {
-                    Vehicle o = vehicles.get(i);
-                    if (o.type != CRUISER || !o.patrol || o.state != PATROL || o.incident != null || o.crew.isEmpty() || o.crew.size() > 2
-                            || o.kind == K_BIKE || o.pickupFor != null || o.player != null || o.broken || o.burnt || o.removedFromFleet
-                            || o.block != null || o.zone != null || o.loop || o.leaving || o.shelter) continue;
-                    float d = (float) World.hypot(o.x - sx, o.y - sy);
-                    if (d < best && w.countZombiesNear(o.x, o.y, 80) == 0) {
-                        best = d;
-                        v = o;
-                    }
-                }
-            }
-            if (v == null && type == Entity.SOLDIER) {
-                // ((12.3) Or an army truck standing by somewhere in town, after dropping a squad off: it drives over.)
-                drv = null;
-                // ((16.9) From further off: a truck a couple of miles away is still quicker than the walk.)
-                float best = 3000;
-                for (int i = 0, m = vehicles.size(); i < m; i++) {
-                    Vehicle o = vehicles.get(i);
-                    if (!o.standby || o.type != TRUCK || o.broken || o.burnt || o.kind == K_BIKE || o.pickupFor != null || o.player != null
-                            || o.removedFromFleet || !o.crew.isEmpty() || o.block != null || o.zone != null || o.loop || o.shelter || o.leaving || o.supply > 0) continue;
-                    float d = (float) World.hypot(o.x - sx, o.y - sy);
-                    if (d < best && w.countZombiesNear(o.x, o.y, 80) == 0) {
-                        best = d;
-                        v = o;
-                    }
-                }
-            }
-            if (v == null) return false;
-            float[] spot = city.nearestDrivable(sx, sy);
-            if (spot == null || !route(v, spot[0], spot[1])) return false;
-            seatDriver(v, drv);
-            v.aimCd = 3;
-            v.state = DRIVE;
-            v.stuckTimer = 0;
-            v.place = city.placeName(spot[0], spot[1]);
-        } else {
-            v.state = PICKUP;
-            v.timer = 0;
-            v.speed = 0;
-        }
-        v.parked = false;
-        v.standby = false;
-        v.pulling = false;
-        v.pickup = true;
-        v.wasPatrol = false;
-        v.patrol = false;
-        v.incident = null;
-        v.pickupFor = inc;
-        v.reclaimCd = 30;
-        v.squad.clear();
-        v.squad.addAll(group);
-        v.passengerType = type;
-        for (Entity e : group) {
-            w.dispatch.releaseForResupply(e);
-            e.rig = v; note(e);
-            e.task = Dispatch.T_BOARD;
-        }
-        return true;
-    }
-
-    /** Officers in patrol cars on their way to this call. */
-    int inbound(Dispatch.Incident inc) {
-        int n = 0;
-        for (int i = 0, m = vehicles.size(); i < m; i++) {
-            Vehicle v = vehicles.get(i);
-            if (v.patrol && v.incident == inc && v.state == DRIVE) n += v.crew.size();
-            else if (v.patrol && v.incident == inc && v.state == MUSTER) n += Math.max(v.crew.size(), v.crewWanted);
-            else if (v.pickupFor == inc && v.passengerType == Entity.COP) n += v.squad.size();
-        }
-        return n;
-    }
-
-    /** (13.7) How many tied to this vehicle are still alive and on their way to climb in (and the nearest's distance). */
-    private int comingTo(Vehicle v) {
-        int n = 0;
-        float near = Float.MAX_VALUE;
-        for (int i = 0, m = w.entities.size(); i < m; i++) {
-            Entity e = w.entities.get(i);
-            if (e.rig == v && !e.dead && e.task == Dispatch.T_BOARD) {
-                n++;
-                near = Math.min(near, (float) World.hypot(e.x - v.x, e.y - v.y));
-            }
-        }
-        v.comingNear = near;
-        return n;
-    }
-
-    /** Lets go of any crew member still tied to the vehicle (they carry on on foot). */
-    private void dropCrew(Vehicle v) {
-        for (int i = 0, n = w.entities.size(); i < n; i++) {
-            Entity e = w.entities.get(i);
-            if (e.rig == v) {
-                e.rig = null;
-                if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
-            }
-        }
-    }
-
-    /**
-     * A patrol car: drives its beat by the rules of the road, stops and gets out when the officers see
-     * one of them, answers calls with lights and siren, and drives on once its officers are back in.
-     */
-    /** (11.1) Someone of the crew still walking up to the car and nearly there (they come in off the beat now). */
-    private boolean partnerComing(Vehicle v) {
-        // ((12.0) From the list of who belongs to which car: asked every frame while a car waits, it looked through everyone.)
-        ArrayList<Entity> mine = onFoot(v);
-        for (int i = 0; i < mine.size(); i++) {
-            Entity e = mine.get(i);
-            if (!e.dead && e.rig == v && e.task == Dispatch.T_BOARD && Math.abs(e.x - v.x) < 400 && Math.abs(e.y - v.y) < 400) return true;
-        }
-        return false;
-    }
-
-    /**
-     * ((22.0) A motorcycle officer scouts as they ride: a pack of the dead they pass is called in and marked for
-     * the others, like the army's recon.
-     */
-    private void bikeScout(Vehicle v, float dt) {
-        if ((v.reconCd -= dt) > 0) return;
-        v.reconCd = 1;
-        int n = w.countZombiesNear(v.x, v.y, 220);
-        if (n < 6) return;
-        for (int i = 0; i < w.dispatch.incidents.size(); i++) {
-            Dispatch.Incident inc = w.dispatch.incidents.get(i);
-            if (!inc.resolved && World.hypot(inc.x - v.x, inc.y - v.y) < 280) return;
-        }
-        Entity z = w.nearestZombie(v.x, v.y, 220);
-        if (z != null) w.dispatch.sighting(z.x, z.y, null);
-        bikeSightings++;
-        if (w.time - v.reconSaid > 25) {
-            v.reconSaid = w.time;
-            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "of the dead", "of the dead"))
-                    + " on " + city.placeName(v.x, v.y) + ". Calling it in.", v.x, v.y);
-        }
-    }
-
     int bikeSightings;
 
-    /** ((22.0) A motorcycle officer put down on the nearest road, out on patrol (the Cop picker's Motorcycle cop). */
-    Entity startBikeAt(float x, float y) {
-        float[] start = city.nearestDrivable(x, y);
-        if (start == null) return null;
-        Vehicle v = make(CRUISER);
-        v.x = start[0];
-        v.y = start[1];
-        v.angle = w.rnd.nextInt(4) * (float) Math.PI / 2;
-        v.patrol = true;
-        v.station = city.nearestFacility(City.FACILITY_POLICE, x, y);
-        v.state = PATROL;
-        v.number = ++unitCount;
-        if (!newDestination(v)) return null;
-        setKind(v, K_BIKE);
-        Entity e = w.create(Entity.COP, v.x, v.y);
-        e.rig = v; note(e);
-        v.crew.add(e);
-        vehicles.add(v);
-        return e;
-    }
-
-    private boolean updatePatrol(Vehicle v, float dt) {
-        if (v.kind == K_BIKE && !v.crew.isEmpty() && w.zombies > 0 && v.state != MUSTER) bikeScout(v, dt);
-        v.checkCd -= dt;
-        boolean check = v.checkCd <= 0;
-        if (check) v.checkCd = 0.5f;
-        if (v.state == MUSTER) {
-            v.speed = 0;
-            v.timer += dt;
-            if (v.crew.size() >= v.crewWanted || (v.timer > 12 && !v.crew.isEmpty() && (v.timer > 40 || !partnerComing(v)))) {
-                dropCrew(v);
-                // ((10.41) Mounted up for a call: off to it with the lights on; a patrol car after.)
-                Dispatch.Incident inc = v.incident;
-                if (crewNeedsAmmo(v) && ammoRun(v)) return false;
-                if (inc != null && !inc.resolved && respond(v, inc)) return false;
-                v.incident = null;
-                v.state = PATROL;
-                if (!newDestination(v)) v.stuckTimer = 99;
-            } else if (v.timer > 40) {
-                dropCrew(v);
-                v.parked = true;
-            }
-            return false;
-        }
-        if (v.state == SCENE || v.state == RECALL) {
-            v.speed = 0;
-            if (!check) return false;
-            if (v.state == SCENE) {
-                // Waits while its officers deal with it, then calls them back. (10.48) Not for those who've been
-                // given somewhere else to be - a perimeter, a post, another call a long way off: the car goes on
-                // without them (and they find their own way, or another car, later).
-                // ((12.0) Its own people, from the list of who belongs to which car: these four looked through
-                // everyone in the city, for every car at a scene.)
-                ArrayList<Entity> mine = onFoot(v);
-                for (int i = 0; i < mine.size(); i++) {
-                    Entity e = mine.get(i);
-                    if (e.dead || e.rig != v) continue;
-                    if (e.task == Dispatch.T_CORDON || e.task == Dispatch.T_POST || e.task == Dispatch.T_GUARD
-                            || World.hypot(e.x - v.x, e.y - v.y) > 500) e.rig = null;
-                }
-                // ((10.60) One of its officers out of rounds, with the station a long walk off: everyone back in
-                // the car, and it drives them there to restock instead of them walking it with the dead behind.)
-                for (int i = 0; i < mine.size(); i++) {
-                    Entity e = mine.get(i);
-                    if (e.dead || e.rig != v || e.task != Dispatch.T_RESUPPLY || World.hypot(e.x - v.x, e.y - v.y) > 320) continue;
-                    City.Facility f = w.restockFor(e);
-                    if (f == null || World.hypot(f.x - v.x, f.y - v.y) < 450) continue;
-                    v.onward = null;
-                    v.state = RECALL;
-                    v.timer = 0;
-                    return false;
-                }
-                boolean busy = w.countZombiesNear(v.x, v.y, 130) > 0;
-                // ((10.56) Its officers sent on to another call a fair way off, and nothing left here: they come
-                // back to the car and it drives them there, instead of it waiting here while they walk.)
-                if (!busy && v.onward == null) {
-                    for (int i = 0; i < mine.size(); i++) {
-                        Entity e = mine.get(i);
-                        if (e.dead || e.rig != v || e.task != Dispatch.T_RESPOND || e.incident == null || e.incident == v.incident || e.incident.resolved) continue;
-                        if (World.hypot(e.incident.x - v.x, e.incident.y - v.y) < 450) continue;
-                        v.onward = e.incident;
-                        v.state = RECALL;
-                        v.timer = 0;
-                        return false;
-                    }
-                }
-                for (int i = 0; i < mine.size() && !busy; i++) {
-                    Entity e = mine.get(i);
-                    if (!e.dead && e.rig == v && e.task == Dispatch.T_RESPOND) busy = true;
-                }
-                v.quiet = busy ? 0 : v.quiet + 0.5f;
-                if (crewOnFoot(v) == 0 && v.crew.isEmpty()) {
-                    v.parked = true;
-                    v.state = ABANDONED;
-                    return false;
-                }
-                if (v.quiet >= 6) {
-                    v.state = RECALL;
-                    v.timer = 0;
-                }
-                return false;
-            }
-            v.timer += 0.5f;
-            int out = recall(v);
-            if (out > 0 && v.timer < (v.onward != null ? 20 : 40)) return false;
-            dropCrew(v);
-            Dispatch.Incident onward = v.onward;
-            v.onward = null;
-            if (v.crew.isEmpty()) {
-                v.parked = true;
-                v.state = ABANDONED;
-                return false;
-            }
-            // ((10.60) Out of rounds: to the station to restock first, not on to the next call with empty guns.)
-            if (crewNeedsAmmo(v) && ammoRun(v)) return false;
-            if (onward != null && !onward.resolved && respond(v, onward)) return false;
-            v.state = PATROL;
-            v.incident = null;
-            if (!newDestination(v)) v.stuckTimer = 99;
-            return false;
-        }
-        if (v.agency == 1 && trafficStop(v, dt)) return false;
-        // Officers spot one of them from the car: pull up and get out (well short of a crowd of them). A
-        // moving car looks every moment, so it doesn't drive on into them between looks.
-        boolean look = check || (Math.abs(v.speed) > 15 && w.zombieWithin(v.x, v.y, 190));
-        // ((12.0) Not in the middle of a junction, though: it drives on out of it first. Stopped there for the scene,
-        // it blocked the junction for everyone until its officers came back.)
-        if (look && v.crew.size() > 0 && (city.junctionIdAt(v.x, v.y) < 0 || Math.abs(v.speed) < 3) && (hordeAhead(v)
-                || (w.countZombiesNear(v.x, v.y, 90) > 0 && w.countZombiesNear(v.x, v.y, 30) < 4))) {
-            v.speed = 0;
-            v.state = SCENE;
-            v.quiet = 0;
-            Dispatch.Incident inc = v.incident;
-            ArrayList<Entity> out = new ArrayList<Entity>(v.crew);
-            crewOut(v, false);
-            if (inc != null && !inc.resolved) {
-                for (Entity e : out) {
-                    e.task = Dispatch.T_RESPOND;
-                    e.incident = inc;
-                    e.onScene = false;
-                }
-            } else if (v.soundCd <= 0 && !out.isEmpty()) {
-                v.soundCd = 4;
-                w.dispatch.chatter(Dispatch.WHO_POLICE, out.get(0), callsign(v) + ", contact on "
-                        + city.placeName(v.x, v.y) + ". We're out of the car.", v.x, v.y);
-            }
-            return false;
-        }
-        if (v.state == DRIVE && v.ammoRun != null) return ammoRunStep(v, dt);
-        if (v.state == DRIVE) {
-            Dispatch.Incident inc = v.incident;
-            if (inc == null || inc.resolved) {
-                v.state = PATROL;
-                v.incident = null;
-                if (!newDestination(v)) v.stuckTimer = 99;
-                return false;
-            }
-            if (v.soundCd <= 0) {
-                v.soundCd = 3.5f;
-                w.emit(Sfx.SIREN, v.x, v.y);
-            }
-            v.stuckTimer += dt;
-            // (10.45) The dead spotted on the way: pull up and deal with them first.
-            Dispatch.Incident here = spotOnTheWay(v, dt);
-            if (here != null) {
-                v.incident = here;
-                inc = here;
-            }
-            boolean moving = here == null && driveStep(v, dt, v.kind == K_BIKE ? 130 : 115, carAhead(v) ? 0.5f : 1f);
-            if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-            if (!moving || ((World.hypot(inc.x - v.x, inc.y - v.y) < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
-                v.speed = 0;
-                v.state = SCENE;
-                v.quiet = 0;
-                ArrayList<Entity> out = new ArrayList<Entity>(v.crew);
-                crewOut(v, false);
-                for (Entity e : out) {
-                    e.task = Dispatch.T_RESPOND;
-                    e.incident = inc;
-                    e.onScene = false;
-                }
-            }
-            return false;
-        }
-        // On patrol: an ordinary car on the road, keeping to the rules.
-        if (v.crew.isEmpty()) {
-            v.parked = true;
-            return false;
-        }
-        if (check && crewNeedsAmmo(v) && ammoRun(v)) return false;
-        float limit = junctionRule(v, dt);
-        boolean person = w.personAhead(v.x, v.y, v.angle);
-        // Brake for someone in the road, then creep through (in a crowd nobody gets anywhere otherwise).
-        if (trainComing(v) || (person && v.timer < 2.5f)) {
-            v.speed = Math.max(0, v.speed - dt * 200);
-            if (person) v.timer += dt;
-            return false;
-        }
-        if (!person) v.timer = 0;
-        v.stuckTimer += dt;
-        boolean queue = carAhead(v);
-        if ((v.held || queue) && !gridlocked(v)) v.stuckTimer = Math.min(v.stuckTimer, 1);
-        if (!driveStep(v, dt, Math.min(limit, person ? 15 : city.onHighway(v.x, v.y) ? 105 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 95 : 60), queue ? 0.15f : 1f) || v.stuckTimer > 10) {
-            v.stuckTimer = 0;
-            newDestination(v);
-        } else if (v.orbited) {
-            // ((11.5) Gone round in a circle - a turn too tight for it off a wide road - on its rounds: somewhere else
-            // instead, rather than round the block again and again.)
-            v.orbited = false;
-            v.destCd = 0;
-            newDestination(v);
-        }
-        return false;
-    }
-
-    /** (10.60) Officers aboard short of rounds: any of them down to less than a magazine, spare rounds and all. */
-    private boolean crewNeedsAmmo(Vehicle v) {
-        for (int i = 0; i < v.crew.size(); i++) {
-            Entity e = v.crew.get(i);
-            if (e.hasGun && e.magSize > 0 && e.ammo + e.reserve < e.magSize) return true;
-        }
-        return false;
-    }
-
-    /**
-     * (10.60) A patrol car drives its officers to the nearest station or armoury with ammunition left, lights on,
-     * and they restock there without getting out. False if there's nowhere left with any, or no road to it.
-     */
-    private boolean ammoRun(Vehicle v) {
-        if (v.crew.isEmpty() || v.player != null) return false;
-        City.Facility f = w.restockFor(v.crew.get(0));
-        if (f == null || !route(v, f.x, f.y)) return false;
-        v.state = DRIVE;
-        v.incident = null;
-        v.onward = null;
-        v.ammoRun = f;
-        v.stuckTimer = 0;
-        w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", we're nearly out of rounds. Heading to " + f.name + " to restock.", v.x, v.y);
-        return true;
-    }
-
-    /** (10.60) On the way to restock; there, everyone aboard fills up and the car goes back on patrol, free for calls. */
-    private boolean ammoRunStep(Vehicle v, float dt) {
-        City.Facility f = v.ammoRun;
-        v.stuckTimer += dt;
-        boolean moving = driveStep(v, dt, 100, carAhead(v) ? 0.5f : 1f);
-        if (moving) hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        float d = (float) World.hypot(f.x - v.x, f.y - v.y);
-        if (moving && d > Math.max(60, f.r) && v.stuckTimer < 8) return false;
-        v.speed = 0;
-        v.ammoRun = null;
-        if (d < f.r + 160 && w.restockCrew(v.crew, f) > 0 && !v.crew.isEmpty())
-            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", restocked at " + f.name + ". Available.", v.x, v.y);
-        else if (crewNeedsAmmo(v)) {
-            // (Couldn't get through: out, and the rest of the way on foot.)
-            crewOut(v, false);
-            return false;
-        }
-        v.state = PATROL;
-        if (!newDestination(v)) v.stuckTimer = 99;
-        return false;
-    }
-
-    private static float turnTo(float from, float to, float amount) {
+    static float turnTo(float from, float to, float amount) {
         float diff = to - from;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
         return from + Math.max(-amount, Math.min(amount, diff));
     }
 
-    // ------------------------------------------------------------------ helicopter
+    // ------------------------------------------------------------------ ((27.3) what the rest of the game calls, passed on to the part that does it
 
-    private boolean updateHeli(Vehicle v, float dt) {
-        if (staleCall(v, dt)) return false;
-        if (v.state == IDLE) {
-            // On the pad: rotor still, refuelling after a flight.
-            v.refuel = Math.max(0, v.refuel - dt);
-            v.speed = v.hvx = v.hvy = 0;
-            v.alt = 0;
-            return false;
-        }
-        if (v.state == MUSTER) {
-            // On the pad with the rotor still, waiting for the crew to walk out and climb aboard.
-            v.timer += dt;
-            Entity pilot = livePilot(v);
-            boolean pilotIn = pilot != null && v.crew.contains(pilot);
-            if (pilot == null || (!pilotIn && v.timer > 60)) {
-                landed(v);
-                v.refuel = 5;
-                return false;
-            }
-            if (pilotIn && (v.crew.size() >= v.crewWanted || v.timer > 30)) {
-                // Anyone who didn't make it in time stays behind.
-                for (int i = 0, n = w.entities.size(); i < n; i++) {
-                    Entity e = w.entities.get(i);
-                    if (!e.dead && e.rig == v && e.task == Dispatch.T_BOARD) {
-                        e.task = Dispatch.T_NONE;
-                        e.rig = null;
-                    }
-                }
-                // ((14.9) Everyone aboard but the pilot goes down: it used to keep two of the squad back as door
-                // gunners, so a helicopter with seven aboard put only four down.)
-                if (v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI) v.troops = Math.max(0, v.crew.size() - 1);
-                v.state = SPOOL;
-                v.spoolTime = v.timer = 4.5f;
-            }
-            return false;
-        }
-        if (v.soundCd <= 0) {
-            v.soundCd = v.state == SPOOL ? 0.9f : 0.6f;
-            w.emit(Sfx.ROTOR, v.x, v.y);
-        }
-        // Rotor wash kicks up dust when it's low.
-        if ((v.alt < 0.6f && v.state != SPOOL) || (v.state == SPOOL && v.timer < 3)) {
-            if (w.rnd.nextFloat() < dt * 25) {
-                float a = w.rnd.nextFloat() * (float) Math.PI * 2;
-                w.particle(v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10, (float) Math.cos(a) * 45,
-                        (float) Math.sin(a) * 45, 0.8f, 2.5f, 0xFFB8AE98, World.P_SMOKE);
-            }
-        }
-        if (v.state == SPOOL) {
-            // Spinning up on the pad (or wherever it set down).
-            v.timer -= dt;
-            if (v.timer <= 0) v.state = FLY_IN;
-            return false;
-        }
-        float gx = v.x, gy = v.y, speed = 110, face = Float.NaN;
-        // (Escorting a convoy: wherever its head is now.)
-        if (v.escort != null) {
-            if (w.dispatch.convoys.contains(v.escort)) {
-                v.tx = v.escort.x;
-                v.ty = v.escort.y;
-            } else if (v.state == CIRCLE) {
-                v.escort = null;
-                v.timer = Math.min(v.timer, 40);
-            }
-        }
-        if (v.state == FLY_IN) {
-            // A careful climb off the pad, then cruise, slowing for the approach.
-            v.alt = Math.min(1, v.alt + dt * 0.15f);
-            gx = v.tx;
-            gy = v.ty;
-            float d = (float) World.hypot(gx - v.x, gy - v.y);
-            speed = 15 + 95 * v.alt * v.alt;
-            if (v.alt < 0.35f) {
-                // (Straight up first: no skimming across the rooftops.)
-                gx = v.x;
-                gy = v.y;
-            }
-            if (v.kind == K_RESCUE_HELI && d < 150) {
-                // ((11.0) Not over the dead: the nearest spot to them that's clear, for the winch.)
-                float[] spot = clearSpot(v.tx, v.ty, 260);
-                if (spot != null) {
-                    v.tx = spot[0];
-                    v.ty = spot[1];
-                }
-                v.state = HOVER;
-                v.timer = 0;
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Over " + (v.place != null ? v.place : "the scene")
-                        + (v.pickup ? ". Coming in for the pickup, winch going down." : ". Coming into the hover, team going down on the winch."), v.x, v.y);
-            } else if (v.kind != K_POLICE_HELI && v.kind != K_RESCUE_HELI && v.troops > 0 && d < 220) {
-                // Air assault: put the troops down first, clear of the dead.
-                v.state = DROP;
-                v.lzTries = 0;
-                v.lzCheck = 1;
-                float[] lz = landingZone(v.tx, v.ty, v.x, v.y);
-                v.homeX = lz[0];
-                v.homeY = lz[1];
-            } else if (d < 170 && v.kind != K_RESCUE_HELI) {
-                v.state = CIRCLE;
-                v.circle = (float) Math.atan2(v.y - v.ty, v.x - v.tx);
-                v.hold = 0;
-                if (v.kind == K_POLICE_HELI) {
-                    v.timer = 90;
-                    w.dispatch.say(Dispatch.WHO_POLICE, null, "Police helicopter: Over " + (v.place != null ? v.place : "the scene")
-                            + ". Marksman at the door, spotlight on. We'll call them out for you.", v.x, v.y);
-                } else {
-                    v.timer = v.escort != null ? 600 : 60;
-                    w.dispatch.say(Dispatch.WHO_MILITARY, null, "Air " + v.number + ": " + (v.escort != null ? "With the convoy, flying cover."
-                            : "On station over " + (v.place != null ? v.place : "the target") + ". Door gunners clear to engage."), v.x, v.y);
-                }
-            }
-        } else if (v.state == DROP) {
-            // Down low over the landing zone, steady, while the troops jump out.
-            gx = v.homeX;
-            gy = v.homeY;
-            speed = 45;
-            float d = (float) World.hypot(gx - v.x, gy - v.y);
-            // ((10.60) Watching the landing zone all the way down: the dead closing on it (the rotors draw them), and
-            // it climbs away and picks another, rather than putting the squad down on top of them.)
-            v.lzCheck -= dt;
-            if (v.lzCheck <= 0) {
-                v.lzCheck = 0.5f;
-                if (w.countZombiesNear(gx, gy, 70) > 0 && v.lzTries < 4) {
-                    v.lzTries++;
-                    float[] lz = landingZone(v.tx, v.ty, v.x, v.y);
-                    v.homeX = lz[0];
-                    v.homeY = lz[1];
-                    gx = v.homeX;
-                    gy = v.homeY;
-                    d = (float) World.hypot(gx - v.x, gy - v.y);
-                    v.alt = Math.max(v.alt, 0.5f);
-                    if (v.lzTries == 1)
-                        w.dispatch.say(Dispatch.WHO_MILITARY, null, "Air " + v.number + ": LZ's hot, waving off. Finding another.", v.x, v.y);
-                }
-            }
-            if (d < 25) v.alt += (0.12f - v.alt) * Math.min(1, dt * 0.9f);
-            if (d < 6 && v.alt < 0.2f && v.speed < 8 && (w.countZombiesNear(v.x, v.y, 45) == 0 || v.lzTries >= 4)) {
-                unloadTroops(v);
-                v.state = CIRCLE;
-                v.circle = (float) Math.atan2(v.y - v.ty, v.x - v.tx);
-                v.hold = 0;
-                v.timer = 60;
-            }
-        } else if (v.state == HOVER) {
-            // Right over them, low, holding steady while the team works.
-            gx = v.tx;
-            gy = v.ty;
-            speed = 40;
-            face = v.angle;
-            v.alt += (0.5f - v.alt) * Math.min(1, dt * 0.8f);
-            // ((11.0) The dead come to the spot before the team is down: shift to another, and nobody goes down the
-            // line until it's clear.)
-            boolean hot = !v.pickup && v.team == null && w.countZombiesNear(gx, gy, 55) > 0;
-            if (hot) {
-                v.lzCheck -= dt;
-                if (v.lzCheck <= 0) {
-                    v.lzCheck = 2;
-                    float[] spot = clearSpot(gx, gy, 260);
-                    if (spot != null) {
-                        v.tx = spot[0];
-                        v.ty = spot[1];
-                    }
-                }
-            }
-            int step = !hot && World.hypot(gx - v.x, gy - v.y) < 8 && v.speed < 10 ? w.rescueStep(v, dt) : 0;
-            if (step == 1) {
-                // The team's down: back to base to wait for their call.
-                v.state = FLY_OUT;
-                v.standby = true;
-                // ((16.5) Anyone aboard comes back to base with them: there's no hospital.)
-                boolean lift = v.passengers > 0;
-                v.homeX = v.baseX;
-                v.homeY = v.baseY;
-                w.dispatch.chatter(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Team's on the ground. "
-                        + (lift ? "Got the lookout off the tower, bringing them back to base." : "Heading back to base.")
-                        + " Call us when you need us.", v.x, v.y);
-            } else if (step == 2) {
-                v.state = FLY_OUT;
-                v.standby = false;
-                v.homeX = v.baseX;
-                v.homeY = v.baseY;
-                w.dispatch.say(Dispatch.WHO_POLICE, null, "Rescue " + v.number + ": Everyone's aboard. "
-                        + (v.passengers > 0 ? v.passengers + " survivor" + (v.passengers == 1 ? "" : "s") + ", heading back to base." : "Nobody left to bring out. Returning."),
-                        v.x, v.y);
-            }
-        } else if (v.state == STANDBY) {
-            // Waiting on the pad, rotor turning slowly, for the team to call.
-            gx = v.homeX;
-            gy = v.homeY;
-            speed = 12;
-            v.alt = Math.max(0, v.alt - dt * 0.2f);
-            if (w.rescueCalled(v)) {
-                v.state = FLY_IN;
-                v.pickup = true;
-                v.standby = false;
-            }
-        } else if (v.state == CIRCLE) {
-            v.timer -= dt;
-            // Not a tight circle: it holds a hover off to one side with the door towards the fighting, then
-            // shifts a sixth of the way round and holds again.
-            v.hold -= dt;
-            if (v.hold <= 0) {
-                v.hold = 7 + w.rnd.nextFloat() * 4;
-                v.circle += v.escort != null ? 0 : 1.05f;
-            }
-            float r = v.escort != null ? 70 : v.kind == K_POLICE_HELI ? 110 : 140;
-            gx = v.tx + (float) Math.cos(v.circle) * r;
-            gy = v.ty + (float) Math.sin(v.circle) * r;
-            speed = v.escort != null ? 75 : 45;
-            float d = (float) World.hypot(gx - v.x, gy - v.y);
-            // Side-on to the target (the door gunner's side), sliding sideways from one hover to the next
-            // rather than swinging the nose round each time.
-            if (v.escort == null && d < 200) face = (float) Math.atan2(v.ty - v.y, v.tx - v.x) + (float) Math.PI / 2;
-            v.alt += (0.75f - v.alt) * Math.min(1, dt);
-            // Door gunners (the police helicopter's marksman takes careful single shots).
-            v.gunCd -= dt;
-            if (v.kind == K_POLICE_HELI) {
-                // ((14.8) Spotting from above for the units on the ground.)
-                if (v.escort == null) w.heliSpot(v, dt);
-                if (v.gunCd <= 0) {
-                    Entity z = w.nearestZombie(v.x, v.y, 220);
-                    v.gunCd = z != null ? 1.3f : 0.5f;
-                    if (z != null) w.marksmanShot(v.x, v.y, z);
-                }
-            } else if (v.gunCd <= 0) {
-                Entity z = w.nearestZombie(v.x, v.y, 210);
-                if (z != null) {
-                    v.burst++;
-                    v.gunCd = v.burst % 6 == 0 ? 1.4f : 0.13f;
-                    w.airShot(v.x, v.y, z);
-                } else {
-                    v.gunCd = 0.5f;
-                }
-            }
-            if (v.timer <= 0) {
-                v.state = FLY_OUT;
-                v.escort = null;
-                v.homeX = v.baseX;
-                v.homeY = v.baseY;
-                if (v.kind == K_POLICE_HELI)
-                    w.dispatch.say(Dispatch.WHO_POLICE, null, "Police helicopter: Low on fuel, heading back to the pad.", v.x, v.y);
-                else w.dispatch.say(Dispatch.WHO_MILITARY, null, "Air " + v.number + ": Winchester, returning to base to rearm.", v.x, v.y);
-            }
-        } else if (v.state == FLY_OUT) {
-            v.alt += (1 - v.alt) * Math.min(1, dt);
-            gx = v.homeX;
-            gy = v.homeY;
-            speed = 110;
-            float d = (float) World.hypot(gx - v.x, gy - v.y);
-            // ((10.60) The dead round the pad, or the hospital doors: it holds overhead until they're dealt with,
-            // rather than setting down and letting everyone out among them.)
-            // ((24.0) Not for ever, though: with no more than a straggler or two about after a minute and a quarter it sets
-            // down all the same. One idle zombie by the pad held a rescue flight and its passengers overhead for good.)
-            if (d < 6 && v.speed < 12) v.holdT += dt;
-            else v.holdT = 0;
-            int round = d < 6 && v.speed < 12 ? w.countZombiesNear(gx, gy, 70) : 0;
-            if (round > 0 && (v.holdT < 75 || round > 2)) {
-                if (v.holdSaidCd <= 0) {
-                    v.holdSaidCd = 30;
-                    w.dispatch.say(v.kind == K_POLICE_HELI || v.kind == K_RESCUE_HELI ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, null,
-                            (v.kind == K_RESCUE_HELI ? "Rescue " : v.kind == K_POLICE_HELI ? "Police helicopter " : "Air ") + v.number
-                                    + ": The dead are all round where we set down. Holding overhead till it's clear.", v.x, v.y);
-                }
-            } else if (d < 6 && v.speed < 12) {
-                if (v.kind == K_RESCUE_HELI && v.passengers > 0) {
-                    // Set them down at the hospital, then home.
-                    w.dropRescued(v);
-                    v.homeX = v.baseX;
-                    v.homeY = v.baseY;
-                    return false;
-                }
-                if (v.padAt == null) return true;
-                v.state = LAND;
-            }
-        } else {
-            // Settle onto the pad.
-            gx = v.homeX;
-            gy = v.homeY;
-            speed = 8;
-            face = v.angle;
-            v.alt -= dt * 0.2f;
-            // ((10.60) And back up if they come for it as it settles.)
-            if (v.alt > 0.05f && w.countZombiesNear(gx, gy, 50) > (v.holdT >= 75 ? 2 : 0)) {
-                v.state = FLY_OUT;
-                v.alt += dt * 0.4f;
-            } else if (v.alt <= 0) {
-                if (v.padAt == null) return true;
-                if (v.kind == K_RESCUE_HELI && v.standby) {
-                    v.alt = 0;
-                    v.state = STANDBY;
-                    return false;
-                }
-                landed(v);
-                return false;
-            }
-        }
-        flyTo(v, gx, gy, speed, face, dt);
-        return false;
+    /** See FleetTraffic. */
+    float[] pumpFuel() {
+        return cars.pumpFuel();
     }
 
-    /**
-     * A helicopter moves any way it likes, not just nose first: it accelerates towards where it wants to be,
-     * slows to arrive there, and can hang still over a spot. The nose follows the way it's going (or points
-     * where it's told to while it hovers), and it banks into each change of course.
-     */
-    private void flyTo(Vehicle v, float gx, float gy, float speed, float face, float dt) {
-        float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-        float acc = 32;
-        float want = d < 0.5f ? 0 : Math.min(speed, (float) Math.sqrt(2 * acc * 0.8f * d));
-        float wvx = d < 0.5f ? 0 : dx / d * want, wvy = d < 0.5f ? 0 : dy / d * want;
-        float ax = wvx - v.hvx, ay = wvy - v.hvy, al = (float) Math.sqrt(ax * ax + ay * ay), max = acc * dt;
-        if (al > max) {
-            ax *= max / al;
-            ay *= max / al;
-        }
-        v.hvx += ax;
-        v.hvy += ay;
-        v.x += v.hvx * dt;
-        v.y += v.hvy * dt;
-        v.speed = (float) Math.sqrt(v.hvx * v.hvx + v.hvy * v.hvy);
-        float heading = !Float.isNaN(face) ? face : v.speed > 12 ? (float) Math.atan2(v.hvy, v.hvx) : v.angle;
-        float diff = heading - v.angle;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        v.angle += Math.max(-dt * 0.9f, Math.min(dt * 0.9f, diff));
-        // Bank with the sideways push.
-        float side = (-ax * (float) Math.sin(v.angle) + ay * (float) Math.cos(v.angle)) / Math.max(dt, 0.001f);
-        v.bank += (Math.max(-1.2f, Math.min(1.2f, side * 0.03f)) - v.bank) * Math.min(1, dt * 3);
+    /** See FleetPickups. */
+    int pickups() {
+        return convoyUnits.pickups();
     }
 
-    /** Somewhere open to put troops down near (x, y), a little way back from the nearest of the dead. */
-    /**
-     * (10.60) Where to put troops down for a fight at (x, y), coming in from (fx, fy): open ground (a street, a square,
-     * a field) a good way off the fighting, with none of the dead near it and as few as can be further out,
-     * on the near side if it can; with nowhere clear, the quietest spot found. It used to look only away
-     * from the nearest one, check a few steps round the spot, and with nothing clear set down on the fight itself.
-     */
-    private float[] landingZone(float x, float y, float fx, float fy) {
-        float[] best = null, quiet = null;
-        float bs = Float.MAX_VALUE, qs = Float.MAX_VALUE;
-        float ax = fx - x, ay = fy - y, al = (float) World.hypot(ax, ay) + 0.01f;
-        for (float r = 140; r <= 420; r += 40)
-            for (int k = 0; k < 16; k++) {
-                float a = k * (float) Math.PI / 8 + r * 0.01f;
-                float ca = (float) Math.cos(a), sa = (float) Math.sin(a);
-                float[] p = city.findWalkable(x + ca * r, y + sa * r);
-                if (p == null || city.circleBlocked(p[0], p[1], 10)) continue;
-                int near = w.countZombiesNear(p[0], p[1], 90), around = w.countZombiesNear(p[0], p[1], 180);
-                // (Nearer the fight is better, and on the side it's coming from; the dead about count most.)
-                float score = r * 0.4f + around * 60 - (ca * ax + sa * ay) / al * 30;
-                if (near == 0 && score < bs) {
-                    bs = score;
-                    best = p;
-                }
-                float qscore = near * 100 + around * 20 + r * 0.1f;
-                if (qscore < qs) {
-                    qs = qscore;
-                    quiet = p;
-                }
-            }
-        if (best != null) return best;
-        if (quiet != null) return quiet;
-        float[] p = city.findWalkable(fx, fy);
-        return p != null ? p : new float[]{fx, fy};
+    /** See FleetPickups. */
+    int pickupsOf(SurvivorBases.Base b) {
+        return convoyUnits.pickupsOf(b);
     }
 
-    /**
-     * (11.0) The nearest open spot to (x, y), within reach, with none of the dead within 60 of it (the spot itself if
-     * it's clear). Null if there's nowhere.
-     */
-    private float[] clearSpot(float x, float y, float reach) {
-        for (float r = 0; r <= reach; r += 30)
-            for (int k = 0; k < (r == 0 ? 1 : 12); k++) {
-                float a = k * (float) Math.PI / 6 + r * 0.02f;
-                float[] p = city.findWalkable(x + (float) Math.cos(a) * r, y + (float) Math.sin(a) * r);
-                if (p == null || city.circleBlocked(p[0], p[1], 6)) continue;
-                if (w.countZombiesNear(p[0], p[1], 60) == 0) return p;
-            }
-        return null;
+    /** See FleetPickups. */
+    Vehicle makePickup(float x, float y, float angle, SurvivorBases.Base b, java.util.List<Entity> crew) {
+        return convoyUnits.makePickup(x, y, angle, b, crew);
     }
 
-    /** The troops jump down: everyone aboard but the pilot (and a reinforcement's two door gunners), off to the fighting. */
-    private void unloadTroops(Vehicle v) {
-        Entity pilot = livePilot(v);
-        // ((14.9) Only reinforcements flown in from outside bring door gunners of their own, who stay aboard.)
-        int keep = v.reinforcement ? 2 : 0;
-        Entity first = null;
-        for (int i = v.crew.size() - 1; i >= 0; i--) {
-            Entity e = v.crew.get(i);
-            if (e == pilot) continue;
-            if (keep > 0) {
-                keep--;
-                continue;
-            }
-            v.crew.remove(i);
-            float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
-            if (!w.release(e, v.x + (float) Math.cos(a) * 12, v.y + (float) Math.sin(a) * 12)) continue;
-            e.rig = null;
-            if (v.incident != null && !v.incident.resolved) {
-                e.task = Dispatch.T_RESPOND;
-                e.incident = v.incident;
-                e.onScene = false;
-            } else {
-                e.fear = 15;
-                e.threatX = v.tx;
-                e.threatY = v.ty;
-            }
-            if (first == null) first = e;
-        }
-        v.troops = 0;
-        if (first != null && first.role == Entity.ROLE_SF)
-            w.dispatch.say(Dispatch.WHO_MILITARY, first, "Viper team is on the ground at " + (v.place != null ? v.place : "the LZ") + ". Moving in quiet.", v.x, v.y, true);
-        else if (first != null)
-            w.dispatch.say(Dispatch.WHO_MILITARY, first, "Boots on the ground at " + (v.place != null ? v.place : "the LZ") + ". Moving up.", v.x, v.y);
+    /** See FleetPickups. */
+    Vehicle convoyVehicle(int role, float x, float y, float angle, Convoys.Column c) {
+        return convoyUnits.convoyVehicle(role, x, y, angle, c);
     }
 
-    // ------------------------------------------------------------------ tanks and ambulances
-
-    private boolean updateTank(Vehicle v, float dt) {
-        v.cannonCd -= dt;
-        v.gunCd -= dt;
-        if (v.state == WAIT) {
-            v.timer -= dt;
-            if (v.timer <= 0) v.state = DRIVE;
-            return false;
-        }
-        // The turret tracks the nearest zombie; the cannon fires at crowds, the coax gun at stragglers.
-        // Only what the crew can see: no shooting through buildings.
-        Entity z = w.nearestVisibleZombie(v.x, v.y, 260);
-        float aim = z != null ? (float) Math.atan2(z.y - v.y, z.x - v.x) : v.angle;
-        v.turret = turnTo(v.turret, aim, dt * 1.8f);
-        if (z != null) {
-            float off = Math.abs(aim - v.turret);
-            if (v.cannonCd <= 0 && off < 0.15f && (w.countZombiesNear(z.x, z.y, 40) >= 3 || z.type == Entity.GIANT) && !w.peopleNear(z.x, z.y, 55)
-                    && World.hypot(z.x - v.x, z.y - v.y) > 60) {
-                v.cannonCd = 3.5f;
-                w.tankShell(v.x + (float) Math.cos(v.turret) * 14, v.y + (float) Math.sin(v.turret) * 14, z.x, z.y);
-            } else if (v.gunCd <= 0 && World.hypot(z.x - v.x, z.y - v.y) < 160) {
-                v.gunCd = 0.15f;
-                w.airShot(v.x, v.y, z);
-            }
-        }
-        if (v.soundCd <= 0 && v.state != ENGAGE) {
-            v.soundCd = 1.1f;
-            w.emit(Sfx.ENGINE, v.x, v.y);
-        }
-        if (v.state == DRIVE) {
-            v.stuckTimer += dt;
-            boolean moving = driveStep(v, dt, 45, 1);
-            if (moving) w.runOver(v.x, v.y, 10, Math.max(v.speed, 25), v.angle);
-            // (A tank coming in from outside waits out a jam on the way in.)
-            if (!moving || v.stuckTimer > (v.reinforcement ? 20 : 5)) {
-                v.state = ENGAGE;
-                v.timer = 70;
-                v.speed = 0;
-            }
-            return false;
-        }
-        if (v.state == ENGAGE) {
-            v.speed = 0;
-            v.timer -= dt;
-            v.idleTimer = z == null ? v.idleTimer + dt : 0;
-            if (v.timer <= 0 || v.idleTimer > 15) {
-                v.state = RETURN;
-                w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Armor pulling back to base.", v.x, v.y);
-                return !route(v, v.homeX, v.homeY);
-            }
-            return false;
-        }
-        v.stuckTimer += dt;
-        boolean moving = driveStep(v, dt, 45, 1);
-        if (moving) w.runOver(v.x, v.y, 10, Math.max(v.speed, 25), v.angle);
-        // ((24.2) A tank stuck on its way back was taken off the map after eight seconds, in front of you. In view and
-        // still a way off, it tries another way first.)
-        if ((!moving || v.stuckTimer > 8) && inView(v.x, v.y) && World.hypot(v.x - v.homeX, v.y - v.homeY) > 160 && v.jamTries < 8) {
-            if (v.rerouteCd <= 0) {
-                v.jamTries++;
-                v.rerouteCd = 4;
-                v.stuckTimer = 0;
-                route(v, v.homeX, v.homeY);
-            }
-            return false;
-        }
-        return !moving || v.stuckTimer > 8;
+    /** See FleetPickups. */
+    boolean routeTo(Vehicle v, float x, float y) {
+        return convoyUnits.routeTo(v, x, y);
     }
 
+    /** See FleetPickups. */
+    boolean convoyDrive(Vehicle v, float dt, float max) {
+        return convoyUnits.convoyDrive(v, dt, max);
+    }
+
+    /** See FleetPickups. */
+    void convoyGun(Vehicle v, float dt) {
+        convoyUnits.convoyGun(v, dt);
+    }
+
+    /** See FleetPickups. */
+    void takeAsPickup(Vehicle v, java.util.List<Entity> crew) {
+        convoyUnits.takeAsPickup(v, crew);
+    }
+
+    /** See FleetRouting. */
+    float[] randomTownRoad() {
+        return routing.randomTownRoad();
+    }
+
+    /** See FleetRouting. */
+    int traceRoute(Vehicle v, int[] out) {
+        return routing.traceRoute(v, out);
+    }
+
+    /** See FleetRouting. */
+    boolean inView(float x, float y) {
+        return routing.inView(x, y);
+    }
+
+    /** See FleetService. */
+    boolean send(int unitType, int count, float fromX, float fromY, float toX, float toY, Dispatch.Incident inc, Dispatch.SafeZone zone, String place) {
+        return service.send(unitType, count, fromX, fromY, toX, toY, inc, zone, place);
+    }
+
+    /** See FleetRouting. */
+    boolean clearFromEntry(Vehicle o) {
+        return routing.clearFromEntry(o);
+    }
+
+    /** See FleetRouting. */
+    int driveCost(float fx, float fy, float tx, float ty) {
+        return routing.driveCost(fx, fy, tx, ty);
+    }
+
+    /** See FleetRouting. */
+    boolean canDrive(float fx, float fy, float tx, float ty) {
+        return routing.canDrive(fx, fy, tx, ty);
+    }
+
+    /** See FleetService. */
+    boolean sendSwat(City.Facility station, Dispatch.Incident inc) {
+        return service.sendSwat(station, inc);
+    }
+
+    /** See FleetService. */
+    boolean sendBearCat(City.Facility station, Dispatch.Incident inc) {
+        return service.sendBearCat(station, inc);
+    }
+
+    /** See FleetArmy. */
+    boolean startRecon(City.Facility base) {
+        return armyUnits.startRecon(base);
+    }
+
+    /** See FleetArmy. */
+    Vehicle startReconAt(float x, float y) {
+        return armyUnits.startReconAt(x, y);
+    }
+
+    /** See FleetService. */
+    Vehicle placeBearCat(float x, float y) {
+        return service.placeBearCat(x, y);
+    }
+
+    /** See FleetService. */
+    Vehicle placeShelterVan(float x, float y) {
+        return service.placeShelterVan(x, y);
+    }
+
+    /** See FleetCommand. */
+    Vehicle commandPost(float sx, float sy, float tx, float ty, java.util.List<Entity> crew, int kind) {
+        return commandTrucks.commandPost(sx, sy, tx, ty, crew, kind);
+    }
+
+    /** See FleetCommand. */
+    Vehicle parkPost(City.Facility f, int kind) {
+        return commandTrucks.parkPost(f, kind);
+    }
+
+    /** See FleetCommand. */
+    void parkHome(Vehicle v, City.Facility f) {
+        commandTrucks.parkHome(v, f);
+    }
+
+    /** See FleetCommand. */
+    boolean postGo(Vehicle v, float tx, float ty) {
+        return commandTrucks.postGo(v, tx, ty);
+    }
+
+    /** See FleetCommand. */
+    void seat(Vehicle v, java.util.List<Entity> crew) {
+        commandTrucks.seat(v, crew);
+    }
+
+    /** See FleetCommand. */
+    void musterPost(Vehicle v, java.util.List<Entity> crew, float tx, float ty) {
+        commandTrucks.musterPost(v, crew, tx, ty);
+    }
+
+    /** See FleetCommand. */
+    boolean movePost(Vehicle v, float tx, float ty) {
+        return commandTrucks.movePost(v, tx, ty);
+    }
+
+    /** See FleetBoats. */
+    Vehicle policeBoat(float x, float y, float lx, float ly, int number) {
+        return boats.policeBoat(x, y, lx, ly, number);
+    }
+
+    /** See FleetBoats. */
+    int[][] seaApproach(float tx, float ty) {
+        return boats.seaApproach(tx, ty);
+    }
+
+    /** See FleetBoats. */
+    boolean marineLanding(int count, float tx, float ty, String place, Dispatch.Incident inc) {
+        return boats.marineLanding(count, tx, ty, place, inc);
+    }
+
+    /** See FleetService. */
+    boolean sendRiotVan(City.Facility station, Dispatch.Incident inc) {
+        return service.sendRiotVan(station, inc);
+    }
+
+    /** See FleetPatrols. */
+    Vehicle startRangerPatrol(City.Building station) {
+        return patrols.startRangerPatrol(station);
+    }
+
+    /** See FleetArmy. */
+    int ammoTrucksOut() {
+        return armyUnits.ammoTrucksOut();
+    }
+
+    /** See FleetArmy. */
+    Vehicle ammoTruckNear(float x, float y, float reach) {
+        return armyUnits.ammoTruckNear(x, y, reach);
+    }
+
+    /** See FleetArmy. */
+    boolean ammoTruckFor(Dispatch.Incident inc) {
+        return armyUnits.ammoTruckFor(inc);
+    }
+
+    /** See FleetArmy. */
+    Vehicle ammoTruckComing(float x, float y, float reach) {
+        return armyUnits.ammoTruckComing(x, y, reach);
+    }
+
+    /** See FleetArmy. */
+    Vehicle sendAmmoTruck(City.Facility from, Dispatch.Incident inc) {
+        return armyUnits.sendAmmoTruck(from, inc);
+    }
+
+    /** See FleetArmy. */
+    void ensureDozers() {
+        armyUnits.ensureDozers();
+    }
+
+    /** See FleetArmy. */
+    boolean sendSupply(City.Facility from, Dispatch.SafeZone z, int rounds) {
+        return armyUnits.sendSupply(from, z, rounds);
+    }
+
+    /** See FleetArmy. */
+    boolean sendRestock(float fromX, float fromY, City.Building b, City.Facility f) {
+        return armyUnits.sendRestock(fromX, fromY, b, f);
+    }
+
+    /** See FleetAircraft. */
+    void sendJet(float tx, float ty) {
+        aircraft.sendJet(tx, ty);
+    }
+
+    /** See FleetAircraft. */
+    boolean flyInTroops(int count, Dispatch.Incident inc, String place) {
+        return aircraft.flyInTroops(count, inc, place);
+    }
+
+    /** See FleetAircraft. */
+    void sendCrashingPlane(float tx, float ty) {
+        aircraft.sendCrashingPlane(tx, ty);
+    }
+
+    /** See FleetAmbulances. */
+    boolean sendAmbulance(float tx, float ty) {
+        return ambulances.sendAmbulance(tx, ty);
+    }
+
+    /** See FleetArmy. */
+    boolean sendTank(float fromX, float fromY, float toX, float toY, String place) {
+        return armyUnits.sendTank(fromX, fromY, toX, toY, place);
+    }
+
+    /** See FleetTraffic. */
+    Vehicle placeCar(float x, float y) {
+        return cars.placeCar(x, y);
+    }
+
+    /** See FleetPatrols. */
+    Vehicle placePolice(float x, float y) {
+        return patrols.placePolice(x, y);
+    }
+
+    /** See FleetPatrols. */
+    int roadblocks(Dispatch.SafeZone z) {
+        return patrols.roadblocks(z);
+    }
+
+    /** See FleetPatrols. */
+    void putUpBarrier(Vehicle v, float zx, float zy) {
+        patrols.putUpBarrier(v, zx, zy);
+    }
+
+    /** See FleetArmy. */
+    Vehicle placeTank(float x, float y) {
+        return armyUnits.placeTank(x, y);
+    }
+
+    /** See FleetHelis. */
+    void stationHelis() {
+        helis.stationHelis();
+    }
+
+    /** See FleetHelis. */
+    int helisOfKind(int kind) {
+        return helis.helisOfKind(kind);
+    }
+
+    /** See FleetHelis. */
+    Entity livePilot(Vehicle v) {
+        return helis.livePilot(v);
+    }
+
+    /** See FleetHelis. */
+    Vehicle readyHeli(int kind, float x, float y) {
+        return helis.readyHeli(kind, x, y);
+    }
+
+    /** See FleetHelis. */
+    boolean launchHeli(Vehicle v, float tx, float ty, String place, Dispatch.Incident inc, int extra) {
+        return helis.launchHeli(v, tx, ty, place, inc, extra);
+    }
+
+    /** See FleetHelis. */
+    ArrayList<Entity> airlift(int count, float fx, float fy, float tx, float ty, String place, Dispatch.Incident inc) {
+        return helis.airlift(count, fx, fy, tx, ty, place, inc);
+    }
+
+    /** See FleetTrains. */
+    boolean crossingClosed(float x) {
+        return trains.crossingClosed(x);
+    }
+
+    /** See FleetDriving. */
+    int gather(float x, float y, float r) {
+        return driving.gather(x, y, r);
+    }
+
+    /** See FleetTraffic. */
+    void tripAlarm(Vehicle v, float odds) {
+        cars.tripAlarm(v, odds);
+    }
+
+    /** See FleetService. */
+    boolean sendHome(java.util.List<Entity> group, float ex, float ey) {
+        return service.sendHome(group, ex, ey);
+    }
+
+    /** See FleetDriving. */
+    boolean onBridge(Vehicle v) {
+        return driving.onBridge(v);
+    }
+
+    /** See FleetPlayer. */
+    void takeWheel(Vehicle v, Entity e) {
+        playerDriving.takeWheel(v, e);
+    }
+
+    /** See FleetPlayer. */
+    void leaveWheel(Vehicle v, Entity e) {
+        playerDriving.leaveWheel(v, e);
+    }
+
+    /** See FleetCrews. */
+    void boarded(Vehicle v, Entity e) {
+        crews.boarded(v, e);
+    }
+
+    /** See FleetCrews. */
+    Entity dragOut(Vehicle v, float x, float y) {
+        return crews.dragOut(v, x, y);
+    }
+
+    /** See FleetCrews. */
+    void board(Vehicle v, Entity e) {
+        crews.board(v, e);
+    }
+
+    /** See FleetCrews. */
+    void discard(Vehicle v) {
+        crews.discard(v);
+    }
+
+    /** See FleetCrews. */
+    void crewOut(Vehicle v, boolean offDuty) {
+        crews.crewOut(v, offDuty);
+    }
+
+    /** See FleetEvac. */
+    void exodusOver() {
+        evacBuses.exodusOver();
+    }
+
+    /** See FleetCrews. */
+    int crewOnFoot(Vehicle v) {
+        return crews.crewOnFoot(v);
+    }
+
+    /** See FleetCrews. */
+    void note(Entity e) {
+        crews.note(e);
+    }
+
+    /** See FleetCrews. */
+    void countCrews(int[] counts) {
+        crews.countCrews(counts);
+    }
+
+    /** See FleetPatrols. */
+    Vehicle startPatrol(City.Facility station) {
+        return patrols.startPatrol(station);
+    }
+
+    /** See FleetPatrols. */
+    Vehicle startAgencyPatrol(int agency) {
+        return patrols.startAgencyPatrol(agency);
+    }
+
+    /** See FleetPatrols. */
+    boolean stationCar(java.util.List<Entity> officers, City.Facility f, Dispatch.Incident inc) {
+        return patrols.stationCar(officers, f, inc);
+    }
+
+    /** See FleetPatrols. */
+    Vehicle patrolFor(float x, float y) {
+        return patrols.patrolFor(x, y);
+    }
+
+    /** See FleetPatrols. */
+    void heardFight(float x, float y, float radius, float tx, float ty) {
+        patrols.heardFight(x, y, radius, tx, ty);
+    }
+
+    /** See FleetPatrols. */
+    void redirect(Dispatch.Incident from, Dispatch.Incident to) {
+        patrols.redirect(from, to);
+    }
+
+    /** See FleetPatrols. */
+    boolean respond(Vehicle v, Dispatch.Incident inc) {
+        return patrols.respond(v, inc);
+    }
+
+    /** See FleetArmy. */
+    boolean mountUp(java.util.List<Entity> squad, Dispatch.Incident inc) {
+        return armyUnits.mountUp(squad, inc);
+    }
+
+    /** See FleetArmy. */
+    float[] bay(float[] p, City.Facility f) {
+        return armyUnits.bay(p, f);
+    }
+
+    /** See FleetArmy. */
+    java.util.List<Entity> standby(City.Facility f, int type, int role, int max) {
+        return armyUnits.standby(f, type, role, max);
+    }
+
+    /** See FleetArmy. */
+    boolean basePatrol(java.util.List<Entity> squad, City.Facility base, float tx, float ty) {
+        return armyUnits.basePatrol(squad, base, tx, ty);
+    }
+
+    /** See FleetArmy. */
+    int basePatrols(City.Facility base) {
+        return armyUnits.basePatrols(base);
+    }
+
+    /** See FleetArmy. */
+    int inboundSoldiers(Dispatch.Incident inc) {
+        return armyUnits.inboundSoldiers(inc);
+    }
+
+    /** See FleetArmy. */
+    void stockBases() {
+        armyUnits.stockBases();
+    }
+
+    /** See FleetPatrols. */
+    void stockStations() {
+        patrols.stockStations();
+    }
+
+    /** See FleetService. */
+    boolean driveTo(java.util.List<Entity> group, Dispatch.Incident inc) {
+        return service.driveTo(group, inc);
+    }
+
+    /** See FleetService. */
+    int inbound(Dispatch.Incident inc) {
+        return service.inbound(inc);
+    }
+
+    /** See FleetPatrols. */
+    Entity startBikeAt(float x, float y) {
+        return patrols.startBikeAt(x, y);
+    }
 }
