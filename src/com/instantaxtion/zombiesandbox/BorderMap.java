@@ -71,7 +71,7 @@ final class BorderMap extends CityPart {
         if (ra1 - ra0 < 6 || rc1 - rc0 < 6) return;
         int B = 15 + r.nextInt(6);
         int na = Math.max(1, Math.round((ra1 - ra0 + 3) / (float) (B + 3))), nc = Math.max(1, Math.round((rc1 - rc0 + 3) / (float) (B + 3)));
-        int[] as = cuts(ra0, ra1, na), cs = cuts(rc0, rc1, nc);
+        int[] as = cuts(ra0, ra1, na, r), cs = cuts(rc0, rc1, nc, r);
         for (int i = 1; i < na; i++) road(as[i] - 3, rc0, as[i], rc1, false, false);
         for (int j = 1; j < nc; j++) road(ra0, cs[j] - 3, ra1, cs[j], true, false);
         // (The square by the frontier road, in the middle of the stretch along it.)
@@ -86,9 +86,12 @@ final class BorderMap extends CityPart {
     }
 
     /** n pieces of lo..hi, three-tile streets between them: the starts, and hi plus 3 at the end. */
-    private static int[] cuts(int lo, int hi, int n) {
+    private static int[] cuts(int lo, int hi, int n, Random r) {
         int[] s = new int[n + 1];
-        for (int i = 0; i <= n; i++) s[i] = lo + Math.round((hi - lo + 3) * i / (float) n);
+        // (Not all the same: each block a little longer or shorter than the next.)
+        float[] cum = new float[n + 1];
+        for (int i = 1; i <= n; i++) cum[i] = cum[i - 1] + 0.7f + 0.6f * r.nextFloat();
+        for (int i = 0; i <= n; i++) s[i] = lo + Math.round((hi - lo + 3) * cum[i] / cum[n]);
         s[n] = hi + 3;
         for (int i = 1; i < n; i++) s[i] = Math.max(s[i], lo + 4);
         return s;

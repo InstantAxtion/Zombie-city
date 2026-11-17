@@ -107,28 +107,63 @@ final class StadiumMap extends CityPart {
         gen.carve(new Street(sx0, sy, sx1, sy + 3, false, false));
         int ma0 = topMain ? my0 : sy + 3, ma1 = topMain ? sy : my1;
         // The stadium in the middle of the main half, fan zones either side.
-        int stw = clamp(Math.round(sw * 0.5f), 30, 140);
+        int stw = clamp(Math.round(sw * 0.5f), 30, 78);
         int s0 = cx - stw / 2, s1 = s0 + stw;
         gen.carve(new Street(s0 - 3, ma0, s0, ma1, true, false));
         gen.carve(new Street(s1, ma0, s1 + 3, ma1, true, false));
-        part(s0, ma0, s1, ma1, "Grand Stadium");
-        part(sx0, ma0, s0 - 3, ma1, "Fan Zone");
-        part(s1 + 3, ma0, sx1, ma1, r.nextBoolean() ? "Fan Zone" : "Food Truck Plaza");
+        // (On the big maps the stadium by the station, and more of the complex beyond it.)
+        int sth = Math.min(ma1 - ma0, Math.max(26, Math.round(stw * 0.78f)));
+        int st0 = topMain ? ma1 - sth : ma0, st1 = st0 + sth;
+        part(s0, st0, s1, st1, "Grand Stadium");
+        if (ma1 - ma0 - sth >= 12) {
+            int ey = topMain ? st0 - 3 : st1;
+            gen.carve(new Street(s0, ey, s1, ey + 3, false, false));
+            venues(s0, topMain ? ma0 : ey + 3, s1, topMain ? ey : ma1, new String[]{"Fan Zone", "Athletics Stadium", "Music Festival Ground"}, r);
+        }
+        venues(sx0, ma0, s0 - 3, ma1, new String[]{"Fan Zone", "Food Truck Plaza", "Velodrome", "Fan Zone"}, r);
+        venues(s1 + 3, ma0, sx1, ma1, new String[]{r.nextBoolean() ? "Fan Zone" : "Food Truck Plaza", "Fan Zone", "Training Ground", "Music Festival Ground"}, r);
         // The other half: the arena, the pitches, a fan zone - in a seeded order.
-        int aw = clamp(Math.round(sw * 0.3f), 18, 70), fw = clamp(Math.round(sw * 0.22f), 12, 60);
+        int aw = clamp(Math.round(sw * 0.3f), 18, 52), fw = clamp(Math.round(sw * 0.22f), 12, 44);
         int a0 = r.nextBoolean() ? sx0 : sx1 - aw;
         boolean arenaLeft = a0 == sx0;
         String arena = r.nextBoolean() ? "Basketball Arena" : "Ice Rink Arena";
         int b0 = arenaLeft ? sx0 + aw + 3 : sx0, b1 = arenaLeft ? sx1 : sx1 - aw - 3;
         gen.carve(new Street(arenaLeft ? sx0 + aw : sx1 - aw - 3, oy0, arenaLeft ? sx0 + aw + 3 : sx1 - aw, oy1, true, false));
-        part(a0, oy0, a0 + aw, oy1, arena);
+        venues(a0, oy0, a0 + aw, oy1, new String[]{arena, "Fan Zone", "Tennis Club"}, r);
         boolean fanFirst = r.nextBoolean();
         int f0 = fanFirst ? b0 : b1 - fw, f1 = f0 + fw;
         if (b1 - b0 - fw - 3 >= 14) {
             gen.carve(new Street(fanFirst ? f1 : f0 - 3, oy0, fanFirst ? f1 + 3 : f0, oy1, true, false));
-            part(f0, oy0, f1, oy1, "Fan Zone");
-            part(fanFirst ? f1 + 3 : b0, oy0, fanFirst ? b1 : f0 - 3, oy1, "Pitches");
-        } else part(b0, oy0, b1, oy1, "Pitches");
+            venues(f0, oy0, f1, oy1, new String[]{"Fan Zone", "Food Truck Plaza"}, r);
+            venues(fanFirst ? f1 + 3 : b0, oy0, fanFirst ? b1 : f0 - 3, oy1, new String[]{"Pitches", "Athletics Stadium", "Pitches", "Training Ground"}, r);
+        } else venues(b0, oy0, b1, oy1, new String[]{"Pitches", "Fan Zone"}, r);
+    }
+
+    /**
+     * A stretch of the complex cut by streets into parts no more than about sixty tiles a side, each the next of what's
+     * on the menu (round again if it runs out).
+     */
+    private void venues(int x0, int y0, int x1, int y1, String[] menu, Random r) {
+        venues(x0, y0, x1, y1, menu, new int[1]);
+    }
+
+    private void venues(int x0, int y0, int x1, int y1, String[] menu, int[] next) {
+        int w = x1 - x0, h = y1 - y0;
+        if (w > 64 && w >= h) {
+            int at = x0 + w / 2 - 1;
+            gen.carve(new Street(at, y0, at + 3, y1, true, false));
+            venues(x0, y0, at, y1, menu, next);
+            venues(at + 3, y0, x1, y1, menu, next);
+            return;
+        }
+        if (h > 64) {
+            int at = y0 + h / 2 - 1;
+            gen.carve(new Street(x0, at, x1, at + 3, false, false));
+            venues(x0, y0, x1, at, menu, next);
+            venues(x0, at + 3, x1, y1, menu, next);
+            return;
+        }
+        part(x0, y0, x1, y1, menu[next[0]++ % menu.length]);
     }
 
     private void part(int x0, int y0, int x1, int y1, String kind) {

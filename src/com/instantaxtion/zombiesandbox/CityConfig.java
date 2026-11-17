@@ -133,7 +133,7 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // Bay City
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Delta Marsh
             {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Fjord Town
-            {STYLE_MIXED, 1, 2, 3, 1, 1, 2, 1},       // ((28.0) Stadium City, in the old Canal City's place)
+            {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // ((28.0) Stadium City, in the old Canal City's place)
     };
 
     // Landmarks per medium map:  churches, schools, fire stations, supermarkets, gas stations, cemeteries,
@@ -195,10 +195,10 @@ final class CityConfig implements OptionSet {
             {2, 1, 1, 1, 0, 2},
             {3, 2, 1, 2, 2, 1},
             {3, 2, 1, 2, 1, 2}, {4, 2, 1, 1, 2, 1}, {4, 1, 1, 2, 1, 2}, {3, 3, 0, 2, 3, 0}, {3, 2, 2, 1, 2, 1},
-            {2, 1, 1, 1, 3, 0}, {3, 2, 0, 1, 4, 0},
+            {2, 1, 1, 1, 3, 0}, {3, 2, 1, 2, 1, 1},
             {2, 1, 3, 2, 0, 0},
             {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0},
-            {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 1, 0, 1, 3, 0},
+            {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 2, 3, 3, 0, 1},
     };
 
     /** Current index into VALUES for each option. */
