@@ -19,7 +19,8 @@ import java.util.ArrayList;
 final class SaveGame {
     // ((27.1) Still 78: 27.0 wrote saves at 78 (for a map since taken out again; a save on it is refused as a removed map).)
     // ((27.4) 79: the vehicles themselves (VehicleSave), at the very end.)
-    private static final int VERSION = 79;
+    // ((27.5) 80: the calls going on (CallSave), after the vehicles.)
+    private static final int VERSION = 80;
 
     private SaveGame() {
     }
@@ -516,6 +517,8 @@ final class SaveGame {
             writePost(out, ops.army);
             // ((27.4) Version 79 (at the very end): the vehicles, with those aboard, and the convoys.)
             VehicleSave.write(out, w, kept, keptIndex, index);
+            // ((27.5) Version 80: the calls going on, and who and what was on its way to each.)
+            CallSave.write(out, w, kept, index);
         } finally {
             moved = null;
             homeIndex = null;
@@ -1182,7 +1185,12 @@ final class SaveGame {
                     if (version >= 76) readPost(in, ops, ops.army, version);
                 }
             }
-            if (version >= 79) VehicleSave.read(in, w, written);
+            if (version >= 79) {
+                int before = w.fleet.vehicles.size();
+                VehicleSave.read(in, w, written);
+                // ((27.5) The calls, after the vehicles that were on their way to them.)
+                if (version >= 80) CallSave.read(in, w, new ArrayList<Fleet.Vehicle>(w.fleet.vehicles.subList(before, w.fleet.vehicles.size())), written);
+            }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;

@@ -4777,6 +4777,54 @@ public final class GameTests {
                 }
             }
         });
+        test("27.5: calls are kept in a save", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 275;
+                World w = new World(c);
+                w.populate(c);
+                for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
+                // A patrol car out on its beat sent to a call a long way off, and an officer on foot answering it too.
+                Fleet.Vehicle car = null;
+                for (Fleet.Vehicle v : w.fleet.vehicles)
+                    if (v.type == Fleet.CRUISER && v.patrol && v.state == Fleet.PATROL && v.crew.size() == 2 && !v.parked) car = v;
+                check(car != null, "a patrol car out on its beat");
+                Dispatch.Incident inc = null;
+                java.util.Random r = new java.util.Random(5);
+                for (int k = 0; k < 200 && inc == null; k++) {
+                    float[] q = w.city.randomStreetSpot(r);
+                    if (q == null || Math.hypot(q[0] - car.x, q[1] - car.y) < 700) continue;
+                    inc = w.dispatch.sighting(q[0], q[1], null);
+                    if (inc != null && !w.fleet.respond(car, inc)) inc = null;
+                }
+                check(inc != null && car.incident == inc && car.state == Fleet.DRIVE, "the car on its way to a call");
+                float[] p = w.city.findWalkable(inc.x + 200, inc.y);
+                Entity cop = w.spawnCop(0, p[0], p[1]);
+                cop.task = Dispatch.T_RESPOND;
+                cop.incident = inc;
+                for (int f = 0; f < 30; f++) w.update(1 / 30f);
+                check(car.incident == inc && cop.task == Dispatch.T_RESPOND && cop.incident == inc && !inc.resolved, "still on their way a second on");
+                File f = File.createTempFile("zc275", ".dat");
+                SaveGame.save(w, f);
+                World l = SaveGame.load(f);
+                f.delete();
+                Dispatch.Incident li = null;
+                for (Dispatch.Incident o : l.dispatch.incidents) if (Math.hypot(o.x - inc.x, o.y - inc.y) < 1 && o.place.equals(inc.place)) li = o;
+                check(li != null && !li.resolved && li.reported == inc.reported, "the call is on the board again, where it was");
+                Fleet.Vehicle lcar = null;
+                for (Fleet.Vehicle v : l.fleet.vehicles) if (v.type == Fleet.CRUISER && v.number == car.number) lcar = v;
+                check(lcar != null && lcar.incident == li && lcar.state == Fleet.DRIVE && lcar.crew.size() == 2, "the car still on its way to it, lights on, its officers aboard");
+                Entity lcop = null;
+                for (Entity e : l.entities) if (!e.dead && e.type == Entity.COP && e.nameSeed == cop.nameSeed) lcop = e;
+                check(lcop != null && lcop.task == Dispatch.T_RESPOND && lcop.incident == li, "the officer on foot still answering it");
+                float d0 = (float) Math.hypot(lcar.x - li.x, lcar.y - li.y);
+                for (int k = 0; k < 30 * 3; k++) l.update(1 / 30f);
+                check(lcar.incident == li && (lcar.state == Fleet.SCENE || Math.hypot(lcar.x - li.x, lcar.y - li.y) < d0 - 30),
+                        "and the car carries on to it, not back on patrol (" + (int) d0 + " -> " + (int) Math.hypot(lcar.x - li.x, lcar.y - li.y) + ")");
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

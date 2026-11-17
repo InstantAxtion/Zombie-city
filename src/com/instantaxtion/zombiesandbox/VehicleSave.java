@@ -23,8 +23,8 @@ import java.util.List;
  * A vehicle's numbers and flags are written by name (a table of field names and kinds, once, then each vehicle's
  * values in that order), so a field added to Fleet.Vehicle later is kept without anything more here, and a save from
  * before it (or after one goes) still loads: names it doesn't know are skipped, missing ones keep their defaults.
- * Links to people, places and other vehicles are written as indexes, as the rest of the save does. Calls (incidents)
- * aren't saved, so a vehicle on its way to one carries on without it. Routes are found again on load.
+ * Links to people, places and other vehicles are written as indexes, as the rest of the save does. ((27.5) The calls a
+ * vehicle was on its way to are kept after the vehicles, from version 80: see CallSave.) Routes are found again on load.
  */
 final class VehicleSave {
     private VehicleSave() {
@@ -274,7 +274,7 @@ final class VehicleSave {
     // ------------------------------------------------------------------ the field table
 
     /** The fields a record keeps: numbers, flags and words, not the transient or final ones (those are caches or lists). */
-    private static List<Field> fields(Class<?> c, String[] skip) {
+    static List<Field> fields(Class<?> c, String[] skip) {
         ArrayList<Field> out = new ArrayList<Field>();
         java.util.HashSet<String> no = new java.util.HashSet<String>(java.util.Arrays.asList(skip));
         for (Field f : c.getDeclaredFields()) {
@@ -304,7 +304,7 @@ final class VehicleSave {
         return 0;
     }
 
-    private static void writeTable(DataOutputStream out, List<Field> fs) throws IOException {
+    static void writeTable(DataOutputStream out, List<Field> fs) throws IOException {
         out.writeInt(fs.size());
         for (Field f : fs) {
             out.writeUTF(f.getName());
@@ -313,7 +313,7 @@ final class VehicleSave {
     }
 
     /** A table as written: each value's kind, and the field it goes in now (null where that name isn't one any more). */
-    private static final class Table {
+    static final class Table {
         final Field[] fields;
         final char[] kinds;
 
@@ -323,7 +323,7 @@ final class VehicleSave {
         }
     }
 
-    private static Table readTable(DataInputStream in, Class<?> c) throws IOException {
+    static Table readTable(DataInputStream in, Class<?> c) throws IOException {
         int n = in.readInt();
         Table t = new Table(n);
         for (int i = 0; i < n; i++) {
@@ -343,7 +343,7 @@ final class VehicleSave {
         return t;
     }
 
-    private static void writeValues(DataOutputStream out, List<Field> fs, Object o) throws IOException {
+    static void writeValues(DataOutputStream out, List<Field> fs, Object o) throws IOException {
         try {
             for (Field f : fs) {
                 switch (code(f.getType())) {
@@ -363,7 +363,7 @@ final class VehicleSave {
         }
     }
 
-    private static void readValues(DataInputStream in, Table t, Object o) throws IOException {
+    static void readValues(DataInputStream in, Table t, Object o) throws IOException {
         Field[] fs = t.fields;
         char[] k = t.kinds;
         try {
