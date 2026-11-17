@@ -12,9 +12,12 @@ import java.util.BitSet;
  */
 final class Ops {
     private final World w;
+    /** ((27.4) Who each unit is working for: see Jobs. */
+    final Jobs jobs;
 
     Ops(World w) {
         this.w = w;
+        jobs = new Jobs(w);
     }
 
     /** Once a step (World.update). */
@@ -25,6 +28,7 @@ final class Ops {
         }
         if ((tick -= dt) <= 0) {
             tick = 1;
+            jobs.audit();
             postTick();
             if ((sfTick -= 1) <= 0) {
                 sfTick = 5;
@@ -879,6 +883,8 @@ final class Ops {
             if (e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_SF || e.role == Entity.ROLE_K9 || e.role == Entity.ROLE_SAR) continue;
             if (e.task != Dispatch.T_NONE && e.task != Dispatch.T_POST && e.task != Dispatch.T_PATROL) continue;
             if (crew.contains(e) || World.hypot(e.x - v.x, e.y - v.y) > 420) continue;
+            // ((27.4) Not one another job has - another post's guards, a crew on its way to its own vehicle.)
+            if (!jobs.isFree(e, Jobs.P_CREW, p)) continue;
             crew.add(e);
         }
         return crew;
@@ -900,6 +906,8 @@ final class Ops {
         p.returning = home;
         p.farFor = p.quietFor = 0;
         w.fleet.musterPost(p.truck, crew, tx, ty);
+        // ((27.4) The crew walking out to it are the truck's: nobody else's to send anywhere.)
+        for (int i = 0; i < crew.size(); i++) jobs.claim(crew.get(i), p, Jobs.P_CREW, p.side().toLowerCase(java.util.Locale.ROOT) + " command truck crew");
         return true;
     }
 
@@ -907,7 +915,10 @@ final class Ops {
     private void clearTent(Post p) {
         for (int i = 0, m = w.entities.size(); i < m; i++) {
             Entity e = w.entities.get(i);
-            if (!e.dead && e.type == p.type() && e.task == Dispatch.T_POST && World.hypot(e.postX - p.x, e.postY - p.y) < 30) e.task = Dispatch.T_NONE;
+            if (!e.dead && e.type == p.type() && e.task == Dispatch.T_POST && World.hypot(e.postX - p.x, e.postY - p.y) < 30) {
+                jobs.release(e, p);
+                e.task = Dispatch.T_NONE;
+            }
         }
     }
 
@@ -918,6 +929,7 @@ final class Ops {
         for (int i = w.overwatch.size() - 1; i >= 0; i--) {
             Entity e = w.overwatch.get(i);
             if (e.dead || e.removed || e.roof == null || !e.onTower) {
+                jobs.release(e, w.rooftops);
                 e.roof = null;
                 e.onTower = false;
                 w.overwatch.remove(i);
@@ -952,7 +964,12 @@ final class Ops {
             // ((26.3) Its crew sit in it at home, waiting - and get out to fight if the dead come.)
             if (w.countZombiesNear(v.x, v.y, 180) > 0) {
                 if (!v.crew.isEmpty()) w.fleet.crewOut(v, true);
-            } else if (v.crew.isEmpty() && home != null && World.hypot(v.x - home.x, v.y - home.y) < home.r + 400) w.fleet.seat(v, crewFor(p, home));
+            } else if (v.crew.isEmpty() && home != null && World.hypot(v.x - home.x, v.y - home.y) < home.r + 400) {
+                ArrayList<Entity> crew = crewFor(p, home);
+                w.fleet.seat(v, crew);
+                // ((27.4) Waiting in it: the truck's. (Out again, they're nobody's: see FleetCrews.crewOut.))
+                for (int i = 0; i < crew.size(); i++) jobs.claim(crew.get(i), p, Jobs.P_CREW, p.side().toLowerCase(java.util.Locale.ROOT) + " command truck crew");
+            }
             if ((p.cd -= 1) > 0) return;
             p.cd = 10;
             if (!w.outbreak || w.city.cfg.mission >= 0 || w.alert < (p.army ? 2 : 1)) return;
@@ -1166,6 +1183,8 @@ final class Ops {
             float[] s = w.city.findWalkable(p.x + (guards == 1 ? -12 : 12), p.y + 8);
             e.postX = s != null ? s[0] : p.x;
             e.postY = s != null ? s[1] : p.y;
+            // ((27.4) On watch at the tent: the post's, until it packs up or is lost.)
+            jobs.claim(e, p, Jobs.P_CREW, p.side().toLowerCase(java.util.Locale.ROOT) + " command post guard");
         }
         p.setUp++;
         w.dispatch.say(p.who(), null, p.hq() + ": Mobile command post is set up on " + v.place
@@ -1176,6 +1195,7 @@ final class Ops {
     /** (From Fleet.) Nobody came to crew the truck: it stays where it is (set up again, out at the fighting). */
     void postUnmanned(Fleet.Vehicle v) {
         Post p = postOf(v);
+        jobs.releaseAll(p);
         p.cd = 20;
         if (p.returning || World.hypot(v.x - v.homeX, v.y - v.homeY) > 120) {
             p.returning = false;
@@ -1190,6 +1210,7 @@ final class Ops {
         String where = v != null && v.place != null ? v.place : w.city.placeName(p.x, p.y);
         if (v != null && !v.broken) w.fleet.damage(v, v.maxHp * 2, false);
         if (wasUp) clearTent(p);
+        jobs.releaseAll(p);
         p.truck = null;
         p.up = p.returning = false;
         p.newCd = 180;

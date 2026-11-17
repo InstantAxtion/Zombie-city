@@ -279,8 +279,10 @@ final class Containment {
             if (e.task == Dispatch.T_CORDON) {
                 World.InfectionZone z = zoneOfPost(e.postX, e.postY);
                 int best = z == null || !z.critical ? -1 : postFor(z, e.postX, e.postY);
-                if (best < 0) e.task = Dispatch.T_NONE;
-                else {
+                if (best < 0) {
+                    w.ops.jobs.release(e, z);
+                    e.task = Dispatch.T_NONE;
+                } else {
                     z.manned[best]++;
                     e.postX = z.post[best * 2];
                     e.postY = z.post[best * 2 + 1];
@@ -309,6 +311,8 @@ final class Containment {
                 e.task = Dispatch.T_CORDON;
                 e.postX = z.post[best * 2];
                 e.postY = z.post[best * 2 + 1];
+                // ((27.4) On the line round the zone: its, until the zone's lifted or the post goes.)
+                w.ops.jobs.claim(e, z, Jobs.P_POST, "on the cordon");
                 z.manned[best]++;
                 budget--;
             }
@@ -568,6 +572,8 @@ final class Containment {
                 best.task = Dispatch.T_POST;
                 best.postX = spot[0];
                 best.postY = spot[1];
+                // ((27.4) On the checkpoint: the zone's, like those on its cordon.)
+                w.ops.jobs.claim(best, z, Jobs.P_POST, "at a checkpoint");
                 continue;
             }
             // A long way: they go by truck, the squad for this zone's checkpoints together.
@@ -614,6 +620,7 @@ final class Containment {
         for (int s = 0; s < z.guards.length; s++) {
             Entity g = z.guards[s];
             if (g != null && !g.dead && (g.task == Dispatch.T_POST || (g.task == Dispatch.T_RESPOND && g.incident == z.guardCall[s]))) {
+                w.ops.jobs.release(g, z);
                 g.task = Dispatch.T_NONE;
                 g.incident = null;
             }
@@ -814,6 +821,7 @@ final class Containment {
         for (int i = 0, m = w.entities.size(); i < m; i++) {
             Entity e = w.entities.get(i);
             if (e.task == Dispatch.T_CORDON && zoneOfPost(e.postX, e.postY) == z) e.task = Dispatch.T_NONE;
+            w.ops.jobs.release(e, z);
         }
         w.infection.remove(z);
         if (say != null) {
@@ -848,6 +856,8 @@ final class Containment {
     /** Police and soldiers with nothing to do and rounds to shoot (not the specialists). */
     boolean cordonCandidate(Entity e) {
         if (e.task != Dispatch.T_NONE || e.scout || e.aloft || e.ammo + e.reserve <= 0) return false;
+        // ((27.4) Not one another job has.)
+        if (w.ops.jobs.keeps(e, Jobs.P_POST)) return false;
         if (e.type == Entity.COP) return e.agency == 0 && e.role != Entity.ROLE_SAR && e.role != Entity.ROLE_SWAT;
         return e.type == Entity.SOLDIER && (e.role == Entity.ROLE_RIFLE || e.role == Entity.ROLE_GUNNER);
     }

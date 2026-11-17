@@ -197,6 +197,8 @@ final class FleetCrews {
             Entity e = v.crew.get(i);
             float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
             if (!w.release(e, v.x + (float) Math.cos(a) * (10 + i * 3), v.y + (float) Math.sin(a) * (10 + i * 3))) continue;
+            // ((27.4) A job that was getting into this vehicle is over once they're out of it.)
+            if (e.owner != null && e.owner.rig == v) e.owner = null;
             e.rig = offDuty ? null : v;
             if (!offDuty) note(e);
             e.taskTimer = 0;

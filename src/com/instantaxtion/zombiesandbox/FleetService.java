@@ -1125,6 +1125,8 @@ final class FleetService {
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);
             if (e.rig == v) {
+                // ((27.4) A job that was getting into this vehicle is over: the vehicle let them go.)
+                if (e.owner != null && e.owner.rig == v) e.owner = null;
                 e.rig = null;
                 if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
             }

@@ -17,6 +17,7 @@ final class Overwatch {
 
     /** Down off the roof (or giving up on the way to it). */
     void comeDown(Entity e) {
+        w.ops.jobs.release(e, this);
         e.roof = null;
         e.onTower = false;
         e.roofCd = 12;
@@ -73,6 +74,8 @@ final class Overwatch {
             float in = 5 + (e.nameSeed & 3) * 3, along = ((e.nameSeed >> 2 & 3) - 1.5f) * 5;
             e.roofX = Math.max(b.x0 + 4, Math.min(b.x1 - 4, cx - ox / ol * in + oy / ol * along));
             e.roofY = Math.max(b.y0 + 4, Math.min(b.y1 - 4, cy - oy / ol * in - ox / ol * along));
+            // ((27.4) Up there for the call: nobody else's to send somewhere else meanwhile.)
+            w.ops.jobs.claim(e, this, Jobs.P_CREW, "overwatch on a roof");
         }
         City.Building b = e.roof;
         // (Taken somewhere else since - a lift, an order: no longer up there.)

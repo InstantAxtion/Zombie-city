@@ -100,6 +100,8 @@ final class Entity {
      * on the roof they are, where at the foot of its wall they stand, and until they look for another roof.)
      */
     transient City.Building roof;
+    /** ((27.4) The job a system has this unit on, and which system: see Jobs. Null when nobody has. */
+    transient Jobs.Job owner;
     transient float roofX, roofY, roofGX, roofGY, roofCd;
     transient float baseSpotX, baseSpotY, baseSpotT;
     /** (11.1) Police and soldiers with nothing on: where their beat or duty takes them next, and how long they wait there. */

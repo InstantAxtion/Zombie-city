@@ -489,6 +489,8 @@ final class FleetArmy {
             if (e.dead || e.type != type || e.task != Dispatch.T_POST || e == w.controlled) continue;
             if (e.role != role && !(role == Entity.ROLE_SWAT && e.role == Entity.ROLE_MARKSMAN)) continue;
             if (World.hypot(e.x - f.x, e.y - f.y) > f.r + 140) continue;
+            // ((27.4) Not one on another job (a post's guard, a crew of its own) that happens to be standing here.)
+            if (e.owner != null && e.owner.priority >= Jobs.P_CREW && !w.ops.jobs.isFree(e, Jobs.P_CREW)) continue;
             out.add(e);
         }
         return out;

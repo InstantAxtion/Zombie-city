@@ -871,6 +871,7 @@ final class Dispatch {
             Entity e = w.entities.get(i);
             if (e.dead || e.type != Entity.SOLDIER || e.task != T_NONE || e.role == Entity.ROLE_GUARD || e.rig != null) continue;
             if (e.ammo <= 0 && e.reserve <= 0) continue;
+            if (w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
             ArrayList<Entity> sq = squads.get(e.squad);
             if (sq == null) squads.put(e.squad, sq = new ArrayList<Entity>());
             sq.add(e);
@@ -1386,6 +1387,8 @@ final class Dispatch {
             for (int k = 0, n = w.entities.size(); k < n && moved < 2; k++) {
                 Entity e = w.entities.get(k);
                 if (e.dead || e.type != Entity.COP || e.task != T_RESPOND || e.incident != donor || e.onScene || e.rig != null) continue;
+                // ((27.4) Not one on a job of its own at the call (a marksman on the way up to a roof).)
+                if (w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
                 e.incident = starved;
                 e.orderField = null;
                 donor.cops--;
@@ -1508,7 +1511,7 @@ final class Dispatch {
             int sent = 0;
             for (int i = 0; i < units.size() && sent < room; i++) {
                 Entity e = units.get(i);
-                if (e.incident != from) continue;
+                if (e.incident != from || w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
                 e.incident = best;
                 e.onScene = false;
                 e.orderField = null;
@@ -1581,6 +1584,8 @@ final class Dispatch {
                 if (e.dead || e.type != type || e.task != T_NONE || picked.contains(e)) continue;
                 // ((11.5) Not someone with no rounds left, or badly hurt: they'd only be another one down.)
                 if (e.ammo + e.reserve <= 0 || e.hp < e.maxHp * 0.35f || e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR) continue;
+                // ((27.4) Nor one another job has (see Jobs).)
+                if (w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
                 float dx = e.x - x, dy = e.y - y, d = dx * dx + dy * dy;
                 if (d < bd) {
                     bd = d;

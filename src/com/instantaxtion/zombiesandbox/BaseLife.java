@@ -129,6 +129,7 @@ final class BaseLife {
         for (int k = 0, n = w.entities.size(); k < n; k++) {
             Entity e = w.entities.get(k);
             if (e.base == s) {
+                w.ops.jobs.release(e, s);
                 e.base = null;
                 e.onTower = false;
             }
@@ -171,6 +172,8 @@ final class BaseLife {
         if (e.task == Dispatch.T_SEEK || e.task == Dispatch.T_HIDE) e.task = Dispatch.T_NONE;
         e.seekZone = null;
         if (armed && e.canShoot() && e.ammo + e.reserve >= 6) {
+            // ((27.4) A guard on its wall: the base's (a guard's day goes through tasks of its own, so it's not checked).)
+            w.ops.jobs.claim(e, s, Jobs.P_POST, "guard at " + s.name, false);
             e.militia = true;
             e.building = s.b;
             e.postX = s.b.doorX;
@@ -402,7 +405,10 @@ final class BaseLife {
         w.bases.add(m);
         for (int k = 0, n = w.entities.size(); k < n; k++) {
             Entity e = w.entities.get(k);
-            if (e.base == a || e.base == b) e.base = m;
+            if (e.base == a || e.base == b) {
+                if (e.owner != null && (e.owner.holder == a || e.owner.holder == b)) w.ops.jobs.claim(e, m, Jobs.P_POST, "guard at " + m.name, false);
+                e.base = m;
+            }
         }
         for (int k = 0; k < w.fleet.vehicles.size(); k++) {
             Fleet.Vehicle v = w.fleet.vehicles.get(k);
@@ -465,6 +471,7 @@ final class BaseLife {
     boolean baseMember(Entity e, float dt) {
         SurvivorBases.Base s = e.base;
         if (s == null || s.fallen) {
+            if (s != null) w.ops.jobs.release(e, s);
             e.base = null;
             return false;
         }

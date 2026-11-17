@@ -199,6 +199,8 @@ final class Rides {
             // ((24.3) The police too: they walked to every call they weren't sent to by car, right across town.)
             if (e.dead || (e.type != Entity.SOLDIER && e.type != Entity.COP) || e.rig != null || e == w.controlled || e.aloft || e.rideCd > w.time) continue;
             if (e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_K9 || e.task >= 32) continue;
+            // ((27.4) Not a crew's or a roof's: they're where their job wants them.)
+            if (w.ops.jobs.keeps(e, Jobs.P_CREW)) continue;
             float[] to = rideTarget(e);
             // ((24.3) From a shorter walk than before (500).)
             if (to == null || World.hypot(to[0] - e.x, to[1] - e.y) < World.RIDE_FROM || w.spatial.countZombiesNear(e.x, e.y, 120) > 0) continue;
@@ -233,6 +235,8 @@ final class Rides {
                     if (o.dead || o.type != a.type || o.task != Dispatch.T_NONE || o.rig != null || o == w.controlled || group.contains(o)
                             || o.role == Entity.ROLE_GUARD || o.role == Entity.ROLE_PILOT || o.role == Entity.ROLE_SAR || o.role == Entity.ROLE_K9
                             || w.posts.onDuty(o) || o.ammo + o.reserve <= 0 || o.hp < o.maxHp * 0.5f || o.rideCd > w.time) continue;
+                    // ((27.4) Nor one on a job of its own.)
+                    if (!w.ops.jobs.take(o, Jobs.P_POST)) continue;
                     o.task = Dispatch.T_RESPOND;
                     o.incident = a.incident;
                     o.onScene = false;

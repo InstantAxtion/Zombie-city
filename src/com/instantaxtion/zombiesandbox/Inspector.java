@@ -60,6 +60,9 @@ final class Inspector {
         else if (e.trade() != Entity.TR_NONE) title = Names.person(e.nameSeed) + "  -  " + Entity.TRADE_NAMES[e.trade()];
         else title = Names.person(e.nameSeed) + "  -  " + Entity.NAMES[e.type];
         lines.add(doing(e));
+        // ((27.4) Whose they are just now: a command post's guard, a roof's marksman, a truck's crew (see Jobs).)
+        String job = Jobs.describe(e);
+        if (job != null) lines.add(job);
         String life = gv.world.jobTitle(e);
         if (life != null) lines.add(life + (e.home != null ? ", lives on " + gv.world.city.placeName(e.home.doorX, e.home.doorY).split(" & ")[0]
                 : homeless(e) ? ", no home" : ""));

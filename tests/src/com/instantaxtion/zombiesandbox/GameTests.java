@@ -4827,6 +4827,55 @@ public final class GameTests {
                 check(spread < 160, "and keep together while they go (" + (int) spread + ")");
             }
         });
+        test("27.4: a unit's job keeps it", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 274;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                Jobs j = w.ops.jobs;
+                Object crew = new Object(), other = new Object();
+                float[] p = w.city.randomStreetSpot(new java.util.Random(6));
+                float[] pa = w.city.findWalkable(p[0] + 50, p[1]), pb = w.city.findWalkable(p[0] + 150, p[1]);
+                final Entity a = w.spawnCop(0, pa[0], pa[1]), b = w.spawnCop(0, pb[0], pb[1]);
+                // The rules: a job keeps a unit from anything that matters less, not more; only its holder lets it go.
+                j.claim(a, crew, Jobs.P_CREW, "test crew");
+                check(!j.isFree(a, Jobs.P_POST) && j.isFree(a, Jobs.P_MISSION) && j.isFree(b, Jobs.P_POST), "a job keeps a unit from lesser ones, not greater");
+                check("On: test crew".equals(Jobs.describe(a)) && Jobs.describe(b) == null, "and its card says whose it is");
+                check(!j.release(a, other) && a.owner != null, "only its holder lets it go");
+                // A call right by them goes to the free officer, not the nearer one on a job.
+                empty(w, p[0], p[1], 500, a, b);
+                java.lang.reflect.Method nf = Dispatch.class.getDeclaredMethod("nearestFree", int.class, float.class, float.class, int.class, float.class);
+                nf.setAccessible(true);
+                java.util.List<?> picked = (java.util.List<?>) nf.invoke(w.dispatch, Entity.COP, p[0], p[1], 1, 400f);
+                check(picked.size() == 1 && picked.get(0) == b, "the call goes to the free officer, not the nearer one on a job");
+                Jobs.enforce = false;
+                picked = (java.util.List<?>) nf.invoke(w.dispatch, Entity.COP, p[0], p[1], 1, 400f);
+                Jobs.enforce = true;
+                check(picked.size() == 1 && picked.get(0) == a, "(without jobs, the nearer one would have been taken)");
+                final Dispatch.Incident inc = w.dispatch.sighting(p[0], p[1], null);
+                // Taken off it by someone else all the same: the next look round counts it, and the job's gone.
+                int yanks = j.yanks;
+                a.task = Dispatch.T_RESPOND;
+                a.incident = inc;
+                j.audit();
+                check(j.yanks == yanks + 1 && a.owner == null, "taken by another all the same: counted, and let go");
+                // The holder let it go, and it's anyone's.
+                j.claim(b, crew, Jobs.P_CREW, "test crew");
+                check(j.release(b, crew) && b.owner == null && j.isFree(b, Jobs.P_CREW), "let go by its holder: anyone's");
+                // Out of a vehicle the job was getting into: it's over.
+                Fleet.Vehicle car = w.fleet.vehicles.get(0);
+                j.claim(b, crew, Jobs.P_CREW, "test crew");
+                b.rig = car;
+                j.claim(b, car, Jobs.P_CREW, "crew of a police car");
+                w.fleet.board(car, b);
+                w.fleet.crewOut(car, true);
+                check(b.owner == null && !b.removed, "out of the vehicle: no longer its crew");
+            }
+        });
         test("27.0: the armoured dead", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
