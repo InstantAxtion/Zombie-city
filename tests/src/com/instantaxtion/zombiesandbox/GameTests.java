@@ -4735,6 +4735,48 @@ public final class GameTests {
                 check(Math.hypot(lcar.x - x0, lcar.y - y0) > 20 || lcar.state != Fleet.PATROL, "and they carry on (" + (int) Math.hypot(lcar.x - x0, lcar.y - y0) + ")");
             }
         });
+        test("27.5: a vehicle the player lets go of at the wheel drives on", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 41;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                for (int kind = 0; kind < 2; kind++) {
+                    Fleet.Vehicle car = null;
+                    for (Fleet.Vehicle v : w.fleet.vehicles)
+                        if (!v.broken && v.player == null && !Fleet.offRoad(v) && (kind == 0 ? v.type == Fleet.CRUISER && v.patrol : v.type == Fleet.CAR && !v.parked)) {
+                            car = v;
+                            break;
+                        }
+                    if (car == null && kind == 1) {
+                        float[] q = w.city.randomStreetSpot(new java.util.Random(6));
+                        car = w.fleet.placeCar(q[0], q[1]);
+                    }
+                    check(car != null, kind == 0 ? "a patrol car" : "a car in traffic");
+                    Entity e = w.spawn(kind == 0 ? Entity.COP : Entity.CIVILIAN, car.x, car.y);
+                    w.controlled = e;
+                    w.driveInto(e, car);
+                    // The player takes the wheel, sits there stopped a while, and lets go.
+                    for (int f = 0; f < 90; f++) w.update(1 / 30f);
+                    check(car.player == e && Math.abs(car.speed) < 1, "stopped with the player at the wheel");
+                    w.letGoOfCar();
+                    w.controlled = null;
+                    float x0 = car.x, y0 = car.y;
+                    float moved = 0;
+                    for (int f = 0; f < 30 * 20; f++) {
+                        w.update(1 / 30f);
+                        moved = Math.max(moved, (float) Math.hypot(car.x - x0, car.y - y0));
+                    }
+                    check(car.player == null && car.state != Fleet.ABANDONED && moved > 60,
+                            (kind == 0 ? "the patrol car" : "the car") + " drives on without the player (moved " + (int) moved + ", state " + car.state + ", model " + car.model + ", riders " + car.riders.size()
+                                    + ", through " + car.through + ", fleeing " + car.fleeing + ", field " + (car.field != null) + ", held " + car.held + ", speed " + (int) car.speed + ", tile " + w.city.tiles[w.city.tileIndex(car.x, car.y)] + ")");
+                    if (kind == 0) check(car.crew.contains(e) || !e.removed, "the officer who was driving is its crew now");
+                }
+            }
+        });
         test("27.4: squads focus fire and fall back together", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

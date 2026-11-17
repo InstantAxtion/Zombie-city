@@ -1661,6 +1661,10 @@ final class Fleet {
     }
 
     /** See FleetPlayer. */
+    void handBack(Vehicle v, Entity e) {
+        playerDriving.handBack(v, e);
+    }
+
     void leaveWheel(Vehicle v, Entity e) {
         playerDriving.leaveWheel(v, e);
     }

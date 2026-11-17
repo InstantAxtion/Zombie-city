@@ -43,6 +43,7 @@ final class TouchInput {
     }
 
     void takeControl(Entity e) {
+        gv.world.letGoOfCar();
         gv.world.controlled = e;
         gv.world.joyX = gv.world.joyY = 0;
         gv.world.ctrlAttack = false;
@@ -57,6 +58,7 @@ final class TouchInput {
     }
 
     void releaseControl() {
+        gv.world.letGoOfCar();
         gv.world.controlled = null;
         gv.world.joyX = gv.world.joyY = 0;
         gv.world.ctrlAttack = false;

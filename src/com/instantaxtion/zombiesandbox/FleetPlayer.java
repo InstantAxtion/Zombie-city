@@ -63,6 +63,70 @@ final class FleetPlayer {
         v.riders.clear();
     }
 
+    /**
+     * ((27.5) The player lets go of the one at the wheel (stops controlling them, or takes over someone else) while
+     * driving: the vehicle goes back to the game with them still in it, instead of standing there for good with nobody
+     * steering. A police car goes back on patrol with its officers, an army truck takes its soldiers home to base, an
+     * everyday car rejoins the traffic. A helicopter or a tank is left the way getting out leaves it.
+     */
+    void handBack(Vehicle v, Entity e) {
+        if (v.player != e) return;
+        boolean police = e.type == Entity.COP && v.type == CRUISER, army = e.type == Entity.SOLDIER && v.type == TRUCK;
+        if (v.type == HELI || v.type == TANK || v.broken || !(police || army || v.type == CAR)) {
+            leaveWheel(v, e);
+            return;
+        }
+        // (Left off the road - on the grass, the pavement: a car a lane or two off is back on it; one well off it is
+        // left there, and they get out.)
+        float[] lane = city.nearestDrivable(v.x, v.y);
+        int t = city.tileIndex(v.x, v.y);
+        boolean onRoad = t >= 0 && (city.tiles[t] == City.ROAD || city.tiles[t] == City.DIRT || city.tiles[t] == City.LOT || city.tiles[t] == City.BASE);
+        if (!onRoad) {
+            if (lane == null || World.hypot(lane[0] - v.x, lane[1] - v.y) > City.T * 3) {
+                leaveWheel(v, e);
+                return;
+            }
+            v.x = lane[0];
+            v.y = lane[1];
+        }
+        v.player = null;
+        v.parked = false;
+        v.pulling = false;
+        v.field = null;
+        v.incident = null;
+        v.stuckTimer = 0;
+        if (v.type == CAR) {
+            // (They drive on as everyday traffic, still aboard.)
+            v.state = CRUISE;
+            if (!fleet.routing.newDestination(v)) v.stuckTimer = 5;
+            return;
+        }
+        // Police or army: they're its crew now (and the others of theirs riding with them); anyone else gets out.
+        v.riders.remove(e);
+        fleet.board(v, e);
+        for (Entity o : new ArrayList<Entity>(v.riders)) {
+            v.riders.remove(o);
+            if (o.type == e.type) fleet.board(v, o);
+            else w.release(o, v.x, v.y);
+        }
+        v.passengerType = e.type;
+        if (police) {
+            v.patrol = true;
+            v.state = PATROL;
+            if (!fleet.routing.newDestination(v)) v.stuckTimer = 99;
+            return;
+        }
+        // (Home to base, where they get out and are sent on again; with no way there, they get out here.)
+        v.squad.clear();
+        v.pickup = true;
+        if (!fleet.service.headHome(v)) {
+            v.pickup = false;
+            fleet.crewOut(v, true);
+            v.parked = true;
+            v.state = ABANDONED;
+        }
+    }
+
     /** Driving: the stick says where to go (pull back to reverse); the button sounds the horn, or fires the cannon. */
     boolean updatePlayerVehicle(Vehicle v, float dt) {
         Entity e = v.player;

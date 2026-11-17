@@ -1812,6 +1812,12 @@ final class World {
         return playerControl.canDrive(v);
     }
 
+    /** ((27.5) Control ending (or passing to someone else) while the player is at the wheel: the vehicle goes back to the game. */
+    void letGoOfCar() {
+        if (controlledCar != null && controlled != null && controlledCar.player == controlled) fleet.handBack(controlledCar, controlled);
+        controlledCar = null;
+    }
+
     void driveInto(Entity e, Fleet.Vehicle v) {
         playerControl.driveInto(e, v);
     }
