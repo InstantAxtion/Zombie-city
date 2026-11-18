@@ -323,16 +323,16 @@ final class WorldTests extends TestKit {
         }
         float[] zp = w.city.findWalkable(at[0] + 24, at[1] + 6);
         Entity z = w.spawn(Entity.ZOMBIE, zp[0], zp[1]);
+        // (Nobody else about: no officer to shoot it before they can, no one else for it to go for.)
+        Quiet calm = quiet(w, at[0], at[1], 400, folk, z);
         float hp0 = z.hp;
         int fought = 0;
         for (int f = 0; f < 30 * 10 && !(z.dead || z.hp <= 0); f++) {
             z.speed = z.runSpeed = 0;
             for (Entity e : folk) if (e.goal == World.G_FIGHT) fought++;
-            w.update(1 / 30f);
-            w.evCount = 0;
+            step(w, calm);
         }
         check(fought > 0 && (z.dead || z.hp < hp0), "they stood and fought it (" + fought + " frames fighting, hp " + z.hp + " of " + hp0 + ")");
-
     }
 
     static void hiddenBites() throws Exception {
