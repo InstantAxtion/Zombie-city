@@ -898,6 +898,8 @@ final class Fleet {
      * Emergency services never wait.
      */
     int routeBudget = Integer.MAX_VALUE;
+    /** ((28.1) What was left of it at the end of the last step, carried over (see update). */
+    transient int routeBudgetLeft;
 
     /** Four-wheel drive: army trucks, Humvees, APCs and tanks, and the sheriff's, rangers' and federal agents' SUVs. */
     static boolean allWheel(Vehicle v) {
@@ -1008,12 +1010,17 @@ final class Fleet {
         // (10.32) A route on the biggest maps searches a lot more road: fewer of them a frame there.
         int area = city.w * city.h;
         // ((16.2) One a step on the biggest maps: a couple of hundred patrol cars need only a few new routes a second.)
-        routeBudget = area > 600000 ? 1 : area > 300000 ? 3 : 6;
+        int perStep = area > 600000 ? 1 : area > 300000 ? 3 : 6;
         findSirens();
         boolean lodOn = w.viewX1 >= 0 && w.viewX1 - w.viewX0 < 2000 && vehicles.size() > 120;
         // ((16.8) Every fourth step with over four hundred on the map, four steps' worth: under a tile's length, even
         // at highway speed.)
         int lodEvery = vehicles.size() > 400 ? 4 : 2;
+        // ((28.1) What a step leaves unused is kept for the next few: the cars well off screen (most of them, on a big
+        // map) only drive every second or fourth step, all on the same step, and asked for their new trips then - one
+        // search between the lot, the rest refused. On the biggest maps the patrol cars got a new beat a third as often
+        // as they reached the end of one, and went round and round its last spot. The same searches a second on average.)
+        routeBudget = Math.min(routeBudgetLeft + perStep, perStep * (lodOn ? lodEvery : 1));
         for (int i = vehicles.size() - 1; i >= 0; i--) {
             Vehicle v = vehicles.get(i);
             // ((11.5) Well off screen (out past the edge, not just round it), everyday traffic and units on their
@@ -1057,6 +1064,7 @@ final class Fleet {
             else if (Math.abs(v.speed) > 10) v.kerbed = false;
             if (!airborne(v) && v.type != TRAIN && v.hp < v.maxHp * 0.5f) smoke(v, vdt);
         }
+        routeBudgetLeft = Math.max(0, routeBudget);
         routeBudget = Integer.MAX_VALUE;
         driving.buildGrid();
         driving.collide();
