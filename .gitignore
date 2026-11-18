@@ -1,2 +1,9 @@
 build/
 .claude/worktrees/
+
+# Gradle and Android Studio
+.gradle/
+local.properties
+.idea/
+*.iml
+.kotlin/

@@ -1094,16 +1094,34 @@ The GitHub workflow runs the fast tier and the health check on every push, and t
 
 ## Building
 
-No Gradle or Android Studio needed. On Ubuntu/Debian:
+Two ways, from the same sources, resources and manifest.
+
+**`build.sh`** (no Gradle or Android Studio needed; what CI uses for the release APK). On Ubuntu/Debian:
 
 ```sh
 sudo apt-get install aapt dalvik-exchange zipalign apksigner android-sdk-platform-23
 ./build.sh   # -> release/ZombieCitySandbox.apk
 ```
 
-The APK is signed with the debug keystore in `keystore/` (password `android`), so newer builds
-install as updates over older ones. GitHub Actions also builds the APK on every push
-(`.github/workflows/build-apk.yml`).
+**Gradle** (since 28.2), for Android Studio (open the folder: run on a phone or emulator, debug, profile) or the
+command line. It needs the Android SDK (platform 34) and JDK 17 or newer; the wrapper fetches Gradle itself.
+
+```sh
+./gradlew assembleDebug     # -> build/gradle/outputs/apk/debug/ZombieCitySandbox-debug.apk
+./gradlew assembleRelease   # -> build/gradle/outputs/apk/release/ZombieCitySandbox-release.apk
+./gradlew installDebug      # onto a connected phone
+./gradlew gameTests         # ./test.sh (FAST=1 ./gradlew gameTests for the fast tier)
+./gradlew healthCheck       # tools/health.sh
+```
+
+`AndroidManifest.xml` stays the one place for the version and SDK levels: Gradle reads them from it and builds
+from a copy without `package` and `<uses-sdk>` (which the Android Gradle plugin doesn't allow). No R8: saved
+games read some classes' fields by name, which shrinking would rename. Gradle writes only under `build/gradle/`,
+and never touches `release/`.
+
+Either way the APK is signed with the debug keystore in `keystore/` (password `android`), so newer builds
+install as updates over older ones, whichever built them. GitHub Actions builds the APK with `build.sh` on
+every push (`.github/workflows/build-apk.yml`).
 
 Code layout (`src/com/instantaxtion/zombiesandbox/`):
 

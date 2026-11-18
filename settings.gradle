@@ -1,0 +1,16 @@
+// Gradle build, alongside build.sh (which stays the way CI builds the release APK). See README "Building".
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'ZombieCitySandbox'
