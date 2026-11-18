@@ -430,7 +430,7 @@ final class WorldTests extends TestKit {
         float rx = 0, ry = 0;
         for (Entity e : w.entities) {
             if (e.type != Entity.CIVILIAN || e.dead || e.task != Dispatch.T_NONE || !w.city.inTown(e.x, e.y) || e.aloft || e.hasGun || e.isArmed()
-                    || World.bravery(e) > 0.4f || e.leader != null || e.ride != null || w.city.insideOf(e.x, e.y) != null
+                    || World.bravery(e) > 0.4f || e.leader != null || e.ride != null || w.city.insideOf(e.x, e.y) != null || e.inmate || e.escapee || e.militia || e.raider || e.base != null
                     || e.job == Entity.J_LOOKOUT || e.job == Entity.J_RELIEF || e.job == Entity.J_HIKER) continue;
             float zx = e.x + (float) Math.cos(e.angle) * 30, zy = e.y + (float) Math.sin(e.angle) * 30;
             float[] q = w.city.findWalkable(zx, zy);
@@ -442,10 +442,21 @@ final class WorldTests extends TestKit {
         }
         check(runner != null, "someone out in town");
         {
+            // (On the screen: thought about every step, as the player watching them would see.)
+            w.viewX0 = runner.x - 300;
+            w.viewY0 = runner.y - 200;
+            w.viewX1 = runner.x + 300;
+            w.viewY1 = runner.y + 200;
             Quiet calm = quiet(w, runner.x, runner.y, 300, runner);
             Entity scare = w.spawn(Entity.ZOMBIE, rx, ry);
             calm.keep(scare);
-            for (int f = 0; f < 10; f++) step(w, calm);
+            // (Until they've seen it and taken to their heels - or three seconds have gone by: the map of where the dead
+            // are, that tells people one is near, is worked out a slice at a time.)
+            for (int f = 0; f < 90 && runner.goal != World.G_FLEE && runner.goal != World.G_HIDE && runner.fleeTimer <= 0; f++) {
+                scare.stun = Math.max(scare.stun, 0.2f);
+                step(w, calm);
+            }
+            check(runner.goal == World.G_FLEE || runner.goal == World.G_HIDE || runner.fleeTimer > 0 || runner.dead, "they see it and run");
             float sx = scare.x, sy = scare.y;
             scare.dead = true;
             scare.removed = true;
@@ -604,17 +615,40 @@ final class WorldTests extends TestKit {
         boolean seesAlpha = w.city.los(sniper.x, sniper.y, lead.x, lead.y);
         check(!seesAlpha || chosen == lead, "a sniper picks the alpha out of the horde (" + (chosen == null ? "nobody" : "one at " + (int) World.hypot(chosen.x - sniper.x, chosen.y - sniper.y))
                 + ", alpha at " + (int) World.hypot(lead.x - sniper.x, lead.y - sniper.y) + " dead " + lead.dead + ")");
-        // Fire discipline: with no alpha to go for, a second gun takes a different one of the crowd. (Further back, out
-        // past the range where one nearly on them gets every gun.)
+        // Fire discipline: with no alpha to go for, two guns side by side take different ones of a crowd in a row in
+        // front of them, out past the range where one nearly on them gets every gun. (A row of four, all as near as
+        // each other: a crowd's front, not one standing out ahead of the rest.)
         lead.alpha = false;
-        float[] back = w.city.findWalkable(sniper.x - 50, sniper.y);
-        if (back == null || !w.city.los(back[0], back[1], horde.get(1).x, horde.get(1).y)) back = new float[]{sniper.x, sniper.y};
-        Entity s2 = w.spawnSoldier(Entity.ROLE_RIFLE, back[0], back[1] + 4), s3 = w.spawnSoldier(Entity.ROLE_RIFLE, back[0], back[1] - 4);
+        Entity s2 = null, s3 = null;
+        java.util.List<Entity> row = new java.util.ArrayList<Entity>();
+        for (int k = 0; k < 16 && s2 == null; k++) {
+            double a = k * Math.PI / 8;
+            float ux = (float) Math.cos(a), uy = (float) Math.sin(a);
+            float gx = sx - 200 * ux, gy = sy - 200 * uy;
+            boolean ok = !w.city.circleBlocked(gx, gy, 5);
+            for (int j = 0; j < 4 && ok; j++) {
+                float zx = gx + ux * 72 - uy * (j - 1.5f) * 6, zy = gy + uy * 72 + ux * (j - 1.5f) * 6;
+                ok = !w.city.circleBlocked(zx, zy, 4) && w.city.los(gx, gy, zx, zy);
+            }
+            if (!ok) continue;
+            s2 = w.spawnSoldier(Entity.ROLE_RIFLE, gx, gy);
+            s3 = w.spawnSoldier(Entity.ROLE_RIFLE, gx - uy * 4, gy + ux * 4);
+            for (int j = 0; j < 4; j++) {
+                Entity z = w.spawn(Entity.ZOMBIE, gx + ux * 72 - uy * (j - 1.5f) * 6, gy + uy * 72 + ux * (j - 1.5f) * 6);
+                untouchable(z);
+                row.add(z);
+            }
+            s2.angle = s3.angle = (float) a;
+        }
+        check(s2 != null && row.size() == 4, "a row of the dead in front of two soldiers");
         s2.ammo = s2.reserve = s3.ammo = s3.reserve = 0;
         s2.fear = s3.fear = 1;
         w.time += 2;
+        w.spatial.buildHash();
         Entity first = (Entity) pick.invoke(w, s2, 400f), second = (Entity) pick.invoke(w, s3, 400f);
-        check(first == null || second == null || first != second, "two guns side by side pick different ones of a crowd");
+        check(first != null && second != null && first != second && row.contains(first) && row.contains(second), "two guns side by side pick different ones of a crowd");
+        for (Entity z : row) z.dead = z.removed = true;
+        s2.dead = s2.removed = s3.dead = s3.removed = true;
         lead.alpha = true;
         // Kept in a save.
         File file = File.createTempFile("zcs", ".dat");
@@ -1169,12 +1203,15 @@ final class WorldTests extends TestKit {
             boss = w.spawn(Entity.CIVILIAN, p0[0], p0[1]);
             arm.invoke(w, boss, 30);
             boss.raider = true;
+            // (Nobody else at the shop: the gang, and in the second round the survivor and the officer.)
+            Quiet q = quiet(w, shop.doorX, shop.doorY, 450, boss);
             for (int k = 0; k < 2; k++) {
                 float[] p = w.city.findWalkable(p0[0] + 8 * (k + 1), p0[1]);
                 Entity o = w.spawn(Entity.CIVILIAN, p[0], p[1]);
                 arm.invoke(w, o, 30);
                 o.raider = true;
                 o.leader = boss;
+                q.keep(o);
             }
             Entity victim = null, cop = null;
             float[] pv = null;
@@ -1188,6 +1225,7 @@ final class WorldTests extends TestKit {
                 cop.task = Dispatch.T_HOLD;
                 cop.postX = pc[0];
                 cop.postY = pc[1];
+                q.keep(victim, cop);
             }
             w.alert = 2;
             float bossHp = boss.hp;
@@ -1199,8 +1237,7 @@ final class WorldTests extends TestKit {
                 }
                 // (The dead kept going far off: with none left the outbreak's over and the gang breaks up.)
                 if (f % 30 == 0 && w.zombies < 2) w.spawn(Entity.ZOMBIE, far[0], far[1]);
-                w.update(1 / 30f);
-                w.evCount = 0;
+                step(w, q);
                 if (round == 0 && shop.stock == 0) stripped = true;
                 if (victim != null && victim.hp < 400) shotAt = true;
                 if (round == 1 && (boss.hp < bossHp || boss.dead)) shotBack = true;
@@ -1341,7 +1378,23 @@ final class WorldTests extends TestKit {
         for (Entity e : w.entities) if (!e.dead && e.task == Dispatch.T_SHELTER && e.zone == z && z.inside(e.x, e.y)) inside++;
         check(inside >= 3, "the sheltered are inside the wall (" + inside + ")");
         // The dead claw through a section; it's mended once they're gone.
+        // (A section a guard can get to the inside of: open ground there, a walk of a few steps from the nearest guard,
+        // not one boxed in behind the tents.)
         int k = z.wall.length / 3;
+        float kd = Float.MAX_VALUE;
+        for (int s = 0; s < z.wall.length; s++) {
+            if (!z.up[s]) continue;
+            float[] ip = z.innerOf(z.wall[s], w.city.w);
+            if (w.city.circleBlocked(ip[0], ip[1], 6)) continue;
+            for (Entity e : w.entities) {
+                if (e.dead || e.task != Dispatch.T_GUARD || e.zone != z) continue;
+                float d = (float) Math.hypot(e.x - ip[0], e.y - ip[1]);
+                if (d > 60 && d < kd) {
+                    kd = d;
+                    k = s;
+                }
+            }
+        }
         w.dispatch.damageWall(z, k, 1000);
         check(!z.up[k] && !w.city.solid[z.wall[k]], "a section broken down is a gap in the wall");
         boolean mended = false;
