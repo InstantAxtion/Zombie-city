@@ -356,7 +356,8 @@ final class MapLabels {
             }
         }
         // ((22.0) The stations and bases by name only from a middling zoom in: far out, the districts' names are enough.)
-        for (int i = 0, n = gv.scale / gv.dp < 0.55f ? 0 : gv.world.city.facilities.size(); i < n; i++) {
+        // ((28.0) Further out now: the police, the army and the federal agents are where you look for help first.)
+        for (int i = 0, n = gv.scale / gv.dp < 0.2f ? 0 : gv.world.city.facilities.size(); i < n; i++) {
             City.Facility f = gv.world.city.facilities.get(i);
             if (f.kind == City.FACILITY_FIRE || f.kind == City.FACILITY_HOSPITAL) continue;
             boolean zoned = false;
