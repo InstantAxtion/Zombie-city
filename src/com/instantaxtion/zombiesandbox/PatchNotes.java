@@ -21,7 +21,7 @@ final class PatchNotes {
                     "Island maps get their full share of police stations (Theme Park Island often had one).",
                     "Stations, bases and the FBI office are named from further out.",
                     "Outside police backup comes four to a car and spreads out round the call instead of piling up.",
-                    "Cars no longer drive into each other.",
+                    "Cars no longer drive into each other, and patrol cars no longer spin in circles.",
                     "Police start at the city's stations and in their cars; volunteers stay at their station, up to 120 a game.",
             },
             {

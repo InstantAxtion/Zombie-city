@@ -4444,6 +4444,7 @@ public final class GameTests {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
                 c.seed = 3;
+                c.civic = 39; // the map it was set up on
                 c.v[CityConfig.OPT_ZOMBIES] = 0;
                 World w = new World(c);
                 w.populate(c);
@@ -4459,7 +4460,9 @@ public final class GameTests {
                     if (!w.zombieWithin(p[0], p[1], 600)) break;
                 }
                 for (int i = 0; i < 4; i++) w.armCivilian(w.spawn(Entity.CIVILIAN, p[0] + i * 6, p[1]), 30);
-                for (int s = 0; s < 30 * 120; s++) {
+                // (Up to four minutes for the wall: how fast it goes up turns on who happens to be about.)
+                for (int s = 0; s < 30 * 240 && !(s > 30 * 120 && !w.bases.isEmpty() && w.bases.get(0).walled
+                        && SurvivorBases.wallsUp(w.city, w.bases.get(0)) >= w.bases.get(0).ring.length - w.bases.get(0).gates.length); s++) {
                     w.update(1 / 30f);
                     w.evCount = 0;
                     // (The outbreak kept going far off, but not at the base.)
