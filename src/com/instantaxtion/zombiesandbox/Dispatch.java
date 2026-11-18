@@ -255,9 +255,14 @@ final class Dispatch {
         int tries;
         /** Seconds this one has waited at its way in for the road to clear. */
         float wait;
+        /** ((28.0) Police officers to a car (outside police come four to one), and the call's own road point, to fall back on if its own drop-off can't be reached. */
+        int per = 2;
+        float fx, fy;
     }
 
     private final ArrayList<Queued> column = new ArrayList<Queued>();
+    /** ((28.0) How far (each way) the road at a way in must be clear of the last vehicle in before the next one comes on. */
+    static final float ENTRY_CLEAR = 30;
 
     private void enqueue(Convoy cv, int type, int count, float[] p, float tx, float ty, Incident inc, SafeZone zone, String place) {
         Queued q = new Queued();
@@ -266,8 +271,8 @@ final class Dispatch {
         q.count = count;
         q.x = p[0];
         q.y = p[1];
-        q.tx = tx;
-        q.ty = ty;
+        q.tx = q.fx = tx;
+        q.ty = q.fy = ty;
         q.inc = inc;
         q.zone = zone;
         q.place = place;
@@ -291,7 +296,9 @@ final class Dispatch {
             boolean clear = true;
             for (int k = 0; k < w.fleet.vehicles.size() && clear; k++) {
                 Fleet.Vehicle v = w.fleet.vehicles.get(k);
-                if (Fleet.offRoad(v) || Math.abs(v.x - q.x) >= 24 || Math.abs(v.y - q.y) >= 24) continue;
+                // ((28.0) A car's length and more clear: one put on 24 from the last, before it had pulled away, came on
+                // nose to tail with it.)
+                if (Fleet.offRoad(v) || Math.abs(v.x - q.x) >= ENTRY_CLEAR || Math.abs(v.y - q.y) >= ENTRY_CLEAR) continue;
                 // (An abandoned or broken-down car on the way in is towed off; anything else, wait for it.)
                 if (w.fleet.clearFromEntry(v)) k--;
                 else clear = false;
@@ -323,7 +330,13 @@ final class Dispatch {
             int before = w.fleet.vehicles.size();
             boolean sent;
             if (q.tank) sent = w.fleet.sendTank(q.x, q.y, q.tx, q.ty, q.place);
-            else sent = w.fleet.send(q.type, q.count, q.x, q.y, q.tx, q.ty, q.inc, q.zone, q.place);
+            else sent = w.fleet.send(q.type, q.count, q.x, q.y, q.tx, q.ty, q.inc, q.zone, q.place, q.per);
+            if ((!sent || w.fleet.vehicles.size() == before) && (q.tx != q.fx || q.ty != q.fy)) {
+                // ((28.0) Its own drop-off by the call out of reach: the call's road point, as the rest.)
+                q.tx = q.fx;
+                q.ty = q.fy;
+                sent = w.fleet.send(q.type, q.count, q.x, q.y, q.tx, q.ty, q.inc, q.zone, q.place, q.per);
+            }
             if (!sent || w.fleet.vehicles.size() == before) {
                 // (No route this moment: back of the line to try again, never left off the map.)
                 if (++q.tries < 20) {
@@ -2407,6 +2420,50 @@ final class Dispatch {
 
     private int arrivedWaves;
 
+    /**
+     * ((28.0) Where each of a column's n cars puts its officers down: a road point of its own on a ring 60 to 160 round
+     * the call, spread over the side the column comes in on (each wave to the call turned a little further round, so
+     * waves come at it from different sides where the roads allow), never a junction, never one another's spot or one
+     * that a car already on its way there has. All of them drove to the one bit of road nearest the call before, and
+     * three waves at once knotted in the junction beside it. A car with no spot found (null) uses the call's road point.
+     */
+    float[][] dropOffs(Arrival a, float[] from, int n, float gx, float gy) {
+        float[][] out = new float[n][];
+        ArrayList<float[]> taken = new ArrayList<float[]>();
+        int already = 0;
+        for (int i = 0; i < w.fleet.vehicles.size(); i++) {
+            Fleet.Vehicle v = w.fleet.vehicles.get(i);
+            if (v.reinforcement && a.incident != null && v.incident == a.incident && v.state == Fleet.DRIVE) {
+                taken.add(new float[]{v.tx, v.ty});
+                already++;
+            }
+        }
+        for (Queued q : column) if (a.incident != null && q.inc == a.incident) {
+            taken.add(new float[]{q.tx, q.ty});
+            already++;
+        }
+        // The side it comes in from, turned round a step for each column already on its way to the call.
+        int side = (already + 2) / 6;
+        float base = (float) Math.atan2(from[1] - a.y, from[0] - a.x) + (side % 2 == 1 ? 1 : -1) * 0.9f * ((side + 1) / 2);
+        for (int k = 0; k < n; k++) {
+            for (int tries = 0; tries < 12 && out[k] == null; tries++) {
+                int slot = k + tries * 3;
+                float ang = base + ((slot % 5) - 2) * 0.6f + (slot / 5) * 0.31f;
+                float r = 60 + ((slot * 37) % 101);
+                float[] p = city.nearestDrivable(a.x + (float) Math.cos(ang) * r, a.y + (float) Math.sin(ang) * r);
+                if (p == null || World.hypot(p[0] - a.x, p[1] - a.y) > 200) continue;
+                int t = city.tileIndex(p[0], p[1]);
+                if (t < 0 || city.tiles[t] != City.ROAD || city.junctionIdAt(p[0], p[1]) >= 0 || city.onHighway(p[0], p[1])) continue;
+                boolean near = false;
+                for (float[] o : taken) if (World.hypot(o[0] - p[0], o[1] - p[1]) < 26) near = true;
+                if (near) continue;
+                out[k] = p;
+                taken.add(p);
+            }
+        }
+        return out;
+    }
+
     /** (15.9) Police or soldiers (by type) called in from outside and on their way, not yet on the map. */
     int incoming(int type) {
         int n = 0;
@@ -2484,13 +2541,24 @@ final class Dispatch {
                 enqueue(cv, Entity.SOLDIER, a.count, p, gx, gy, a.incident, a.zone, a.place);
                 column.get(column.size() - 1).swat = true;
                 cars = 1;
-            } else
-                for (int per = a.qrf ? 4 : army ? 8 : 2, left = a.count; left > 0; left -= per, cars++) {
-                    enqueue(cv, a.type, Math.min(left, per), p, gx, gy, a.incident, a.zone, a.place);
-                    column.get(column.size() - 1).agency = a.agency;
+            } else {
+                // ((28.0) Outside police four to a car, as many as it seats - two to a car, a wave of thirty came in fifteen
+                // cars, and three waves at once were forty cars knotted at one junction by the call. And each car with a
+                // drop-off of its own round the call (see dropOffs), not every one of them to the same bit of road.)
+                int per = a.qrf ? 4 : army ? 8 : Fleet.SEATS;
+                float[][] drops = army ? null : dropOffs(a, p, (a.count + per - 1) / per, gx, gy);
+                for (int left = a.count; left > 0; left -= per, cars++) {
+                    float[] d = drops != null && cars < drops.length && drops[cars] != null ? drops[cars] : null;
+                    enqueue(cv, a.type, Math.min(left, per), p, d != null ? d[0] : gx, d != null ? d[1] : gy, a.incident, a.zone, a.place);
+                    Queued q = column.get(column.size() - 1);
+                    q.per = per;
+                    q.fx = gx;
+                    q.fy = gy;
+                    q.agency = a.agency;
                     // ((10.60) The quick reaction force comes in Humvees.)
-                    if (a.qrf && city.cfg.nature()) column.get(column.size() - 1).vkind = Fleet.K_HUMVEE;
+                    if (a.qrf && city.cfg.nature()) q.vkind = Fleet.K_HUMVEE;
                 }
+            }
             boolean hwy = city.onHighway(p[0], p[1]);
             say(army ? WHO_MILITARY : WHO_POLICE, null, (army ? (a.qrf ? "Military: Quick reaction force, " + cars + " Humvees," : "Military: Reserve truck") : "Dispatch: " + (a.label != null ? a.label : "Backup") + ", " + cars + (a.swat ? " armoured van," : cars == 1 ? " car," : " cars,"))
                     + " entering the city from " + sideOfMap(p[0], p[1]) + (hwy && city.hwyName != null ? " on " + city.hwyName : "")

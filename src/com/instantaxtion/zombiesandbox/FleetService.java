@@ -24,6 +24,12 @@ final class FleetService {
      */
     boolean send(int unitType, int count, float fromX, float fromY, float toX, float toY, Dispatch.Incident inc,
                  Dispatch.SafeZone zone, String place) {
+        return send(unitType, count, fromX, fromY, toX, toY, inc, zone, place, 2);
+    }
+
+    /** ((28.0) As send, with per police officers to a car: the city's own go in pairs, police from outside four to a car (Fleet.SEATS). */
+    boolean send(int unitType, int count, float fromX, float fromY, float toX, float toY, Dispatch.Incident inc,
+                 Dispatch.SafeZone zone, String place, int per) {
         float[] start = null;
         // An army truck from a base or the armory: one of the trucks parked there drives out.
         // (10.24) First one of the cars or trucks parked back at the station or base after an earlier call.
@@ -43,7 +49,8 @@ final class FleetService {
         if (!way || full[city.tileIndex(start[0], start[1])] >= City.FAR) return false;
         Route field = fleet.routing.corridor(full, start[0], start[1]);
         boolean cops = unitType == Entity.COP;
-        int cars = cops ? (count + 1) / 2 : 1;
+        per = Math.max(1, Math.min(Fleet.SEATS, per));
+        int cars = cops ? (count + per - 1) / per : 1;
         for (int i = 0; i < cars; i++) {
             Vehicle v = fleet.make(cops ? CRUISER : TRUCK);
             v.state = WAIT;
@@ -56,7 +63,7 @@ final class FleetService {
             v.ty = toY;
             v.field = field;
             v.passengerType = unitType;
-            v.passengers = cops ? Math.min(2, count - i * 2) : count;
+            v.passengers = cops ? Math.min(per, count - i * per) : count;
             v.incident = inc;
             v.zone = zone;
             v.place = place;
@@ -330,7 +337,7 @@ final class FleetService {
                     v.pathField = null;
                 } else arrived = true;
             }
-        } else if (v.stuckTimer > (v.reinforcement ? 12 : 4)) arrived = true;
+        } else if (v.stuckTimer > (v.reinforcement && !nearItsCall(v) ? 12 : 4)) arrived = true;
         if (arrived) return arrivedStep(v, dt);
         fleet.driving.hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
         if (v.type == CRUISER && v.soundCd <= 0 && v.state == DRIVE) {
@@ -338,6 +345,17 @@ final class FleetService {
             w.emit(Sfx.SIREN, v.x, v.y);
         }
         return false;
+    }
+
+    /**
+     * ((28.0) Help from outside held up within 300 of its call (or of its drop-off by it): four seconds of that and its
+     * officers get out and walk the rest, rather than sit twelve in the knot round the call - and the car pulls off the
+     * lane (kerbAtScene).
+     */
+    boolean nearItsCall(Vehicle v) {
+        if (v.state != DRIVE || v.passengers <= 0) return false;
+        if (v.incident != null && World.hypot(v.x - v.incident.x, v.y - v.incident.y) < 300) return true;
+        return v.incident != null && World.hypot(v.x - v.tx, v.y - v.ty) < 300;
     }
 
     /** A police car parked up at the call, lights going. */
