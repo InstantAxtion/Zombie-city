@@ -212,8 +212,20 @@ final class FleetRouting {
 
     boolean newDestination(Vehicle v) {
         if (v.destCd > 0) return false;
+        // ((28.0) Nothing found: it keeps the way it had, not the last one tried and turned down - one that began back the
+        // way it came, which it then swung round on the spot to take.)
+        Route was = v.field;
+        float wtx = v.tx, wty = v.ty, wDist = v.lastDist;
         boolean ok = pickDestination(v);
-        if (!ok) v.destCd = 2 + w.rnd.nextFloat() * 2;
+        if (!ok) {
+            v.destCd = 2 + w.rnd.nextFloat() * 2;
+            if (v.field != was) {
+                v.field = was;
+                v.tx = wtx;
+                v.ty = wty;
+                v.lastDist = wDist;
+            }
+        }
         return ok;
     }
 
@@ -355,11 +367,54 @@ final class FleetRouting {
         // ((27.4) Round the streets thick with the dead - all but where it's going, if that's to a call.)
         hazardOn(hazardMul(v), x, y, emergency(v) ? HAZ_CALL : HAZ_TRIP);
         try {
+            // ((28.0) On the move, its way starts on ahead: on to a junction or a gap in the median to turn, or round the
+            // block. Planned from its own tile with nothing behind it ruled out, the shortest way to somewhere behind (or
+            // off to the side, or just past the end of a route that turned hard) began with a step back the way it came,
+            // and the car swung round on the spot to take it - a full circle where the step back was across a median it
+            // couldn't cross. Only with no way on at all (a dead end) is it planned the short way, back.)
+            if (noTurningBack(v)) {
+                noLoosen = true;
+                try {
+                    if (routeOn(v, x, y, field)) return true;
+                } finally {
+                    noLoosen = false;
+                    city.noGoN = 0;
+                }
+                if (city.capped) return false;
+            }
             return routeOn(v, x, y, field);
         } finally {
             city.searchCap = 0;
             hazardOff();
         }
+    }
+
+    /** ((28.0) The search under way may not fall back on one over the pavements (see routeOn). */
+    private boolean noLoosen;
+    /** ((28.0) Set while a vehicle plans its way back out of trouble on purpose (the dead thick on the road ahead). */
+    boolean mayTurnBack;
+
+    /**
+     * ((28.0) If v is driving along a road, on ahead at a fair speed, the row of tiles right behind it, all the way
+     * across the road (both sides of it, and a median), is put out of bounds for the search about to be made (City.noGo):
+     * its way can't start by turning round where it is. True if it was.
+     */
+    boolean noTurningBack(Vehicle v) {
+        city.noGoN = 0;
+        if (mayTurnBack || v.player != null || offRoad(v) || v.speed < 8 || v.backT > 0 || v.giveWayT > 0) return false;
+        int own = city.tileIndex(v.x, v.y);
+        if (own < 0 || city.tiles[own] != City.ROAD || city.hwyTile(own % city.w, own / city.w)) return false;
+        float c = (float) Math.cos(v.angle), sn = (float) Math.sin(v.angle);
+        // (Square on to the road, not halfway round a corner.)
+        if (Math.max(Math.abs(c), Math.abs(sn)) < 0.82f) return false;
+        int dx = Math.abs(c) >= Math.abs(sn) ? (c > 0 ? 1 : -1) : 0, dy = dx == 0 ? (sn > 0 ? 1 : -1) : 0;
+        int bx = own % city.w - dx, by = own / city.w - dy;
+        for (int s = -4; s <= 4; s++) {
+            int x = bx + dy * s, y = by + dx * s;
+            if (x < 0 || y < 0 || x >= city.w || y >= city.h || city.driveCost(y * city.w + x) < 0) continue;
+            city.noGo[city.noGoN++] = y * city.w + x;
+        }
+        return city.noGoN > 0;
     }
 
     /**
@@ -445,7 +500,7 @@ final class FleetRouting {
         if (!city.driveField(field, x, y, strict, from) || nearField(field, v.x, v.y) >= City.FAR) {
             // Off the road (shoved onto the pavement, or parked on a lot): find the way back over whatever's paved.
             // ((16.8) Not after an everyday search that gave up: the other way would only give up too.)
-            if (!strict || city.capped || !city.driveField(field, x, y, false, from) || nearField(field, v.x, v.y) >= City.FAR) return false;
+            if (!strict || city.capped || noLoosen || !city.driveField(field, x, y, false, from) || nearField(field, v.x, v.y) >= City.FAR) return false;
         }
         v.field = corridor(field, v.x, v.y);
         v.tx = x;

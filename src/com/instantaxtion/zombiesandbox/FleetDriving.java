@@ -1169,7 +1169,13 @@ final class FleetDriving {
         float hx = v.x + fx * 95, hy = v.y + fy * 95;
         if (World.hypot(v.tx - hx, v.ty - hy) < 240) return false;
         v.rerouteCd = 4;
-        if (!fleet.routing.route(v, v.tx, v.ty)) return false;
+        // ((28.0) Turning back from them is the point here.)
+        fleet.routing.mayTurnBack = true;
+        try {
+            if (!fleet.routing.route(v, v.tx, v.ty)) return false;
+        } finally {
+            fleet.routing.mayTurnBack = false;
+        }
         steered++;
         // (Hemmed in, hardly moving, and the new way is back the way it came: back out of them.)
         if (Math.abs(v.speed) < 6) backOutIfBehind(v);
