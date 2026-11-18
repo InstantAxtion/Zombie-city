@@ -47,7 +47,8 @@ final class Recruitment {
      * than this many sign up in the whole game: with the 27.5 cities' twenty-odd stations the kit alone let well over a
      * hundred through, a fresh one for each that fell.)
      */
-    static final int MAX_VOLUNTEERS = 36;
+    // ((28.0) A hundred and twenty: thirty-six was too few to notice in a city of twenty-odd stations.)
+    static final int MAX_VOLUNTEERS = 120;
 
     private int kitFor(City.Facility f) {
         if (f.kind == City.FACILITY_BASE) return 10;

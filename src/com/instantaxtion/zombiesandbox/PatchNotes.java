@@ -22,7 +22,7 @@ final class PatchNotes {
                     "Stations, bases and the FBI office are named from further out.",
                     "Outside police backup comes four to a car and spreads out round the call instead of piling up.",
                     "Cars no longer drive into each other.",
-                    "Police start at the city's stations and in their cars; volunteers stay at their station and stop at 36.",
+                    "Police start at the city's stations and in their cars; volunteers stay at their station, up to 120 a game.",
             },
             {
                     "27.5  -  Every city its own",
