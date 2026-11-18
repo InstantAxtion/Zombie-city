@@ -6,16 +6,17 @@ import java.util.ArrayList;
  * (26.0) Convoys: a column of vehicles that travels together - escorts at the head and tail, trucks or buses between -
  * keeping its spacing, the lead waiting for anyone fallen behind. When the dead get in among it, it halts and its
  * gunners fight; once it's clear (or it's been held too long) it pushes on. Supply convoys bring ammunition to a safe
- * zone, a survivor base or a police station; evacuation convoys take the people sheltering in a safe zone out of the
- * city. Called by the city itself (a zone running low, or full) or from the Events tool.
+ * zone, a survivor base or a police station. Called by the city itself (a zone running low) or from the Events tool.
+ * ((28.2) The evacuation convoys are gone: one in an old save turns round and leaves, empty - see dropEvacuations.)
  */
 final class Convoys {
+    /** ((28.2) 1 was an evacuation convoy, gone: see dropEvacuations.) */
     static final int SUPPLY = 0, EVAC = 1;
     static final int FORMING = 0, MOVING = 1, HALTED = 2, AT_TARGET = 3, LEAVING = 4, DONE = 5;
-    /** What each vehicle in the queue to come on is: an escort, a supply truck, a bus. */
+    /** What each vehicle in the queue to come on is: an escort, a supply truck. ((28.2) Buses and police escorts were the evacuation convoys': only in old saves.) */
     static final int V_ESCORT = 0, V_TRUCK = 1, V_BUS = 2, V_POLICE = 3;
     static final int MAX_COLUMNS = 3;
-    static final int TRUCK_ROUNDS = 300, BUS_SEATS = 36;
+    static final int TRUCK_ROUNDS = 300;
 
     static final class Column {
         int purpose, state = FORMING, resume = MOVING;
@@ -27,6 +28,7 @@ final class Convoys {
         SurvivorBases.Base base;
         City.Facility station;
         float tx, ty;
+        /** ((28.2) aboard and carried were the evacuation convoys': kept so old saves read.) */
         int trucks, trucksStart, cargo, aboard, lost, carried;
         float stateT, age, quietT, saidCd, progressT, bestD = Float.MAX_VALUE;
         String place, from;
@@ -36,7 +38,7 @@ final class Convoys {
     private final World w;
     final ArrayList<Column> columns = new ArrayList<Column>();
     private float autoCd = 30;
-    int delivered, evacuatedBy, launched;
+    int delivered, launched;
 
     Convoys(World w) {
         this.w = w;
@@ -71,12 +73,6 @@ final class Convoys {
         c.sa = (float) Math.atan2(c.ty - best[1], c.tx - best[0]);
         c.from = "outside the city";
         return true;
-    }
-
-    int running(int purpose) {
-        int n = 0;
-        for (int i = 0; i < columns.size(); i++) if (columns.get(i).purpose == purpose && columns.get(i).state != DONE) n++;
-        return n;
     }
 
     private boolean busy(Object target) {
@@ -116,32 +112,10 @@ final class Convoys {
         return c;
     }
 
-    /** An evacuation convoy for the people sheltering in safe zone z. Null if it can't go. */
-    Column evacuate(Dispatch.SafeZone z) {
-        if (columns.size() >= MAX_COLUMNS || z == null || z.removed || busy(z) || z.sheltered <= 0) return null;
-        Column c = new Column();
-        c.purpose = EVAC;
-        c.zone = z;
-        float[] road = w.city.nearestDrivable(z.x, z.y);
-        if (road == null) return null;
-        c.tx = road[0];
-        c.ty = road[1];
-        c.place = z.place;
-        if (!source(c)) return null;
-        int buses = Math.max(1, Math.min(3, (z.sheltered + BUS_SEATS - 1) / BUS_SEATS));
-        c.queue.add(V_POLICE);
-        for (int i = 0; i < buses; i++) c.queue.add(V_BUS);
-        c.queue.add(w.city.mainBase() != null ? V_ESCORT : V_POLICE);
-        start(c, "EVACUATION CONVOY");
-        w.dispatch.say(Dispatch.WHO_POLICE, null, "Dispatch: Evacuation convoy, " + buses + (buses == 1 ? " bus" : " buses")
-                + " with an escort, on its way to " + c.place + " to take the people there out of the city.", c.sx, c.sy);
-        return c;
-    }
-
     private void start(Column c, String label) {
         c.tracker = new Dispatch.Convoy();
         c.tracker.managed = true;
-        c.tracker.type = c.purpose == SUPPLY ? Entity.SOLDIER : Entity.COP;
+        c.tracker.type = Entity.SOLDIER;
         c.tracker.label = label;
         c.tracker.place = c.place;
         c.tracker.fromX = c.tracker.x = c.sx;
@@ -194,8 +168,7 @@ final class Convoys {
                     c.lost++;
                     if (c.saidCd <= 0) {
                         c.saidCd = 8;
-                        w.dispatch.say(c.purpose == SUPPLY ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null,
-                                (c.purpose == SUPPLY ? "Convoy: " : "Evacuation convoy: ") + "We've lost a " + roleName(v.convoyRole) + " near "
+                        w.dispatch.say(Dispatch.WHO_MILITARY, null, "Convoy: We've lost a " + roleName(v.convoyRole) + " near "
                                         + w.city.placeName(v.x, v.y) + "! The rest keep going.", v.x, v.y);
                     }
                     // (Its passengers get out where it stopped.)
@@ -205,18 +178,17 @@ final class Convoys {
                     }
                 }
             }
-            if (c.purpose == SUPPLY) c.trucks = trucks;
+            c.trucks = trucks;
             Fleet.Vehicle head = head(c);
             if (head != null) {
                 c.tracker.x = head.x;
                 c.tracker.y = head.y;
             }
-            c.tracker.label = (c.purpose == SUPPLY ? (c.state == LEAVING ? "CONVOY RETURNING" : "SUPPLY CONVOY") : "EVACUATION CONVOY")
-                    + (c.state == HALTED ? " - CONTACT!" : c.state == AT_TARGET ? (c.purpose == EVAC ? " - LOADING" : " - UNLOADING") : "")
-                    + "  " + alive + (alive == 1 ? " vehicle" : " vehicles") + (c.purpose == EVAC && c.aboard > 0 ? ", " + c.aboard + " aboard" : "");
+            c.tracker.label = (c.state == LEAVING ? "CONVOY RETURNING" : "SUPPLY CONVOY")
+                    + (c.state == HALTED ? " - CONTACT!" : c.state == AT_TARGET ? " - UNLOADING" : "")
+                    + "  " + alive + (alive == 1 ? " vehicle" : " vehicles");
             if (alive == 0 && c.queue.isEmpty() && c.state != FORMING) {
-                end(c, c.state == LEAVING && c.purpose == EVAC ? null : (c.purpose == SUPPLY ? "Military: The supply convoy to " + c.place + " has been wiped out."
-                        : "Dispatch: The evacuation convoy from " + c.place + " never made it out."));
+                end(c, c.state == LEAVING ? null : "Military: The supply convoy to " + c.place + " has been wiped out.");
                 columns.remove(i);
                 continue;
             }
@@ -234,7 +206,7 @@ final class Convoys {
                     c.progressT = 0;
                 } else c.progressT += dt;
                 if (c.progressT > 90) {
-                    leave(c, (c.purpose == SUPPLY ? "Military" : "Dispatch") + ": The convoy can't get through to " + c.place + ". Turning back.");
+                    leave(c, "Military: The convoy can't get through to " + c.place + ". Turning back.");
                     continue;
                 }
             }
@@ -251,8 +223,7 @@ final class Convoys {
                 c.quietT = 0;
                 if (c.saidCd <= 0 && head != null) {
                     c.saidCd = 25;
-                    w.dispatch.say(c.purpose == SUPPLY ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null, (c.purpose == SUPPLY ? "Convoy" : "Evacuation convoy")
-                            + ": Contact at " + w.city.placeName(head.x, head.y) + "! Halting - gunners, clear them off.", head.x, head.y);
+                    w.dispatch.say(Dispatch.WHO_MILITARY, null, "Convoy: Contact at " + w.city.placeName(head.x, head.y) + "! Halting - gunners, clear them off.", head.x, head.y);
                 }
             } else if (c.state == HALTED) {
                 c.quietT = threat == 0 ? c.quietT + dt : 0;
@@ -260,7 +231,7 @@ final class Convoys {
                 if (c.quietT > 2.5f || c.stateT > 40) {
                     if (c.stateT > 40 && c.saidCd <= 0 && head != null) {
                         c.saidCd = 25;
-                        w.dispatch.say(c.purpose == SUPPLY ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null, "Convoy: We can't hold here. Pushing through!", head.x, head.y);
+                        w.dispatch.say(Dispatch.WHO_MILITARY, null, "Convoy: We can't hold here. Pushing through!", head.x, head.y);
                     }
                     c.state = c.resume;
                     c.stateT = c.resume == MOVING ? 0 : c.stateT;
@@ -270,8 +241,7 @@ final class Convoys {
             else if (c.state == MOVING && c.stateT > 300) {
                 // (No way through at all: it turns back.)
                 leave(c, "Convoy: There's no way through to " + c.place + ". Turning back.");
-            } else if (c.state == AT_TARGET && c.stateT > (c.purpose == EVAC ? 10 : 6)) {
-                if (c.purpose == EVAC) load(c);
+            } else if (c.state == AT_TARGET && c.stateT > 6) {
                 leave(c, null);
             }
         }
@@ -286,11 +256,11 @@ final class Convoys {
         return role == V_TRUCK ? "truck" : role == V_BUS ? "bus" : "escort";
     }
 
-    /** At the target: a supply convoy unloads what's left of its rounds; an evacuation convoy pulls up to load. */
+    /** At the target: a supply convoy unloads what's left of its rounds. */
     private void arrive(Column c) {
         c.state = AT_TARGET;
         c.stateT = 0;
-        if (c.purpose == SUPPLY) {
+        {
             int rounds = c.trucksStart <= 0 ? 0 : Math.round(c.cargo * (float) c.trucks / c.trucksStart);
             if (c.zone != null && !c.zone.removed) {
                 c.zone.ammo += rounds;
@@ -300,60 +270,19 @@ final class Convoys {
             delivered += rounds;
             w.dispatch.say(Dispatch.WHO_MILITARY, null, "Convoy: At " + c.place + ". " + rounds + " rounds delivered"
                     + (c.lost > 0 ? " - we lost " + c.lost + (c.lost == 1 ? " vehicle" : " vehicles") + " on the way." : "."), c.tx, c.ty);
-        } else {
-            w.dispatch.say(Dispatch.WHO_POLICE, null, "Evacuation convoy: At " + c.place + ". Get everyone aboard, quickly!", c.tx, c.ty);
         }
     }
 
-    /** The people sheltering in the zone climb aboard the buses, as many as there are seats. */
-    private void load(Column c) {
-        Dispatch.SafeZone z = c.zone;
-        if (z == null || z.removed) return;
-        ArrayList<Fleet.Vehicle> buses = new ArrayList<Fleet.Vehicle>();
-        for (int k = 0; k < c.vs.size(); k++) if (alive(c.vs.get(k)) && c.vs.get(k).convoyRole == V_BUS) buses.add(c.vs.get(k));
-        if (buses.isEmpty()) return;
-        int b = 0, n = 0;
-        for (int i = 0, m = w.entities.size(); i < m; i++) {
-            Entity e = w.entities.get(i);
-            if (e.dead || e.removed || e.task != Dispatch.T_SHELTER || e.zone != z || e.infected || e == w.controlled) continue;
-            while (b < buses.size() && buses.get(b).riders.size() >= BUS_SEATS) b++;
-            if (b >= buses.size()) break;
-            Fleet.Vehicle bus = buses.get(b);
-            e.task = Dispatch.T_NONE;
-            e.zone = null;
-            e.dead = true;
-            e.removed = true;
-            bus.riders.add(e);
-            z.sheltered = Math.max(0, z.sheltered - 1);
-            w.dispatch.sheltered = Math.max(0, w.dispatch.sheltered - 1);
-            n++;
-        }
-        c.aboard = n;
-        w.dispatch.say(Dispatch.WHO_POLICE, null, "Evacuation convoy: " + n + (n == 1 ? " person" : " people") + " aboard. Moving out!", c.tx, c.ty);
-    }
-
-    /** Away again: off the map by the nearest way out (an evacuation convoy) or back where it came from. */
+    /** Away again: back where it came from. */
     private void leave(Column c, String say) {
         c.state = LEAVING;
         c.stateT = 0;
-        if (say != null) w.dispatch.say(c.purpose == SUPPLY ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null, say, c.tx, c.ty);
+        if (say != null) w.dispatch.say(Dispatch.WHO_MILITARY, null, say, c.tx, c.ty);
         float ex = c.sx, ey = c.sy;
-        if (c.purpose == EVAC) {
-            java.util.List<float[]> out = w.dispatch.entries(c.tx, c.ty, true);
-            float bd = Float.MAX_VALUE;
-            for (float[] p : out) {
-                float d = (float) World.hypot(p[0] - c.tx, p[1] - c.ty);
-                if (d < bd) {
-                    bd = d;
-                    ex = p[0];
-                    ey = p[1];
-                }
-            }
-        }
-        c.tracker.label = c.purpose == SUPPLY ? "CONVOY RETURNING" : "EVACUATION CONVOY";
+        c.tracker.label = "CONVOY RETURNING";
         c.tracker.toX = ex;
         c.tracker.toY = ey;
-        c.tracker.place = c.purpose == SUPPLY ? c.from : "out of the city";
+        c.tracker.place = c.from;
         for (int k = 0; k < c.vs.size(); k++) {
             Fleet.Vehicle v = c.vs.get(k);
             if (!alive(v)) continue;
@@ -366,27 +295,43 @@ final class Convoys {
     private void end(Column c, String say) {
         c.state = DONE;
         w.dispatch.convoys.remove(c.tracker);
-        if (c.zone != null && c.purpose == SUPPLY) c.zone.supplyComing = false;
-        if (say != null) w.dispatch.say(c.purpose == SUPPLY ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, null, say, c.tx, c.ty);
+        if (c.zone != null) c.zone.supplyComing = false;
+        if (say != null) w.dispatch.say(Dispatch.WHO_MILITARY, null, say, c.tx, c.ty);
     }
 
-    /** A vehicle of a column has gone off the map at the end: an evacuation bus's people count as got out. */
+    /** A vehicle of a column has gone off the map at the end, or in at the base. */
     void gone(Fleet.Vehicle v) {
         Column c = v.convoy;
         if (c == null) return;
-        if (v.convoyRole == V_BUS && !v.riders.isEmpty()) {
-            c.carried += v.riders.size();
-            w.evacuated += v.riders.size();
-            evacuatedBy += v.riders.size();
-            v.riders.clear();
-        }
         c.vs.remove(v);
         boolean left = false;
         for (int k = 0; k < c.vs.size(); k++) if (alive(c.vs.get(k))) left = true;
         if (!left && c.queue.isEmpty() && columns.contains(c)) {
-            end(c, c.purpose == EVAC ? "Dispatch: The evacuation convoy from " + c.place + " is out of the city with " + c.carried
-                    + (c.carried == 1 ? " person" : " people") + " aboard." : null);
+            end(c, null);
             columns.remove(c);
+        }
+    }
+
+    /**
+     * ((28.2) A game saved with an evacuation convoy on the road: the people aboard get out where they are, and the
+     * column turns round and goes back the way it came, empty, like a supply convoy that's delivered.)
+     */
+    void dropEvacuations() {
+        for (int i = 0; i < columns.size(); i++) {
+            Column c = columns.get(i);
+            if (c.purpose == SUPPLY) continue;
+            for (int k = 0; k < c.vs.size(); k++) {
+                Fleet.Vehicle v = c.vs.get(k);
+                for (int r = 0; r < v.riders.size(); r++) w.release(v.riders.get(r), v.x, v.y);
+                v.riders.clear();
+            }
+            c.purpose = SUPPLY;
+            c.queue.clear();
+            c.zone = null;
+            c.trucks = c.trucksStart = c.cargo = c.aboard = 0;
+            if (c.from == null) c.from = "outside the city";
+            if (c.state == FORMING || c.state == MOVING || c.state == HALTED || c.state == AT_TARGET) leave(c, null);
+            else c.tracker.label = "CONVOY RETURNING";
         }
     }
 
@@ -469,23 +414,13 @@ final class Convoys {
         return best != null && supply(null, null, best, 600) != null;
     }
 
-    /** (The Events tool.) An evacuation convoy for the safe zone at (x, y). */
-    boolean evacuateAt(float x, float y) {
-        for (int i = 0; i < w.dispatch.zones.size(); i++) {
-            Dispatch.SafeZone z = w.dispatch.zones.get(i);
-            if (!z.removed && z.contains(x, y, 4)) return evacuate(z) != null;
-        }
-        return false;
-    }
-
-    /** The city's own convoys: ammunition to zones running low, and the people out of zones filling up. */
+    /** The city's own convoys: ammunition to zones and stations running low. */
     private void auto() {
-        if (!w.outbreak || w.city.cfg.mission >= 0) return;
+        if (!w.outbreak) return;
         for (int i = 0; i < w.dispatch.zones.size() && columns.size() < MAX_COLUMNS; i++) {
             Dispatch.SafeZone z = w.dispatch.zones.get(i);
             if (z.removed || !z.open) continue;
             if (z.ammo < 120 && !z.supplyComing && supply(z, null, null, 600) != null) z.supplyComing = true;
-            else if (z.sheltered >= Math.max(20, z.capacity * 0.7f) && w.outbreakTime > 90 && running(EVAC) == 0) evacuate(z);
         }
         // (A police station whose armoury's nearly empty.)
         for (City.Facility f : w.city.facilities) {

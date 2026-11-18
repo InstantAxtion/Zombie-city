@@ -716,8 +716,6 @@ final class Population {
         if (type == Entity.COP || type == Entity.SOLDIER) e.hp *= World.ARMED_HP;
         // ((20.0) The dead are tougher on the harder settings.)
         if (Entity.isZombieType(type)) e.hp *= Director.Z_HP[w.difficulty];
-        // ((21.0) A commander's body armour perk.)
-        else if ((type == Entity.COP || type == Entity.SOLDIER) && Perks.has(w, Perks.ARMOUR)) e.hp *= 1.15f;
         e.maxHp = e.hp;
         e.ammo = e.magSize;
         // ((11.4) Not every patrol officer carries the same: some have the shotgun from the car, some the patrol carbine.)
@@ -926,8 +924,8 @@ final class Population {
                 // A rifle with a grenade launcher slung under it, and a bandolier of rounds for it.
                 e.hp = e.maxHp = 100;
                 e.magSize = 30;
-                e.reserve = Perks.has(w, Perks.HEAVY) ? 225 : 150;
-                e.grenades = Perks.has(w, Perks.HEAVY) ? 6 : 4;
+                e.reserve = 150;
+                e.grenades = 4;
                 break;
             case Entity.ROLE_MARKSMAN:
                 // A scoped bolt-action rifle and a handful of rounds.
@@ -1004,7 +1002,7 @@ final class Population {
             case Entity.ROLE_GUNNER:
                 e.hp = e.maxHp = 130;
                 e.magSize = 100;
-                e.reserve = Perks.has(w, Perks.HEAVY) ? 300 : 200;
+                e.reserve = 200;
                 e.grenades = 0;
                 e.speed = 19;
                 e.runSpeed = 31;

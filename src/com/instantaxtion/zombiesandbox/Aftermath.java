@@ -17,7 +17,7 @@ final class Aftermath {
 
     /** Once a second: in an outbreak with people sheltering, every few minutes a plane drops supplies over the busiest zone. */
     void cargoFlights() {
-        if (w.cargoPlane != null || !w.outbreak || w.zombies == 0 || w.dispatch.zones.isEmpty() || w.city.cfg.mission >= 0) return;
+        if (w.cargoPlane != null || !w.outbreak || w.zombies == 0 || w.dispatch.zones.isEmpty()) return;
         if ((w.cargoCd -= 1) > 0) return;
         Dispatch.SafeZone best = null;
         for (Dispatch.SafeZone z : w.dispatch.zones) if (best == null || z.sheltered > best.sheltered) best = z;
@@ -73,7 +73,6 @@ final class Aftermath {
         w.war.fieldSupplies();
         w.raiders.raiders();
         if (World.WALK_IN) w.indoors.countInside();
-        if (w.city.cfg.mission >= 0) Campaign.tick(w);
         w.director.tick(w);
         w.armedAI.mopUp();
         w.fieldworks.engineersWire();

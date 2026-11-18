@@ -69,7 +69,7 @@ final class Menu {
     }
 
     static final int NONE = 0, MAIN = 1, SETUP = 2, SETTINGS = 3, NOTES = 4, PAUSE = 5, STATS = 6, RECORDS = 8,
-            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12, REPORT = 13, CAMPAIGN = 14, SOUNDS = 15;
+            SAVES = 9, LOG = 10, REPLAY = 11, TOP = 12, REPORT = 13, SOUNDS = 15;
     /** ((15.1) How many save slots there are (the autosave besides): six, up from three.) */
     static final int SLOTS = 6;
 
@@ -81,8 +81,8 @@ final class Menu {
             A_MAIN_MENU = 6, A_BACK = 7, A_START = 8, A_RANDOM = 9, A_SAVE = 10, A_STATS = 11, A_HOW_TO = 12,
             A_TUT_NEXT = 13, A_TUT_PREV = 14, A_TUT_DONE = 15, A_CODE = 16, A_REROLL = 17, A_SHOT = 18, A_RECORDS = 19, A_SAVES = 20, A_LOAD = 21, A_LOG = 22, A_HUD = 23,
             A_REPLAY = 24, A_REPLAY_PLAY = 25, A_RESTART = 26, A_COPY_CODE = 27, A_SLOT = 100, A_RESET_SETTINGS = 28, A_LOAD_SLOT = 150, A_DELETE_SLOT = 170, A_LOG_ROW = 200, A_LOG_FILTER = 1000,
-            A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30, A_CAMPAIGN = 31, A_RETRY = 32, A_NEXT = 33, A_MISSION = 5000,
-            A_SOUNDS = 34, A_RESET_STATS = 35, A_SFX = 6000, A_LOOP = 7000, A_PERK = 8000;
+            A_TOP = 29, A_TOP_ROW = 600, A_REPORT = 30,
+            A_SOUNDS = 34, A_RESET_STATS = 35, A_SFX = 6000, A_LOOP = 7000;
     /** ((19.0) The ambience bed being tried in the Sound Lab, or -1. */
     int previewLoop = -1;
     /** ((19.6) The sound last played in the Sound Lab, and when: lit up, with a meter along the bottom. */
@@ -186,7 +186,7 @@ final class Menu {
     }
 
     void open(int s) {
-        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP || s == REPORT || s == CAMPAIGN || s == SOUNDS) {
+        if (s == SETUP || s == SETTINGS || s == NOTES || s == STATS || s == RECORDS || s == SAVES || s == LOG || s == TOP || s == REPORT || s == SOUNDS) {
             if (screen == MAIN || screen == PAUSE || screen == NONE) returnTo = screen;
         } else {
             returnTo = MAIN;
@@ -268,7 +268,6 @@ final class Menu {
             case LOG: drawLog(c, w, h); break;
             case TOP: drawTop(c, w, h); break;
             case REPORT: drawReport(c, w, h); break;
-            case CAMPAIGN: drawCampaign(c, w, h); break;
             case SOUNDS: drawSounds(c, w, h); break;
             case REPLAY: drawReplay(c, w, h, dt); break;
         }
@@ -515,11 +514,7 @@ final class Menu {
             }
             button("New Game", A_NEW, false, x0, y, x0 + colW, y + tileH);
         } else button("New Game", A_NEW, true, x0, y, x0 + colW, y + bigH);
-        y += (game ? tileH : bigH) + gap;
-        // ((18.0) The campaign: missions to win as the commander, beside the sandbox's New Game.)
-        button("Campaign  " + Campaign.stars(0).charAt(0) + " " + (records != null ? records.totalStars() : 0) + "/" + Campaign.MISSIONS.length * 3,
-                A_CAMPAIGN, false, x0, y, x0 + colW, y + tileH);
-        y += tileH + gap * 1.6f;
+        y += (game ? tileH : bigH) + gap * 1.6f;
         // The rest, two to a row.
         java.util.ArrayList<Object[]> tiles = new java.util.ArrayList<Object[]>();
         if (slots) tiles.add(new Object[]{"Load Game", A_LOAD});
@@ -670,19 +665,13 @@ final class Menu {
      */
     private void drawReport(Canvas c, int w, int h) {
         World world = host.world();
-        Campaign.Mission mission = world.mission();
-        float top = header(c, w, h, mission != null ? "Mission Report" : "After-Action Report");
+        float top = header(c, w, h, "After-Action Report");
         float side = 16 * dp, maxW = Math.min(w - side * 2, 760 * dp), x0 = (w - maxW) / 2;
-        // ((18.0) A mission's report has its buttons along the bottom: try again, the next mission, the campaign.)
-        float barH = mission != null ? 70 * dp : 0;
-        listArea.set(0, top, w, h - 8 * dp - barH);
-        if (mission != null) missionButtons(world, w, h, barH, maxW, x0);
+        listArea.set(0, top, w, h - 8 * dp);
         c.save();
         c.clipRect(listArea);
         float y = top + 8 * dp - scroll;
-        if (mission != null) y = missionSummary(c, world, mission, w, y, maxW, x0);
-        // (A mission says how it ended above.)
-        if (mission == null) {
+        {
             // How it ended.
             text.setTextAlign(Paint.Align.CENTER);
             text.setTextSize(22 * dp);
@@ -710,14 +699,13 @@ final class Menu {
                 {"Soldiers lost", String.valueOf(world.soldiersLost)},
                 {"Civilians lost", String.valueOf(world.civiliansLost)},
                 {"People turned", String.valueOf(world.turned)},
-                {world.mission() != null ? "Score (" + Director.NAMES[world.difficulty] + ")" : "Score", String.valueOf(world.score())},
+                {"Score", String.valueOf(world.score())},
         };
         String[][] theirs = {
                 {"Destroyed", String.valueOf(world.zombiesKilled)},
                 {"Most at once", String.valueOf(world.peakZombies)},
                 {"Biggest horde", String.valueOf(world.biggestHorde)},
                 {"Still walking", String.valueOf(world.zombieCount())},
-                {"Hordes from outside", String.valueOf(world.director.hordes + world.director.sieges + world.director.stragglers)},
                 {"Mines set off", String.valueOf(world.minesBlown)},
                 {"Alphas killed", world.alphasKilled + " of " + world.alphas},
                 {"Died in the wire", String.valueOf(world.defences.wireKills)},
@@ -827,177 +815,6 @@ final class Menu {
         drawScrollHint(c, w);
     }
 
-    /** ((18.0) A mission's result at the top of its report: how it ended, the stars, and each objective. */
-    private float missionSummary(Canvas c, World world, Campaign.Mission m, int w, float y, float maxW, float x0) {
-        int res = world.missionResult;
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(13 * dp);
-        text.setColor(ACCENT);
-        c.drawText((world.city.cfg.mission + 1) + ".  " + m.title.toUpperCase(java.util.Locale.US), w / 2f, y + 14 * dp, text);
-        y += 22 * dp;
-        text.setTextSize(24 * dp);
-        text.setColor(res == 1 ? 0xFF8BE05A : res == 2 ? 0xFFFF6A5A : INK);
-        c.drawText(res == 1 ? "MISSION COMPLETE" : res == 2 ? "MISSION FAILED" : "MISSION IN PROGRESS", w / 2f, y + 26 * dp, text);
-        y += 36 * dp;
-        if (res == 1) {
-            text.setTextSize(30 * dp);
-            text.setColor(0xFFFFD54A);
-            c.drawText(Campaign.stars(world.missionStars), w / 2f, y + 28 * dp, text);
-            y += 38 * dp;
-        } else if (res == 2 && world.missionWhy != null) {
-            plain.setTextAlign(Paint.Align.CENTER);
-            plain.setTextSize(13 * dp);
-            plain.setColor(MUTED);
-            c.drawText(world.missionWhy, w / 2f, y + 12 * dp, plain);
-            y += 22 * dp;
-        }
-        String[] goals = {Campaign.goalText(world), "Civilians lost: no more than " + m.starCivilians + "  (" + world.civiliansLost + ")",
-                "Officers and soldiers lost: no more than " + m.starLosses + "  (" + Campaign.lost(world) + ")"};
-        boolean[] met = {res == 1, Campaign.starCivilians(world), Campaign.starLosses(world)};
-        tmp.set(x0, y, x0 + maxW, y + 16 * dp + goals.length * 24 * dp + 22 * dp);
-        fill.setColor(0xFF1C1F24);
-        c.drawRoundRect(tmp, 10 * dp, 10 * dp, fill);
-        float ry = y + 12 * dp;
-        plain.setTextAlign(Paint.Align.LEFT);
-        plain.setTextSize(13 * dp);
-        for (int i = 0; i < goals.length; i++) {
-            plain.setColor(met[i] ? 0xFF8BE05A : res == 0 ? MUTED : 0xFFFF8A6A);
-            String mark = i == 0 ? (met[i] ? "✔ " : res == 2 ? "✘ " : "○ ") : (met[i] ? "★ " : "☆ ");
-            c.drawText(fit(plain, mark + goals[i], maxW - 24 * dp), x0 + 12 * dp, ry + 14 * dp, plain);
-            ry += 24 * dp;
-        }
-        plain.setColor(MUTED);
-        c.drawText(fit(plain, "Spent $" + world.spent + " of $" + (m.budget + Campaign.earned(world)) + "   Time "
-                + World.clock((int) Campaign.missionTime(world)) + " of " + World.clock(m.limit), maxW - 24 * dp), x0 + 12 * dp, ry + 14 * dp, plain);
-        return tmp.bottom + 16 * dp;
-    }
-
-    private void missionButtons(World world, int w, int h, float barH, float maxW, float x0) {
-        float top = h - barH + 8 * dp, bh = barH - 22 * dp, gap = 10 * dp;
-        boolean next = world.missionResult == 1 && Campaign.get(world.city.cfg.mission + 1) != null;
-        int n = next ? 3 : 2;
-        float bw = (maxW - gap * (n - 1)) / n, x = x0;
-        int first = buttons.size();
-        button("Campaign", A_CAMPAIGN, false, x, top, x + bw, top + bh);
-        x += bw + gap;
-        button(world.missionResult == 1 ? "Play again" : "Retry", A_RETRY, !next && world.missionResult != 0, x, top, x + bw, top + bh);
-        x += bw + gap;
-        if (next) button("Next mission", A_NEXT, true, x, top, x + bw, top + bh);
-        sameSize(first);
-    }
-
-    /**
-     * ((18.0) The campaign: each mission as a card, with its stars, the open ones to tap and play; the veterans on the
-     * roster.
-     */
-    private void drawCampaign(Canvas c, int w, int h) {
-        float top = header(c, w, h, "Campaign");
-        float side = 16 * dp, maxW = Math.min(w - side * 2, 640 * dp), x0 = (w - maxW) / 2;
-        listArea.set(0, top, w, h - 8 * dp);
-        c.save();
-        c.clipRect(listArea);
-        float y = top + 4 * dp - scroll;
-        plain.setTextAlign(Paint.Align.LEFT);
-        plain.setTextSize(13 * dp);
-        plain.setColor(MUTED);
-        for (String line : wrap("You're the commander. You start with the city's own police and soldiers and a budget: more units, vehicles and air support "
-                + "cost money, which comes in as funding and as a reward for doing well. Units come in from the stations and bases and go where you "
-                + "send them; use Orders to move them. Win a mission to open the next. Officers and soldiers who make rank come back as veterans.", maxW, plain)) {
-            c.drawText(line, x0, y + 13 * dp, plain);
-            y += 18 * dp;
-        }
-        y += 6 * dp;
-        int vets = records == null ? 0 : Campaign.rosterSize(records.veterans());
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(14 * dp);
-        text.setColor(0xFFFFD54A);
-        c.drawText("★ " + (records == null ? 0 : records.totalStars()) + " / " + Campaign.MISSIONS.length * 3
-                + "      Veterans on the roster: " + vets, x0, y + 14 * dp, text);
-        y += 28 * dp;
-        // ((22.0) The commander's perks: a tree of three branches, a point to spend for every four stars. Tap one that's
-        // open to take it.)
-        int allStars = records == null ? 0 : records.totalStars();
-        int mask = records == null ? 0 : records.perkMask();
-        int spare = Perks.spare(mask, allStars);
-        text.setTextSize(12.5f * dp);
-        text.setColor(0xFFC8CCD2);
-        c.drawText("PERKS  " + Perks.count(mask) + " / " + Perks.COUNT + (spare > 0 ? "      " + spare + (spare == 1 ? " point" : " points") + " to spend: tap a perk"
-                : "      a point every " + Perks.STARS_PER_POINT + " stars"), x0, y + 12 * dp, text);
-        y += 22 * dp;
-        for (int br = 0; br < Perks.BRANCHES.length; br++) {
-            text.setTextSize(11.5f * dp);
-            text.setColor(ACCENT);
-            c.drawText(Perks.BRANCH_NAMES[br].toUpperCase(java.util.Locale.US), x0, y + 12 * dp, text);
-            y += 18 * dp;
-            for (int k : Perks.BRANCHES[br]) {
-                boolean got = Perks.taken(mask, k), canTake = Perks.open(mask, allStars, k);
-                tmp.set(x0, y, x0 + maxW, y + 40 * dp);
-                fill.setColor(got ? 0xFF1E2A1C : canTake ? 0xFF22303F : 0xFF1C1F24);
-                c.drawRoundRect(tmp, 8 * dp, 8 * dp, fill);
-                if (canTake) {
-                    stroke.setColor(ACCENT);
-                    stroke.setStrokeWidth(1.5f * dp);
-                    c.drawRoundRect(tmp, 8 * dp, 8 * dp, stroke);
-                    button("", A_PERK + k, false, tmp.left, tmp.top, tmp.right, tmp.bottom).invisible = true;
-                }
-                text.setTextSize(13 * dp);
-                text.setColor(got ? 0xFF9BE07A : canTake ? 0xFFFFFFFF : 0xFF8A8F98);
-                c.drawText((got ? "\u2713 " : canTake ? "+ " : "\u2022 ") + Perks.NAMES[k], x0 + 10 * dp, y + 16 * dp, text);
-                plain.setTextSize(11.5f * dp);
-                plain.setColor(got ? 0xFFC8CCD2 : MUTED);
-                c.drawText(fit(plain, Perks.INFO[k], maxW - 20 * dp), x0 + 10 * dp, y + 32 * dp, plain);
-                y += 46 * dp;
-            }
-        }
-        y += 8 * dp;
-        for (int i = 0; i < Campaign.MISSIONS.length; i++) {
-            Campaign.Mission m = Campaign.MISSIONS[i];
-            boolean open = records == null || records.unlocked(i);
-            int stars = records == null ? 0 : records.missionStars(i);
-            plain.setTextSize(12.5f * dp);
-            ArrayList<String> lines = wrap(open ? m.brief : "Win the mission before to open this one.", maxW - 84 * dp, plain);
-            float ch = 50 * dp + lines.size() * 17 * dp;
-            tmp.set(x0, y, x0 + maxW, y + ch);
-            fill.setColor(open ? CARD_HI : 0xFF15171A);
-            c.drawRoundRect(tmp, 12 * dp, 12 * dp, fill);
-            stroke.setStrokeWidth(1 * dp);
-            stroke.setColor(stars > 0 ? 0x80FFD54A : EDGE);
-            c.drawRoundRect(tmp, 12 * dp, 12 * dp, stroke);
-            fill.setColor(open ? ACCENT : 0xFF3A3D42);
-            c.drawCircle(x0 + 28 * dp, y + 28 * dp, 17 * dp, fill);
-            text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(16 * dp);
-            text.setColor(open ? ACCENT_INK : MUTED);
-            c.drawText(open ? String.valueOf(i + 1) : "•", x0 + 28 * dp, y + 34 * dp, text);
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setTextSize(16 * dp);
-            text.setColor(open ? INK : MUTED);
-            c.drawText(m.title, x0 + 56 * dp, y + 24 * dp, text);
-            plain.setTextSize(11.5f * dp);
-            plain.setColor(ACCENT);
-            c.drawText(Campaign.GOAL_NAMES[m.goal] + "   " + World.clock(m.limit) + "   $" + m.budget, x0 + 56 * dp, y + 40 * dp, plain);
-            text.setTextAlign(Paint.Align.RIGHT);
-            text.setTextSize(18 * dp);
-            text.setColor(stars > 0 ? 0xFFFFD54A : 0x55FFFFFF);
-            c.drawText(Campaign.stars(stars), x0 + maxW - 12 * dp, y + 26 * dp, text);
-            plain.setTextSize(12.5f * dp);
-            plain.setColor(open ? MUTED : 0x66FFFFFF);
-            float ly = y + 58 * dp;
-            for (String line : lines) {
-                c.drawText(line, x0 + 56 * dp, ly, plain);
-                ly += 17 * dp;
-            }
-            if (open && tmp.bottom > listArea.top && tmp.top < listArea.bottom)
-                button("", A_MISSION + i, false, tmp.left, Math.max(tmp.top, listArea.top), tmp.right, Math.min(tmp.bottom, listArea.bottom)).invisible = true;
-            y += ch + 10 * dp;
-        }
-        text.setTextAlign(Paint.Align.LEFT);
-        c.restore();
-        contentHeight = y + scroll - top + 10 * dp;
-        clampScroll();
-        drawScrollHint(c, w);
-    }
-
     /** ((19.0) The Sound Lab: every sound to try, by group, and the ambience beds to switch on one at a time. */
     private void drawSounds(Canvas c, int w, int h) {
         float top = header(c, w, h, "Sound Lab");
@@ -1015,7 +832,7 @@ final class Menu {
             y += 18 * dp;
         }
         y += 6 * dp;
-        String[] groups = {"Guns", "Blasts", "Voices", "Vehicles", "The world", "Radio", "Menus & missions"};
+        String[] groups = {"Guns", "Blasts", "Voices", "Vehicles", "The world", "Radio", "Menus"};
         int cols = maxW > 520 * dp ? 4 : 3;
         float gap = 8 * dp, bw = (maxW - gap * (cols - 1)) / cols, bh = 40 * dp;
         // The ambience beds first.
@@ -2240,7 +2057,7 @@ final class Menu {
                     scrubReplay(x);
                     break;
                 }
-                // ((19.6) Every list scrolls: the Campaign, the reports, the Sound Lab and the top fighters were left out.)
+                // ((19.6) Every list scrolls: the reports, the Sound Lab and the top fighters were left out.)
                 if (!dragging && Math.abs(y - downY) > 10 * dp && listArea.contains(downX, downY)
                         && screen != MAIN && screen != PAUSE && screen != REPLAY && screen != NONE) dragging = true;
                 if (dragging) {
@@ -2320,15 +2137,6 @@ final class Menu {
             host.preview(action - A_SFX);
             previewId = action - A_SFX;
             previewAt = time;
-            return;
-        }
-        if (action >= A_PERK && action < A_PERK + Perks.COUNT) {
-            if (records != null) records.takePerk(action - A_PERK);
-            return;
-        }
-        if (action >= A_MISSION) {
-            int id = action - A_MISSION;
-            if (Campaign.get(id) != null && (records == null || records.unlocked(id))) host.startGame(Campaign.config(id));
             return;
         }
         if (action >= A_TOP_ROW && action < A_LOG_FILTER) {
@@ -2462,17 +2270,6 @@ final class Menu {
                 break;
             case A_SOUNDS:
                 open(SOUNDS);
-                break;
-            case A_CAMPAIGN:
-                open(CAMPAIGN);
-                returnTo = MAIN;
-                break;
-            case A_RETRY:
-                if (host.world() != null && host.world().mission() != null) host.startGame(Campaign.config(host.world().city.cfg.mission));
-                break;
-            case A_NEXT:
-                if (host.world() != null && Campaign.get(host.world().city.cfg.mission + 1) != null)
-                    host.startGame(Campaign.config(host.world().city.cfg.mission + 1));
                 break;
             case A_LOG:
                 open(LOG);

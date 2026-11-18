@@ -11,7 +11,7 @@ final class Settings implements OptionSet {
             "Screen shake", "Show FPS", "Max population", "Radio messages", "Minimap",
             "Text & buttons", "Battery saver", "Name tags", "Graphics", "Vibration", "Radio lines on screen", "Destruction",
             // ((19.0) The Sound Update.)
-            "Ambience", "Radio chatter", "Menu & mission sounds", "Mono audio", "Dynamic range", "Sound captions", "Shell shock",
+            "Ambience", "Radio chatter", "Menu sounds", "Mono audio", "Dynamic range", "Sound captions", "Shell shock",
             // ((19.5) The Visuals Update.)
             "Effects", "Screen effects", "Colour grading"};
     private static final String[][] VALUES = {VOLUME, VOLUME, {"Bird's-eye", "3D"}, ON_OFF, ON_OFF, ON_OFF, ON_OFF,
@@ -57,7 +57,7 @@ final class Settings implements OptionSet {
     boolean vibration() { return v[14] == 1; }
     /** ((18.4) Heavy destruction: blasts tear buildings apart, and a collapse brings down what's next to it. */
     boolean heavyDestruction() { return v[16] == 1; }
-    /** ((19.0) The levels of the ambience, the radio and the menus' and missions' sounds, 0 to 1. */
+    /** ((19.0) The levels of the ambience, the radio and the menus' sounds, 0 to 1. */
     float ambience() { return v[17] / 4f; }
     float radioVolume() { return v[18] / 4f; }
     float uiVolume() { return v[19] / 4f; }

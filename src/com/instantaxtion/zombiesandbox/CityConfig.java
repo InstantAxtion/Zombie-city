@@ -71,10 +71,8 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
-    /** ((20.0) How hard a campaign mission is (Campaign.Mission.difficulty). ((21.1) Not a choice in the sandbox.) */
+    /** ((20.0) How hard the game is. ((21.1) Not a choice: always Normal since the campaign's missions went in 28.2.) */
     int difficulty = Director.NORMAL;
-    /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
-    int mission = -1;
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
             "Reinforcements", "Country"};
     private static final String[][] VALUES = {
@@ -220,12 +218,9 @@ final class CityConfig implements OptionSet {
      * saves and shared codes that use them still build as they were.
      */
     /**
-     * ((26.1) What to call this city's map where the player sees it: the map's name if it's one on offer, the mission's
-     * title in the campaign (some missions are on maps no longer offered), else nothing.)
+     * ((26.1) What to call this city's map where the player sees it: the map's name if it's one on offer, else nothing.)
      */
     String mapLabel() {
-        Campaign.Mission m = Campaign.get(mission);
-        if (m != null) return m.title;
         int p = v[OPT_PRESET];
         return retired(OPT_PRESET, p) ? null : PRESETS[p];
     }
@@ -507,7 +502,6 @@ final class CityConfig implements OptionSet {
         c.exodus = exodus;
         c.force = force;
         c.difficulty = difficulty;
-        c.mission = mission;
         c.civic = civic;
         for (int[] e : edits) c.edits.add(e.clone());
         c.normalize();
@@ -651,7 +645,7 @@ final class CityConfig implements OptionSet {
     private static final int[] POP_TILES = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
     private static final int[] POP_TARGET = {2500, 5000, 8000, 12000, 16000, 20000, 25000, 28000, 30000};
 
-    boolean popLadder() { return civic >= 36 && mission < 0; }
+    boolean popLadder() { return civic >= 36; }
 
     /** ((22.6) Map version 37: more colours for homes, shops, flats, cars and people, more names for streets and places. */
     boolean variety() { return civic >= 37; }
@@ -729,9 +723,7 @@ final class CityConfig implements OptionSet {
                     + "the worse the city is losing. Then three quarters as many soldiers again as the city has, in three waves: a quick reaction force in Humvees, "
                     + "the main convoy with armour, and air assaults by helicopter wherever it's worst."};
     int zombies() {
-        // ((18.0) A mission's own number.)
-        Campaign.Mission m = Campaign.get(mission);
-        return m != null ? m.foes : ZOMBIES[v[OPT_ZOMBIES]];
+        return ZOMBIES[v[OPT_ZOMBIES]];
     }
     /** Which country the city is in (see {@link Country}). */
     int country() { return v[OPT_COUNTRY]; }

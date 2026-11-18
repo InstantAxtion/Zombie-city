@@ -403,12 +403,12 @@ final class SaveGame {
             out.writeInt(0);
             out.writeInt(0);
             out.writeInt(0);
-            // (Version 60, 18.0: the campaign mission.)
-            out.writeInt(cfg.mission);
-            out.writeFloat(w.missionStart);
-            out.writeInt(w.spent);
-            out.writeInt(w.missionResult);
-            out.writeInt(w.missionStars);
+            // (Version 60, 18.0: the campaign mission: none since 28.2, when the campaign went.)
+            out.writeInt(-1);
+            out.writeFloat(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
             // (Version 61, 18.1: heists. The jobs under way aren't kept: their crews make off once it's loaded.)
             out.writeInt(0);
             out.writeInt(0);
@@ -472,8 +472,8 @@ final class SaveGame {
             out.writeInt(w.alphas);
             out.writeInt(w.alphasKilled);
             out.writeInt(w.barrages);
-            out.writeInt(w.perkStars);
-            out.writeFloat(w.siteT);
+            out.writeInt(0); // (The commander's perks and a mission's site, until 28.2.)
+            out.writeFloat(0);
             // (Version 70, 25.0: the airstrike's cooldown, and the wreckage of planes that came down.)
             out.writeFloat(Math.max(0, w.airstrikeReady - w.time));
             out.writeInt(w.crashes.size());
@@ -1051,13 +1051,13 @@ final class SaveGame {
                 in.readInt();
                 in.readInt();
                 if (version >= 60) {
-                    int ms = in.readInt();
-                    w.city.cfg.mission = Campaign.get(ms) != null ? ms : -1;
+                    // ((28.2) The campaign's gone: a mission saved before plays on as a sandbox game on its city.)
+                    in.readInt();
                     w.applyRules();
-                    w.missionStart = in.readFloat();
-                    w.spent = in.readInt();
-                    w.missionResult = in.readInt();
-                    w.missionStars = in.readInt();
+                    in.readFloat();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
                 }
                 if (version >= 61) {
                     in.readInt();
@@ -1151,10 +1151,8 @@ final class SaveGame {
                     w.alphas = in.readInt();
                     w.alphasKilled = in.readInt();
                     w.barrages = in.readInt();
-                    w.perkStars = in.readInt();
-                    // ((22.0) Stars then; the perks themselves now.)
-                    if (version < 67) w.perkStars = Perks.legacy(w.perkStars);
-                    w.siteT = in.readFloat();
+                    in.readInt();
+                    in.readFloat();
                 }
                 if (version >= 70) {
                     w.airstrikeReady = w.time + in.readFloat();

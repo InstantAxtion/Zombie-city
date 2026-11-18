@@ -9,10 +9,6 @@ away from the middle of the screen as you pan, and the game plays in both portra
 
 ## Main menu
 
-- **Campaign** (18.0): twelve missions (21.0) to play in order, with perks earned by stars as the commander - a set force, a budget to buy
-  more police, soldiers, vehicles and air support (earned by funding and by doing well), units that come in
-  from the stations and bases and go where you send them, and an objective against the clock. Up to three
-  stars a mission; veterans who make rank carry over to the next. New Game below is the sandbox.
 - **New Game** opens the city setup, with a live preview of the city and these options: the map (Suburbs,
   Metropolis, Islands or Archipelago), map size (Default, Gigantic or Colossal: about 20,000, 27,500 and
   30,000 people) and how many reinforcements can
@@ -441,6 +437,8 @@ mounting up, and lighter running with big populations.
 **Full names (22.7):** GameView.wrapLine breaks a line at spaces to fit; the person card moves the part of a too-long title after "  -  " to the first line below, and it and the vehicle and building cards wrap their lines instead of cutting them short with fitText.
 
 **Neighbourhoods (22.8):** Map version 38 (CityConfig.neighbourhoods). Neighbourhoods.THEMES: fifteen characters, each for some district types, with house, shop and office palettes, a paving colour, strings over the street (red lanterns, warm bulbs, coloured flags) and favourite landmarks; the famous ones (Chinatown, Little Italy, Financial District...) once a city, and they rename their district. Neighbourhoods.assign after makeDistricts (its own Random); City.themeAt; addLot and addFacilityLot take the theme's colours; landmark() picks one of the theme's favourites six times in ten when one fits; render paves SIDEWALK, BUILDING and PLAZA tiles in the theme's colour; placeStrings adds D_STRINGS decor across its streets every few tiles. ROOFS38, WALLS38, GLASS_WALLS38 and WAREHOUSE_*38 for everywhere else. LandmarkArt9..12: another hundred designs (250), chosen from only on version 38.
+
+**No campaign, no evacuation convoys (28.2):** Campaign.java and Perks.java are gone, with CityConfig.mission, World.mission()/missionStart/spent/missionResult/missionStars/missionWhy/perkStars/retakeDistrict/siteT, GameView.commander() and the commander's tools (TouchInput.commandAt, ToolBar.costs, Hud.drawMissionPanel), Menu's CAMPAIGN screen, mission report and perk tree, Records' stars, veterans and perks (cleared from the phone once), the mission sounds and every `cfg.mission >= 0` branch. Director.tick only watches now (its stragglers, hordes and sieges were missions' only). Events.arrival (the riot squad's way in) moved out of Campaign. Save format unchanged: the mission fields are written as -1/0 and skipped on load, so an old mission save plays on as a sandbox game. Convoys: EVAC columns, evacuate/evacuateAt and the automatic evacuation of full zones removed; Events loses "Evac convoy" (16); FleetEvac no longer sends the 23.0 extra buses and police escort to a busy stop. Convoys.dropEvacuations (after VehicleSave loads) lets an old save's evacuation passengers off and sends the column home empty. Test "campaign" replaced by "no campaign and no evacuation convoys"; the SharedPreferences stub gains contains, getAll and remove.
 
 **Traffic flows (28.1):** Fleet.update carries unused route-search budget over the off-screen steps (patrol cars on the biggest maps were refused new beats and circled; stuck >30 s 153 -> 9 on Metropolis). FleetPatrols.pairUp/staffPatrols never take a ranger. Dispatch.nearestBreach skips mended sections and takes a range and a horde limit (Posts.holdPost).
 

@@ -236,7 +236,7 @@ final class Events {
                 if (World.hypot(e.x - x, e.y - y) > (pass == 0 ? 1500 : 450)) continue;
                 w.riotSquad.add(e);
             }
-        float[] at = Campaign.arrival(w, true, x, y);
+        float[] at = arrival(w, x, y);
         for (int k = w.riotSquad.size(); k < 6 && at != null; k++) {
             Entity e = w.population.spawnCop(Entity.ROLE_RIOT, at[0] + (k % 3) * 6, at[1] + (k / 3) * 6);
             if (e == null) break;
@@ -523,5 +523,21 @@ final class Events {
         w.dispatch.say(Dispatch.WHO_INFO, null, w.indoors.apocalypse() ? "City Hall: Emergency sirens are sounding. Get to a safe zone now!"
                         : "City Hall: Emergency sirens are sounding. Get indoors now!",
                 w.city.worldW() / 2, w.city.worldH() / 2);
+    }
+
+    /**
+     * Where the riot squad comes in for a spot: the nearest police station, or the edge of town if that's nearer or
+     * there's none. ((28.2) Out of the campaign, which is gone.)
+     */
+    static float[] arrival(World w, float x, float y) {
+        City.Facility f = w.city.nearestFacility(City.FACILITY_POLICE, x, y);
+        float[] in = f != null ? w.city.findWalkable(f.gateX, f.gateY) : null;
+        float ww = w.city.worldW(), hh = w.city.worldH();
+        float dl = x, dr = ww - x, dt = y, db = hh - y;
+        float m = Math.min(Math.min(dl, dr), Math.min(dt, db));
+        float[] edge = w.city.edgeSpawn(m == dl ? 0 : m == dr ? ww : x, m == dt ? 0 : m == db ? hh : y);
+        if (in == null) return edge;
+        if (edge != null && World.hypot(edge[0] - x, edge[1] - y) < World.hypot(in[0] - x, in[1] - y) * 0.7f) return edge;
+        return in;
     }
 }

@@ -43,8 +43,6 @@ final class FleetHelis {
             for (int i = 0; i < fleet.vehicles.size() && v == null; i++) if (fleet.vehicles.get(i).padAt == p) v = fleet.vehicles.get(i);
             if (v == null) {
                 if (fleet.padLost.contains(p)) continue;
-                // ((18.0) In a mission a pad's helicopter is there once: one lost isn't replaced for free.)
-                if (w.city.cfg.mission >= 0 && !fleet.padStocked.add(p)) continue;
                 v = fleet.make(HELI);
                 v.padAt = p;
                 v.pad = true;
@@ -88,8 +86,7 @@ final class FleetHelis {
                 if (v.pilotComing == null || v.pilotComing.dead || v.pilotComing.pilotFor != v) v.pilotComing = w.callReservePilot(v);
                 if (v.flight.isEmpty()) continue;
             }
-            // ((18.0) In a mission, only the pad's first crew: no new pilots from nowhere once they're lost.)
-            while (v.flight.size() < want && v.crewSpawns < (w.city.cfg.mission >= 0 ? want : 8)) {
+            while (v.flight.size() < want && v.crewSpawns < 8) {
                 boolean pilot = livePilot(v) == null;
                 if (pilot && v.crewSpawns > 0) break;
                 v.crewSpawns++;

@@ -90,9 +90,7 @@ final class Fieldworks {
 
     /** A coil of razor wire on the tile at (x, y); null if it can't go there. */
     float[] layWire(float x, float y) {
-        float[] c = w.defences.layWire(w, x, y);
-        if (c != null && Perks.has(w, Perks.SAPPERS)) c[2] *= 1.5f;
-        return c;
+        return w.defences.layWire(w, x, y);
     }
 
     void wireGone(float x, float y) {
@@ -199,9 +197,8 @@ final class Fieldworks {
      */
     void engineersFortify() {
         if (!w.outbreak || (w.fortifyCd -= 1) > 0) return;
-        boolean field = Perks.has(w, Perks.ENGINEERS);
-        w.fortifyCd = field ? 6 : 12;
-        int most = field ? 9 : 6;
+        w.fortifyCd = 12;
+        int most = 6;
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);
             if (e.dead || e.type != Entity.SOLDIER || e.role != Entity.ROLE_ENGINEER || e.rig != null || e.ride != null) continue;

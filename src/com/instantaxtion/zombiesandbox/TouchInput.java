@@ -421,30 +421,6 @@ final class TouchInput {
                 gv.brushIdx = (gv.brushIdx + 1) % BRUSHES.length;
                 break;
             case BTN_CLEAR:
-                // ((18.0) In a mission there's no clearing the streets: the button says what the mission wants.)
-                if (gv.commander()) {
-                    gv.world.say(Campaign.goalText(gv.world) + "  " + Campaign.progress(gv.world));
-                    // (And a look at the next of the enemy still out there: the nearest not already on screen.)
-                    float cx = gv.camX + gv.getWidth() / 2f / gv.scale, cy = gv.camY + gv.getHeight() / 2f / gv.scale;
-                    Entity near = null, far = null;
-                    float nd = Float.MAX_VALUE, fd = Float.MAX_VALUE;
-                    for (int k = 0, n = gv.world.entities.size(); k < n; k++) {
-                        Entity e = gv.world.entities.get(k);
-                        if (!e.isZombie() || e.dead || e.removed) continue;
-                        float d = (float) World.hypot(e.x - cx, e.y - cy);
-                        if (d < nd) {
-                            nd = d;
-                            near = e;
-                        }
-                        if (d > 300 && d < fd) {
-                            fd = d;
-                            far = e;
-                        }
-                    }
-                    Entity go = far != null ? far : near;
-                    if (go != null) gv.jumpTo(go.x, go.y);
-                    break;
-                }
                 gv.clearMenu = !gv.clearMenu;
                 break;
             case BTN_TOP:
@@ -463,12 +439,6 @@ final class TouchInput {
         gv.follow = null;
         gv.followV = null;
         if (gv.tool != TOOL_ORDER && gv.tool != TOOL_BOMB && gv.tool != TOOL_ERASE) gv.lastAction.clear();
-        if (gv.commander() && gv.tool != TOOL_ORDER) {
-            commandAt(wx, wy);
-            gv.lastSpawnX = wx;
-            gv.lastSpawnY = wy;
-            return;
-        }
         if (gv.tool == TOOL_PLACE) {
             place(wx, wy);
         } else if (gv.tool == TOOL_EVENT) {
@@ -532,13 +502,6 @@ final class TouchInput {
             gv.boxX1 = wx;
             gv.boxY1 = wy;
             gv.boxing = gv.dragged;
-        } else if (gv.commander()) {
-            // ((18.0) Nothing brushed on in a mission: one tap, one purchase - but a barricade line can be dragged out.)
-            if (gv.tool == TOOL_PLACE && (gv.placeVariant == 3 || gv.placeVariant == 9 || gv.placeVariant == 12 || gv.placeVariant == 13) && (Math.abs(wx - gv.lastSpawnX) > City.T * 0.8f || Math.abs(wy - gv.lastSpawnY) > City.T * 0.8f)) {
-                commandAt(wx, wy);
-                gv.lastSpawnX = wx;
-                gv.lastSpawnY = wy;
-            }
         } else if (gv.tool == TOOL_PLACE) {
             // Drag to build a line of barricades.
             if ((gv.placeVariant == 3 || gv.placeVariant == 9 || gv.placeVariant == 12 || gv.placeVariant == 13) && (Math.abs(wx - gv.lastSpawnX) > City.T * 0.8f || Math.abs(wy - gv.lastSpawnY) > City.T * 0.8f)) {
@@ -688,120 +651,6 @@ final class TouchInput {
         gv.selection.clear();
     }
 
-    /**
-     * ((18.0) The commander's tap: police and soldiers bought and sent in from the nearest station or base to the spot,
-     * vehicles out of the station or base, barricades, supplies and air support put down where tapped - each paid for
-     * out of the mission's budget.
-     */
-    void commandAt(float wx, float wy) {
-        int budget = Campaign.budget(gv.world);
-        if (gv.tool == TOOL_COP || gv.tool == TOOL_MIL) {
-            boolean police = gv.tool == TOOL_COP;
-            int cost = police ? Campaign.unitCost(gv.world, true)[gv.copVariant] : Campaign.unitCost(gv.world, false)[gv.milVariant];
-            String name = police ? gv.copNames()[gv.copVariant] : MIL_NAMES[gv.milVariant];
-            int n = BRUSHES[gv.brushIdx];
-            if (!police && MIL_ROLES[gv.milVariant] == Entity.ROLE_COMMANDER) n = 1;
-            float[] at = Campaign.arrival(gv.world, police, wx, wy);
-            if (at == null) {
-                gv.world.say("No way in for them from there");
-                return;
-            }
-            java.util.ArrayList<Entity> made = new java.util.ArrayList<Entity>();
-            for (int i = 0; i < n; i++) {
-                if (!Campaign.spend(gv.world, cost)) break;
-                float ox = n > 1 ? (gv.rnd.nextFloat() - 0.5f) * 30 : 0, oy = n > 1 ? (gv.rnd.nextFloat() - 0.5f) * 30 : 0;
-                Entity e = police ? gv.world.spawnCop(COP_ROLES[gv.copVariant], at[0] + ox, at[1] + oy)
-                        : gv.world.spawnSoldier(MIL_ROLES[gv.milVariant], at[0] + ox, at[1] + oy);
-                if (e == null) {
-                    gv.world.spent -= cost;
-                    break;
-                }
-                made.add(e);
-                gv.lastAction.add(e);
-            }
-            if (made.isEmpty()) {
-                gv.audio.buzzError();
-                gv.world.say(budget < cost ? "Not enough money: " + name + " costs $" + cost + ", you have $" + budget : "No room for them there");
-                return;
-            }
-            gv.world.dispatch.order(made, wx, wy);
-            gv.orderX = wx;
-            gv.orderY = wy;
-            gv.orderMarker = 1.5f;
-            gv.world.say(made.size() + " x " + name + " on the way from " + gv.world.city.placeName(at[0], at[1]) + "  (-$" + cost * made.size() + ")");
-            return;
-        }
-        int[] cost = gv.toolBar.costs(gv.tool);
-        int v = gv.tool == TOOL_PLACE ? gv.placeVariant : gv.eventVariant;
-        String[] names = gv.tool == TOOL_PLACE ? PLACE_NAMES : EVENT_NAMES;
-        if (cost == null) return;
-        if (v >= cost.length || cost[v] < 0) {
-            gv.audio.buzzError();
-            gv.world.say(names[v] + " isn't yours to use in a mission");
-            return;
-        }
-        if (budget < cost[v]) {
-            gv.audio.buzzError();
-                gv.world.say("Not enough money: " + names[v] + " costs $" + cost[v] + ", you have $" + budget);
-            return;
-        }
-        Object made = null;
-        if (gv.tool == TOOL_EVENT) {
-            switch (v) {
-                case 3: gv.world.supplyDrop(wx, wy); made = Boolean.TRUE; break;
-                case 4: gv.world.airstrike(wx, wy); made = Boolean.TRUE; break;
-                case 5: gv.world.cityAlarm(); made = Boolean.TRUE; break;
-                case 7: gv.world.flare(wx, wy); made = Boolean.TRUE; break;
-                case 8:
-                    if (gv.world.layMines(wx, wy) > 0) made = Boolean.TRUE;
-                    break;
-                case 9: gv.world.barrage(wx, wy); made = Boolean.TRUE; break;
-                case 10:
-                    if (!gv.world.airborne(wx, wy).isEmpty()) made = Boolean.TRUE;
-                    break;
-            }
-        } else {
-            // (Vehicles come out of the station or the base; the rest go down where tapped.)
-            boolean vehicle = v == 1 || v == 2 || v == 6 || v == 7;
-            float[] at = vehicle ? Campaign.arrival(gv.world, v == 1 || v == 6, wx, wy) : new float[]{wx, wy};
-            if (at == null) at = new float[]{wx, wy};
-            switch (v) {
-                case 1: made = gv.world.fleet.placePolice(at[0], at[1]); break;
-                case 2:
-                    if (gv.world.fleet.sendTank(at[0], at[1], wx, wy, gv.world.city.placeName(wx, wy))) made = Boolean.TRUE;
-                    else made = gv.world.fleet.placeTank(at[0], at[1]);
-                    break;
-                case 3: made = gv.world.placeBarricade(wx, wy); break;
-                case 4: made = gv.world.placeCrate(wx, wy, 0); break;
-                case 5: made = gv.world.placeMedkit(wx, wy); break;
-                case 6: made = gv.world.fleet.placeBearCat(at[0], at[1]); break;
-                case 7: made = gv.world.fleet.startReconAt(at[0], at[1]); break;
-                case 8: made = gv.world.launchDrone(wx, wy); break;
-                case 9:
-                    if (gv.world.layWire(wx, wy) != null) made = Boolean.TRUE;
-                    break;
-                case 10:
-                    if (!gv.world.mgNest(wx, wy).isEmpty()) made = Boolean.TRUE;
-                    break;
-                case 11: made = gv.world.fleet.placeShelterVan(wx, wy); break;
-                case 12: made = gv.world.placeBarricade(wx, wy, 1); break;
-                case 13: made = gv.world.placeBarricade(wx, wy, 2); break;
-                case 14: made = gv.world.ops.placePost(wx, wy); break;
-                case 15:
-                    if (!gv.world.ops.callIn(wx, wy, "", true).isEmpty()) made = Boolean.TRUE;
-                    break;
-                case 16: made = gv.world.ops.placeBoat(wx, wy); break;
-            }
-        }
-        if (made == null) {
-            gv.world.say("Can't put " + names[v].toLowerCase(java.util.Locale.US) + " there");
-            return;
-        }
-        Campaign.spend(gv.world, cost[v]);
-        if (!(made instanceof Boolean)) gv.lastAction.add(made);
-        if (cost[v] > 0 && (gv.tool != TOOL_PLACE || (v != 3 && v != 9 && v != 12 && v != 13) || gv.world.messageTime <= 0)) gv.world.say(names[v] + "  (-$" + cost[v] + ")");
-    }
-
     void spawnBrush(float wx, float wy) {
         if (gv.tool == TOOL_SQUAD) {
             spawnSquad(wx, wy);
@@ -921,9 +770,6 @@ final class TouchInput {
             case 15:
                 // ((26.0) A supply convoy to the safe zone, survivor base or police station tapped.)
                 if (!gv.world.convoys.supplyAt(wx, wy)) gv.world.say("Tap a safe zone, survivor base or police station (or a convoy's already going there)");
-                break;
-            case 16:
-                if (!gv.world.convoys.evacuateAt(wx, wy)) gv.world.say("Tap a safe zone with people sheltering in it");
                 break;
             case 9: gv.world.barrage(wx, wy); break;
             case 10: gv.lastAction.addAll(gv.world.airborne(wx, wy)); break;

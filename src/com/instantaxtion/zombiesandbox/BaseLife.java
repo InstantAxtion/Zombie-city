@@ -20,7 +20,7 @@ final class BaseLife {
      * near a safe zone or another base, or a building that can't be walled round.
      */
     SurvivorBases.Base foundBase(City.Building b, boolean announce) {
-        if (b == null || b.collapsed || w.bases.size() >= SurvivorBases.MAX_BASES || w.city.cfg.mission >= 0) return null;
+        if (b == null || b.collapsed || w.bases.size() >= SurvivorBases.MAX_BASES) return null;
         for (int i = 0; i < w.bases.size(); i++) if (w.bases.get(i).b == b) return w.bases.get(i);
         // (One at a time: a city's survivors don't all dig in at once.)
         if (w.time - w.baseFoundedAt < 45 && !w.bases.isEmpty()) return null;

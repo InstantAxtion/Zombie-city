@@ -60,21 +60,10 @@ final class FleetPickups {
 
     // ------------------------------------------------------------------ (26.0) convoy columns (see Convoys)
 
-    /** One vehicle of a convoy column, at (x, y): an escort (a Humvee, or a BearCat for the police), a supply truck, a bus. */
+    /** One vehicle of a convoy column, at (x, y): an escort (a Humvee) or a supply truck. */
     Vehicle convoyVehicle(int role, float x, float y, float angle, Convoys.Column c) {
-        Vehicle v;
-        if (role == Convoys.V_BUS) {
-            v = fleet.make(CAR);
-            v.model = M_BUS;
-            v.color = 0xFFE8B030;
-            v.hp = v.maxHp = MAX_HP[CAR] * 2.5f;
-        } else if (role == Convoys.V_POLICE) {
-            v = fleet.make(CRUISER);
-            fleet.setKind(v, K_BEARCAT);
-        } else {
-            v = fleet.make(TRUCK);
-            if (role == Convoys.V_ESCORT) fleet.setKind(v, K_HUMVEE);
-        }
+        Vehicle v = fleet.make(TRUCK);
+        if (role == Convoys.V_ESCORT) fleet.setKind(v, K_HUMVEE);
         v.x = x;
         v.y = y;
         v.homeX = x;
@@ -102,7 +91,7 @@ final class FleetPickups {
         return going;
     }
 
-    /** A convoy's escort firing its mounted gun. */
+    /** A convoy's escort firing its mounted gun. ((28.2) V_POLICE: an old save's evacuation escort, on its way home.) */
     void convoyGun(Vehicle v, float dt) {
         if (v.convoyRole == Convoys.V_ESCORT || v.convoyRole == Convoys.V_POLICE) fleet.turret(v, dt);
     }

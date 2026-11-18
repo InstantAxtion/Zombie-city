@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.1";
-    static final int VERSION_CODE = 281;
+    static final String VERSION = "28.2";
+    static final int VERSION_CODE = 282;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.2  -  The sandbox only",
+                    "The Campaign is gone: no missions, budgets, stars, perks or veterans. New Game is the game. A mission saved before plays on as an ordinary game on the same city.",
+                    "Evacuation convoys are gone: none on the Events tool, none sent to full safe zones, and a busy bus stop gets one bus, not a column of three with a police escort. Single evacuation buses and trains still run, and supply convoys are as they were.",
+            },
             {
                     "28.1  -  Traffic flows",
                     "Patrol cars no longer get stuck circling the end of their beat waiting for a new route.",

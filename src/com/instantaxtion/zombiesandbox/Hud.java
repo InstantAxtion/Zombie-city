@@ -19,7 +19,7 @@ import static com.instantaxtion.zombiesandbox.GameView.*;
 
 /**
  * ((27.3) Out of GameView.) What's drawn over the map round the edges of the screen: the stats panel and war meter, the
- * minimap with its hot spots, timeline and tactical map, the radio feed, headlines, banners, the mission panel, the
+ * minimap with its hot spots, timeline and tactical map, the radio feed, headlines, banners, the
  * loading screen and the on-screen controls; and the text fitting they share.
  */
 final class Hud {
@@ -1059,37 +1059,6 @@ final class Hud {
     }
 
     /** ((12.0) s at the text size set now, or a little smaller (down to 80%) if that's what it takes, then cut to fit.) */
-    /** ((18.0) A mission's panel above the tool bar: the objective and how it's going, the clock, and the budget. */
-    void drawMissionPanel(Canvas c) {
-        Campaign.Mission m = gv.world.mission();
-        float pw = Math.min(gv.getWidth() - 20 * gv.dp, 440 * gv.dp), ph = 44 * gv.dp;
-        float left = (gv.getWidth() - pw) / 2, top = gv.barTop - ph - (gv.toolsFolded ? 6 : 20) * gv.dp;
-        gv.oval.set(left, top, left + pw, top + ph);
-        gv.fill.setColor(0xE0141619);
-        c.drawRoundRect(gv.oval, 10 * gv.dp, 10 * gv.dp, gv.fill);
-        int res = gv.world.missionResult;
-        gv.stroke.setColor(res == 1 ? 0xFF8BE05A : res == 2 ? 0xFFFF6A5A : 0x80E8C547);
-        gv.stroke.setStrokeWidth(1.2f * gv.dp);
-        c.drawRoundRect(gv.oval, 10 * gv.dp, 10 * gv.dp, gv.stroke);
-        gv.text.setTextAlign(Paint.Align.LEFT);
-        gv.text.setTextSize(12.5f * gv.dp);
-        gv.text.setColor(0xFFE8C547);
-        String head = m.title.toUpperCase(java.util.Locale.US) + "   ";
-        c.drawText(head, left + 10 * gv.dp, top + 18 * gv.dp, gv.text);
-        float hx = left + 10 * gv.dp + gv.text.measureText(head);
-        gv.text.setColor(0xFFF2F2F2);
-        String prog = res == 1 ? "Complete  " + Campaign.stars(gv.world.missionStars) : res == 2 ? "Failed" : Campaign.progress(gv.world);
-        c.drawText(fitText(prog, left + pw - 10 * gv.dp - hx), hx, top + 18 * gv.dp, gv.text);
-        gv.text.setTextSize(12 * gv.dp);
-        int left2 = Campaign.timeLeft(gv.world);
-        gv.text.setColor(left2 < 60 && res == 0 ? 0xFFFF8A6A : 0xFFB8BDC4);
-        c.drawText("⏱ " + (res != 0 ? "-" : World.clock(left2) + " left"), left + 10 * gv.dp, top + 36 * gv.dp, gv.text);
-        gv.text.setTextAlign(Paint.Align.RIGHT);
-        gv.text.setColor(0xFF8BE05A);
-        c.drawText("$" + Campaign.budget(gv.world) + "   +" + m.income + "/min", left + pw - 10 * gv.dp, top + 36 * gv.dp, gv.text);
-        gv.text.setTextAlign(Paint.Align.LEFT);
-    }
-
     String shrinkToFit(String s, float width) {
         float size = gv.text.getTextSize(), w = gv.text.measureText(s);
         if (w > width) gv.text.setTextSize(Math.max(size * 0.8f, size * width / w));
@@ -1186,7 +1155,7 @@ final class Hud {
         gv.text.setTextSize(12.5f * gv.dp);
         drawStatsPanel(c, lh, d, rows);
         // Top buttons.
-        String[] top = {"", SPEEDS[gv.speedIdx] + "x", "Brush " + BRUSHES[gv.brushIdx], gv.commander() ? "Goal" : "Clear", "Menu", "Kills"};
+        String[] top = {"", SPEEDS[gv.speedIdx] + "x", "Brush " + BRUSHES[gv.brushIdx], "Clear", "Menu", "Kills"};
         gv.text.setTextSize((gv.portrait ? 11 : 12) * gv.dp);
         gv.text.setTextAlign(Paint.Align.CENTER);
         drawTopButtons(c, top);
@@ -1415,7 +1384,6 @@ final class Hud {
             }
         }
         if (gv.picker >= 0) gv.toolBar.drawPicker(c);
-        else if (gv.commander()) drawMissionPanel(c);
 
         drawHeadlines(c);
         if (gv.settings.captions()) drawCaptions(c, gv.frameDt);
@@ -1537,8 +1505,6 @@ final class Hud {
 
     /** The Clear menu under the Clear button, and the Undo button above the tool bar. */
     void drawPopups(Canvas c) {
-        // ((18.0) No Undo in a mission: what's bought is bought.)
-        if (gv.commander()) gv.lastAction.clear();
         if (!gv.lastAction.isEmpty()) {
             gv.text.setTextSize(13 * gv.dp);
             gv.text.setTextAlign(Paint.Align.CENTER);

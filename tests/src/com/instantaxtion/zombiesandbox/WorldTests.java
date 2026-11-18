@@ -1573,16 +1573,14 @@ final class WorldTests extends TestKit {
         android.graphics.Canvas cv = new android.graphics.Canvas(bm);
         fx.events(w, sx - 300, sy - 300, sx + 300, sy + 300);
         fx.drawGround(cv, sx - 300, sy - 300, sx + 300, sy + 300);
-        // The tools: named, described and priced.
+        // The tools: named and described.
         for (String[] pair : new String[][]{{"PLACE_NAMES", "PLACE_INFO"}, {"EVENT_NAMES", "EVENT_INFO"}}) {
             java.lang.reflect.Field names = GameView.class.getDeclaredField(pair[0]), info = GameView.class.getDeclaredField(pair[1]);
             names.setAccessible(true);
             info.setAccessible(true);
             String[] n = (String[]) names.get(null), i = (String[]) info.get(null);
-            int[] cost = pair[0].startsWith("PLACE") ? Campaign.PLACE_COST : Campaign.EVENT_COST;
-            check(n.length == i.length && n.length == cost.length, pair[0] + ": every tool named, described and priced (" + n.length + ", " + i.length + ", " + cost.length + ")");
+            check(n.length == i.length, pair[0] + ": every tool named and described (" + n.length + ", " + i.length + ")");
         }
-        check(Campaign.PLACE_COST[9] > 0 && Campaign.PLACE_COST[10] > 0 && Campaign.EVENT_COST[9] > 0, "a commander pays for wire, nests and barrages");
     }
 
     static void flaresAndMines() throws Exception {
@@ -1668,9 +1666,8 @@ final class WorldTests extends TestKit {
         names.setAccessible(true);
         info.setAccessible(true);
         String[] en = (String[]) names.get(null), ei = (String[]) info.get(null);
-        check(en.length >= 9 && ei.length == en.length && Campaign.EVENT_COST.length == en.length && "Flare".equals(en[7]) && "Mines".equals(en[8]),
+        check(en.length >= 9 && ei.length == en.length && "Flare".equals(en[7]) && "Mines".equals(en[8]),
                 "flares and mines among the events");
-        check(Campaign.EVENT_COST[7] > 0 && Campaign.EVENT_COST[8] > 0, "a commander pays for them");
     }
 
     static void roadblockBarriers() throws Exception {

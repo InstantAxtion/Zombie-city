@@ -152,13 +152,6 @@ abstract class TestKit {
         return cfg(CityConfig.METROPOLIS, size, seed);
     }
 
-    /** A campaign mission's city, on TEST_CIVIC like the rest. */
-    static CityConfig mission(int i) {
-        CityConfig c = Campaign.config(i);
-        c.civic = TEST_CIVIC;
-        return c;
-    }
-
     /** A world on that city, its people placed. */
     static World world(CityConfig c) {
         World w = new World(c);

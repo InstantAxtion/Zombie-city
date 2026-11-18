@@ -60,9 +60,6 @@ final class GameView extends View implements Menu.Host {
             "Drag to build a wall nobody can cross", "Tap to put up a house", "Tap to put up a shop", "Grass over, or knock a building down"};
     /** Tools no longer on the bar: the medic (now in the People picker), Orders, Place, Events and Build. */
     boolean hiddenTool(int t) {
-        // ((18.0) A mission: the commander's tools only - police, soldiers, vehicles and support to buy, and orders.)
-        if (commander())
-            return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
         // ((25.0) Events back on the bar: the plane crash, prison break and riot, and the airstrike with its cooldown.)
         return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_BUILD || t == TOOL_ZONE;
     }
@@ -70,7 +67,7 @@ final class GameView extends View implements Menu.Host {
             "Command post", "Special forces", "Police boat"};
     static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
             "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde", "Plane crash", "Prison break", "Riot",
-            "Supply convoy", "Evac convoy"};
+            "Supply convoy"};
     static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
     static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
@@ -131,7 +128,7 @@ final class GameView extends View implements Menu.Host {
 
     /** ((25.0) The Events button's name: the airstrike's with the seconds left while it's not ready. */
     String eventLabel() {
-        int wait = eventVariant == 4 && !commander() ? world.airstrikeWait() : 0;
+        int wait = eventVariant == 4 ? world.airstrikeWait() : 0;
         return wait > 0 ? "Airstrike " + wait + "s" : EVENT_NAMES[eventVariant];
     }
 
@@ -139,14 +136,7 @@ final class GameView extends View implements Menu.Host {
         return ROW_LABELS[t];
     }
 
-    /** ((18.0) Playing a campaign mission: the commander, with a budget, not the sandbox's free hand. */
-    boolean commander() {
-        return world != null && hasGame && world.mission() != null;
-    }
-
     String toolName(int t) {
-        if (commander() && t == TOOL_PLACE) return "Vehicles";
-        if (commander() && t == TOOL_EVENT) return "Support";
         return TOOL_NAMES[t];
     }
 
@@ -176,8 +166,7 @@ final class GameView extends View implements Menu.Host {
             "An airliner comes down on the spot: fire, wreckage, survivors - and some infected aboard",
             "Every inmate breaks out of the prison at once (maps with a prison); the police round them up",
             "The crowd here riots for a couple of minutes: looting, cars set alight, riot police called in",
-            "Tap a safe zone, survivor base or police station: an escorted column of trucks brings it ammunition",
-            "Tap a safe zone: escorted buses come and take the people sheltering there out of the city"};
+            "Tap a safe zone, survivor base or police station: an escorted column of trucks brings it ammunition"};
     static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_CLEAR = 3, BTN_MENU = 4, BTN_TOP = 5;
     /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
     static final int TOP_BUTTONS = 6;
@@ -763,12 +752,10 @@ final class GameView extends View implements Menu.Host {
             @Override
             public void run() {
                 World w = new World(cfg);
-                // ((18.0) A mission's the same on every phone: its own population, not the setting's.)
-                w.setMaxPopulation(cfg.mission >= 0 ? Campaign.population(cfg.mission) : maxPop);
+                w.setMaxPopulation(maxPop);
                 w.gore = gore;
                 w.heavy = heavy;
                 w.populate(cfg);
-                if (cfg.mission >= 0) Campaign.begin(w, records.veterans(), records.perkMask());
                 built = w;
             }
         });
@@ -874,7 +861,7 @@ final class GameView extends View implements Menu.Host {
         feedOnAge.clear();
         centerCamera();
         menu.screen = Menu.NONE;
-        missionSetup();
+        toolSetup();
     }
 
     /** Waits for a city being built (for the tests). */
@@ -912,25 +899,14 @@ final class GameView extends View implements Menu.Host {
         hintTime = 14f;
         lastMessageCount = 0;
         menu.screen = Menu.NONE;
-        missionSetup();
+        toolSetup();
     }
 
-    /** ((18.0) The tool bar for the game just started or loaded: a mission's commander tools, or the sandbox's. */
-    void missionSetup() {
-        missionRecorded = world != null && world.missionResult != 0;
-        if (commander()) {
-            // (The mission panel sits where the first hint would.)
-            hintTime = 0;
-            brushIdx = 0;
-            if (Campaign.PLACE_COST[placeVariant] < 0) placeVariant = 1;
-            if (Campaign.EVENT_COST[eventVariant] < 0) eventVariant = 4;
-        }
+    /** ((18.0) The tool bar for the game just started or loaded. */
+    void toolSetup() {
         picker = -1;
         if (getWidth() > 0) onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
     }
-
-    /** ((18.0) Whether this game's mission result has gone into the campaign records yet. */
-    boolean missionRecorded;
 
     @Override
     public void toMainMenu() {
@@ -1224,11 +1200,7 @@ final class GameView extends View implements Menu.Host {
         }
 
         // ((17.5) The game's over: the after-action report, once the ending's been shown.)
-        if (hasGame && world != null && world.missionResult != 0 && !missionRecorded) {
-            missionRecorded = true;
-            if (world.missionResult == 1) records.missionWon(world.city.cfg.mission, world.missionStars, Campaign.veterans(world));
-        }
-        if (hasGame && world != null && (world.warResult != 0 || world.missionResult != 0) && !reportShown && world.warBannerTime <= 0 && !menu.isOpen()) {
+        if (hasGame && world != null && world.warResult != 0 && !reportShown && world.warBannerTime <= 0 && !menu.isOpen()) {
             reportShown = true;
             menu.open(Menu.REPORT);
         }
@@ -1386,11 +1358,8 @@ final class GameView extends View implements Menu.Host {
             seenBanner = world.bannerSeq;
             // ((19.0) A sting under each big announcement: bright for a win, dark for a loss, an alert for the rest.)
             if (world.warBanner != null && hasGame && !menu.isOpen()) {
-                String b = world.warBanner;
-                boolean won = world.warResult == 1 || world.missionResult == 1, lost = world.warResult == 2 || world.missionResult == 2;
+                boolean won = world.warResult == 1, lost = world.warResult == 2;
                 sound.play(won ? Sfx.STING_WIN : lost ? Sfx.STING_LOSE : Sfx.STING_ALERT, 0.8f, 0);
-                if (world.missionResult == 1 && b.startsWith("MISSION"))
-                    for (int s = 0; s < world.missionStars; s++) audio.later(1.1f + s * 0.35f, Sfx.STAR, 0.7f);
             }
             if (world.warBanner != null) {
                 boolean good = world.warBanner.contains("SURVIVES") || world.warBanner.contains("TURNING");
@@ -1421,10 +1390,8 @@ final class GameView extends View implements Menu.Host {
             if (inGame && settings.radio()) audio.radioSound();
             lastMessageCount = world.dispatch.messageCount;
         }
-        if (inGame) {
-            audio.ambience(dt);
-            audio.missionSounds();
-        } else audio.ambienceQuiet();
+        if (inGame) audio.ambience(dt);
+        else audio.ambienceQuiet();
         audio.playLater(dt);
     }
 
@@ -1645,9 +1612,6 @@ final class GameView extends View implements Menu.Host {
 
     /** The radio as each message comes in: a phone for a 911 call, the army's two beeps, the police's hiss; then the squelch. */
     float radioQuietUntil;
-
-    /** ((19.0) A mission's sounds: money spent, a step towards the objective. */
-    int lastProgress = -1, lastSpent;
 
     // ---- The ambience ----
 
@@ -1876,10 +1840,5 @@ final class GameView extends View implements Menu.Host {
     /** ((27.3) For TouchInput, which can't reach the View's own handling of a touch it doesn't want.) */
     boolean superTouch(MotionEvent ev) {
         return super.onTouchEvent(ev);
-    }
-
-    /** ((27.3) A command at (wx, wy) with the tool in hand - see TouchInput; kept here, where the tests reach it.) */
-    void commandAt(float wx, float wy) {
-        touchInput.commandAt(wx, wy);
     }
 }

@@ -2644,11 +2644,6 @@ final class Dispatch {
                     z.open = true;
                     z.age = 0;
                     zonesDirty = true;
-                    // ((22.0) The Fortified perk: the wall's reinforced from the start.)
-                    if (Perks.has(w, Perks.FORTIFIED)) {
-                        z.level = 1;
-                        for (int k = 0; k < z.hp.length; k++) if (z.up[k]) z.hp[k] = Math.max(z.hp[k], 100);
-                    }
                     say(z.military ? WHO_MILITARY : WHO_POLICE, null, (z.military ? "Military: " : "Police Command: ")
                             + "The safe zone at " + z.place + " is open: walled in, room for " + z.capacity
                             + ". Civilians, come to the gates!", z.x, z.y);

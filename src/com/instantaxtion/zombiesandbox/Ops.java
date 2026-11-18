@@ -73,7 +73,7 @@ final class Ops {
      */
     void setupBoats() {
         City c = w.city;
-        if (!boats.isEmpty() || c.waterKind == CityConfig.W_NONE || c.waterKind == CityConfig.W_LAKE || c.cfg.mission >= 0) return;
+        if (!boats.isEmpty() || c.waterKind == CityConfig.W_NONE || c.waterKind == CityConfig.W_LAKE) return;
         int W = c.w, H = c.h;
         water = new BitSet(W * H);
         shore = new BitSet(W * H);
@@ -972,7 +972,7 @@ final class Ops {
             }
             if ((p.cd -= 1) > 0) return;
             p.cd = 10;
-            if (!w.outbreak || w.city.cfg.mission >= 0 || w.alert < (p.army ? 2 : 1)) return;
+            if (!w.outbreak || w.alert < (p.army ? 2 : 1)) return;
             if (p.army && w.counts[Entity.SOLDIER] < 4) return;
             // (The army's goes to a fight the police's isn't at.)
             Dispatch.Incident bad = p.army && police.truck != null && police.out() ? worst(police.truck.tx, police.truck.ty, 700)
@@ -1280,7 +1280,7 @@ final class Ops {
         if (w.counts[Entity.GIANT] > 0) {
             if (giantSince < 0) giantSince = w.time;
         } else giantSince = -1;
-        if ((sfCd -= 5) > 0 || !w.outbreak || w.alert < 1 || w.city.cfg.mission >= 0) return;
+        if ((sfCd -= 5) > 0 || !w.outbreak || w.alert < 1) return;
         int out = 0;
         Entity giant = null;
         for (int i = 0, n = w.entities.size(); i < n; i++) {

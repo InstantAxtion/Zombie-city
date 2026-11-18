@@ -35,23 +35,7 @@ final class ToolBar {
     }
 
     String[] optionNames(int t) {
-        String[] n = sandboxNames(t);
-        int[] cost = gv.commander() ? costs(t) : null;
-        if (cost == null) return n;
-        String[] out = new String[n.length];
-        for (int k = 0; k < n.length; k++) out[k] = n[k] + (k >= cost.length || cost[k] < 0 ? "  (n/a)" : cost[k] == 0 ? "  free" : "  $" + cost[k]);
-        return out;
-    }
-
-    /** ((18.0) What each choice of a tool costs in a mission, or null. */
-    int[] costs(int t) {
-        switch (t) {
-            case TOOL_COP: return Campaign.unitCost(gv.world, true);
-            case TOOL_MIL: return Campaign.unitCost(gv.world, false);
-            case TOOL_PLACE: return Campaign.placeCost(gv.world);
-            case TOOL_EVENT: return Campaign.eventCost(gv.world);
-            default: return null;
-        }
+        return sandboxNames(t);
     }
 
     String[] sandboxNames(int t) {
@@ -358,7 +342,7 @@ final class ToolBar {
     boolean drawEventIcon(Canvas c, float cx, float cy, float size) {
         switch (gv.eventVariant) {
             case 4: {
-                int wait = gv.commander() ? 0 : gv.world.airstrikeWait();
+                int wait = gv.world.airstrikeWait();
                 c.save();
                 c.translate(cx, cy);
                 c.rotate(-45);
@@ -422,15 +406,6 @@ final class ToolBar {
                 c.drawRect(cx - size * 0.28f, cy - size * 0.22f, cx + size * 0.12f, cy + size * 0.2f, gv.fill);
                 gv.fill.setColor(0xFF3C4628);
                 c.drawRect(cx + size * 0.72f, cy - size * 0.2f, cx + size * 0.98f, cy + size * 0.2f, gv.fill);
-                return true;
-            }
-            case 16: {
-                // ((26.0) An evacuation convoy: a yellow bus.)
-                gv.fill.setColor(0xFFE8B030);
-                gv.oval.set(cx - size * 0.95f, cy - size * 0.38f, cx + size * 0.95f, cy + size * 0.38f);
-                c.drawRoundRect(gv.oval, size * 0.12f, size * 0.12f, gv.fill);
-                gv.fill.setColor(0xFF2A3640);
-                for (int k = 0; k < 5; k++) c.drawRect(cx - size * 0.75f + k * size * 0.32f, cy - size * 0.24f, cx - size * 0.55f + k * size * 0.32f, cy + size * 0.24f, gv.fill);
                 return true;
             }
             case 14: {

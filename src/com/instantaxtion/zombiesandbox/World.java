@@ -1359,16 +1359,6 @@ final class World {
         return false;
     }
 
-    /** ((18.0) The campaign mission being played, or null in a sandbox game. */
-    Campaign.Mission mission() {
-        return Campaign.get(city.cfg.mission);
-    }
-
-    /** ((18.0) A mission's running record: when it started, what's been spent, and how it ended (1 won, 2 failed). */
-    float missionStart;
-    int spent, missionResult, missionStars;
-    String missionWhy;
-
     int gatherArmed(float x, float y, float r) {
         return spatial.gatherArmed(x, y, r);
     }
@@ -1384,12 +1374,11 @@ final class World {
     float zPace;
 
     /**
-     * ((21.1) Only a campaign mission has a difficulty - its own. A sandbox game is always Normal, whatever it was
-     * saved as: nothing about it is harder or easier than what the player puts in it.
+     * ((21.1) A game is always Normal, whatever it was saved as: nothing about it is harder or easier than what the
+     * player puts in it. ((28.2) Only the campaign's missions had a difficulty of their own, and they're gone.)
      */
     void applyRules() {
-        Campaign.Mission m = mission();
-        difficulty = m != null ? Math.max(0, Math.min(3, m.difficulty)) : Director.NORMAL;
+        difficulty = Director.NORMAL;
         zPace = Director.Z_SPEED[difficulty];
         director.level = difficulty;
         city.cfg.difficulty = difficulty;
@@ -1441,16 +1430,9 @@ final class World {
     // ---- ((21.0) Defences, alphas, the barrage and the mop-up ----
 
     final Defences defences = new Defences();
-    /** The stars a commander had going into this mission: what perks they have (Perks). */
-    int perkStars;
-    /** ((22.0) Retake the district: which one (City.districts), and how long it's been clear of the dead. */
-    int retakeDistrict = -1;
-    float retakeClearT;
     /** How big a horde has to be to have an alpha at its head; how many of the dead left counts as mopping up. */
     static final int ALPHA_HORDE = 12, MOP_UP = 12;
     int alphas, alphasKilled, barrages;
-    /** ((21.0) A mission's site to hold: how long it's been in the hands of the dead (Campaign.G_DEFEND). */
-    float siteT;
     /** The last of the dead, once there are few enough to hunt: x, y pairs (for the screen's pointers). */
     float[] lastDead = new float[0];
     boolean mopping;

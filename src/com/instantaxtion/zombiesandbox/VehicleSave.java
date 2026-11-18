@@ -243,6 +243,8 @@ final class VehicleSave {
         }
         fleet.unitCount = top;
         fleet.fromSave = true;
+        // ((28.2) No evacuation convoys any more: one saved on the road lets its people off and heads back.)
+        w.convoys.dropEvacuations();
         for (Entity e : people) if (e.rig != null && !e.dead) fleet.note(e);
         // On their way somewhere: a route there again (the old one isn't kept). With none, the vehicle's own "stuck"
         // handling finds it another way, as it would on the road.

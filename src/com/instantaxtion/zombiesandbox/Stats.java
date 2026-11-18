@@ -257,7 +257,6 @@ final class Stats {
      */
     int score() {
         float s = w.zombiesKilled * 10 + w.alphasKilled * 150 + (w.warResult == 1 ? 1500 + w.humans * 2 : 0) - w.civiliansLost * 4 - (w.copsLost + w.soldiersLost) * 6;
-        if (w.mission() != null && w.missionResult == 1) s += 1000 * w.missionStars;
         return Math.max(0, Math.round(s * Director.SCORE[w.difficulty]));
     }
 

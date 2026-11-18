@@ -16,13 +16,11 @@ final class Records {
 
     Records(Context context) {
         prefs = context.getSharedPreferences("records", Context.MODE_PRIVATE);
-        // (19.6) Only the zombie missions are left: Dead City moved up from the seventh to the third.
-        if (prefs.getInt("zombiesOnly", 0) == 0) {
+        // ((28.2) The campaign's gone: its stars, veterans and perks are let go of.)
+        if (prefs.contains("zombiesOnly") || prefs.contains("veterans") || prefs.contains("perkMask")) {
             SharedPreferences.Editor ed = prefs.edit();
-            int dead = prefs.getInt("mission6", 0);
-            for (int i = 2; i <= 6; i++) ed.putInt("mission" + i, 0);
-            if (dead > 0) ed.putInt("mission2", dead);
-            ed.putInt("zombiesOnly", 1).apply();
+            for (String k : prefs.getAll().keySet()) if (k.startsWith("mission")) ed.remove(k);
+            ed.remove("zombiesOnly").remove("veterans").remove("perkMask").apply();
         }
     }
 
@@ -48,35 +46,6 @@ final class Records {
         add(5, 1);
     }
 
-    // ---- ((18.0) The campaign: the best stars for each mission, and the veterans carried from one to the next.) ----
-
-    int missionStars(int id) {
-        return prefs.getInt("mission" + id, 0);
-    }
-
-    /** A mission's open to play once the one before it has been won. */
-    boolean unlocked(int id) {
-        return id == 0 || missionStars(id - 1) > 0;
-    }
-
-    String veterans() {
-        return prefs.getString("veterans", "");
-    }
-
-    /** A mission won: its best stars kept, and the veterans who came through it are the roster now. */
-    void missionWon(int id, int stars, String roster) {
-        SharedPreferences.Editor ed = prefs.edit();
-        if (stars > missionStars(id)) ed.putInt("mission" + id, stars);
-        ed.putString("veterans", roster == null ? "" : roster);
-        ed.apply();
-    }
-
-    int totalStars() {
-        int n = 0;
-        for (int i = 0; i < Campaign.MISSIONS.length; i++) n += missionStars(i);
-        return n;
-    }
-
     private int lastKilled;
     private World lastWorld;
 
@@ -85,21 +54,7 @@ final class Records {
         lastWorld = null;
     }
 
-    /** ((22.0) The perks taken (one bit each). Before any are chosen, those the stars gave by themselves before 22.0. */
-    int perkMask() {
-        int m = prefs.getInt("perkMask", -1);
-        return m >= 0 ? m : Perks.legacy(totalStars());
-    }
-
-    /** ((22.0) Takes a perk, if it's open. */
-    boolean takePerk(int perk) {
-        int m = perkMask();
-        if (!Perks.open(m, totalStars(), perk)) return false;
-        prefs.edit().putInt("perkMask", m | (1 << perk)).apply();
-        return true;
-    }
-
-    /** ((21.4) Wipes the records and the hall of fame. Campaign stars and veterans are kept.) */
+    /** ((21.4) Wipes the records and the hall of fame.) */
     void resetStats() {
         SharedPreferences.Editor ed = prefs.edit();
         for (int i = 0; i < RECORD_NAMES.length; i++) ed.putInt("rec" + i, 0);

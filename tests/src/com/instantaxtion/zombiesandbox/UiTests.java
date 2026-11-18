@@ -3,15 +3,15 @@ package com.instantaxtion.zombiesandbox;
 import java.io.File;
 import java.lang.reflect.Field;
 
-/** Screens: every screen draws, the game view, the campaign. */
+/** Screens: every screen draws, the game view; and (28.2) no campaign. */
 final class UiTests extends TestKit {
     static void register() {
         test("every screen draws", FAST, 45, UiTests.class,
                 "everyScreen", "gamesLetGo", "recordsAndSettings");
         test("the game view: the after-action report, sound, visuals, overlays, the war meter, the map in tiles", FULL, 30, UiTests.class,
                 "report", "sound", "visuals", "firesAndMeter", "overlays", "mapTiles");
-        test("campaign: missions, budgets, objectives, difficulty, perks, veterans and the commander's tools", FULL, 25, UiTests.class,
-                "missions", "difficulty", "objectives", "perksAndHolding", "perkTreeAndRetake");
+        test("no campaign and no evacuation convoys (28.2); always Normal, the director, the last of the dead", FULL, 25, UiTests.class,
+                "noCampaign", "noEvacConvoys", "difficulty", "lastOfTheDead");
     }
 
     static void everyScreen() throws Exception {
@@ -415,124 +415,87 @@ final class UiTests extends TestKit {
         check(lit > 300, "and drawn whole from them (" + lit + " of 400 points)");
     }
 
-    static void missions() throws Exception {
-        Campaign.Mission m0 = Campaign.MISSIONS[0];
-        CityConfig c = mission(0);
-        check(c.mission == 0 && c.zombies() == m0.foes, "the mission's city and enemy");
-        World w = new World(c);
-        w.populate(c);
-        Campaign.begin(w, "");
-        w.recount();
-        check(w.mission() == m0, "it's a mission");
-        // (On foot and in the cars parked at the stations, each once: w.counts has the crews already.)
-        int police = policeNow(w);
-        check(police <= m0.cops && police >= m0.cops / 2, "the police cut to the mission's (" + police + " for " + m0.cops + ")");
-        check(w.counts[Entity.SOLDIER] <= m0.soldiers, "and the soldiers (" + w.counts[Entity.SOLDIER] + ")");
-        check(w.dispatch.policeReserve == 0 && w.dispatch.squadReserve == 0, "no help from outside");
-        // The budget: start money, spent, earned.
-        check(Campaign.budget(w) == m0.budget, "starts with the mission's money");
-        check(Campaign.spend(w, 10) && Campaign.budget(w) == m0.budget - 10, "spending takes it off");
-        check(!Campaign.spend(w, 100000), "can't spend what isn't there");
-        int before = Campaign.budget(w);
-        w.zombiesKilled += 5;
-        check(Campaign.budget(w) > before, "kills earn money");
-        float[] at = Campaign.arrival(w, true, w.city.worldW() / 2, w.city.worldH() / 2);
-        check(at != null, "police have somewhere to come in from");
-        // Run out the clock: failed.
-        w.missionStart = w.time - m0.limit - 1;
-        WM life = wm("cityLife");
-        life.setAccessible(true);
-        life.invoke(w);
-        check(w.missionResult == 2 && "Out of time.".equals(w.missionWhy), "out of time, the mission's failed (" + w.missionResult + ", " + w.missionWhy + ")");
-        // Won: every zombie down.
-        World w2 = new World(mission(0));
-        w2.populate(w2.city.cfg);
-        Campaign.begin(w2, "");
-        for (int f = 0; f < 30 * 40 && w2.missionResult == 0; f++) {
-            for (Entity e : w2.entities) if (e.isUndead()) e.hp = 0;
-            w2.update(1 / 30f);
-            w2.evCount = 0;
-        }
-        check(w2.missionResult == 1 && w2.missionStars >= 1, "cleared: won with stars (" + w2.missionResult + ", " + w2.missionStars + ")");
-        // Saved and loaded.
-        w2.spent = 37;
-        File file = File.createTempFile("zcs", ".dat");
-        SaveGame.save(w2, file);
-        World l = SaveGame.load(file);
-        file.delete();
-        check(l.mission() == m0 && l.spent == 37 && l.missionResult == 1 && l.missionStars == w2.missionStars, "the mission's kept in a save");
-        // Veterans: a ranked officer goes on the roster and comes back in the next mission.
-        Entity hero = null;
-        for (Entity e : w2.entities) if (!e.dead && e.type == Entity.COP) { hero = e; break; }
-        // (Or one sitting in a car.)
-        for (Fleet.Vehicle v : w2.fleet.vehicles) for (Entity e : v.crew) if (hero == null && e.type == Entity.COP) hero = e;
-        hero.kills = 20;
-        String roster = Campaign.veterans(w2);
-        check(Campaign.rosterSize(roster) >= 1 && roster.contains("," + hero.nameSeed + ";"), "a ranked officer's a veteran (" + roster + ")");
-        World w3 = new World(mission(1));
-        w3.populate(w3.city.cfg);
-        Campaign.begin(w3, roster);
-        boolean back = false;
-        for (Entity e : w3.entities) back |= e.type == Entity.COP && e.nameSeed == hero.nameSeed && e.kills == 20;
-        check(back, "and is back in the next mission");
-        // The campaign's progress on the phone.
-        Records rec = new Records(new android.app.Activity());
-        check(rec.unlocked(0) && !rec.unlocked(1), "only the first mission open at first");
-        rec.missionWon(0, 2, roster);
-        check(rec.unlocked(1) && rec.missionStars(0) == 2 && rec.veterans().equals(roster), "winning opens the next and keeps the stars and the roster");
-        rec.missionWon(0, 1, "");
-        check(rec.missionStars(0) == 2, "the best stars kept");
-        // The commander's screen: only their tools, buying units that come in and are sent to the spot.
+    /** (28.2) The campaign is gone: no button for it, nothing of it kept on the phone, and the sandbox has every tool. */
+    static void noCampaign() throws Exception {
         GameView v = new GameView(new android.app.Activity());
         int[] size = {1080, 2000};
         v.layout(size[0], size[1]);
         Menu menu = (Menu) field(v, "menu");
-        v.startGame(mission(2));
+        menu.open(Menu.MAIN);
+        draw(v, size);
+        boolean campaign = false;
+        for (Object b : (java.util.List<?>) field(menu, "buttons")) {
+            String label = (String) field(b, "label");
+            campaign |= label != null && label.toLowerCase().contains("campaign");
+        }
+        check(!campaign, "no Campaign on the main menu");
+        // An old phone's campaign stars, veterans and perks are let go of; the records are kept.
+        android.app.Activity a = new android.app.Activity();
+        android.content.SharedPreferences prefs = a.getSharedPreferences("records", 0);
+        prefs.edit().putInt("mission0", 3).putInt("mission1", 2).putInt("zombiesOnly", 1).putString("veterans", ",1;").putInt("perkMask", 5)
+                .putInt("rec4", 77).apply();
+        Records rec = new Records(a);
+        check(!prefs.contains("mission0") && !prefs.contains("mission1") && !prefs.contains("veterans") && !prefs.contains("perkMask")
+                && !prefs.contains("zombiesOnly") && rec.record(4) == 77, "the campaign's left on the phone is cleared, the records kept");
+        // A game: every sandbox tool on the bar, the airstrike's wait shown, Clear on the button.
+        CityConfig gc = cfg(CityConfig.TINY, 83);
+        gc.v[CityConfig.OPT_ZOMBIES] = 2;
+        v.startGame(gc);
         v.awaitLoad();
-        for (int k = 0; k < 3; k++) draw(v, size);
+        for (int i = 0; i < 3; i++) draw(v, size);
         menu.screen = Menu.NONE;
-        World gw = (World) field(v, "world");
-        check(gw.mission() == Campaign.MISSIONS[2], "the mission's started from the view");
         java.lang.reflect.Method hidden = GameView.class.getDeclaredMethod("hiddenTool", int.class);
         hidden.setAccessible(true);
-        check((Boolean) hidden.invoke(v, 2) && (Boolean) hidden.invoke(v, 6) && !(Boolean) hidden.invoke(v, 3) && !(Boolean) hidden.invoke(v, 1),
-                "no people or enemy to spawn, police and orders there");
-        java.lang.reflect.Field tool = GameView.class.getDeclaredField("tool");
-        tool.setAccessible(true);
-        tool.setInt(v, 3);
-        gw.recount();
-        int cops = gw.counts[Entity.COP], money = Campaign.budget(gw);
-        java.lang.reflect.Method cmd = GameView.class.getDeclaredMethod("commandAt", float.class, float.class);
-        cmd.setAccessible(true);
-        float tx = 0, ty = 0;
-        for (Entity e : gw.entities)
-            if (!e.dead && e.type == Entity.CIVILIAN && e.ride == null && gw.city.insideOf(e.x, e.y) == null) {
-                tx = e.x;
-                ty = e.y;
-                break;
-            }
-        cmd.invoke(v, tx, ty);
-        gw.recount();
-        check(gw.counts[Entity.COP] == cops + 1 && Campaign.budget(gw) == money - Campaign.COP_COST[0], "a cop bought (" + cops + " -> "
-                + gw.counts[Entity.COP] + ", $" + money + " -> $" + Campaign.budget(gw) + ")");
-        Entity newest = null;
-        for (Entity e : gw.entities) if (e.type == Entity.COP && e.task == Dispatch.T_MOVE) newest = e;
-        check(newest != null && World.hypot(newest.postX - tx, newest.postY - ty) < 120, "and sent to the spot");
-        gw.spent = 1000000;
-        cmd.invoke(v, tx, ty);
-        gw.recount();
-        check(gw.counts[Entity.COP] == cops + 1, "no money, no more");
-        for (int k = 0; k < 3; k++) draw(v, size);
-        // The campaign screen and the mission report draw, and a finished mission opens its report.
-        menu.open(Menu.CAMPAIGN);
-        draw(v, size);
-        menu.screen = Menu.NONE;
-        Campaign.finish(gw, 1, null);
-        gw.warBannerTime = 0;
-        draw(v, size);
-        check(menu.screen == Menu.REPORT, "the report's up at the end");
-        draw(v, size);
+        check(!(Boolean) hidden.invoke(v, 2) && !(Boolean) hidden.invoke(v, 6) && !(Boolean) hidden.invoke(v, 3),
+                "people, the dead and police to put down");
+        for (int i = 0; i < 4; i++) draw(v, size);
         check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
+        // The report at the end of a game is the after-action report.
+        World gw = (World) field(v, "world");
+        menu.open(Menu.REPORT);
+        draw(v, size);
+        check(menu.screen == Menu.REPORT && v.drawErrors == 0 && gw.difficulty == Director.NORMAL, "the report draws (" + v.drawErrors + ")");
+    }
+
+    /** (28.2) No evacuation convoys: none on the Events tool, none sent by the city, and one in an old save goes home empty. */
+    static void noEvacConvoys() throws Exception {
+        java.lang.reflect.Field names = GameView.class.getDeclaredField("EVENT_NAMES");
+        names.setAccessible(true);
+        boolean evac = false;
+        for (String n : (String[]) names.get(null)) evac |= n.toLowerCase().contains("evac");
+        check(!evac, "no evacuation convoy on the Events tool");
+        CityConfig c = cfg(CityConfig.SMALL, 91);
+        World w = new World(c);
+        w.populate(c);
+        // A safe zone full of people, and the city's own convoys looked at: none comes for them.
+        City.Facility st = null;
+        for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_POLICE && !f.fallen) { st = f; break; }
+        check(st != null, "a police station");
+        st.ammo = 10000;
+        w.outbreak = true;
+        w.outbreakTime = 300;
+        for (int k = 0; k < 6; k++) w.convoys.update(5);
+        for (Convoys.Column col : w.convoys.columns) check(col.purpose == Convoys.SUPPLY, "only supply convoys");
+        // An evacuation convoy as an old save has it: it lets its people off and turns for home, empty.
+        Convoys.Column col = w.convoys.supply(null, null, st, 300);
+        check(col != null, "a column on its way");
+        for (int f = 0; f < 30 * 20 && col.vs.isEmpty(); f++) w.update(1 / 30f);
+        check(!col.vs.isEmpty(), "its vehicles out");
+        Entity rider = null;
+        for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN && e.ride == null && w.city.insideOf(e.x, e.y) == null) { rider = e; break; }
+        Fleet.Vehicle bus = col.vs.get(0);
+        rider.dead = true;
+        rider.removed = true;
+        bus.riders.add(rider);
+        w.entities.remove(rider);
+        col.purpose = Convoys.EVAC;
+        col.aboard = 1;
+        w.convoys.dropEvacuations();
+        check(col.purpose == Convoys.SUPPLY && col.state == Convoys.LEAVING && bus.riders.isEmpty() && col.cargo == 0,
+                "turned for home (" + col.purpose + ", state " + col.state + ", " + bus.riders.size() + " aboard)");
+        check(!rider.dead && !rider.removed && w.entities.contains(rider), "and its passenger let off");
+        for (int f = 0; f < 30 * 5; f++) w.update(1 / 30f);
+        check(true, "and it runs on");
     }
 
     static void difficulty() throws Exception {
@@ -545,9 +508,6 @@ final class UiTests extends TestKit {
         World sb = new World(c);
         sb.populate(c);
         check(sb.difficulty == Director.NORMAL && sb.director.level == Director.NORMAL, "a sandbox game is always Normal");
-        Entity sz = null;
-        for (Entity e : sb.entities) if (e.type == Entity.ZOMBIE) { sz = e; break; }
-        float normalHp = sz.maxHp;
         int zs = sb.zombieCount(), crates = sb.pickups.size();
         for (int t = 0; t < 1500; t++) {
             sb.outbreak = true;
@@ -575,44 +535,21 @@ final class UiTests extends TestKit {
             rested |= sb.director.phase == Director.RESPITE;
         }
         check(rested && sb.director.phase == Director.BUILD, "then a respite, then building again");
-        // A mission on Hard (Overrun): tougher dead, stragglers, a horde, in time a siege.
-        CityConfig mc = mission(5);
-        World w = new World(mc);
-        w.setMaxPopulation(3000);
-        w.populate(mc);
-        Campaign.begin(w, "");
-        check(w.difficulty == Director.HARD && w.director.level == Director.HARD, "a mission has its own difficulty");
-        Entity mz = null;
-        for (Entity e : w.entities) if (e.type == Entity.ZOMBIE) { mz = e; break; }
-        check(mz.maxHp > normalHp * 1.1f, "the dead are tougher on Hard (" + normalHp + " -> " + mz.maxHp + ")");
-        int before = w.zombieCount();
-        for (int t = 0; t < 700 && (w.director.hordes == 0 || w.director.sieges == 0 || w.director.stragglers == 0); t++) {
-            w.outbreak = true;
-            w.director.stress = 0;
-            w.director.tick(w);
-        }
-        w.recount();
-        check(w.director.stragglers >= 1 && w.director.hordes >= 1 && w.director.sieges >= 1 && w.zombieCount() > before,
-                "stragglers, a horde and a siege come in (" + w.director.stragglers + ", " + w.director.hordes + ", " + w.director.sieges + ")");
-        // Kept through a save, and a sandbox save that says Hard loads as Normal.
-        File file = File.createTempFile("zcs", ".dat");
-        SaveGame.save(w, file);
-        World l = SaveGame.load(file);
-        file.delete();
-        check(l.difficulty == Director.HARD && l.director.level == Director.HARD && l.mission() == w.mission(), "a mission's difficulty is kept in a save");
+        // A sandbox save that says Hard loads as Normal.
+        File file;
         sb.city.cfg.difficulty = Director.HARD;
         file = File.createTempFile("zcs", ".dat");
         SaveGame.save(sb, file);
         World sl = SaveGame.load(file);
         file.delete();
         check(sl.difficulty == Director.NORMAL && sl.director.level == Director.NORMAL, "a sandbox save loads as Normal");
-        // The score: kills count, and more in a harder mission.
-        sb.zombiesKilled = w.zombiesKilled = 100;
-        sb.civiliansLost = w.civiliansLost = 0;
-        sb.copsLost = w.copsLost = sb.soldiersLost = w.soldiersLost = 0;
-        sb.alphasKilled = w.alphasKilled = 0;
-        sb.warResult = w.warResult = 0;
-        check(sb.score() == 1000 && w.score() > sb.score(), "a hundred kills score, more on Hard (" + sb.score() + ", " + w.score() + ")");
+        // The score: kills count.
+        sb.zombiesKilled = 100;
+        sb.civiliansLost = 0;
+        sb.copsLost = sb.soldiersLost = 0;
+        sb.alphasKilled = 0;
+        sb.warResult = 0;
+        check(sb.score() == 1000, "a hundred kills score a thousand (" + sb.score() + ")");
         // No difficulty to choose on the New Game screen.
         boolean offered = false;
         CityConfig oc = new CityConfig();
@@ -620,167 +557,12 @@ final class UiTests extends TestKit {
         check(!offered && oc.difficulty == Director.NORMAL && oc.copy().difficulty == Director.NORMAL, "no difficulty on the New Game screen");
     }
 
-    static void objectives() throws Exception {
-        check(Campaign.MISSIONS.length >= 8, "the missions");
-        for (int i = 0; i < Campaign.MISSIONS.length; i++) {
-            Campaign.Mission m = Campaign.MISSIONS[i];
-            CityConfig mc = mission(i);
-            check(mc.mission == i && mc.difficulty == m.difficulty && mc.exodus == m.exodus, m.title + ": the mission's rules");
-            check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
-        }
-        // One small city stands in for each counted objective.
-        CityConfig c = mission(5);
-        World w = new World(c);
-        w.setMaxPopulation(1800);
-        w.populate(c);
-        Campaign.begin(w, "");
-        check(w.difficulty == Director.HARD, "Overrun is on Hard");
-        for (int id : new int[]{3, 6}) {
-            Campaign.Mission m = Campaign.MISSIONS[id];
-            w.city.cfg.mission = id;
-            w.missionResult = 0;
-            w.missionStart = w.time;
-            w.fled = 0;
-            w.zombiesKilled = 0;
-            check(w.mission() == m && !Campaign.goalText(w).isEmpty() && Campaign.progress(w).startsWith("0 / " + m.goalN), m.title + " says what it wants");
-            Campaign.tick(w);
-            check(w.missionResult == 0, m.title + ": not won yet");
-            if (m.goal == Campaign.G_EVAC) w.fled = m.goalN;
-            else w.zombiesKilled = m.goalN;
-            Campaign.tick(w);
-            check(w.missionResult == 1 && w.missionStars >= 1, m.title + ": won on its objective (" + w.missionResult + ")");
-        }
-        // And they run out of time like the rest.
-        w.city.cfg.mission = 6;
-        w.missionResult = 0;
-        w.zombiesKilled = 0;
-        w.missionStart = w.time - Campaign.MISSIONS[6].limit - 1;
-        Campaign.tick(w);
-        check(w.missionResult == 2, "out of time");
-        // The campaign screen draws with all of them.
+    /** In a game: the last of the dead pointed out, an alpha drawn, wire on the ground. */
+    static void lastOfTheDead() throws Exception {
         GameView v = new GameView(new android.app.Activity());
         int[] size = {1080, 2000};
         v.layout(size[0], size[1]);
         Menu menu = (Menu) field(v, "menu");
-        for (int i = 0; i < 3; i++) draw(v, size);
-        menu.open(Menu.CAMPAIGN);
-        java.lang.reflect.Field sc = Menu.class.getDeclaredField("scroll");
-        sc.setAccessible(true);
-        for (int i = 0; i < 4; i++) {
-            sc.setFloat(menu, i * 500);
-            draw(v, size);
-        }
-        menu.open(Menu.SETUP);
-        for (int i = 0; i < 5; i++) {
-            sc.setFloat(menu, i * 500);
-            draw(v, size);
-        }
-        check(v.drawErrors == 0, "the campaign and setup screens draw (" + v.drawErrors + ")");
-    }
-
-    static void perksAndHolding() throws Exception {
-        check(Perks.count(0) == 0 && Perks.count(Perks.legacy(9)) == 3 && Perks.points(24) == 6 && Perks.NAMES.length == Perks.COUNT
-                && Perks.INFO.length == Perks.COUNT, "perks by stars");
-        check(Campaign.MISSIONS.length >= 12, "the missions (" + Campaign.MISSIONS.length + ")");
-        for (Campaign.Mission m : Campaign.MISSIONS) check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
-        CityConfig c = mission(8);
-        World w = new World(c);
-        w.setMaxPopulation(1800);
-        w.populate(c);
-        Campaign.Mission m = Campaign.MISSIONS[8];
-        w.setMaxPopulation(2400);
-        // No perks without stars; all of them with enough.
-        Campaign.begin(w, "", 0);
-        check(w.perkStars == 0 && !Perks.has(w, Perks.ARMOUR) && Campaign.budget(w) == m.budget && Campaign.placeCost(w) == Campaign.PLACE_COST
-                && Campaign.eventCost(w) == Campaign.EVENT_COST, "no stars, no perks");
-        Entity any = null;
-        for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP && e.ride == null && w.city.insideOf(e.x, e.y) == null) { any = e; break; }
-        Entity plain = w.spawnCop(0, any.x + 6, any.y);
-        Campaign.begin(w, "", (1 << Perks.COUNT) - 1);
-        check(Perks.has(w, Perks.OLD_HANDS) && Campaign.budget(w) == m.budget * 6 / 5, "Logistics: a fifth more to start with");
-        Entity tough = w.spawnCop(0, any.x - 6, any.y);
-        check(plain != null && tough != null && Math.abs(tough.maxHp - plain.maxHp * 1.15f) < 0.5f, "Body armour (" + plain.maxHp + " -> " + tough.maxHp + ")");
-        check(Campaign.placeCost(w)[9] == (Campaign.PLACE_COST[9] + 1) / 2 && Campaign.placeCost(w)[1] == Campaign.PLACE_COST[1]
-                && Campaign.eventCost(w)[7] == Campaign.EVENT_COST[7] / 2 && Campaign.eventCost(w)[4] == Campaign.EVENT_COST[4] * 2 / 3
-                && Campaign.eventCost(w)[9] == Campaign.EVENT_COST[9] * 2 / 3, "Quartermaster and Fire support take money off");
-        float[] bar = w.placeBarricade(tough.x + City.T * 3, tough.y);
-        check(bar == null || bar[2] > 300, "Sappers build tougher");
-        // Never in the sandbox.
-        w.city.cfg.mission = -1;
-        check(!Perks.has(w, Perks.ARMOUR), "perks are for missions only");
-        w.city.cfg.mission = 8;
-        // Holding the station: lost once the dead have had it, with nobody armed there, for twenty seconds.
-        City.Facility f = Campaign.site(w);
-        check(f != null && Campaign.goalText(w).startsWith("Hold ") && m.goal == Campaign.G_DEFEND, "a station to hold");
-        Campaign.begin(w, "", 0);
-        Campaign.tick(w);
-        check(w.missionResult == 0 && w.siteT == 0, "holding");
-        // (Everyone of the city's gone from there: off the streets, out of the cars, out of the buildings.)
-        for (Entity e : w.entities) {
-            if (e.type == Entity.COP || e.type == Entity.SOLDIER || World.hypot(e.x - f.x, e.y - f.y) < 600 && !e.isZombie()) { e.removed = true; e.dead = true; }
-            e.hasGun = false;
-        }
-        for (Fleet.Vehicle v : new java.util.ArrayList<Fleet.Vehicle>(w.fleet.vehicles)) w.fleet.discard(v);
-        w.update(1 / 30f);
-        float[] gate = w.city.findWalkable(f.x, f.y);
-        java.util.ArrayList<Entity> at = new java.util.ArrayList<Entity>();
-        for (int k = 0; k < 9; k++) {
-            Entity z = w.spawn(Entity.ZOMBIE, gate[0] + (k % 3) * 6, gate[1] + (k / 3) * 6);
-            if (z != null) at.add(z);
-        }
-        float[][] pos = new float[at.size()][];
-        for (int k = 0; k < at.size(); k++) pos[k] = new float[]{at.get(k).x, at.get(k).y};
-        check(at.size() >= 6, "the dead at the gate");
-        for (int f2 = 0; f2 < 30 * 26 && w.missionResult == 0; f2++) {
-            for (int k = 0; k < at.size(); k++) { at.get(k).x = pos[k][0]; at.get(k).y = pos[k][1]; at.get(k).hp = at.get(k).maxHp; }
-            w.update(1 / 30f);
-            w.evCount = 0;
-        }
-        check(w.missionResult == 2 && w.missionWhy != null && w.missionWhy.endsWith("has fallen."), "the station falls (" + w.missionResult + ", " + w.missionWhy + ", " + w.siteT + ", dead there " + w.countZombiesNear(f.x, f.y, Campaign.reach(f))
-                + ", armed " + w.armedNear(f.x, f.y, Campaign.reach(f) + 30) + ")");
-        // Keeping people alive.
-        Campaign.Mission pm = Campaign.MISSIONS[9];
-        w.city.cfg.mission = 9;
-        w.missionResult = 0;
-        w.missionStart = w.time - 30;
-        w.warResult = 0;
-        check(pm.goal == Campaign.G_PROTECT && Campaign.goalText(w).startsWith("Keep " + pm.goalN), "people to keep alive");
-        w.humans = pm.goalN + 50;
-        Campaign.tick(w);
-        check(w.missionResult == 0 && Campaign.progress(w).startsWith((pm.goalN + 50) + " alive"), "enough alive");
-        w.missionStart = w.time - pm.limit - 1;
-        Campaign.tick(w);
-        check(w.missionResult == 1, "and still at the end: won");
-        w.missionResult = 0;
-        w.missionStart = w.time - 30;
-        w.humans = pm.goalN - 1;
-        Campaign.tick(w);
-        check(w.missionResult == 2 && w.missionWhy.startsWith("Too many lost"), "too many lost");
-        // Saved with its perks.
-        w.perkStars = 12;
-        File file = File.createTempFile("zcs", ".dat");
-        SaveGame.save(w, file);
-        World l = SaveGame.load(file);
-        file.delete();
-        check(l.perkStars == 12, "the perks are kept in a save");
-        // The campaign screen, with perks earned and one to come.
-        GameView v = new GameView(new android.app.Activity());
-        int[] size = {1080, 2000};
-        v.layout(size[0], size[1]);
-        Menu menu = (Menu) field(v, "menu");
-        Records rec = (Records) field(v, "records");
-        for (int i = 0; i < 4; i++) rec.missionWon(i, 3, "");
-        check(rec.totalStars() == 12 && Perks.count(rec.perkMask()) == 4, "twelve stars, four perks");
-        for (int i = 0; i < 3; i++) draw(v, size);
-        menu.open(Menu.CAMPAIGN);
-        java.lang.reflect.Field sc = Menu.class.getDeclaredField("scroll");
-        sc.setAccessible(true);
-        for (int i = 0; i < 6; i++) {
-            sc.setFloat(menu, i * 500);
-            draw(v, size);
-        }
-        check(v.drawErrors == 0, "the campaign screen draws with its perks (" + v.drawErrors + ")");
-        // In a game: the last of the dead pointed out, an alpha drawn, wire on the ground.
         CityConfig gc = cfg(CityConfig.TINY, 83);
         gc.v[CityConfig.OPT_ZOMBIES] = 2;
         v.startGame(gc);
@@ -802,27 +584,5 @@ final class UiTests extends TestKit {
         v.jumpTo(gz.x, gz.y);
         for (int i = 0; i < 4; i++) draw(v, size);
         check(v.drawErrors == 0, "drawn without an error (" + v.drawErrors + ")");
-    }
-
-    static void perkTreeAndRetake() throws Exception {
-        // The perk tree: a perk needs the one before it, and points from stars.
-        check(!Perks.open(0, 40, Perks.SAPPERS), "Sappers needs Body armour first");
-        check(Perks.open(1 << Perks.ARMOUR, 40, Perks.SAPPERS), "and is open once Body armour is taken");
-        check(!Perks.open(0, 3, Perks.ARMOUR), "no perk without a point (four stars)");
-        check(Perks.legacy(9) == 7, "the perks earned before the tree are kept");
-        // Retake the district: clear the named district and hold it.
-        CityConfig rc = mission(13);
-        World rw = new World(rc);
-        rw.populate(rc);
-        Campaign.begin(rw, "", 0);
-        City.District d = Campaign.retakeDistrict(rw);
-        check(d != null && rw.mission().goal == Campaign.G_RETAKE, "a mission to retake " + (d == null ? "?" : d.name));
-        for (Entity e : rw.entities) if (e.isZombie()) e.hp = 0;
-        rw.update(1 / 30f);
-        for (int k = 0; k < Campaign.RETAKE_HOLD + 2 && rw.missionResult == 0; k++) {
-            for (Entity e : rw.entities) if (e.isZombie() && rw.city.districtOf(e.x, e.y) == d) e.hp = 0;
-            Campaign.tick(rw);
-        }
-        check(rw.missionResult == 1, "cleared and held: the mission is won");
     }
 }

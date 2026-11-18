@@ -79,7 +79,6 @@ final class FleetCrews {
                 v.realDriver = false;
                 d.rig = null;
             } else {
-                if (w.city.cfg.mission >= 0) return null;
                 e = w.spawn(d.type, x, y);
                 if (e == null) return null;
                 e.nameSeed = d.nameSeed;
@@ -281,8 +280,6 @@ final class FleetCrews {
             if (w.release(d, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10) && hurt) d.hp *= 0.7f;
             return;
         }
-        // ((18.0) In a mission a driver nobody sent doesn't climb out as one more officer or soldier.)
-        if (w.city.cfg.mission >= 0) return;
         Entity e = w.spawn(d.type, v.x + (float) Math.cos(a) * 10, v.y + (float) Math.sin(a) * 10);
         if (e == null) return;
         e.nameSeed = d.nameSeed;

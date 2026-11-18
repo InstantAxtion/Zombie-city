@@ -48,3 +48,13 @@ check can be brought back if it's missed; the old suite is `tests/src/.../GameTe
   from the fight before is cleared).
 - Fire discipline: two soldiers and a row of four of the dead set out in front of them, not the alpha's horde, where
   one standing out ahead of the rest drew both guns.
+
+## Removed with the feature (28.2)
+
+- The "campaign" test (missions, budgets, objectives, mission difficulty, perks, veterans, the commander's tools, retake
+  the district) went with the campaign. Its sandbox checks are kept in "no campaign and no evacuation convoys": a
+  sandbox game is always Normal, nothing comes in by itself, the director's phases, a Hard save loads as Normal, the
+  score, no difficulty on New Game, and the last of the dead pointed out. Dropped from it: "the dead are tougher on
+  Hard" and "more score on Hard" (only missions were ever Hard).
+- "Every tool priced" and "a commander pays for wire, nests, barrages, flares and mines" (the mission prices are gone);
+  "every tool named and described" is kept.

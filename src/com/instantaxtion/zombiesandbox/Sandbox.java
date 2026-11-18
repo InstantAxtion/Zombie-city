@@ -96,8 +96,6 @@ final class Sandbox {
         w.city.tiles[i] = City.FENCE;
         w.city.solid[i] = true;
         w.city.solidChanged(i);
-        // ((21.0) A commander's sappers build them tougher.)
-        if (Perks.has(w, Perks.SAPPERS)) b[2] *= 1.5f;
         w.barriers.add(b);
         w.fieldTimer = 0;
         return b;

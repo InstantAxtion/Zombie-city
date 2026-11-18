@@ -351,8 +351,6 @@ final class War {
      * Guard (once): two trucks of guardsmen drive in from the edge of town to protect the civilians.
      */
     void callNationalGuard() {
-        // ((18.0) Not in a mission: the only help is what the commander pays for.)
-        if (w.city.cfg.mission >= 0) return;
         // (A Guard headquarters at the base: the governor doesn't wait so long.)
         City.Facility hq = w.city.mainBase();
         boolean local = hq != null && hq.baseType == City.BT_GUARD;

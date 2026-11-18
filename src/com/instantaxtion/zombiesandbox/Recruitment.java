@@ -58,7 +58,7 @@ final class Recruitment {
     }
 
     /**
-     * ((27.5) Once the emergency broadcast is out (and only in the sandbox: a mission has the force it's given), able
+     * ((27.5) Once the emergency broadcast is out able
      * adults sign up: a few each time round, at the nearest police station or army base with kit left to hand out and
      * none of the dead at its door. Ex-soldiers and hunters most of all; never the bitten, inmates, or those already
      * holding out in a survivor base or a safe zone. They come out a little later as police auxiliaries or army
@@ -69,7 +69,7 @@ final class Recruitment {
 
     void volunteers() {
         // ((28.0) Not once the city's fight is over, won or lost: they kept coming out of the stations for good after.)
-        if (!VOLUNTEERS || w.alert < 2 || w.city.cfg.mission >= 0 || w.peakZombies < 5 || w.warResult != 0) return;
+        if (!VOLUNTEERS || w.alert < 2 || w.peakZombies < 5 || w.warResult != 0) return;
         int about = 0, enlisting = 0;
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);

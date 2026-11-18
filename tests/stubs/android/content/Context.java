@@ -6,4 +6,6 @@ public class Context { public static final int MODE_PRIVATE=0; public static fin
  public SharedPreferences getSharedPreferences(String n,int m){ return new SharedPreferences(){
    public int getInt(String k,int d){Integer v=map.get(k);return v==null?d:v;}
    public String getString(String k,String d){String v=strings.get(k);return v==null?d:v;}
-   public Editor edit(){ return new Editor(){ public Editor putInt(String k,int v){map.put(k,v);return this;} public Editor putString(String k,String v){strings.put(k,v);return this;} public void apply(){} }; } }; } }
+   public boolean contains(String k){return map.containsKey(k)||strings.containsKey(k);}
+   public java.util.Map<String,?> getAll(){HashMap<String,Object> a=new HashMap<>(map);a.putAll(strings);return a;}
+   public Editor edit(){ return new Editor(){ public Editor putInt(String k,int v){map.put(k,v);return this;} public Editor putString(String k,String v){strings.put(k,v);return this;} public Editor remove(String k){map.remove(k);strings.remove(k);return this;} public void apply(){} }; } }; } }

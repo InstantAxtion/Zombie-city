@@ -164,18 +164,6 @@ final class GameAudio {
         later(0.9f + gv.rnd.nextFloat() * 0.3f, Sfx.SQUELCH, 0.3f);
     }
 
-    void missionSounds() {
-        if (!gv.commander()) {
-            gv.lastProgress = -1;
-            return;
-        }
-        int p = gv.world.zombiesKilled / 25;
-        if (gv.lastProgress >= 0 && p > gv.lastProgress && gv.world.missionResult == 0) gv.sound.play(Sfx.CHIME, 0.5f, 0);
-        gv.lastProgress = p;
-        if (gv.world.spent > gv.lastSpent && gv.world.spent - gv.lastSpent < 100000) gv.sound.play(Sfx.CASH, 0.55f, 0);
-        gv.lastSpent = gv.world.spent;
-    }
-
     /** In the menus: just the city's hum behind them, the rest faded. */
     void ambienceQuiet() {
         for (int l = 0; l < Sfx.LOOPS; l++)
