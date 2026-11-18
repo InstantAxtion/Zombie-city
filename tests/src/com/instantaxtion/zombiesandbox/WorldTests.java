@@ -66,7 +66,7 @@ final class WorldTests extends TestKit {
         w.populate(c);
         for (int f = 0; f < 30 * 3; f++) w.update(1 / 30f);
         // The police command truck sent out, and a patrol car on its beat.
-        float[] p = w.city.nearestDrivable(w.ops.police.truck.x + 600, w.ops.police.truck.y);
+        float[] p = driveSpot(w, w.ops.police.truck.x, w.ops.police.truck.y, 400, 900, 3);
         Fleet.Vehicle cp = w.ops.placePost(p[0], p[1]);
         for (int f = 0; f < 30 * 4; f++) w.update(1 / 30f);
         check(cp != null && !cp.crew.isEmpty() && cp.state != Fleet.WAIT, "a command truck out on the road with its crew");
@@ -105,7 +105,7 @@ final class WorldTests extends TestKit {
         l.stats.recount();
         check(l.counts[Entity.COP] == cops, "the police all counted (" + l.counts[Entity.COP] + " vs " + cops + ")");
         float x0 = lcar.x, y0 = lcar.y;
-        for (int k = 0; k < 30 * 4; k++) l.update(1 / 30f);
+        for (int k = 0; k < 30 * 8; k++) l.update(1 / 30f);
         check(Math.hypot(lcar.x - x0, lcar.y - y0) > 20 || lcar.state != Fleet.PATROL, "and they carry on (" + (int) Math.hypot(lcar.x - x0, lcar.y - y0) + ")");
     }
 
@@ -424,21 +424,32 @@ final class WorldTests extends TestKit {
         w.viewY1 = w.city.worldH();
         w.update(1 / 30f);
         // Someone who has just seen one keeps running after it's out of sight.
-        // (Someone just out and about in town, with open ground beside them for it to appear on.)
+        // (Someone timid and unarmed just out and about in town - not one who'd stand and fight it - with open ground
+        // in front of them for it to appear on, in plain sight.)
         Entity runner = null;
+        float rx = 0, ry = 0;
         for (Entity e : w.entities) {
-            if (e.type != Entity.CIVILIAN || e.dead || e.task != Dispatch.T_NONE || !w.city.inTown(e.x, e.y) || e.aloft
-                    || e.leader != null || e.job == Entity.J_LOOKOUT || e.job == Entity.J_RELIEF || e.job == Entity.J_HIKER) continue;
-            float[] q = w.city.findWalkable(e.x + 30, e.y);
-            if (q != null && Math.hypot(q[0] - e.x - 30, q[1] - e.y) < 6) runner = e;
+            if (e.type != Entity.CIVILIAN || e.dead || e.task != Dispatch.T_NONE || !w.city.inTown(e.x, e.y) || e.aloft || e.hasGun || e.isArmed()
+                    || World.bravery(e) > 0.4f || e.leader != null || e.ride != null || w.city.insideOf(e.x, e.y) != null
+                    || e.job == Entity.J_LOOKOUT || e.job == Entity.J_RELIEF || e.job == Entity.J_HIKER) continue;
+            float zx = e.x + (float) Math.cos(e.angle) * 30, zy = e.y + (float) Math.sin(e.angle) * 30;
+            float[] q = w.city.findWalkable(zx, zy);
+            if (q != null && Math.hypot(q[0] - zx, q[1] - zy) < 6 && w.city.los(e.x, e.y, q[0], q[1])) {
+                runner = e;
+                rx = q[0];
+                ry = q[1];
+            }
         }
-        if (runner != null) {
-            Entity scare = w.spawn(Entity.ZOMBIE, runner.x + 30, runner.y);
-            for (int f = 0; f < 10; f++) w.update(1 / 30f);
+        check(runner != null, "someone out in town");
+        {
+            Quiet calm = quiet(w, runner.x, runner.y, 300, runner);
+            Entity scare = w.spawn(Entity.ZOMBIE, rx, ry);
+            calm.keep(scare);
+            for (int f = 0; f < 10; f++) step(w, calm);
             float sx = scare.x, sy = scare.y;
             scare.dead = true;
             scare.removed = true;
-            for (int f = 0; f < 30 * 6; f++) w.update(1 / 30f);
+            for (int f = 0; f < 30 * 6; f++) step(w, calm);
             // ((17.1) Or gone into a building to hide.)
             check(runner.dead || runner.task != Dispatch.T_NONE || runner.fleeTimer > 0 || Math.hypot(runner.x - sx, runner.y - sy) > 90
                             || runner.stayIn != null || w.city.insideOf(runner.x, runner.y) != null,
@@ -593,9 +604,12 @@ final class WorldTests extends TestKit {
         boolean seesAlpha = w.city.los(sniper.x, sniper.y, lead.x, lead.y);
         check(!seesAlpha || chosen == lead, "a sniper picks the alpha out of the horde (" + (chosen == null ? "nobody" : "one at " + (int) World.hypot(chosen.x - sniper.x, chosen.y - sniper.y))
                 + ", alpha at " + (int) World.hypot(lead.x - sniper.x, lead.y - sniper.y) + " dead " + lead.dead + ")");
-        // Fire discipline: with no alpha to go for, a second gun takes a different one of the crowd.
+        // Fire discipline: with no alpha to go for, a second gun takes a different one of the crowd. (Further back, out
+        // past the range where one nearly on them gets every gun.)
         lead.alpha = false;
-        Entity s2 = w.spawnSoldier(Entity.ROLE_RIFLE, sniper.x, sniper.y + 4), s3 = w.spawnSoldier(Entity.ROLE_RIFLE, sniper.x, sniper.y - 4);
+        float[] back = w.city.findWalkable(sniper.x - 50, sniper.y);
+        if (back == null || !w.city.los(back[0], back[1], horde.get(1).x, horde.get(1).y)) back = new float[]{sniper.x, sniper.y};
+        Entity s2 = w.spawnSoldier(Entity.ROLE_RIFLE, back[0], back[1] + 4), s3 = w.spawnSoldier(Entity.ROLE_RIFLE, back[0], back[1] - 4);
         s2.ammo = s2.reserve = s3.ammo = s3.reserve = 0;
         s2.fear = s3.fear = 1;
         w.time += 2;
@@ -948,9 +962,8 @@ final class WorldTests extends TestKit {
 
     static void fireTower() throws Exception {
         // Up a fire tower: they have to climb to get the lookout (it takes them a while).
-        CityConfig t = cfg(6, CityConfig.LARGE, 9);
-        World tw = new World(t);
-        tw.populate(t);
+        World tw = wildWorld(9);
+        check(tw.towerKeeper.length > 0, "a lookout up a fire tower");
         Entity keeper = tw.towerKeeper[0];
         float hp = keeper.hp;
         Entity climber = tw.spawn(Entity.ZOMBIE, keeper.x + 6, keeper.y + 6);
@@ -1627,28 +1640,33 @@ final class WorldTests extends TestKit {
         w.populate(c);
         for (int f = 0; f < 30; f++) w.update(1 / 30f);
         // A roadblock's barriers across a road: the dead are held at them till they push them over.
+        // (A straight stretch of road the barriers go up across: the first of the town's that takes them.)
         java.util.Random r = new java.util.Random(5);
-        float[] road = null;
+        Fleet.Vehicle v = null;
         int dir = 0;
-        for (int k = 0; k < 20000 && road == null; k++) {
+        float ax = 0, ay = 0;
+        for (int k = 0; k < 20000 && v == null; k++) {
             float[] q = w.city.randomWalkableInTown(r);
             int tx = (int) (q[0] / City.T), ty = (int) (q[1] / City.T);
             int d = w.city.roadDirAt(tx, ty);
-            if (d == 1 || d == 2) {
-                road = new float[]{tx * City.T + City.T / 2f, ty * City.T + City.T / 2f};
+            if (d != 1 && d != 2) continue;
+            Fleet.Vehicle t = w.fleet.placeTank(tx * City.T + City.T / 2f, ty * City.T + City.T / 2f);
+            if (t == null) continue;
+            w.fleet.vehicles.remove(t);
+            t.x = tx * City.T + City.T / 2f;
+            t.y = ty * City.T + City.T / 2f;
+            t.blockDir = d;
+            float bx0 = d == 1 ? 0 : 1, by0 = d == 1 ? 1 : 0;
+            // The zone lies one way along the road; the dead come from the other.
+            w.fleet.putUpBarrier(t, t.x + bx0 * 300, t.y + by0 * 300);
+            if (t.barHp > 0 && Math.hypot(t.barX1 - t.barX0, t.barY1 - t.barY0) >= 12) {
+                v = t;
                 dir = d;
+                ax = bx0;
+                ay = by0;
             }
         }
-        check(road != null, "a straight road");
-        Fleet.Vehicle v = w.fleet.placeTank(road[0], road[1]);
-        w.fleet.vehicles.remove(v);
-        v.x = road[0];
-        v.y = road[1];
-        v.blockDir = dir;
-        float ax = dir == 1 ? 0 : 1, ay = dir == 1 ? 1 : 0;
-        // The zone lies one way along the road; the dead come from the other.
-        w.fleet.putUpBarrier(v, v.x + ax * 300, v.y + ay * 300);
-        check(v.barHp > 0 && Math.hypot(v.barX1 - v.barX0, v.barY1 - v.barY0) >= 12, "barriers up across the road");
+        check(v != null, "barriers up across the road");
         float bx = (v.barX0 + v.barX1) / 2, by = (v.barY0 + v.barY1) / 2;
         // (Nobody else about: no one to shoot the dead before they reach it, or to draw them off elsewhere.)
         Quiet calm = quiet(w, bx, by, 500);

@@ -1,0 +1,23 @@
+# tools/health.sh numbers, recorded 2026-11-18 on aae6a4a
+metropolis.vehicles_stuck_30s 189
+metropolis.overlap_pair_seconds 0.5
+metropolis.spins 41
+metropolis.idle_police_far_max 66
+metropolis.idle_police_far_mean 45.8
+metropolis.police_0s 938
+metropolis.police_60s 938
+metropolis.police_120s 937
+metropolis.response_trips 2
+metropolis.response_trip_mean_s 3.6
+metropolis.sim_ms_per_step 1.91
+archipelago.vehicles_stuck_30s 119
+archipelago.overlap_pair_seconds 1.6
+archipelago.spins 26
+archipelago.idle_police_far_max 58
+archipelago.idle_police_far_mean 41.4
+archipelago.police_0s 926
+archipelago.police_60s 926
+archipelago.police_120s 926
+archipelago.response_trips 4
+archipelago.response_trip_mean_s 4.8
+archipelago.sim_ms_per_step 1.74

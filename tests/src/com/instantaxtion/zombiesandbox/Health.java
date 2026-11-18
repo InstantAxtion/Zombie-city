@@ -70,16 +70,18 @@ final class Health {
         java.util.Random r = new java.util.Random(7);
         for (int f = 0; f < SECONDS * 30; f++) {
             if (f == OUTBREAK_AT * 30) {
-                // A small outbreak in town: half a dozen of the dead together.
-                float[] p = null;
-                for (int k = 0; k < 200 && p == null; k++) {
-                    float[] q = w.city.randomWalkableInTown(r);
-                    if (q != null && Math.hypot(q[0] - cx, q[1] - cy) < w.city.worldW() / 4f) p = q;
-                }
-                if (p == null) p = w.city.randomWalkableInTown(r);
-                for (int k = 0; k < 6; k++) {
-                    float[] q = w.city.findWalkable(p[0] + (k % 3) * 8, p[1] + (k / 3) * 8);
-                    if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                // A small outbreak in town: three packs of eight of the dead, one by the middle of the view.
+                for (int pack = 0; pack < 3; pack++) {
+                    float[] p = null;
+                    for (int k = 0; k < 200 && p == null; k++) {
+                        float[] q = w.city.randomWalkableInTown(r);
+                        if (q != null && Math.hypot(q[0] - cx, q[1] - cy) < (pack == 0 ? 300 : w.city.worldW() / 4f)) p = q;
+                    }
+                    if (p == null) p = w.city.randomWalkableInTown(r);
+                    for (int k = 0; k < 8; k++) {
+                        float[] q = w.city.findWalkable(p[0] + (k % 3) * 8, p[1] + (k / 3) * 8);
+                        if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
+                    }
                 }
                 w.recount();
             }
@@ -87,6 +89,9 @@ final class Health {
             w.update(DT);
             simNanos += System.nanoTime() - t0;
             w.evCount = 0;
+            if (f % 600 == 599 && System.getenv("HEALTH_DEBUG") != null)
+                System.err.println(name + " t=" + (int) w.time + " zombies " + w.zombies + " humans " + w.humans + " outbreak " + w.outbreak + " alert " + w.alert
+                        + " calls " + w.dispatch.incidents.size() + " killed " + w.zombiesKilled);
             if (f == 60 * 30 - 1) police[1] = policeNow(w);
             if (f == 120 * 30 - 1) police[2] = policeNow(w);
             List<Fleet.Vehicle> road = new ArrayList<Fleet.Vehicle>();

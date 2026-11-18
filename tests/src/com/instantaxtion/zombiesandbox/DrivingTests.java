@@ -52,7 +52,9 @@ final class DrivingTests extends TestKit {
     }
 
     static void junctions() throws Exception {
-        CityConfig c = cfg(CityConfig.TINY, 23);
+        // (A Small town, not a Tiny one: a whole police force on patrol in a Tiny town on map version 40 and later can jam
+        // solid - a size the game doesn't offer; the health check watches traffic at the Default size.)
+        CityConfig c = cfg(CityConfig.SMALL, 23);
         World w = new World(c);
         w.populate(c);
         // A minute of town traffic, police on patrol among it.
@@ -253,13 +255,28 @@ final class DrivingTests extends TestKit {
         apc.y = a[1];
         check(w.fleet.routing.route(apc, b[0], b[1]) && tilesTo(w, apc) <= tilesTo(w, car), "armour cares less (" + tilesTo(w, apc) + " tiles, the car " + tilesTo(w, car) + ")");
         // A car on the old line with the crowd just ahead of it, going somewhere past them: it plans round them.
-        int before = path[Math.max(0, n / 2 - 6)];
+        // (A hundred or so short of them on the way it planned, whatever the size of a tile or the bends in the way, and
+        // heading for somewhere well past them: the end of its way.)
+        int before = path[0];
+        float bestD = Float.MAX_VALUE;
+        for (int j = 0; j < n / 2; j++) {
+            float d = (float) Math.hypot((path[j] % w.city.w + 0.5f) * City.T - mx, (path[j] / w.city.w + 0.5f) * City.T - my);
+            if (Math.abs(d - 105) < bestD) {
+                bestD = Math.abs(d - 105);
+                before = path[j];
+            }
+        }
         Fleet.Vehicle cruiser = w.fleet.make(Fleet.CRUISER);
         cruiser.x = (before % w.city.w + 0.5f) * City.T;
         cruiser.y = (before / w.city.w + 0.5f) * City.T;
         cruiser.angle = (float) Math.atan2(my - cruiser.y, mx - cruiser.x);
-        cruiser.tx = b[0];
-        cruiser.ty = b[1];
+        int end = path[n - 1];
+        cruiser.tx = (end % w.city.w + 0.5f) * City.T;
+        cruiser.ty = (end / w.city.w + 0.5f) * City.T;
+        if (Math.hypot(cruiser.tx - mx, cruiser.ty - my) < 300) {
+            cruiser.tx = b[0];
+            cruiser.ty = b[1];
+        }
         check(w.fleet.driving.steerClear(cruiser) && w.fleet.driving.steered == 1, "the dead ahead: a new way round");
         // A wreck across the way: planned round it.
         int[] p3 = new int[4096];

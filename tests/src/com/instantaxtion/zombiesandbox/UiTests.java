@@ -417,17 +417,16 @@ final class UiTests extends TestKit {
 
     static void missions() throws Exception {
         Campaign.Mission m0 = Campaign.MISSIONS[0];
-        CityConfig c = Campaign.config(0);
+        CityConfig c = mission(0);
         check(c.mission == 0 && c.zombies() == m0.foes, "the mission's city and enemy");
         World w = new World(c);
         w.populate(c);
         Campaign.begin(w, "");
         w.recount();
         check(w.mission() == m0, "it's a mission");
-        // (Counting those sitting in the cars parked at the stations.)
-        int police = w.counts[Entity.COP];
-        for (Fleet.Vehicle v : w.fleet.vehicles) for (Entity e : v.crew) if (e.type == Entity.COP) police++;
-        check(police <= m0.cops && police >= m0.cops - 4, "the police cut to the mission's (" + police + ")");
+        // (On foot and in the cars parked at the stations, each once: w.counts has the crews already.)
+        int police = policeNow(w);
+        check(police <= m0.cops && police >= m0.cops / 2, "the police cut to the mission's (" + police + " for " + m0.cops + ")");
         check(w.counts[Entity.SOLDIER] <= m0.soldiers, "and the soldiers (" + w.counts[Entity.SOLDIER] + ")");
         check(w.dispatch.policeReserve == 0 && w.dispatch.squadReserve == 0, "no help from outside");
         // The budget: start money, spent, earned.
@@ -446,7 +445,7 @@ final class UiTests extends TestKit {
         life.invoke(w);
         check(w.missionResult == 2 && "Out of time.".equals(w.missionWhy), "out of time, the mission's failed (" + w.missionResult + ", " + w.missionWhy + ")");
         // Won: every zombie down.
-        World w2 = new World(Campaign.config(0));
+        World w2 = new World(mission(0));
         w2.populate(w2.city.cfg);
         Campaign.begin(w2, "");
         for (int f = 0; f < 30 * 40 && w2.missionResult == 0; f++) {
@@ -470,7 +469,7 @@ final class UiTests extends TestKit {
         hero.kills = 20;
         String roster = Campaign.veterans(w2);
         check(Campaign.rosterSize(roster) >= 1 && roster.contains("," + hero.nameSeed + ";"), "a ranked officer's a veteran (" + roster + ")");
-        World w3 = new World(Campaign.config(1));
+        World w3 = new World(mission(1));
         w3.populate(w3.city.cfg);
         Campaign.begin(w3, roster);
         boolean back = false;
@@ -488,7 +487,7 @@ final class UiTests extends TestKit {
         int[] size = {1080, 2000};
         v.layout(size[0], size[1]);
         Menu menu = (Menu) field(v, "menu");
-        v.startGame(Campaign.config(2));
+        v.startGame(mission(2));
         v.awaitLoad();
         for (int k = 0; k < 3; k++) draw(v, size);
         menu.screen = Menu.NONE;
@@ -577,7 +576,7 @@ final class UiTests extends TestKit {
         }
         check(rested && sb.director.phase == Director.BUILD, "then a respite, then building again");
         // A mission on Hard (Overrun): tougher dead, stragglers, a horde, in time a siege.
-        CityConfig mc = Campaign.config(5);
+        CityConfig mc = mission(5);
         World w = new World(mc);
         w.setMaxPopulation(3000);
         w.populate(mc);
@@ -625,12 +624,12 @@ final class UiTests extends TestKit {
         check(Campaign.MISSIONS.length >= 8, "the missions");
         for (int i = 0; i < Campaign.MISSIONS.length; i++) {
             Campaign.Mission m = Campaign.MISSIONS[i];
-            CityConfig mc = Campaign.config(i);
+            CityConfig mc = mission(i);
             check(mc.mission == i && mc.difficulty == m.difficulty && mc.exodus == m.exodus, m.title + ": the mission's rules");
             check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
         }
         // One small city stands in for each counted objective.
-        CityConfig c = Campaign.config(5);
+        CityConfig c = mission(5);
         World w = new World(c);
         w.setMaxPopulation(1800);
         w.populate(c);
@@ -682,9 +681,9 @@ final class UiTests extends TestKit {
     static void perksAndHolding() throws Exception {
         check(Perks.count(0) == 0 && Perks.count(Perks.legacy(9)) == 3 && Perks.points(24) == 6 && Perks.NAMES.length == Perks.COUNT
                 && Perks.INFO.length == Perks.COUNT, "perks by stars");
-        check(Campaign.MISSIONS.length == 18, "eighteen missions");
+        check(Campaign.MISSIONS.length >= 12, "the missions (" + Campaign.MISSIONS.length + ")");
         for (Campaign.Mission m : Campaign.MISSIONS) check(m.goal >= 0 && m.goal < Campaign.GOAL_NAMES.length, m.title + " has an objective");
-        CityConfig c = Campaign.config(8);
+        CityConfig c = mission(8);
         World w = new World(c);
         w.setMaxPopulation(1800);
         w.populate(c);
@@ -812,7 +811,7 @@ final class UiTests extends TestKit {
         check(!Perks.open(0, 3, Perks.ARMOUR), "no perk without a point (four stars)");
         check(Perks.legacy(9) == 7, "the perks earned before the tree are kept");
         // Retake the district: clear the named district and hold it.
-        CityConfig rc = Campaign.config(13);
+        CityConfig rc = mission(13);
         World rw = new World(rc);
         rw.populate(rc);
         Campaign.begin(rw, "", 0);

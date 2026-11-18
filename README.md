@@ -1073,10 +1073,24 @@ infected person glows green and turns within about 12–26 seconds, even if they
 
 ## Testing
 
-`./test.sh` runs the game on a desktop JVM (with small stand-ins for Android's classes in `tests/stubs`):
-it generates every map (and the classic map at every size), checks the new map features appear, runs a two-minute outbreak and the new
-zombies, units and events, tests army checkpoints, round-trips a save and draws every screen at phone
-and tablet sizes. The GitHub workflow runs it before building.
+`./test.sh` runs the game on a desktop JVM (with small stand-ins for Android's classes in `tests/stubs`): 25 tests,
+each a few parts, by area in `tests/src/.../MapTests`, `WorldTests`, `ForcesTests`, `DrivingTests` and `UiTests`
+(the shared set-ups in `TestKit`, the runner in `GameTests`). `./test.sh --list` lists them.
+
+- `FAST=1 ./test.sh` runs the fast tier (11 of the 25: maps, roads, saves, combat, police, backup, army, driving,
+  dispatch, every screen) - about two minutes with `SHARDS=3`; the full 25 take about four. Run the fast tier after
+  every merge and the full 25 before a release.
+- `./test.sh maps` runs the tests whose names start with "maps"; `PART=riverStreets ./test.sh maps` just that part.
+- Test cities are built with `TestKit.cfg(preset, size, seed)` on map version `TEST_CIVIC` (41), so a new map
+  version doesn't move them; scenarios clear bystanders round them with `quiet()`/`step()`. Every test should pass
+  with `ZC_SEED_SALT=101` and `202` as well as without (other dice for the simulation).
+- `tools/health.sh` plays two minutes of Metropolis and the Archipelago at the Default size (a small outbreak ten
+  seconds in) and counts stuck, overlapping and spinning vehicles, idle police far from a station, police numbers,
+  response trip times and simulation speed; it prints OK, or WARN against `tools/health_baseline.txt` (28.0).
+  `tools/health.sh --baseline` records a new baseline. Run it on every merge.
+- Checks dropped when the suite went from 95 tests to 25 are listed in `tests/DROPPED.md`.
+
+The GitHub workflow runs the fast tier and the health check on every push, and the full 25 on a manual run.
 
 ## Building
 

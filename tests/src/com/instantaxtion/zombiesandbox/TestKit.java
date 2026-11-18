@@ -152,11 +152,49 @@ abstract class TestKit {
         return cfg(CityConfig.METROPOLIS, size, seed);
     }
 
+    /** A campaign mission's city, on TEST_CIVIC like the rest. */
+    static CityConfig mission(int i) {
+        CityConfig c = Campaign.config(i);
+        c.civic = TEST_CIVIC;
+        return c;
+    }
+
     /** A world on that city, its people placed. */
     static World world(CityConfig c) {
         World w = new World(c);
         w.populate(c);
         return w;
+    }
+
+    /**
+     * A spot on the road between min and max from (x, y) that can be driven to from there: for sending a vehicle
+     * somewhere, rather than a fixed offset that may be water or a wall on another map.
+     */
+    static float[] driveSpot(World w, float x, float y, float min, float max, long seed) {
+        java.util.Random r = new java.util.Random(seed);
+        for (int k = 0; k < 600; k++) {
+            float[] q = w.city.randomStreetSpot(r);
+            if (q == null) continue;
+            q = w.city.nearestDrivable(q[0], q[1]);
+            if (q == null) continue;
+            double d = Math.hypot(q[0] - x, q[1] - y);
+            if (d >= min && d <= max && w.fleet.canDrive(x, y, q[0], q[1])) return q;
+        }
+        throw new AssertionError("no road " + (int) min + " to " + (int) max + " away to drive to");
+    }
+
+    /**
+     * A world out in the wilds: a ranger station and fire lookouts in the country round the town. The first seed from
+     * this one whose map has them (how the country round a town falls is the map's business, not the test's).
+     */
+    static World wildWorld(long seed) {
+        for (long s = seed; s < seed + 16; s++) {
+            CityConfig c = cfg(CityConfig.LARGE, s);
+            City city = new City(c, 0.1f);
+            if (city.fireTowers.isEmpty() || city.rangerStationName == null) continue;
+            return world(c);
+        }
+        throw new AssertionError("no map with a ranger station and fire towers");
     }
 
     /** Saved and loaded again. */
