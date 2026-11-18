@@ -20,11 +20,21 @@ final class Recruitment {
      * gaps. Each person decides for themselves: some sign up, most don't.
      */
     void recruitment() {
-        w.peakCops = Math.max(w.peakCops, w.counts[Entity.COP]);
-        w.peakSoldiers = Math.max(w.peakSoldiers, w.counts[Entity.SOLDIER]);
+        // ((28.0) The regulars only: volunteers lifted the peak, and every one of them lost was then made up with a
+        // sworn-in recruit as if an officer had fallen - more police on foot out of the stations for each auxiliary down.)
+        int volCops = 0, volSoldiers = 0;
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.role != Entity.ROLE_VOLUNTEER) continue;
+            if (e.type == Entity.COP) volCops++;
+            else if (e.type == Entity.SOLDIER) volSoldiers++;
+        }
+        int cops = Math.max(0, w.counts[Entity.COP] - volCops), soldiers = Math.max(0, w.counts[Entity.SOLDIER] - volSoldiers);
+        w.peakCops = Math.max(w.peakCops, cops);
+        w.peakSoldiers = Math.max(w.peakSoldiers, soldiers);
         if (w.peakZombies < 5) return;
-        w.policeDrive = drive(Entity.COP, City.FACILITY_POLICE, w.peakCops, w.policeDrive);
-        w.armyDrive = drive(Entity.SOLDIER, City.FACILITY_BASE, w.peakSoldiers, w.armyDrive);
+        w.policeDrive = drive(Entity.COP, City.FACILITY_POLICE, w.peakCops, cops, w.policeDrive);
+        w.armyDrive = drive(Entity.SOLDIER, City.FACILITY_BASE, w.peakSoldiers, soldiers, w.armyDrive);
         volunteers();
     }
 
@@ -32,7 +42,11 @@ final class Recruitment {
 
     /** Kit each station or base has for volunteers (vests and pistols, rifles and webbing): handed out once each. */
     private final java.util.HashMap<City.Facility, int[]> kitOut = new java.util.HashMap<City.Facility, int[]>();
-    /** No more than this many volunteers about at once, however many stations and bases there are. */
+    /**
+     * No more than this many volunteers about at once, however many stations and bases there are; ((28.0) and no more
+     * than this many sign up in the whole game: with the 27.5 cities' twenty-odd stations the kit alone let well over a
+     * hundred through, a fresh one for each that fell.)
+     */
     static final int MAX_VOLUNTEERS = 36;
 
     private int kitFor(City.Facility f) {
@@ -53,15 +67,21 @@ final class Recruitment {
     static final boolean VOLUNTEERS = !"off".equals(System.getProperty("zc.volunteers"));
 
     void volunteers() {
-        if (!VOLUNTEERS || w.alert < 2 || w.city.cfg.mission >= 0 || w.peakZombies < 5) return;
-        int about = 0;
+        // ((28.0) Not once the city's fight is over, won or lost: they kept coming out of the stations for good after.)
+        if (!VOLUNTEERS || w.alert < 2 || w.city.cfg.mission >= 0 || w.peakZombies < 5 || w.warResult != 0) return;
+        int about = 0, enlisting = 0;
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);
             if (e.dead) continue;
             if (e.role == Entity.ROLE_VOLUNTEER && (e.type == Entity.COP || e.type == Entity.SOLDIER)) about++;
-            else if (e.volunteering && e.task == Dispatch.T_ENLIST) about++;
+            else if (e.volunteering && e.task == Dispatch.T_ENLIST) {
+                about++;
+                enlisting++;
+            }
         }
-        if (about >= MAX_VOLUNTEERS) return;
+        // (About at once, and ever: those signed up so far and those on their way to.)
+        int ever = w.volunteersPolice + w.volunteersArmy + enlisting;
+        if (about >= MAX_VOLUNTEERS || ever >= MAX_VOLUNTEERS) return;
         ArrayList<City.Facility> open = new ArrayList<City.Facility>();
         for (City.Facility f : w.city.facilities) {
             if ((f.kind != City.FACILITY_POLICE && f.kind != City.FACILITY_BASE) || f.fed || f.fallen) continue;
@@ -82,7 +102,7 @@ final class Recruitment {
         }
         if (open.isEmpty()) return;
         // (A few asked each time round: those not far from somewhere open, not in danger, with nothing better to do.)
-        int asks = 6, room = MAX_VOLUNTEERS - about;
+        int asks = 6, room = MAX_VOLUNTEERS - Math.max(about, ever);
         for (int i = 0, n = w.entities.size(); i < n && asks > 0 && room > 0; i++) {
             Entity e = w.entities.get(i);
             if (e.dead || e.type != Entity.CIVILIAN || e.asked || e.infected || e.inmate || e.fleeTimer > 0 || e == w.controlled) continue;
@@ -119,13 +139,14 @@ final class Recruitment {
         }
     }
 
-    boolean drive(int type, int facilityKind, int peak, boolean active) {
+    boolean drive(int type, int facilityKind, int peak, int now, boolean active) {
         int enlisting = 0;
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);
-            if (e.task == Dispatch.T_ENLIST && e.enlistAt != null && e.enlistAt.kind == facilityKind) enlisting++;
+            // ((28.0) Not the volunteers on their way: they aren't making up for anyone.)
+            if (e.task == Dispatch.T_ENLIST && e.enlistAt != null && e.enlistAt.kind == facilityKind && !e.volunteering) enlisting++;
         }
-        int missing = peak - w.counts[type] - enlisting;
+        int missing = peak - now - enlisting;
         if (missing <= 0) return enlisting > 0 && active;
         // Recruiting only happens where it's safe.
         City.Facility office = null;
@@ -136,7 +157,7 @@ final class Recruitment {
             }
         if (office == null) return active;
         if (!active) {
-            int lost = peak - w.counts[type];
+            int lost = peak - now;
             if (type == Entity.COP)
                 w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: We've lost " + lost + (lost == 1 ? " officer" : " officers")
                         + ". Any civilians willing to serve, report to " + office.name + " to be sworn in.", office.x, office.y);
@@ -366,6 +387,13 @@ final class Recruitment {
             r.kills = e.kills;
             w.population.applyRole(r, Entity.ROLE_VOLUNTEER);
             r.signedUpAt = f;
+            // ((28.0) And posted there: they hold the station or base they signed up at (fighting from it, and sent on
+            // from it by a call like anyone posted). They had no orders at all, and walked off across the city on their
+            // own - police on foot turning up anywhere, nobody had sent them.)
+            float[] p = !w.city.solidAt(sx, sy) ? new float[]{sx, sy} : w.city.findWalkable(e.x, e.y);
+            r.task = Dispatch.T_POST;
+            r.postX = p != null ? p[0] : e.x;
+            r.postY = p != null ? p[1] : e.y;
             if (type == Entity.COP) w.volunteersPolice++;
             else w.volunteersArmy++;
         }
