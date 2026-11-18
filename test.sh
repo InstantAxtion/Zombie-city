@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 rm -rf build/test
 mkdir -p build/test
 javac -nowarn -encoding UTF-8 -d build/test $(find tests/stubs tests/src -name '*.java') \
-    $(find src -name '*.java' ! -name MainActivity.java ! -name Sound.java) 2>&1 | grep -v '^Note:' || true
+    $(find src -name '*.java' ! -name MainActivity.java ! -name Sound.java) 2>&1 | grep -v -e '^Note:' -e '^Picked up JAVA_TOOL_OPTIONS' || true
 [ -f build/test/com/instantaxtion/zombiesandbox/GameTests.class ] || { echo "compile failed"; exit 1; }
 run() { java -Djava.awt.headless=true -Xmx2g -cp build/test com.instantaxtion.zombiesandbox.GameTests "$@" 2>&1 | grep --line-buffered -v '^Picked up JAVA_TOOL_OPTIONS'; }
 if [ "${1:-}" = "--list" ]; then

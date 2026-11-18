@@ -1078,7 +1078,7 @@ each a few parts, by area in `tests/src/.../MapTests`, `WorldTests`, `ForcesTest
 (the shared set-ups in `TestKit`, the runner in `GameTests`). `./test.sh --list` lists them.
 
 - `FAST=1 ./test.sh` runs the fast tier (11 of the 25: maps, roads, saves, combat, police, backup, army, driving,
-  dispatch, every screen) - about two minutes with `SHARDS=3`; the full 25 take about four. Run the fast tier after
+  dispatch, every screen) - about two and a half minutes with `SHARDS=3`; the full 25 take under four. Run the fast tier after
   every merge and the full 25 before a release.
 - `./test.sh maps` runs the tests whose names start with "maps"; `PART=riverStreets ./test.sh maps` just that part.
 - Test cities are built with `TestKit.cfg(preset, size, seed)` on map version `TEST_CIVIC` (41), so a new map

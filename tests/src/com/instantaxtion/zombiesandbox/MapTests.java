@@ -6,7 +6,7 @@ import java.lang.reflect.Field;
 /** Map generation: every preset and size, the 28.0 maps, islands and rivers, roads and routes, buildings. */
 final class MapTests extends TestKit {
     static void register() {
-        test("maps: every map builds, at every size, each with an army base; four seeds, four different cities", FAST, 25, MapTests.class,
+        test("maps: every map builds, the classic map at every size, the themed maps with an army base; every city its own", FAST, 25, MapTests.class,
                 "everyMapBuilds", "sizesAndOldSizes", "everyCityItsOwn");
         test("maps: the nine 28.0 maps - each its own place, one road network, base and police on it", FAST, 10, MapTests.class,
                 "crossroadsCanyonFrozen", "bridgeSwampLighthouse", "airbaseBorderStadium");
@@ -19,7 +19,8 @@ final class MapTests extends TestKit {
     }
 
     static void everyMapBuilds() throws Exception {
-        // Every map at the smallest size; the classic map at every size. (Island maps at Tiny too, not the one size the game gives them: it's whether they build.)
+        // Every map at the smallest size; the classic map at every size. (Island maps at Tiny too, not the one size the
+        // game gives them: it's whether they build.)
         for (int p = 0; p < CityConfig.PRESETS.length + 5; p++) {
             // (Maps taken out of the game don't build.)
             if (p < CityConfig.PRESETS.length && CityConfig.removed(p)) continue;

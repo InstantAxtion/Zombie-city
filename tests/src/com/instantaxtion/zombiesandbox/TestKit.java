@@ -197,16 +197,6 @@ abstract class TestKit {
         throw new AssertionError("no map with a ranger station and fire towers");
     }
 
-    /** Saved and loaded again. */
-    static World reload(World w) throws Exception {
-        File f = File.createTempFile("zct", ".dat");
-        try {
-            SaveGame.save(w, f);
-            return SaveGame.load(f);
-        } finally {
-            f.delete();
-        }
-    }
 
     /**
      * The roads and lanes joined up (cars cross lots and parked cars): for each tile the piece of road it's on, or -1;
@@ -406,7 +396,6 @@ abstract class TestKit {
         e.vx = e.vy = 0;
     }
 
-    /** A test's zombie that stays where it's put and can't be finished off (call each step). */
     /** ((27.4) How many tiles a vehicle's route takes it, start to finish. */
     static int tilesTo(World w, Fleet.Vehicle v) {
         int t = w.city.tileIndex(v.x, v.y), n = 0;
@@ -433,6 +422,7 @@ abstract class TestKit {
         return c;
     }
 
+    /** A test's zombie that stays where it's put and can't be finished off (call each step). */
     static void untouchable(Entity z) {
         z.speed = z.runSpeed = 0;
         z.vx = z.vy = 0;

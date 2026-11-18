@@ -12,7 +12,7 @@ mkdir -p build/health
 rm -rf build/health/classes
 mkdir -p build/health/classes
 javac -nowarn -encoding UTF-8 -d build/health/classes $(find tests/stubs tests/src -name '*.java') \
-    $(find src -name '*.java' ! -name MainActivity.java ! -name Sound.java) 2>&1 | grep -v '^Note:' || true
+    $(find src -name '*.java' ! -name MainActivity.java ! -name Sound.java) 2>&1 | grep -v -e '^Note:' -e '^Picked up JAVA_TOOL_OPTIONS' || true
 [ -f build/health/classes/com/instantaxtion/zombiesandbox/Health.class ] || { echo "compile failed"; exit 1; }
 java -Djava.awt.headless=true -Xmx3g -cp build/health/classes com.instantaxtion.zombiesandbox.Health run build/health/health.txt 2>&1 \
     | grep -v '^Picked up JAVA_TOOL_OPTIONS'

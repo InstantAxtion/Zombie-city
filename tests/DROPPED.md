@@ -16,7 +16,6 @@ check can be brought back if it's missed; the old suite is `tests/src/.../GameTe
 - "saves load back the same" as a test of its own run after the busy outbreak (testAfter): folded into one part,
   `busyOutbreakSaves`, which builds the outbreak and saves it.
 
-
 ## Loosened (to what the feature promises, not one seed's count)
 
 - 22.4: exactly 297 landmark designs -> at least 250 (every one still has to paint inside its block).
