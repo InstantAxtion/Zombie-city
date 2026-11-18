@@ -18,6 +18,11 @@ final class PatchNotes {
                     "Bridge City: many small islands in a bay, joined by long bridges.",
                     "Swamp Bayou: stilt houses and boardwalks on a bayou, linked by causeways.",
                     "Lighthouse Coast: villages along a cliff road, a harbour town and a lighthouse.",
+                    "Island maps get their full share of police stations (Theme Park Island often had one).",
+                    "Stations, bases and the FBI office are named from further out.",
+                    "Outside police backup comes four to a car and spreads out round the call instead of piling up.",
+                    "Cars no longer drive into each other.",
+                    "Police start at the city's stations and in their cars; volunteers stay at their station and stop at 36.",
             },
             {
                     "27.5  -  Every city its own",
