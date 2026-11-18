@@ -171,10 +171,15 @@ final class Population {
             }
         }
         int copsAtStations = stations > 0 ? cops - aboard : 0;
+        // ((28.0) A country town's station keeps four of its own in (a car's crew seated, two more inside); the rest are at
+        // the city's precincts. Each had an equal share before - and the 27.5 cities, a corner or two of them left as
+        // country, have half a dozen such towns: a third of the force stood about in the hamlets out in the fields.)
+        int sats = stations - town, satEach = cfg.civic >= 40 && town > 0 ? Math.min(4, copsAtStations / stations) : -1;
+        int inTown = satEach >= 0 ? copsAtStations - sats * satEach : copsAtStations, shares = satEach >= 0 ? town : stations;
         int k = 0;
         for (City.Facility f : w.city.facilities) {
             if (f.kind != City.FACILITY_POLICE || f.fed) continue;
-            int n = copsAtStations / stations + (k++ < copsAtStations % stations ? 1 : 0);
+            int n = satEach >= 0 && f.satellite ? satEach : inTown / shares + (k++ < inTown % shares ? 1 : 0);
             for (int i = 0; i < n; i++) spawn(Entity.COP, f.x + w.rnd.nextFloat() * 40 - 20, f.y + w.rnd.nextFloat() * 40 - 20);
         }
         spawnRandom(Entity.COP, cops - copsAtStations - aboard);
@@ -787,6 +792,14 @@ final class Population {
             if (f.fallen) continue;
             if (f.kind == City.FACILITY_POLICE) pol.add(f);
             else if (f.kind == City.FACILITY_BASE) bases.add(f);
+        }
+        // ((28.0) The city's precincts first: the country towns' stations came first in the list, and the SWAT teams and
+        // riot squads all stood by out at the hamlets.)
+        if (w.city.cfg.civic >= 40) {
+            ArrayList<City.Facility> sorted = new ArrayList<City.Facility>();
+            for (City.Facility f : pol) if (!f.satellite && !f.fed) sorted.add(f);
+            for (City.Facility f : pol) if (f.satellite || f.fed) sorted.add(f);
+            pol = sorted;
         }
         if (!pol.isEmpty()) {
             int have = 0, riot = 0;

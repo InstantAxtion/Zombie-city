@@ -21,7 +21,8 @@ final class SaveGame {
     // ((27.4) 79: the vehicles themselves (VehicleSave), at the very end.)
     // ((27.5) 80: the calls going on (CallSave), after the vehicles.)
     // ((27.5) 81: each base's raiding (raider base, ground cleared, raids, hold-ups, bases robbed), after the calls.)
-    private static final int VERSION = 81;
+    // ((28.0) 82: how many have volunteered so far, police and army, after the raiding (the cap is for the whole game).)
+    private static final int VERSION = 82;
 
     private SaveGame() {
     }
@@ -530,6 +531,9 @@ final class SaveGame {
                 out.writeInt(s.robbed);
                 out.writeInt(s.struck);
             }
+            // ((28.0) Version 82: the volunteers so far.)
+            out.writeInt(w.volunteersPolice);
+            out.writeInt(w.volunteersArmy);
         } finally {
             moved = null;
             homeIndex = null;
@@ -1221,7 +1225,18 @@ final class SaveGame {
                         s.struck = struck;
                     }
                 }
+                if (version >= 82) {
+                    w.volunteersPolice = in.readInt();
+                    w.volunteersArmy = in.readInt();
+                }
             }
+            // ((28.0) An older save: at least those still about have volunteered.)
+            if (version < 82)
+                for (Entity e : w.entities)
+                    if (!e.dead && e.role == Entity.ROLE_VOLUNTEER) {
+                        if (e.type == Entity.COP) w.volunteersPolice++;
+                        else if (e.type == Entity.SOLDIER) w.volunteersArmy++;
+                    }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;

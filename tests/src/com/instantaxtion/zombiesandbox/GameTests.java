@@ -5818,6 +5818,71 @@ public final class GameTests {
                 check(l.counts[Entity.ARMOURED] == w.counts[Entity.ARMOURED] && l.counts[Entity.ARMOURED] >= 1 && Entity.current(Entity.SCREAMER) == Entity.ZOMBIE, "kept in a save; a screamer in an older save loads as a zombie");
             }
         });
+        test("28.0: police start at their stations and in their cars", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.MASSIVE;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 280; // (five country towns with a station of their own)
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // At the start: aboard a car, at a station, or on a post (traffic officers) - nobody loose on foot.
+                int aboard = 0, loose = 0, total = policeNow(w);
+                for (Fleet.Vehicle v : w.fleet.vehicles) for (Entity e : v.crew) if (e.type == Entity.COP) aboard++;
+                for (Entity e : w.entities)
+                    if (!e.dead && e.type == Entity.COP && e.agency != 3 && e.task == Dispatch.T_NONE && stationDist(w, e) > 300) loose++;
+                check(aboard > total / 2 && loose == 0, "in their cars and at their stations (" + aboard + " of " + total + " aboard, " + loose + " loose)");
+                // Most of those on foot at the city's precincts, the special units among them; a country town's station keeps a few.
+                int sats = 0, atSats = 0, special = 0;
+                for (City.Facility f : w.city.facilities) {
+                    if (f.kind != City.FACILITY_POLICE || !f.satellite) continue;
+                    sats++;
+                    for (Entity e : w.entities) {
+                        if (e.dead || e.type != Entity.COP || World.hypot(e.x - f.x, e.y - f.y) > f.r) continue;
+                        atSats++;
+                        if (e.role == Entity.ROLE_SWAT || e.role == Entity.ROLE_RIOT) special++;
+                    }
+                }
+                check(sats > 0 && atSats <= sats * 6 && special == 0, "a few at each country town's station, no SWAT or riot squads ("
+                        + atSats + " at " + sats + ", " + special + " special)");
+                // After the broadcast: volunteers sign up, are posted at the station or base they signed up at, and no
+                // more than the cap ever do, however many are lost. Nor is each one lost made up with another recruit.
+                w.outbreak = true;
+                w.peakZombies = 10;
+                int most = total;
+                for (int round = 0; round < 6; round++) {
+                    for (int k = 0; k < 10; k++) {
+                        w.alert = 2;
+                        w.recruiting.volunteers();
+                    }
+                    for (int f = 0; f < 30 * 20; f++) {
+                        w.alert = 2;
+                        w.warResult = 0;
+                        for (Entity e : w.entities)
+                            if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST && e.enlistAt != null) {
+                                e.x = e.enlistAt.x;
+                                e.y = e.enlistAt.y;
+                            }
+                        w.update(1 / 30f);
+                        if (f % 30 == 0) most = Math.max(most, policeNow(w));
+                    }
+                    int vols = 0, posted = 0;
+                    for (Entity e : w.entities) {
+                        if (e.dead || e.role != Entity.ROLE_VOLUNTEER || e.signedUpAt == null) continue;
+                        vols++;
+                        if (e.task == Dispatch.T_POST && World.hypot(e.postX - e.signedUpAt.x, e.postY - e.signedUpAt.y) < e.signedUpAt.r + 20
+                                && World.hypot(e.x - e.signedUpAt.x, e.y - e.signedUpAt.y) < e.signedUpAt.r + 60) posted++;
+                    }
+                    check(posted == vols, "volunteers posted at their station or base (" + posted + " of " + vols + ")");
+                    // Every one of them lost.
+                    for (Entity e : w.entities) if (e.role == Entity.ROLE_VOLUNTEER) e.dead = e.removed = true;
+                }
+                int ever = w.volunteersPolice + w.volunteersArmy;
+                check(ever > 0 && ever <= Recruitment.MAX_VOLUNTEERS, "volunteers capped for the game (" + ever + ")");
+                check(most <= total + Recruitment.MAX_VOLUNTEERS && w.recruits <= 4, "the police stay bounded (" + total + " -> most " + most + ", recruits " + w.recruits + ")");
+            }
+        });
         test("28.0: Highway Crossroads, Canyon Town and Frozen North - each its own place, one road network, base and police on it", new Check() {
             public void run() throws Exception {
                 for (int preset : new int[]{CityConfig.CROSSROADS, CityConfig.CANYON, CityConfig.FROZEN_NORTH})
@@ -6737,6 +6802,25 @@ public final class GameTests {
         });
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
+    }
+
+    /** ((28.0) Police alive on the map and aboard its vehicles (crews and riders). */
+    private static int policeNow(World w) {
+        int n = 0;
+        for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP) n++;
+        for (Fleet.Vehicle v : w.fleet.vehicles) {
+            for (Entity e : v.crew) if (e.type == Entity.COP) n++;
+            for (Entity e : v.riders) if (e.type == Entity.COP) n++;
+        }
+        return n;
+    }
+
+    /** ((28.0) How far someone is from the nearest police station. */
+    private static float stationDist(World w, Entity e) {
+        float best = Float.MAX_VALUE;
+        for (City.Facility f : w.city.facilities)
+            if (f.kind == City.FACILITY_POLICE) best = Math.min(best, (float) World.hypot(e.x - f.x, e.y - f.y));
+        return best;
     }
 
     /** How far it is along a walking route's corners from (sx, sy). */
