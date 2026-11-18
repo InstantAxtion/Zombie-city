@@ -18,25 +18,36 @@ def attr = { String name ->
     m.group(1)
 }
 def gradleManifest = layout.buildDirectory.file('manifest/AndroidManifest.xml').get().asFile
-gradleManifest.parentFile.mkdirs()
-def stripped = manifestText.replaceFirst(/\s+package="[^"]*"/, '').replaceFirst(/(?s)\s*<uses-sdk[^>]*\/>/, '')
-if (!gradleManifest.exists() || gradleManifest.getText('UTF-8') != stripped) gradleManifest.setText(stripped, 'UTF-8')
+def writeGradleManifest = {
+    def stripped = manifestFile.getText('UTF-8').replaceFirst(/\s+package="[^"]*"/, '').replaceFirst(/(?s)\s*<uses-sdk[^>]*\/>/, '')
+    gradleManifest.parentFile.mkdirs()
+    if (!gradleManifest.exists() || gradleManifest.getText('UTF-8') != stripped) gradleManifest.setText(stripped, 'UTF-8')
+}
+// (Written now, for Android Studio's sync, and again before every build, as clean deletes it.)
+writeGradleManifest()
+def stripManifest = tasks.register('stripManifest') {
+    description = 'Copies AndroidManifest.xml without package and <uses-sdk> for the Android Gradle plugin.'
+    inputs.file(manifestFile)
+    outputs.file(gradleManifest)
+    doLast { writeGradleManifest() }
+}
+tasks.named('preBuild') { dependsOn(stripManifest) }
 
 android {
-    namespace 'com.instantaxtion.zombiesandbox'
-    compileSdk 34
+    namespace = 'com.instantaxtion.zombiesandbox'
+    compileSdk = 34
 
     defaultConfig {
-        applicationId 'com.instantaxtion.zombiesandbox'
-        minSdk attr('minSdkVersion') as int
-        targetSdk attr('targetSdkVersion') as int
-        versionCode attr('versionCode') as int
-        versionName attr('versionName')
+        applicationId = 'com.instantaxtion.zombiesandbox'
+        minSdk = attr('minSdkVersion') as int
+        targetSdk = attr('targetSdkVersion') as int
+        versionCode = attr('versionCode') as int
+        versionName = attr('versionName')
     }
 
     sourceSets {
         main {
-            manifest.srcFile gradleManifest
+            manifest.srcFile(gradleManifest)
             java.srcDirs = ['src']
             res.srcDirs = ['res']
         }
@@ -45,34 +56,34 @@ android {
     // The same key as build.sh, so an APK from either installs over the other.
     signingConfigs {
         shared {
-            storeFile file('keystore/debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            storeFile = file('keystore/debug.keystore')
+            storePassword = 'android'
+            keyAlias = 'androiddebugkey'
+            keyPassword = 'android'
         }
     }
 
     buildTypes {
         debug {
-            signingConfig signingConfigs.shared
+            signingConfig = signingConfigs.shared
         }
         release {
-            signingConfig signingConfigs.shared
+            signingConfig = signingConfigs.shared
             // No R8: saved games read some classes' fields by name (VehicleSave), which renaming would break, and
             // the game has no libraries for shrinking to cut.
-            minifyEnabled false
+            minifyEnabled = false
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     lint {
         // Lint is there to read in Android Studio; it doesn't stop a build.
-        abortOnError false
-        checkReleaseBuilds false
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 
