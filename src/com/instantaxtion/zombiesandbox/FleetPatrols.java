@@ -684,6 +684,11 @@ final class FleetPatrols {
             v.stuckTimer = 0;
             fleet.routing.newDestination(v);
             if (stuck && v.field != null && Math.abs(v.speed) < 6) fleet.driving.backOutIfBehind(v);
+        } else if (v.destCd <= 0 && Math.abs(v.tx - v.x) < 90 && Math.abs(v.ty - v.y) < 90 && World.hypot(v.tx - v.x, v.ty - v.y) < 90) {
+            // ((28.0) Nearly there on its rounds - a spot picked anywhere on the road, nowhere it has to be: on to the next
+            // while it's still driving, on ahead. Driven right to it, the last tile often lay across the road or round
+            // the corner it was turning, and it went round in a tight circle for it.)
+            fleet.routing.newDestination(v);
         } else if (v.orbited) {
             // ((11.5) Gone round in a circle - a turn too tight for it off a wide road - on its rounds: somewhere else
             // instead, rather than round the block again and again.)

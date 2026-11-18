@@ -5517,6 +5517,89 @@ public final class GameTests {
                 check(stopped == 0, "no empty car left in a junction (" + stopped + ")");
             }
         });
+        test("28.0: patrol cars don't spin in place", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.set(CityConfig.OPT_PRESET, CityConfig.ARCHIPELAGO);
+                c.seed = 1;
+                World w = new World(c);
+                City city = w.city;
+                // Two streets side by side with a strip of grass between them (no boulevard's one-way sides): a car's lane
+                // is on its own street, never across the grass.
+                int strips = 0, across = 0;
+                for (int y = 2; y < city.h - 2; y++)
+                    for (int x = 2; x < city.w - 2; x++) {
+                        if (city.tiles[y * city.w + x] != City.ROAD || (city.divided != null && city.divided[y * city.w + x] != 0)
+                                || city.junctionAt(x, y) || city.hwyTile(x, y)) continue;
+                        for (int d = 0; d < 4; d++) {
+                            int dx = d == 0 ? 1 : d == 1 ? -1 : 0, dy = d == 2 ? 1 : d == 3 ? -1 : 0;
+                            boolean strip = false;
+                            for (int s = -3; s <= 3; s++)
+                                if (city.isMedian(x - dy * s, y + dx * s) && city.paved(x - dy * (s + Integer.signum(s)), y + dx * (s + Integer.signum(s)))) strip = true;
+                            if (!strip) continue;
+                            strips++;
+                            float off = city.laneOffset(x, y, dx, dy, 1);
+                            for (float f = 0; f <= 1.001f; f += 0.125f) {
+                                int i = city.tileIndex((x + 0.5f) * City.T - dy * off * f, (y + 0.5f) * City.T + dx * off * f);
+                                if (city.tiles[i] != City.ROAD && city.tiles[i] != City.CAR) {
+                                    across++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                check(strips > 100 && across == 0, "lanes beside a grass strip stay on their own street (" + across + " of " + strips + " across it)");
+                // Forty seconds of a normal game: no patrol car turns a full circle on the spot (more than 300 degrees inside
+                // 40 px in under 8 s). There were sixty-odd.
+                w.populate(c);
+                java.util.Map<Fleet.Vehicle, float[]> hist = new java.util.IdentityHashMap<Fleet.Vehicle, float[]>();
+                final int N = 80;
+                int spins = 0;
+                for (int f = 0; f < 30 * 40; f++) {
+                    w.update(1 / 30f);
+                    w.evCount = 0;
+                    if (f % 3 != 0) continue;
+                    for (Fleet.Vehicle v : w.fleet.vehicles) {
+                        if (v.removedFromFleet || Fleet.offRoad(v) || !v.patrol) continue;
+                        // [0] count, [1] unwrapped angle, [2] last raw angle, [3] cooldown, then x, y, angle per sample.
+                        float[] h = hist.get(v);
+                        if (h == null) {
+                            hist.put(v, h = new float[4 + N * 3]);
+                            h[1] = h[2] = v.angle;
+                        }
+                        float da = v.angle - h[2];
+                        while (da > Math.PI) da -= 2 * Math.PI;
+                        while (da < -Math.PI) da += 2 * Math.PI;
+                        h[1] += da;
+                        h[2] = v.angle;
+                        int n = (int) h[0], at = 4 + (n % N) * 3;
+                        h[at] = v.x;
+                        h[at + 1] = v.y;
+                        h[at + 2] = h[1];
+                        h[0] = ++n;
+                        if (h[3] > 0) {
+                            h[3]--;
+                            continue;
+                        }
+                        float minX = v.x, maxX = v.x, minY = v.y, maxY = v.y;
+                        for (int k = 1; k < Math.min(n, N); k++) {
+                            int b = 4 + ((n - 1 - k) % N) * 3;
+                            minX = Math.min(minX, h[b]);
+                            maxX = Math.max(maxX, h[b]);
+                            minY = Math.min(minY, h[b + 1]);
+                            maxY = Math.max(maxY, h[b + 1]);
+                            if (maxX - minX > 80 || maxY - minY > 80) break;
+                            if (Math.abs(h[1] - h[b + 2]) > Math.toRadians(300)) {
+                                spins++;
+                                h[3] = N;
+                                break;
+                            }
+                        }
+                    }
+                }
+                check(spins <= 20, "patrol cars don't turn circles on the spot (" + spins + " in 40 s)");
+            }
+        });
         test("27.5: junctions don't lock up", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();

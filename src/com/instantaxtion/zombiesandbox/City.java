@@ -2922,9 +2922,16 @@ final class City {
     int hazGw, hazGh, hazCell = 4, hazMul = 100, hazTx = -99, hazTy = -99, hazR;
     final int[] blockT = new int[4];
     int blockN;
+    /**
+     * ((28.0) Tiles this one search may not step onto at all, exactly (not the tiles round them): the road right behind a
+     * vehicle on the move, so its way starts on ahead (see FleetRouting.noTurningBack).
+     */
+    final int[] noGo = new int[16];
+    int noGoN;
 
     /** ((27.4) What stepping onto tile n costs over and above the road for this search; -1 if it's blocked. */
     int hazard(int n) {
+        for (int i = 0; i < noGoN; i++) if (noGo[i] == n) return -1;
         int x = n % w, y = n / w;
         for (int i = 0; i < blockN; i++) {
             int b = blockT[i];
@@ -2987,7 +2994,7 @@ final class City {
         }
         boolean aim = from >= 0;
         // ((27.4) The dead or a blockage to keep out of, for this search.)
-        boolean haz = hazZ != null || blockN > 0;
+        boolean haz = hazZ != null || blockN > 0 || noGoN > 0;
         int s0 = tileIndex(p[0], p[1]);
         dist[s0] = 0;
         dfTouch(s0);
@@ -3482,19 +3489,24 @@ final class City {
         if (slipWay != null && slipWay[ty * w + tx] > 0) return 0;
         int rx = -dy, ry = dx;
         int right = 0, left = 0;
+        // ((28.0) Across a median only on a boulevard whose sides are one way each (divided): there the far side is the
+        // other half of the same road. Two streets side by side with a strip of grass between them are two roads, each
+        // two way: a route along the near one going the far one's way had its lane put over on the far one, and the car
+        // drove across the grass to it - and back, as the route pulled it home: the patrol cars turning circles.)
+        boolean oneRoad = divided != null && divided[ty * w + tx] != 0;
         // (The highway is a road of its own: a frontage road beside it doesn't count its lanes as its own.)
         for (int s = 1; s <= 6; s++) {
             int x = tx + rx * s, y = ty + ry * s;
             if (hwyTile(x, y)) break;
             if (paved(x, y)) right = s;
-            else if (isMedian(x, y) && paved(x + rx, y + ry) && !hwyTile(x + rx, y + ry)) continue;
+            else if (oneRoad && isMedian(x, y) && paved(x + rx, y + ry) && !hwyTile(x + rx, y + ry)) continue;
             else break;
         }
         for (int s = 1; s <= 6; s++) {
             int x = tx - rx * s, y = ty - ry * s;
             if (hwyTile(x, y)) break;
             if (paved(x, y)) left = s;
-            else if (isMedian(x, y) && paved(x - rx, y - ry) && !hwyTile(x - rx, y - ry)) continue;
+            else if (oneRoad && isMedian(x, y) && paved(x - rx, y - ry) && !hwyTile(x - rx, y - ry)) continue;
             else break;
         }
         float centre = (right - left) / 2f, half = (right + left + 1) / 2f;
