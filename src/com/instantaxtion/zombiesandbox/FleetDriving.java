@@ -69,8 +69,17 @@ final class FleetDriving {
 
     /** Arrived at a scene: pull in to the kerb, nose angled in, rather than stopping in the middle of the lane. */
     void kerbAtScene(Vehicle v, float dt) {
+        // ((28.0) Still in a junction box (nowhere free off it last time, or shoved into it since): another look every
+        // couple of seconds.)
+        if (v.kerbed && !v.pulling && v.player == null && (int) (v.anim * 0.5f) != (int) ((v.anim - dt) * 0.5f)
+                && city.junctionIdAt(v.x, v.y) >= 0) offLane(v);
         if (!v.kerbed) {
             v.kerbed = true;
+            v.pullOff = false;
+            // ((28.0) Stopped in a junction (or, help from outside, in the middle of a wide road): off the lane - the
+            // kerb of a street off it, a parking lot, the verge. Left in the box, it blocked the junction for everyone,
+            // and the next car in for the call stopped behind it, and the next.)
+            if (city.junctionIdAt(v.x, v.y) >= 0) offLane(v);
             float nx = (float) -Math.sin(v.angle), ny = (float) Math.cos(v.angle);
             int hand = 1;
             for (float s = 4; s <= 22; s += 3) {
@@ -87,18 +96,85 @@ final class FleetDriving {
                 v.pulling = true;
                 break;
             }
+            if (!v.pulling && v.reinforcement && v.player == null) offLane(v);
         }
         if (v.pulling) {
             float dx = v.pullX - v.x, dy = v.pullY - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-            if (d < 0.5f || !city.drivable(v.pullX, v.pullY)) v.pulling = false;
+            if (d < 0.5f || (!v.pullOff && !city.drivable(v.pullX, v.pullY))) v.pulling = v.pullOff = false;
             else {
-                float step = Math.min(d, 18 * dt);
+                float step = Math.min(d, (v.pullOff ? 30 : 18) * dt);
                 v.x += dx / d * step;
                 v.y += dy / d * step;
                 // Nose in towards the kerb a little.
                 v.angle += dt * 0.5f * Math.min(1, d / 4);
             }
         }
+    }
+
+    /**
+     * ((28.0) A spot off the lane for a car stopped where it shouldn't stay (a junction box, the middle of the road): the
+     * nearest within four tiles of the kerb of a road that isn't a junction, a car park or yard, or the verge beside the
+     * road - clear of other vehicles and of anything solid. It slides over there (kerbAtScene). Nothing in reach: it
+     * stays where it is.
+     */
+    void offLane(Vehicle v) {
+        int tx0 = (int) (v.x / City.T), ty0 = (int) (v.y / City.T), W = city.w;
+        float best = Float.MAX_VALUE, bx = 0, by = 0;
+        for (int y = ty0 - 4; y <= ty0 + 4; y++)
+            for (int x = tx0 - 4; x <= tx0 + 4; x++) {
+                if (x < 1 || y < 1 || x >= W - 1 || y >= city.h - 1) continue;
+                int i = y * W + x;
+                if (city.solid[i]) continue;
+                byte t = city.tiles[i];
+                float px = (x + 0.5f) * City.T, py = (y + 0.5f) * City.T;
+                if (city.junctionIdAt(px, py) >= 0) continue;
+                if (t == City.ROAD) {
+                    if (city.onHighway(px, py)) continue;
+                    // The kerb: right in against the edge of the road, on the side with no road beside it.
+                    int[] nb = {i - 1, i + 1, i - W, i + W};
+                    int[] ox = {-1, 1, 0, 0}, oy = {0, 0, -1, 1};
+                    boolean found = false;
+                    for (int k = 0; k < 4 && !found; k++) {
+                        byte n = city.tiles[nb[k]];
+                        if (n == City.ROAD || n == City.CAR || n == City.WATER) continue;
+                        px += ox[k] * 3.5f;
+                        py += oy[k] * 3.5f;
+                        found = true;
+                    }
+                    if (!found) continue;
+                } else if (t == City.LOT || t == City.BASE || t == City.DIRT || t == City.GRASS || t == City.SAND) {
+                    // A car park or a yard; or the verge, right beside the road.
+                    if (t != City.LOT && t != City.BASE) {
+                        boolean verge = false;
+                        int[] nb = {i - 1, i + 1, i - W, i + W};
+                        for (int n : nb) if (city.tiles[n] == City.ROAD && city.junctionIdAt((n % W + 0.5f) * City.T, (n / W + 0.5f) * City.T) < 0) verge = true;
+                        if (!verge || (t != City.DIRT && city.steepAt(i))) continue;
+                    }
+                } else continue;
+                float d = (float) World.hypot(px - v.x, py - v.y);
+                if (d >= best || d > City.T * 4.5f) continue;
+                if (vehicleWithin(px, py, 11, v)) continue;
+                best = d;
+                bx = px;
+                by = py;
+            }
+        if (best == Float.MAX_VALUE) return;
+        v.pullX = bx;
+        v.pullY = by;
+        v.pulling = true;
+        v.pullOff = true;
+    }
+
+    /** ((28.0) Another vehicle (on the ground) with its centre within r of (x, y). */
+    boolean vehicleWithin(float x, float y, float r, Vehicle self) {
+        for (int i = 0; i < fleet.vehicles.size(); i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == self || o.removedFromFleet || airborne(o)) continue;
+            if (o.pulling && World.hypot(o.pullX - x, o.pullY - y) < r) return true;
+            if (Math.abs(o.x - x) >= r || Math.abs(o.y - y) >= r) continue;
+            if (World.hypot(o.x - x, o.y - y) < r) return true;
+        }
+        return false;
     }
 
     void buildGrid() {
@@ -162,10 +238,16 @@ final class FleetDriving {
                 if (j <= i) continue;
                 Vehicle b = fleet.gridV[j];
                 if (levels(a, b)) continue;
-                float dx = b.x - a.x, dy = b.y - a.y, reach = (a.length() + b.length()) * 0.62f;
+                float dx = b.x - a.x, dy = b.y - a.y;
                 float d2 = dx * dx + dy * dy;
-                if (d2 >= reach * reach) continue;
+                if (d2 >= 22 * 22) continue;
                 float d = (float) Math.sqrt(d2) + 0.001f, nx = dx / d, ny = dy / d;
+                // ((28.0) How far apart they have to be along the line between them, by their shapes: nose to tail most
+                // of both their lengths, side by side most of their widths. It was a circle a little over half a car
+                // long round each, so two could sit with their bodies over each other - in a queue, or crossing in a
+                // junction - before anything pushed them apart.)
+                float reach = (extent(a, nx, ny) + extent(b, nx, ny)) * 0.88f;
+                if (d >= reach) continue;
                 // Closing speed along the line between them.
                 float va = a.speed * ((float) Math.cos(a.angle) * nx + (float) Math.sin(a.angle) * ny);
                 float vb = b.speed * ((float) Math.cos(b.angle) * nx + (float) Math.sin(b.angle) * ny);
@@ -200,6 +282,12 @@ final class FleetDriving {
                 }
             }
         }
+    }
+
+    /** ((28.0) How far v's body reaches from its centre along (nx, ny): its half length and half width, by its angle. */
+    static float extent(Vehicle v, float nx, float ny) {
+        float c = Math.abs((float) Math.cos(v.angle) * nx + (float) Math.sin(v.angle) * ny);
+        return v.length() * c + v.halfWidth() * (float) Math.sqrt(Math.max(0, 1 - c * c));
     }
 
     float junctionRule(Vehicle v, float dt) {

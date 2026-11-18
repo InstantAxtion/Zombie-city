@@ -389,6 +389,8 @@ final class Fleet {
         /** A stopped car rolls over to the kerb. */
         float pullX, pullY;
         boolean pulling;
+        /** ((28.0) Pulling off the lane to a spot found by FleetDriving.offLane (a verge isn't somewhere it drives). */
+        transient boolean pullOff;
         /** (11.3) Already put by the kerb (or tried) since it last stopped. */
         boolean pullTried;
         /** Getting out of town now everyone knows (runs red lights once it's clear, drives faster). */
@@ -402,6 +404,11 @@ final class Fleet {
         /** After failing to find somewhere to go (or a way out), a while before trying again: routes are costly. */
         float destCd, fleeCd, rerouteCd;
 
+        /**
+         * Half its length, as it's drawn (VehicleRenderer's hl). ((28.0) Not its whole length, as the collisions took it:
+         * two cars sixteen long were pushed apart only once their centres were under ten apart, so a queue or a knot was
+         * drawn as cars driven into one another. See FleetDriving.extent.)
+         */
         float length() {
             if (kind == K_APC) return 11f;
             if (kind == K_HUMVEE) return 8.5f;
@@ -409,6 +416,14 @@ final class Fleet {
             if (kind == K_BIKE) return 4.5f;
             return type == TANK ? 11f : type == TRUCK || type == AMBULANCE ? 9.5f
                     : type == CAR ? MODEL_HL[model] : 8f;
+        }
+
+        /** ((28.0) Half its width, as it's drawn (near enough VehicleRenderer's hw). */
+        float halfWidth() {
+            if (kind == K_BIKE) return 2f;
+            if (kind == K_APC || kind == K_MRAP || kind == K_FIRE_SUPPORT || type == TANK) return 5.6f;
+            if (kind == K_HUMVEE) return 5.4f;
+            return type == TRUCK ? 5.2f : type == AMBULANCE ? 4.9f : type == CAR ? MODEL_HW[model] : 4.4f;
         }
     }
 
@@ -1448,6 +1463,11 @@ final class Fleet {
     /** See FleetService. */
     boolean send(int unitType, int count, float fromX, float fromY, float toX, float toY, Dispatch.Incident inc, Dispatch.SafeZone zone, String place) {
         return service.send(unitType, count, fromX, fromY, toX, toY, inc, zone, place);
+    }
+
+    /** See FleetService. */
+    boolean send(int unitType, int count, float fromX, float fromY, float toX, float toY, Dispatch.Incident inc, Dispatch.SafeZone zone, String place, int per) {
+        return service.send(unitType, count, fromX, fromY, toX, toY, inc, zone, place, per);
     }
 
     /** See FleetRouting. */

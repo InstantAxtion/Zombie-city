@@ -5399,6 +5399,124 @@ public final class GameTests {
                 check(among != null && w.fieldworks.safePack(f0[0], f0[1], 100, 25, 150, 0) == null, "not with friends close to it");
             }
         });
+        test("28.0: outside police backup arrives without piling up", new Check() {
+            public void run() throws Exception {
+                CityConfig c = new CityConfig();
+                c.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                c.v[CityConfig.OPT_ZOMBIES] = 0;
+                c.seed = 280;
+                World w = new World(c);
+                w.populate(c);
+                w.update(1 / 30f);
+                // A call in the middle of town, with a few of the dead there that can't be put down (it stays open).
+                java.util.Random r = new java.util.Random(5);
+                float[] call = null;
+                float best = Float.MAX_VALUE;
+                for (int k = 0; k < 300; k++) {
+                    float[] s = w.city.randomStreetSpot(r);
+                    if (s == null) continue;
+                    float d = (float) Math.hypot(s[0] - w.city.worldW() / 2, s[1] - w.city.worldH() / 2);
+                    if (d < best) {
+                        best = d;
+                        call = s;
+                    }
+                }
+                w.outbreak = true;
+                java.util.List<Entity> dead = new java.util.ArrayList<Entity>();
+                for (int i = 0; i < 4; i++) {
+                    Entity z = w.spawn(Entity.ZOMBIE, call[0] + 20 * (float) Math.cos(i * 1.6f), call[1] + 20 * (float) Math.sin(i * 1.6f));
+                    if (z != null) dead.add(z);
+                }
+                Dispatch dp = w.dispatch;
+                java.lang.reflect.Method ni = Dispatch.class.getDeclaredMethod("newIncident", float.class, float.class, int.class);
+                ni.setAccessible(true);
+                Dispatch.Incident inc = (Dispatch.Incident) ni.invoke(dp, call[0], call[1], 4);
+                java.lang.reflect.Method pb = Dispatch.class.getDeclaredMethod("policeBackup", Dispatch.Incident.class);
+                pb.setAccessible(true);
+                @SuppressWarnings("unchecked") java.util.List<Integer> bag = (java.util.List<Integer>) field(dp, "waveBag");
+                Field cd = Dispatch.class.getDeclaredField("policeCd");
+                cd.setAccessible(true);
+                // Two waves of another town's police, the city losing badly: twenty officers each.
+                dp.policeReserve = 100;
+                int sent = 0;
+                for (int k = 0; k < 2; k++) {
+                    bag.clear();
+                    bag.add(0);
+                    dp.pressure = 3;
+                    cd.set(dp, 0f);
+                    int before = dp.policeReserve;
+                    check((Boolean) pb.invoke(dp, inc), "wave " + (k + 1) + " called");
+                    sent += before - dp.policeReserve;
+                }
+                dp.policeReserve = 0;
+                java.util.Set<Fleet.Vehicle> cars = new java.util.HashSet<Fleet.Vehicle>();
+                java.util.List<float[]> drops = new java.util.ArrayList<float[]>();
+                java.util.Map<Fleet.Vehicle, Integer> aboardWas = new java.util.HashMap<Fleet.Vehicle, Integer>();
+                int outNear = 0, outFar = 0;
+                float overlapT = 0;
+                int crowded = 0;
+                for (int f = 0; f < 30 * 150; f++) {
+                    for (int i = 0; i < dead.size(); i++) {
+                        Entity z = dead.get(i);
+                        if (z.dead || z.removed) {
+                            z = w.spawn(Entity.ZOMBIE, call[0] + 20 * (float) Math.cos(i * 1.6f), call[1] + 20 * (float) Math.sin(i * 1.6f));
+                            if (z == null) continue;
+                            dead.set(i, z);
+                        }
+                        z.speed = z.runSpeed = 0;
+                        z.hp = z.maxHp = 100000;
+                    }
+                    w.update(1 / 30f);
+                    java.util.List<Fleet.Vehicle> on = new java.util.ArrayList<Fleet.Vehicle>();
+                    for (Fleet.Vehicle v : w.fleet.vehicles) {
+                        if (!v.reinforcement || v.type != Fleet.CRUISER || v.removedFromFleet) continue;
+                        // (Bringing officers in: not one come to take some home.)
+                        if (v.passengers > 0 && v.state != Fleet.RETURN && cars.add(v)) {
+                            check(v.passengers <= Fleet.SEATS, "no more aboard than it seats (" + v.passengers + ")");
+                            drops.add(new float[]{v.tx, v.ty});
+                        }
+                        on.add(v);
+                        // Where its officers get out.
+                        Integer was = aboardWas.put(v, v.passengers);
+                        if (cars.contains(v) && was != null && was > 0 && v.passengers == 0) {
+                            if (Math.hypot(v.x - call[0], v.y - call[1]) < 300) outNear += was;
+                            else outFar += was;
+                        }
+                    }
+                    // Nothing driven into anything else: two backup cars' centres never under a car's width apart.
+                    boolean over = false;
+                    for (int i = 0; i < on.size(); i++)
+                        for (int j = i + 1; j < on.size(); j++)
+                            if (Math.hypot(on.get(i).x - on.get(j).x, on.get(i).y - on.get(j).y) < 8) over = true;
+                    if (over) overlapT += 1 / 30f;
+                    if (f % 30 == 0) {
+                        int near = 0;
+                        for (Fleet.Vehicle v : on) if (Math.hypot(v.x - inc.x, v.y - inc.y) < 60) near++;
+                        crowded = Math.max(crowded, near);
+                    }
+                }
+                // Four to a car: forty officers in ten cars, not twenty.
+                check(sent == 40 && cars.size() == 10, "40 officers in 10 cars (" + sent + " in " + cars.size() + ")");
+                // Each to a drop-off of its own round the call, none in a junction.
+                int spots = 0;
+                for (int i = 0; i < drops.size(); i++) {
+                    boolean seen = false;
+                    for (int j = 0; j < i; j++) if (Math.hypot(drops.get(i)[0] - drops.get(j)[0], drops.get(i)[1] - drops.get(j)[1]) < 20) seen = true;
+                    if (!seen) spots++;
+                    check(w.city.junctionIdAt(drops.get(i)[0], drops.get(i)[1]) < 0 || Math.hypot(drops.get(i)[0] - call[0], drops.get(i)[1] - call[1]) < 40,
+                            "no drop-off in a junction");
+                }
+                check(spots >= 6, "the cars spread over several drop-off points (" + spots + " for " + drops.size() + " cars)");
+                check(overlapT < 1, "no two backup cars on top of each other (" + overlapT + " s)");
+                check(crowded <= 4, "no pile of cars at the call (" + crowded + " within 60)");
+                // The officers out of their cars near the call.
+                int stopped = 0;
+                for (Fleet.Vehicle v : cars)
+                    if (!v.removedFromFleet && Math.abs(v.speed) < 1 && w.city.junctionIdAt(v.x, v.y) >= 0) stopped++;
+                check(outNear >= sent * 3 / 4, "the officers got out near the call (" + outNear + " of " + sent + " within 300, " + outFar + " further off)");
+                check(stopped == 0, "no empty car left in a junction (" + stopped + ")");
+            }
+        });
         test("27.5: junctions don't lock up", new Check() {
             public void run() throws Exception {
                 CityConfig c = new CityConfig();
