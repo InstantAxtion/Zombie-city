@@ -1088,7 +1088,7 @@ final class CityGenerator extends CityPart {
             List<Integer> options = new ArrayList<Integer>();
             // ((28.0) Map version 41: an island with no room for its precinct doesn't stop the rest; then, if there's
             // still nowhere, the stations may stand closer together. Theme Park Island and the Archipelago often had one.)
-            for (int relax = 0; relax < (city.cfg.civic >= 41 ? 3 : 1) && options.isEmpty(); relax++)
+            for (int relax = 0; relax < (city.cfg.civic >= 41 && city.islandRects != null ? 3 : 1) && options.isEmpty(); relax++)
             for (int k = 0; k < city.blocks.size(); k++) {
                 int[] b = city.blocks.get(k);
                 if (used[k] || b[2] - b[0] - 2 < 6 || b[3] - b[1] - 2 < 6) continue;
