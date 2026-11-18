@@ -115,7 +115,8 @@ final class Terrain {
         if (country) {
             rocksAndPines();
             lakes();
-            streams();
+            // ((22.9) No streams in the desert: its water is in the oases.)
+            if (!c.desert) streams();
             park();
             campsites();
             if (c.cfg.wilds()) {

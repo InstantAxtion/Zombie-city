@@ -13,8 +13,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y aapt dalvik-exchange zipalign apksigner android-sdk-platform-23
-      - name: Test
-        run: ./test.sh
+      # Every push: the fast tier and the health check of a real game. A manual run (before a release): all 25.
+      - name: Test (fast tier)
+        if: github.event_name != 'workflow_dispatch'
+        run: FAST=1 SHARDS=3 ./test.sh
+      - name: Test (all 25)
+        if: github.event_name == 'workflow_dispatch'
+        run: SHARDS=3 ./test.sh
+      - name: Health check
+        run: tools/health.sh
       - name: Build
         run: ./build.sh
       - uses: actions/upload-artifact@v4

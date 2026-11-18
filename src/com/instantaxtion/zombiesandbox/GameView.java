@@ -18,236 +18,329 @@ import java.util.Random;
 
 /** Renders the world, runs the game loop and handles all touch input and on-screen buttons. */
 final class GameView extends View implements Menu.Host {
-    private static final int TOOL_PAN = 0, TOOL_ORDER = 1, TOOL_CIV = 2, TOOL_MIL = 4, TOOL_ZOMBIE = 6, TOOL_PLACE = 7,
-            TOOL_EVENT = 8, TOOL_ZONE = 9, TOOL_BOMB = 10, TOOL_ERASE = 11, TOOL_BUILD = 12;
+    // ((27.3) What used to be all in this class, now in classes of their own (each holds this view as gv).)
+    final WorldRenderer worldRenderer = new WorldRenderer(this);
+    final BuildingRenderer buildingRenderer = new BuildingRenderer(this);
+    final VehicleRenderer vehicleRenderer = new VehicleRenderer(this);
+    final EntityRenderer entityRenderer = new EntityRenderer(this);
+    final MapLabels mapLabels = new MapLabels(this);
+    final Hud hud = new Hud(this);
+    final Inspector inspector = new Inspector(this);
+    final Overlays overlays = new Overlays(this);
+    final ToolBar toolBar = new ToolBar(this);
+    final TouchInput touchInput = new TouchInput(this);
+    final GameAudio audio = new GameAudio(this);
+    final SaveSlots saveSlots = new SaveSlots(this);
+
+    static final int TOOL_PAN = 0, TOOL_ORDER = 1, TOOL_CIV = 2, TOOL_MIL = 4, TOOL_ZOMBIE = 6, TOOL_PLACE = 7,
+            TOOL_EVENT = 8, TOOL_ZONE = 9, TOOL_BOMB = 10, TOOL_ERASE = 11, TOOL_BUILD = 12, TOOL_SQUAD = 13;
+    /** ((22.4) The order of the tools on the bar. */
+    static final int[] BAR_ORDER = {0, 1, 2, 3, 4, 13, 6, 7, 8, 9, 10, 11, 12, 5};
     // Tool index -> entity type spawned (or -1). The zombie tool spawns the selected zombie variant.
-    private static final int[] TOOL_TYPE = {-1, -1, Entity.CIVILIAN, Entity.COP, Entity.SOLDIER, Entity.CIVILIAN,
-            Entity.ZOMBIE, -1, -1, -1, -1, -1, -1};
-    private static final String[] TOOL_NAMES = {"Move", "Orders", "People", "Police", "Military", "Medic", "Zombies",
-            "Place", "Events", "Safe Zone", "Bomb", "Erase", "Build"};
-    private static final String[] BUILD_NAMES = {"Road", "Pavement", "Grass", "Trees", "Wall", "House", "Shop", "Clear"};
-    private static final String[] BUILD_INFO = {"Drag to lay a road", "Drag to pave", "Drag to grass over", "Drag to plant trees",
+    static final int[] TOOL_TYPE = {-1, -1, Entity.CIVILIAN, Entity.COP, Entity.SOLDIER, Entity.CIVILIAN,
+            Entity.ZOMBIE, -1, -1, -1, -1, -1, -1, -1};
+    static final String[] TOOL_NAMES = {"Move", "Orders", "People", "Police", "Military", "Medic", "Zombies",
+            "Place", "Events", "Safe Zone", "Bomb", "Erase", "Build", "Squads"};
+    /** ((22.4) Ready-made groups, a whole one to a tap: what's in each (type, then roles for police and soldiers). */
+    static final String[] SQUAD_NAMES = {"Fire team", "Rifle squad", "Sniper team", "Engineer squad", "Response team",
+            "Tactical team", "Riot line", "K9 patrol", "Survivors", "Horde"};
+    static final String[] SQUAD_INFO = {"Four soldiers and a medic: rifles, a grenadier, a machine gunner",
+            "A commander and eight soldiers with a gunner and a medic", "A sniper and a recon scout to spot for them",
+            "Two combat engineers who dig in, with two riflemen to cover them", "Three officers, a riot shield and a marksman",
+            "Four SWAT, a marksman and a K9 handler", "Five riot shields shoulder to shoulder", "A K9 handler and a partner",
+            "Six civilians together", "Twenty of the dead: walkers, runners and a brute"};
+    static final int[][] SQUAD_ROLES = {World.FIRE_TEAM, World.RIFLE_SQUAD, {Entity.ROLE_SNIPER, Entity.ROLE_RECON},
+            {Entity.ROLE_ENGINEER, Entity.ROLE_ENGINEER, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE}, World.RESPONSE_TEAM,
+            World.TACTICAL_TEAM, {Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT},
+            {Entity.ROLE_K9, 0}, null, null};
+    /** 0 soldiers, 1 police, 2 civilians, 3 the dead. */
+    static final int[] SQUAD_SIDE = {0, 0, 0, 0, 1, 1, 1, 1, 2, 3};
+    static final String[] BUILD_NAMES = {"Road", "Pavement", "Grass", "Trees", "Wall", "House", "Shop", "Clear"};
+    static final String[] BUILD_INFO = {"Drag to lay a road", "Drag to pave", "Drag to grass over", "Drag to plant trees",
             "Drag to build a wall nobody can cross", "Tap to put up a house", "Tap to put up a shop", "Grass over, or knock a building down"};
     /** Tools no longer on the bar: the medic (now in the People picker), Orders, Place, Events and Build. */
-    private static boolean hiddenTool(int t) {
-        return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD || t == TOOL_ZONE;
+    boolean hiddenTool(int t) {
+        // ((18.0) A mission: the commander's tools only - police, soldiers, vehicles and support to buy, and orders.)
+        if (commander())
+            return !(t == TOOL_PAN || t == TOOL_ORDER || t == TOOL_COP || t == TOOL_MIL || t == TOOL_PLACE || t == TOOL_EVENT);
+        // ((25.0) Events back on the bar: the plane crash, prison break and riot, and the airstrike with its cooldown.)
+        return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_BUILD || t == TOOL_ZONE;
     }
-    private static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee"};
-    private static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
-            "City alarm", "Infect"};
-    private static final int TOOL_COP = 3;
+    static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier",
+            "Command post", "Special forces", "Police boat"};
+    static final String[] EVENT_NAMES = {"Horde", "Panic", "Outbreak", "Supply drop", "Airstrike",
+            "City alarm", "Infect", "Flare", "Mines", "Barrage", "Airborne", "Mega horde", "Plane crash", "Prison break", "Riot",
+            "Supply convoy", "Evac convoy"};
+    static final int TOOL_COP = 3;
     // (Negative roles are the other agencies: World.spawnCop.)
-    private static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
-            -1, -2, -3, Entity.ROLE_SAR};
-    private static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
-            "Park ranger", "Search & rescue"};
-    private static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
+    static final int[] COP_ROLES = {0, Entity.ROLE_RIOT, Entity.ROLE_SWAT, Entity.ROLE_MARKSMAN,
+            -1, -2, -3, Entity.ROLE_SAR, Entity.ROLE_K9, -4};
+    static final String[] COP_NAMES = {"Cop", "Riot cop", "SWAT", "Marksman", "Highway patrol", "Sheriff's deputy",
+            "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
+    static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
-    private static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUTE};
-    private static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
-    private static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
-            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON};
-    private static final String[] MIL_NAMES = {"Soldier", "Commander", "Sniper", "Machine gunner", "National Guard",
-            "Grenadier", "Marine", "Recon scout"};
+    static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT, Entity.ARMOURED};
+    static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
+    static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
+            Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
+    static final String[] MIL_NAMES = {"Soldier", "Commander", "Sniper", "Machine gunner", "National Guard",
+            "Grenadier", "Marine", "Recon scout", "Combat medic", "Combat engineer", "Mortar team"};
     // One line about each option in the pickers.
-    private static final String[] CIV_INFO = {"Goes about their day, runs and hides from zombies"};
-    private static final String[] COP_INFO = {"Pistol, answers 911 calls", "Shield blocks bites from the front",
+    static final String[] CIV_INFO = {"Goes about their day, runs and hides from zombies"};
+    static final String[] COP_INFO = {"Pistol, answers 911 calls", "Shield blocks bites from the front",
             "Body armour and a carbine; sent to the worst trouble",
             "Scoped rifle: picks off the dead from a long way off", "State trooper: works the highways, backs up the town",
             "County deputy: patrols the back roads", "Patrols the trails and dirt roads, guards the ranger station",
-            "Rescue specialist: finds the cut-off and gets them out"};
-    private static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
+            "Rescue specialist: finds the cut-off and gets them out",
+            "Handler and police dog: the dog sniffs out hidden zombies and bites",
+            "On a police motorcycle: patrols fast and calls in the hordes it passes"};
+    static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
             "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
-            "Quick and light: scouts ahead and marks hordes"};
-    private static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile", "Big and tough, shoves people aside"};
-    private static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
-            "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
-            "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde"};
-    private static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
-            "An outbreak inside a building", "A crate on a parachute",
-            "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten"};
-    private static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_VIEW = 3, BTN_CLEAR = 4, BTN_MENU = 5, BTN_TOP = 6;
-    private static final int TOP_BUTTONS = 7;
-    private static final int[] SPEEDS = {1, 2, 4, 8};
-    private static final int[] BRUSHES = {1, 5, 10, 25};
-    private static final int[] SHOP_AWNINGS = {0xFFD83A3A, 0xFF2E7D4F, 0xFF2E5FB0, 0xFFE8A21C, 0xFF8A2E6B};
-    private static final int[] ROW_COLORS = {0xFFF0AD4E, 0xFF4F7BE0, 0xFF8FA05A, 0xFF7CC24E};
-    private static final String[] ROW_LABELS = {"Civilians", "Cops", "Military", "Zombies"};
+            "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
+            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
+    /** What the enemy tool makes: one of the dead. */
+    int enemyType() {
+        return ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
+    }
 
-    private World world;
-    private final Random rnd = new Random();
-    private float dp;
-    private final float baseDp;
-    private final Settings settings;
-    private final Sound sound;
-    private final Menu menu;
-    private final Records records;
-    private float recordTimer;
+    String[] enemyNames() {
+        return ENEMY_NAMES;
+    }
+
+    /** ((24.0) Worked out once, not on every frame the tool's label is drawn.) */
+    static final String[] ENEMY_NAMES = namesOf(ZOMBIE_VARIANTS), CIV_NAMES = namesOf(CIV_VARIANTS);
+
+    static String[] namesOf(int[] types) {
+        String[] n = new String[types.length];
+        for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[types[k]];
+        return n;
+    }
+
+    /** ((24.0) The i-th of a set of rectangles kept for reuse from frame to frame, made the first time it's wanted. */
+    static RectF pooled(java.util.ArrayList<RectF> pool, int i) {
+        while (pool.size() <= i) pool.add(new RectF());
+        return pool.get(i);
+    }
+
+    /** ((24.0) The marks along a jet's or helicopter's side, for drawing: not a new array for each one each frame. */
+    static final float[] SIDE_MARKS = {-3.6f, -2.0f, 2.0f, 3.6f};
+    final RectF bannerRect = new RectF(), boatRect = new RectF();
+    final java.util.ArrayList<RectF> hotPool = new java.util.ArrayList<RectF>(), timePool = new java.util.ArrayList<RectF>(),
+            tacPool = new java.util.ArrayList<RectF>();
+
+    /** ((25.0) The Events button's name: the airstrike's with the seconds left while it's not ready. */
+    String eventLabel() {
+        int wait = eventVariant == 4 && !commander() ? world.airstrikeWait() : 0;
+        return wait > 0 ? "Airstrike " + wait + "s" : EVENT_NAMES[eventVariant];
+    }
+
+    String rowLabel(int t) {
+        return ROW_LABELS[t];
+    }
+
+    /** ((18.0) Playing a campaign mission: the commander, with a budget, not the sandbox's free hand. */
+    boolean commander() {
+        return world != null && hasGame && world.mission() != null;
+    }
+
+    String toolName(int t) {
+        if (commander() && t == TOOL_PLACE) return "Vehicles";
+        if (commander() && t == TOOL_EVENT) return "Support";
+        return TOOL_NAMES[t];
+    }
+
+    static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile",
+            "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside",
+            "Huge and slow: smashes barricades, throws cars aside; takes a squad, a tank or explosives",
+            "A dead officer or soldier still in armour: the helmet stops the first shot to the head"};
+    static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
+            "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
+            "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",
+            "Flies from the station to watch the spot: marks the enemy there (better aim, no hiding in cover) and calls in what it sees",
+            "Drag to lay coils: the dead tangle in it, slowed to a third and torn at, until it wears out",
+            "Two machine gunners behind sandbags with a crate of ammunition: they hold the spot",
+            "Parked with its doors open: a dozen people running from the dead can shelter inside. Drive it away with them",
+            "Drag to build: over twice as tough as a wooden barricade", "Drag to build: five times as tough as a wooden barricade",
+            "The police's mobile HQ, set up where it's put: steadies officers near it, hands out ammo, runs the calls round it. One at a time",
+            "Four elite soldiers with suppressed rifles, roped down from a helicopter where you tap",
+            "A police launch on the nearest water: patrols, picks up people trapped at the shore, ferries officers across"};
+    static final String[] EVENT_INFO = {"A horde arrives from the edge of town", "People panic and run",
+            "An outbreak inside a building", "A crate on a parachute",
+            "A jet bombs the spot", "Sirens send everyone to safety", "Someone here is bitten",
+            "Burns for 45 seconds: the dead for a long way round are drawn to it",
+            "Six mines round the spot: only the dead set them off",
+            "Eight mortar shells walked across the spot, a couple of seconds after the call",
+            "Six soldiers with a machine gun dropped on the spot, to hold it",
+            "Hundreds of the dead come in from the edge of town, heading for the spot",
+            "An airliner comes down on the spot: fire, wreckage, survivors - and some infected aboard",
+            "Every inmate breaks out of the prison at once (maps with a prison); the police round them up",
+            "The crowd here riots for a couple of minutes: looting, cars set alight, riot police called in",
+            "Tap a safe zone, survivor base or police station: an escorted column of trucks brings it ammunition",
+            "Tap a safe zone: escorted buses come and take the people sheltering there out of the city"};
+    static final int BTN_PAUSE = 0, BTN_SPEED = 1, BTN_BRUSH = 2, BTN_CLEAR = 3, BTN_MENU = 4, BTN_TOP = 5;
+    /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
+    static final int TOP_BUTTONS = 6;
+    static final int[] SPEEDS = {1, 2, 4, 8};
+    static final int[] BRUSHES = {1, 10, 25, 50};
+    static final int[] SHOP_AWNINGS = {0xFFD83A3A, 0xFF2E7D4F, 0xFF2E5FB0, 0xFFE8A21C, 0xFF8A2E6B};
+    static final int[] ROW_COLORS = {0xFFF0AD4E, 0xFF4F7BE0, 0xFF8FA05A, 0xFF7CC24E};
+    static final String[] ROW_LABELS = {"Civilians", "Cops", "Military", "Zombies"};
+
+    World world;
+    final Random rnd = new Random();
+    float dp;
+    final float baseDp;
+    final Settings settings;
+    final Sound sound;
+    final Menu menu;
+    final Records records;
+    float recordTimer;
     /**
      * Big announcements (the war turning, achievements) are queued and shown one at a time in a single band,
      * so they never land on top of each other: {title, subtitle, colour}.
      */
-    private final java.util.ArrayList<Object[]> headlines = new java.util.ArrayList<Object[]>();
-    private float headTime;
-    private int seenBanner;
-    private static final float HEAD_SECONDS = 4.5f;
+    final java.util.ArrayList<Object[]> headlines = new java.util.ArrayList<Object[]>();
+    float headTime;
+    int seenBanner;
+    static final float HEAD_SECONDS = 4.5f;
     /** Where the radio feed ended this frame (the headline band goes below it in portrait). */
-    private float feedBottom;
+    float feedBottom;
 
-    private void headline(String title, String sub, int color) {
+    void headline(String title, String sub, int color) {
         // A newer word on the war replaces one still waiting; never more than three in the queue.
         for (int i = headlines.size() - 1; i >= 1; i--)
             if (((Integer) headlines.get(i)[2]) == color && color != 0xFFFFD86B) headlines.remove(i);
         if (headlines.size() >= 3) headlines.remove(headlines.size() - 1);
         headlines.add(new Object[]{title, sub, color});
     }
-    private boolean hasGame;
-    private float menuTime, savedCamX, savedCamY, savedScale;
-    private float fps, fpsTimer;
-    private int lastMessageCount;
-    private float frameDt;
+    boolean hasGame;
+    float menuTime, savedCamX, savedCamY, savedScale;
+    float fps, fpsTimer;
+    int lastMessageCount;
+    float frameDt;
     /** The tool bar folded away, and the minimap closed (for more of the city on screen). */
-    private boolean toolsFolded, miniClosed;
-    private final RectF foldTab = new RectF(), miniX = new RectF(), mapChip = new RectF();
+    boolean toolsFolded, miniClosed;
+    final RectF foldTab = new RectF(), miniX = new RectF(), mapChip = new RectF();
     /**
      * The radio feed on screen is paced: new messages wait their turn, each new line comes up a few seconds
      * after the last and stays long enough to read. (A backlog is thinned out; everything is in the log.)
      */
-    private final java.util.ArrayList<Dispatch.Message> feedQueue = new java.util.ArrayList<Dispatch.Message>(),
+    final java.util.ArrayList<Dispatch.Message> feedQueue = new java.util.ArrayList<Dispatch.Message>(),
             feedOn = new java.util.ArrayList<Dispatch.Message>();
-    private final java.util.ArrayList<Float> feedOnAge = new java.util.ArrayList<Float>();
-    private int feedSeen;
-    private float feedGap;
+    final java.util.ArrayList<Float> feedOnAge = new java.util.ArrayList<Float>();
+    int feedSeen;
+    float feedGap;
     static final float FEED_LIFE = 14, FEED_EVERY = 3.5f;
-    private final RectF feedRect = new RectF();
-    private final RectF[] feedLines = {new RectF(), new RectF(), new RectF(), new RectF()};
-    private final Dispatch.Message[] feedMsgs = new Dispatch.Message[4];
-    private int feedCount;
-    private int fpsFrames;
+    final RectF feedRect = new RectF();
+    final RectF[] feedLines = {new RectF(), new RectF(), new RectF(), new RectF()};
+    final Dispatch.Message[] feedMsgs = new Dispatch.Message[4];
+    int feedCount;
+    int fpsFrames;
 
-    private float camX, camY, scale = 2f;
-    private boolean running, simPaused;
-    private long lastFrame;
-    private int speedIdx, brushIdx;
+    float camX, camY, scale = 2f;
+    boolean running, simPaused;
+    long lastFrame;
+    int speedIdx, brushIdx;
     /** (11.3) Frames that failed to draw (and were skipped). */
     int drawErrors;
-    private int tool = TOOL_PAN;
-    private int iconCopBody;
-    private final RectF tmpRect = new RectF();
+    int tool = TOOL_PAN;
+    int iconCopBody;
+    final RectF tmpRect = new RectF();
 
     /** The police picker's names, with this country's highway and rural police. */
-    private String[] copNames() {
+    String[] copNames() {
         String[] n = COP_NAMES.clone();
         Country land = world.city.country;
         if (land.hpName != null) n[4] = land.hpName;
         n[5] = land.ruralName != null ? land.ruralName : "Rural police";
         return n;
     }
-    private int zombieVariant, civVariant, milVariant, placeVariant, eventVariant, copVariant, buildVariant;
+    int zombieVariant, civVariant, milVariant, placeVariant, eventVariant, copVariant, buildVariant, zoneVariant, squadVariant;
+    /** ((22.0) The Zone tool's choices: an ordinary safe zone, or the biggest block near the spot. */
+    static final String[] ZONE_NAMES = {"Safe zone", "Large safe zone"};
+    static final String[] ZONE_INFO = {"Walls in a block and guards it; it gets stronger the longer it holds",
+            "As big a block as there is nearby, for many more people"};
     /** The map changed under the Build tool: redraw it when the finger lifts. */
-    private boolean buildDirty;
-    private int lastBuildTile = -1;
+    boolean buildDirty;
+    int lastBuildTile = -1;
     /** What the last tap (or drag) of a spawn or place tool created, so Undo can take it back. */
-    private final java.util.ArrayList<Object> lastAction = new java.util.ArrayList<Object>();
-    private final RectF undoRect = new RectF();
-    private boolean clearMenu;
+    final java.util.ArrayList<Object> lastAction = new java.util.ArrayList<Object>();
+    final RectF undoRect = new RectF();
+    boolean clearMenu;
     /** Director cam: the camera goes wherever the action is. */
-    private final RectF[] clearRects = new RectF[CLEAR_NAMES.length];
+    final RectF[] clearRects = new RectF[CLEAR_NAMES.length];
     /** (Since 10.24 the stats start as one short line: tap it for the full breakdown.) */
-    private boolean statsCollapsed = true, autoCollapsed;
+    boolean statsCollapsed = true, autoCollapsed;
     /** Units picked with the Orders tool. */
-    private final java.util.ArrayList<Entity> selection = new java.util.ArrayList<Entity>();
-    private float orderX, orderY, orderMarker;
-    private Entity follow;
+    final java.util.ArrayList<Entity> selection = new java.util.ArrayList<Entity>();
+    float orderX, orderY, orderMarker;
+    Entity follow;
     /** (10.60) Police and soldiers on their way to each call, for its badge; and the followed vehicle's route. */
-    private final java.util.HashMap<Dispatch.Incident, int[]> inbound = new java.util.HashMap<Dispatch.Incident, int[]>();
-    private final int[] routeBuf = new int[700];
-    private final RectF badgeRect = new RectF();
-    private final Path routePath = new Path();
+    final java.util.HashMap<Dispatch.Incident, int[]> inbound = new java.util.HashMap<Dispatch.Incident, int[]>();
+    final int[] routeBuf = new int[700];
+    final RectF badgeRect = new RectF();
+    final Path routePath = new Path();
 
     /** ((11.5) Everyone on screen this frame, and when the calls' badges were last counted.) */
-    private final java.util.ArrayList<Entity> onScreen = new java.util.ArrayList<Entity>();
+    final java.util.ArrayList<Entity> onScreen = new java.util.ArrayList<Entity>();
     /** ((11.5) Zoomed out, each side's dots this frame (x, y pairs), drawn together; and the round pen for them.) */
-    private final float[][] dotBuf = new float[8][];
-    private final int[] dotN = new int[8];
-    private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    final float[][] dotBuf = new float[8][];
+    final int[] dotN = new int[8];
+    final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     {
         dotPaint.setStyle(Paint.Style.STROKE);
         dotPaint.setStrokeCap(Paint.Cap.ROUND);
     }
     /** ((11.5) The part of the map on screen this frame (world units, with a little to spare).) */
-    private float viewL, viewT, viewR, viewB;
-    private float inboundAt = -9;
+    float viewL, viewT, viewR, viewB;
+    float inboundAt = -9;
 
-    private void tally(Dispatch.Incident inc, boolean army, int n) {
+    void tally(Dispatch.Incident inc, boolean army, int n) {
         int[] k = inbound.get(inc);
         if (k == null) inbound.put(inc, k = new int[2]);
         k[army ? 1 : 0] += n;
     }
-
-    /** (10.60) A faint line along the streets through tiles[from..to), from (x, y), with a dot where it ends. */
-    private void drawRoute(Canvas c, float x, float y, int[] tiles, int from, int to, int col, float u) {
-        if (to - from < 1) return;
-        int w = world.city.w;
-        routePath.reset();
-        routePath.moveTo(x, y);
-        float ex = x, ey = y;
-        for (int i = from; i < to; i++) {
-            ex = (tiles[i] % w + 0.5f) * City.T;
-            ey = (tiles[i] / w + 0.5f) * City.T;
-            routePath.lineTo(ex, ey);
-        }
-        // (A dark edge under it, so it reads on the grey of the road.)
-        stroke.setStrokeWidth(5.5f * u);
-        stroke.setColor(0x55000000);
-        c.drawPath(routePath, stroke);
-        stroke.setStrokeWidth(3.2f * u);
-        stroke.setColor(alpha(col, 0.8f));
-        c.drawPath(routePath, stroke);
-        fill.setColor(alpha(col, 0.8f));
-        c.drawCircle(ex, ey, 3.5f * u, fill);
-    }
     /** A vehicle the camera is following (tap one), with its card. */
-    private Fleet.Vehicle followV;
-    private boolean wasControlling;
-    private float hintTime = 14f;
+    Fleet.Vehicle followV;
+    boolean wasControlling;
+    float hintTime = 14f;
 
     // Layout.
-    private final RectF[] toolRects = new RectF[TOOL_NAMES.length];
-    private final RectF[] topRects = new RectF[TOP_BUTTONS];
+    final RectF[] toolRects = new RectF[TOOL_NAMES.length];
+    final RectF[] topRects = new RectF[TOP_BUTTONS];
     /** The stats panel as drawn this frame (it shrinks when collapsed). */
-    private final RectF statsShown = new RectF();
-    private final RectF statsRect = new RectF();
-    private float barTop;
-    private boolean portrait;
+    final RectF statsShown = new RectF();
+    final RectF statsRect = new RectF();
+    float barTop;
+    boolean portrait;
 
     // Input.
-    private static final int MODE_NONE = 0, MODE_UI = 1, MODE_WORLD = 2, MODE_GESTURE = 3;
-    private int mode;
-    private float downX, downY, lastX, lastY, lastSpawnX, lastSpawnY;
+    static final int MODE_NONE = 0, MODE_UI = 1, MODE_WORLD = 2, MODE_GESTURE = 3;
+    int mode;
+    float downX, downY, lastX, lastY, lastSpawnX, lastSpawnY;
     // ((11.5) A flicked pan glides on a little: the map's speed in world units a second, and when the finger last moved.)
-    private float panVX, panVY;
-    private long panAt;
-    private boolean dragged;
-    private float pinchDist, pinchMidX, pinchMidY;
+    float panVX, panVY;
+    long panAt;
+    boolean dragged;
+    float pinchDist, pinchMidX, pinchMidY;
 
     // Paints and scratch objects.
-    private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint bmpPaint = new Paint();
-    private final RectF oval = new RectF();
-    private final RectF oval2 = new RectF();
-    private final Entity[] icons = new Entity[Entity.TYPE_COUNT];
-    private final Matrix wallMatrix = new Matrix();
-    private final float[] wallSrc = new float[8], wallDst = new float[8];
-    private final Rect roofSrc = new Rect();
-    private final RectF roofDst = new RectF();
-    private City.Building[] visible = new City.Building[64];
+    final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+    final Paint bmpPaint = new Paint();
+    final RectF oval = new RectF();
+    final RectF oval2 = new RectF();
+    final Entity[] icons = new Entity[Entity.TYPE_COUNT];
+    final Matrix wallMatrix = new Matrix();
+    final float[] wallSrc = new float[8], wallDst = new float[8];
+    final Rect roofSrc = new Rect();
+    final RectF roofDst = new RectF();
+    City.Building[] visible = new City.Building[64];
     /** Walls go partly see-through when zoomed right in. */
-    private float wallFade = 1;
-    private float[] visibleKey = new float[64];
+    float wallFade = 1;
+    float[] visibleKey = new float[64];
 
     GameView(Context context) {
         super(context);
@@ -265,14 +358,7 @@ final class GameView extends View implements Menu.Host {
         menu = new Menu(this, settings, dp);
         records = new Records(context);
         menu.records = records;
-        // The main menu shows a live demo city in the background.
-        CityConfig demo = new CityConfig();
-        // (Not the Islands: it's too big to build behind the menu.)
-        do demo.v[CityConfig.OPT_PRESET] = rnd.nextInt(CityConfig.ISLANDS);
-        while (CityConfig.retired(CityConfig.OPT_PRESET, demo.v[CityConfig.OPT_PRESET]));
-        demo.v[CityConfig.OPT_MILITARY] = 1;
-        demo.v[CityConfig.OPT_ZOMBIES] = 2;
-        loadWorld(demo);
+        menuCity();
         applySettings();
         // ((12.0) For a keyboard and mouse: a Chromebook, or a phone with a keyboard plugged in.)
         setFocusable(true);
@@ -280,10 +366,32 @@ final class GameView extends View implements Menu.Host {
         requestFocus();
     }
 
+    /** The main menu's live demo city in the background: a Tiny one. */
+    void menuCity() {
+        CityConfig demo = new CityConfig();
+        // (Not the Islands: it's too big to build behind the menu.)
+        do demo.v[CityConfig.OPT_PRESET] = rnd.nextInt(CityConfig.ISLANDS);
+        while (CityConfig.retired(CityConfig.OPT_PRESET, demo.v[CityConfig.OPT_PRESET]));
+        demo.v[CityConfig.OPT_MILITARY] = 1;
+        demo.v[CityConfig.OPT_ZOMBIES] = 2;
+        // ((14.3) A Tiny one: it was a Large city of 20,000 people (120 MB, and seconds of building as the app opened),
+        // which sat in memory alongside a big saved game while it loaded - and a Colossal game on top of it ran the
+        // phone out of memory.)
+        demo.v[CityConfig.OPT_SIZE] = CityConfig.TINY;
+        try {
+            loadWorld(demo);
+        } catch (OutOfMemoryError oom) {
+            // ((14.3) Short of memory even so (another game of ours still being let go of): once more, after a clear-out.)
+            world = null;
+            System.gc();
+            loadWorld(demo);
+        }
+    }
+
     // ------------------------------------------------------------------ (12.0) keyboard and mouse
 
     /** The arrow keys (or W, A, S, D) held down. */
-    private boolean keyUp, keyDown, keyLeft, keyRight, keyMoved;
+    boolean keyUp, keyDown, keyLeft, keyRight, keyMoved;
 
     @Override
     public boolean onKeyDown(int code, KeyEvent ev) {
@@ -300,10 +408,10 @@ final class GameView extends View implements Menu.Host {
             case KeyEvent.KEYCODE_SPACE:
                 // (Fire, swing or bite while you're someone; otherwise pause.)
                 if (world.controlled != null) world.ctrlAttack = true;
-                else if (ev.getRepeatCount() == 0) pressTop(BTN_PAUSE);
+                else if (ev.getRepeatCount() == 0) touchInput.pressTop(BTN_PAUSE);
                 return true;
             case KeyEvent.KEYCODE_P:
-                if (ev.getRepeatCount() == 0) pressTop(BTN_PAUSE);
+                if (ev.getRepeatCount() == 0) touchInput.pressTop(BTN_PAUSE);
                 return true;
             case KeyEvent.KEYCODE_1:
             case KeyEvent.KEYCODE_2:
@@ -338,6 +446,7 @@ final class GameView extends View implements Menu.Host {
                 followV = null;
                 inspectB = null;
                 inspectZ = null;
+                inspectBase = null;
                 click();
                 return true;
             }
@@ -352,7 +461,8 @@ final class GameView extends View implements Menu.Host {
             case KeyEvent.KEYCODE_ESCAPE:
                 if (ev.getRepeatCount() > 0) return true;
                 if (tactical) tactical = false;
-                else if (world.controlled != null && code == KeyEvent.KEYCODE_ESCAPE) releaseControl();
+                else if (hotOpen) hotOpen = false;
+                else if (world.controlled != null && code == KeyEvent.KEYCODE_ESCAPE) touchInput.releaseControl();
                 else if (picker >= 0 || clearMenu) {
                     picker = -1;
                     clearMenu = false;
@@ -373,7 +483,7 @@ final class GameView extends View implements Menu.Host {
         return super.onKeyUp(code, ev);
     }
 
-    private boolean setKey(int code, boolean down) {
+    boolean setKey(int code, boolean down) {
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_W: keyUp = down; return true;
             case KeyEvent.KEYCODE_DPAD_DOWN: case KeyEvent.KEYCODE_S: keyDown = down; return true;
@@ -384,7 +494,7 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** The keys held down this frame: they walk whoever you're controlling, or move the map. */
-    private void applyKeys(float dt) {
+    void applyKeys(float dt) {
         int kx = (keyRight ? 1 : 0) - (keyLeft ? 1 : 0), ky = (keyDown ? 1 : 0) - (keyUp ? 1 : 0);
         if (world.controlled != null) {
             if (kx != 0 || ky != 0) {
@@ -411,7 +521,7 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** Zooms by f, keeping the spot under (sx, sy) on the screen where it is. */
-    private void zoomBy(float f, float sx, float sy) {
+    void zoomBy(float f, float sx, float sy) {
         float wx = worldX(sx), wy = worldY(sy);
         float minScale = Math.min(getWidth() / world.city.worldW(), getHeight() / world.city.worldH()) * 0.8f;
         scale = Math.max(minScale, Math.min(10f, scale * f));
@@ -436,19 +546,19 @@ final class GameView extends View implements Menu.Host {
         return super.onGenericMotionEvent(ev);
     }
 
-    private void buildIcons() {
+    void buildIcons() {
         int[] bodies = {0xFFD9534F, 0xFF23408E, 0xFF55623A, 0xFFF2F2F2, 0xFFB07A3E, 0xFF2E2622, 0xFF4E5A3E, 0xFF6B3A36,
-                0xFF4D3F4F, 0xFF4E5A3E, 0xFF6A6F60, 0xFF5E6444, 0xFF5E6A3E, 0xFF6E7A48, 0xFF8A6A34};
+                0xFF4D3F4F, 0xFF3A3036, 0xFF6A6F60, 0xFF5E6444, 0xFF5E6A3E, 0xFF6E7A48, 0xFF8A6A34, 0xFFC0282D, 0xFF7A6A4A};
         int[] heads = {0xFF4A2E1A, 0xFF141C38, 0xFF3C4628, 0xFF4A2E1A, 0xFF8C6232, 0xFF9E2A22, 0xFF7C9A5E, 0xFF9DAA70,
-                0xFF6F8D55, 0xFF73905A, 0xFFC8D0B4, 0xFF4E5438, 0xFFA8BE52, 0xFF8E9A5A, 0xFFC8302A};
-        float[] radii = {3.6f, 3.8f, 4f, 3.7f, 2.8f, 3.7f, 3.8f, 3.5f, 6.5f, 3.0f, 3.5f, 2.8f, 3.6f, 5.4f, 3.9f};
+                0xFF6F8D55, 0xFF5C7448, 0xFFC8D0B4, 0xFF4E5438, 0xFFA8BE52, 0xFF8E9A5A, 0xFFC8302A, 0xFF1A1410, 0xFF2E2E30};
+        float[] radii = {3.6f, 3.8f, 4f, 3.7f, 2.8f, 3.7f, 3.8f, 3.5f, 6.5f, 8f, 3.5f, 2.8f, 3.6f, 5.4f, 3.9f, 3.7f, 4f};
         for (int t = 0; t < Entity.TYPE_COUNT; t++) {
             Entity e = new Entity();
             e.type = t;
             e.radius = radii[t];
             e.body = bodies[t];
             e.head = heads[t];
-            e.skin = e.isZombie() ? heads[t] : t == Entity.DOG ? bodies[t] : 0xFFE0AC69;
+            e.skin = e.isUndead() ? heads[t] : t == Entity.DOG ? bodies[t] : 0xFFE0AC69;
             if (t == Entity.ZOMBIE_DOG) e.skin = 0xFF7A8058;
             e.angle = (float) (-Math.PI / 2);
             e.hp = e.maxHp = 1;
@@ -457,10 +567,11 @@ final class GameView extends View implements Menu.Host {
         }
     }
 
-    private void loadWorld(CityConfig cfg) {
+    void loadWorld(CityConfig cfg) {
         world = new World(cfg);
         world.setMaxPopulation(settings.maxPopulation());
         world.gore = settings.gore();
+        world.heavy = settings.heavyDestruction();
         world.populate(cfg);
         follow = null;
         followV = null;
@@ -469,10 +580,11 @@ final class GameView extends View implements Menu.Host {
         pinned.clear();
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         if (getWidth() > 0) centerCamera();
     }
 
-    private void applySettings() {
+    void applySettings() {
         float want = baseDp * settings.uiScale();
         if (want != dp) {
             dp = want;
@@ -481,14 +593,21 @@ final class GameView extends View implements Menu.Host {
         }
         world.setMaxPopulation(settings.maxPopulation());
         world.gore = settings.gore();
+        world.heavy = settings.heavyDestruction();
         sound.setVolumes(settings.music(), settings.sfx());
+        // ((19.0) The groups: the radio and the menus' sounds on their own levels; the listening options.)
+        vfx.quality = settings.effects();
+        vfx.screen = settings.screenEffects();
+        vfx.grading = settings.colourGrading();
+        float[] buses = {1, 1, 1, 1, 1, settings.radioVolume() * 1.2f, settings.uiVolume() * 1.2f};
+        sound.setMix(buses, settings.ambience(), settings.mono(), settings.nightMode());
         realistic = settings.realistic();
         City.realistic = realistic;
         if (world.city.drawnRealistic != realistic) world.redrawCity();
     }
 
     /** The Graphics setting, cached for drawing. */
-    private boolean realistic = true;
+    boolean realistic = true;
 
     // ------------------------------------------------------------------ Menu.Host
 
@@ -497,92 +616,39 @@ final class GameView extends View implements Menu.Host {
         return hasGame;
     }
 
-    private java.io.File saveFile() {
-        return new java.io.File(getContext().getFilesDir(), "save.dat");
-    }
-
-    private java.io.File slotFile(int slot) {
-        return slot == 0 ? saveFile() : new java.io.File(getContext().getFilesDir(), "save" + slot + ".dat");
-    }
-
+    /** (See SaveSlots.) */
     @Override
     public boolean saveSlot(int slot) {
-        if (!hasGame) return false;
-        slotKnown[slot] = false;
-        try {
-            SaveGame.save(world, slotFile(slot));
-            // A short description to show in the slot list without loading the whole game.
-            int t = (int) world.time;
-            String info = world.city.name + " (" + CityConfig.PRESETS[world.city.cfg.v[CityConfig.OPT_PRESET]] + ")\n"
-                    + World.clock(t) + " played, " + World.count(world.humans, "person", "people") + ", " + World.count(world.zombies, "zombie", "zombies") + "\n"
-                    + new java.text.SimpleDateFormat("d MMM HH:mm").format(new java.util.Date());
-            java.io.FileOutputStream out = new java.io.FileOutputStream(slotFile(slot).getPath() + ".info");
-            try {
-                out.write(info.getBytes("UTF-8"));
-            } finally {
-                out.close();
-            }
-            return true;
-        } catch (OutOfMemoryError oom) {
-            // ((13.3) Out of memory saving (on the way out of the app): let go of what can be worked out again and
-            // say it didn't save, rather than crash.)
-            trimMemory();
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
+        return saveSlots.saveSlot(slot);
     }
 
     /** ((12.0) What's in each save slot, read once rather than off the storage every frame the menu is up.) */
-    private final String[] slotText = new String[4];
-    private final boolean[] slotKnown = new boolean[4];
+    // ((15.1) Six slots now, and the autosave.)
+    final String[] slotText = new String[Menu.SLOTS + 1];
+    final boolean[] slotKnown = new boolean[Menu.SLOTS + 1];
 
+    /** (See SaveSlots.) */
     @Override
     public String slotInfo(int slot) {
-        if (!slotKnown[slot]) {
-            slotText[slot] = readSlotInfo(slot);
-            slotKnown[slot] = true;
-        }
-        return slotText[slot];
+        return saveSlots.slotInfo(slot);
     }
 
+    /** (See SaveSlots.) */
     @Override
     public boolean deleteSlot(int slot) {
-        java.io.File f = slotFile(slot), info = new java.io.File(f.getPath() + ".info");
-        boolean ok = !f.exists() || f.delete();
-        info.delete();
-        slotKnown[slot] = false;
-        return ok;
+        return saveSlots.deleteSlot(slot);
     }
 
-    private String readSlotInfo(int slot) {
-        java.io.File f = new java.io.File(slotFile(slot).getPath() + ".info");
-        if (!slotFile(slot).exists()) return null;
-        if (!f.exists()) return "Saved game";
-        try {
-            java.io.FileInputStream in = new java.io.FileInputStream(f);
-            byte[] b = new byte[(int) f.length()];
-            int n = in.read(b);
-            in.close();
-            return new String(b, 0, Math.max(0, n), "UTF-8");
-        } catch (Exception e) {
-            return "Saved game";
-        }
-    }
-
+    /** (See SaveSlots.) */
     @Override
     public boolean loadSlot(int slot) {
-        java.io.File f = slotFile(slot);
-        if (!f.exists()) return false;
-        // (Loaded on the loader thread; if it fails the screen says so.)
-        loadSave(f);
-        return true;
+        return saveSlots.loadSlot(slot);
     }
 
     @Override
     public void watch(Entity e) {
         continueGame();
-        Object in = e.dead ? whereIs(e) : null;
+        Object in = e.dead ? mapLabels.whereIs(e) : null;
         if (in instanceof Fleet.Vehicle) {
             Fleet.Vehicle v = (Fleet.Vehicle) in;
             jumpTo(v.x, v.y);
@@ -604,7 +670,7 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** Photo mode: no buttons or panels until the screen is tapped. */
-    private boolean hudHidden;
+    boolean hudHidden;
 
     @Override
     public void hideHud() {
@@ -625,12 +691,12 @@ final class GameView extends View implements Menu.Host {
 
     @Override
     public boolean canContinue() {
-        return hasGame || saveFile().exists();
+        return hasGame || saveSlots.saveFile().exists();
     }
 
     @Override
     public boolean saveGame() {
-        return saveSlot(0);
+        return saveSlots.saveSlot(0);
     }
 
     @Override
@@ -660,7 +726,7 @@ final class GameView extends View implements Menu.Host {
     public void continueGame() {
         if (!hasGame && menu.screen == Menu.MAIN) {
             // Pick up the saved game (on the loader thread).
-            if (saveFile().exists()) loadSave(saveFile());
+            if (saveSlots.saveFile().exists()) loadSave(saveSlots.saveFile());
             return;
         }
         if (menu.screen == Menu.MAIN) {
@@ -675,38 +741,41 @@ final class GameView extends View implements Menu.Host {
      * A new city is built on a thread of its own (a massive one takes a while on a phone, and doing it on the
      * screen's thread froze the app until Android gave up on it); meanwhile the screen says so.
      */
-    private volatile World built;
-    private volatile Throwable buildError;
-    private Thread loader;
-    private boolean loading;
-    private float loadingTime;
-    private String loadFailed;
-    private float loadFailedTime;
+    volatile World built;
+    volatile Throwable buildError;
+    Thread loader;
+    boolean loading;
+    float loadingTime;
+    String loadFailed;
+    float loadFailedTime;
 
     /** What the loader is doing: a new city, or a saved game (and which file). */
-    private boolean loadingSave;
-    private java.io.File loadingFile;
+    boolean loadingSave;
+    java.io.File loadingFile;
 
     @Override
     public void startGame(final CityConfig cfg) {
         // (10.50) A new game always starts in the 3D view (the View button still switches it).
         settings.setBuildings3d(true);
         final int maxPop = settings.maxPopulation();
-        final boolean gore = settings.gore();
+        final boolean gore = settings.gore(), heavy = settings.heavyDestruction();
         startLoader(false, null, new Runnable() {
             @Override
             public void run() {
                 World w = new World(cfg);
-                w.setMaxPopulation(maxPop);
+                // ((18.0) A mission's the same on every phone: its own population, not the setting's.)
+                w.setMaxPopulation(cfg.mission >= 0 ? Campaign.population(cfg.mission) : maxPop);
                 w.gore = gore;
+                w.heavy = heavy;
                 w.populate(cfg);
+                if (cfg.mission >= 0) Campaign.begin(w, records.veterans(), records.perkMask());
                 built = w;
             }
         });
     }
 
     /** Loads a saved game on the loader thread. */
-    private void loadSave(final java.io.File f) {
+    void loadSave(final java.io.File f) {
         startLoader(true, f, new Runnable() {
             @Override
             public void run() {
@@ -719,7 +788,7 @@ final class GameView extends View implements Menu.Host {
         });
     }
 
-    private void startLoader(boolean save, java.io.File f, final Runnable job) {
+    void startLoader(boolean save, java.io.File f, final Runnable job) {
         if (loading) return;
         loading = true;
         loadingSave = save;
@@ -729,11 +798,47 @@ final class GameView extends View implements Menu.Host {
         City.progress(0, save ? "Loading the save" : "");
         built = null;
         buildError = null;
+        // ((17.3) The city on screen - the menu's demo city, or the game you were in (saved first) - is let go of now,
+        // not kept until the new one's ready: two cities in memory at once was the peak, and the biggest maps on a
+        // phone came close to its limit there.)
+        if (world != null) {
+            if (hasGame) saveGame();
+            world.freeMemory();
+            world = null;
+        }
+        hasGame = false;
+        chunks.clear();
+        // (And what was kept from it: the minimap's picture and the map-picture renderer's hold on it.)
+        miniWorld = null;
+        miniMap = null;
+        chunkCity = null;
+        hotWorld = null;
+        tacWorld = null;
+        miniCountWorld = null;
+        labelCity = null;
+        java.util.Arrays.fill(visible, null);
+        onScreen.clear();
+        plans.clear();
+        loose.clear();
+        roofLabels.clear();
+        byDoor.clear();
+        records.forget();
+        vfx.forget();
+        follow = null;
+        followV = null;
+        inspectB = null;
+        inspectZ = null;
+        inspectBase = null;
+        selection.clear();
+        lastAction.clear();
+        pinned.clear();
+        System.gc();
         loader = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     job.run();
+                    if (released) built = null;
                 } catch (Throwable e) {
                     buildError = e;
                 }
@@ -744,8 +849,9 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** A saved game is ready: into it. */
-    private void finishLoad() {
+    void finishLoad() {
         world = built;
+        reportShown = world != null && world.warResult != 0;
         built = null;
         loading = false;
         applySettings();
@@ -758,6 +864,7 @@ final class GameView extends View implements Menu.Host {
         selection.clear();
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         lastAction.clear();
         tool = TOOL_PAN;
         lastMessageCount = world.dispatch.messageCount;
@@ -767,6 +874,7 @@ final class GameView extends View implements Menu.Host {
         feedOnAge.clear();
         centerCamera();
         menu.screen = Menu.NONE;
+        missionSetup();
     }
 
     /** Waits for a city being built (for the tests). */
@@ -775,7 +883,11 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** The city is ready: into the game. */
-    private void finishStart() {
+    /** ((17.5) Whether this game's report has been put up at its end already. */
+    boolean reportShown;
+
+    void finishStart() {
+        reportShown = false;
         world = built;
         built = null;
         loading = false;
@@ -786,6 +898,7 @@ final class GameView extends View implements Menu.Host {
         pinned.clear();
         inspectB = null;
         inspectZ = null;
+        inspectBase = null;
         if (getWidth() > 0) centerCamera();
         records.gameStarted();
         autoCollapsed = false;
@@ -799,7 +912,25 @@ final class GameView extends View implements Menu.Host {
         hintTime = 14f;
         lastMessageCount = 0;
         menu.screen = Menu.NONE;
+        missionSetup();
     }
+
+    /** ((18.0) The tool bar for the game just started or loaded: a mission's commander tools, or the sandbox's. */
+    void missionSetup() {
+        missionRecorded = world != null && world.missionResult != 0;
+        if (commander()) {
+            // (The mission panel sits where the first hint would.)
+            hintTime = 0;
+            brushIdx = 0;
+            if (Campaign.PLACE_COST[placeVariant] < 0) placeVariant = 1;
+            if (Campaign.EVENT_COST[eventVariant] < 0) eventVariant = 4;
+        }
+        picker = -1;
+        if (getWidth() > 0) onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
+    }
+
+    /** ((18.0) Whether this game's mission result has gone into the campaign records yet. */
+    boolean missionRecorded;
 
     @Override
     public void toMainMenu() {
@@ -808,6 +939,11 @@ final class GameView extends View implements Menu.Host {
         savedCamY = camY;
         savedScale = scale;
         menu.open(Menu.MAIN);
+    }
+
+    @Override
+    public void preview(int sfx) {
+        sound.play(sfx, 0.85f, 0);
     }
 
     @Override
@@ -833,19 +969,30 @@ final class GameView extends View implements Menu.Host {
             click();
             return true;
         }
+        if (hotOpen && !menu.isOpen()) {
+            hotOpen = false;
+            click();
+            return true;
+        }
+        if (timeOpen && !menu.isOpen()) {
+            timeOpen = false;
+            click();
+            return true;
+        }
         // ((12.0) Back shuts whatever is open over the city first - a picker, the Clear menu, a card, being someone -
         // as on any other app, instead of going straight to the pause menu.)
         if (!menu.isOpen() && hasGame) {
             boolean shut = true;
-            if (world.controlled != null) releaseControl();
+            if (world.controlled != null) touchInput.releaseControl();
             else if (picker >= 0 || clearMenu) {
                 picker = -1;
                 clearMenu = false;
-            } else if (follow != null || followV != null || inspectB != null || inspectZ != null) {
+            } else if (follow != null || followV != null || inspectB != null || inspectZ != null || inspectBase != null) {
                 follow = null;
                 followV = null;
                 inspectB = null;
                 inspectZ = null;
+                inspectBase = null;
             } else shut = false;
             if (shut) {
                 click();
@@ -857,11 +1004,18 @@ final class GameView extends View implements Menu.Host {
         return handled;
     }
 
+    /** (14.3) This screen's gone: anything still loading is dropped when it's done, not kept. */
+    volatile boolean released;
+
     void release() {
+        released = true;
         sound.release();
+        chunks.clear();
+        if (world != null) world.freeMemory();
     }
 
-    private void centerCamera() {
+    void centerCamera() {
+        if (world == null) return;
         scale = Math.max(getWidth(), getHeight()) / (34f * City.T);
         camX = world.city.worldW() / 2 - getWidth() / scale / 2;
         camY = world.city.worldH() / 2 - getHeight() / scale / 2;
@@ -887,7 +1041,8 @@ final class GameView extends View implements Menu.Host {
         int n = 0;
         for (int i = 0; i < toolRects.length; i++) if (!hiddenTool(i)) n++;
         int[] shown = new int[n];
-        for (int i = 0, k = 0; i < toolRects.length; i++) {
+        for (int j = 0, k = 0; j < BAR_ORDER.length; j++) {
+            int i = BAR_ORDER[j];
             if (hiddenTool(i)) toolRects[i].setEmpty();
             else shown[k++] = i;
         }
@@ -928,15 +1083,15 @@ final class GameView extends View implements Menu.Host {
         float lh = 17 * dp;
         if (portrait) {
             float top = 10 * dp + th + 8 * dp;
-            statsRect.set(10 * dp, top, 10 * dp + Math.min(260 * dp, w - 20 * dp), top + lh * 8 + 12 * dp + GRAPH_H * dp);
+            statsRect.set(10 * dp, top, 10 * dp + Math.min(260 * dp, w - 20 * dp), top + lh * 12 + 12 * dp + GRAPH_H * dp);
             feedRect.set(10 * dp, statsRect.bottom + 8 * dp, w - 10 * dp, statsRect.bottom + 8 * dp + 4 * 24 * dp);
         } else {
-            statsRect.set(10 * dp, 10 * dp, 200 * dp, 10 * dp + lh * 11 + 12 * dp + GRAPH_H * dp);
+            statsRect.set(10 * dp, 10 * dp, 200 * dp, 10 * dp + lh * 15 + 12 * dp + GRAPH_H * dp);
             feedRect.set(topRects[0].left, topRects[0].bottom + 8 * dp, w - 10 * dp, topRects[0].bottom + 8 * dp + 4 * 24 * dp);
         }
         if (oldw == 0) {
             centerCamera();
-        } else {
+        } else if (world != null) {
             // Keep the same spot in the middle of the screen when the phone rotates.
             camX += (oldw - w) / 2f / scale;
             camY += (oldh - h) / 2f / scale;
@@ -947,18 +1102,18 @@ final class GameView extends View implements Menu.Host {
     // ------------------------------------------------------------------ loop
 
     /** (10.57) Time not yet simulated, and the shortest step the simulation takes (a thirtieth of a second). */
-    private float simAcc;
+    float simAcc;
     /** (10.60) How the city is doing, as the stats panel says it (see Dispatch.pressure). */
-    private static final String[] PRESSURE = {"", "Stretched", "Losing", "Overrun"};
+    static final String[] PRESSURE = {"", "Stretched", "Losing", "Overrun"};
     /** ((13.3) Until the memory in use is next looked at, and until it can be freed again. */
-    private float memoryCheck, memoryFreedAgo = 99;
+    float memoryCheck, memoryFreedAgo = 99;
 
     /**
      * ((13.3) Close to the phone's memory limit: let go of everything that can be worked out again (the ways on
      * foot, the sharp close-ups of the map) before it runs out, rather than after - running out was what crashed
      * the biggest maps.)
      */
-    private void guardMemory(float dt) {
+    void guardMemory(float dt) {
         memoryFreedAgo += dt;
         memoryCheck -= dt;
         if (memoryCheck > 0) return;
@@ -977,85 +1132,47 @@ final class GameView extends View implements Menu.Host {
 
     /** (10.59) Simulation steps that failed and were skipped (see onDraw). */
     int simErrors;
-    private static final float SIM_STEP = 1 / 30f;
-
-    /** (10.59) One splat on the ground: blood, a puddle, glass, tyre marks; fade is how much of it is left. */
-    private void drawDecal(Canvas c, int i, float x, float y, float r, byte kind, float fade) {
-        if (kind == World.D_SKID) {
-            // Tyre marks.
-            stroke.setColor(fadeCol(world.dcol[i], fade));
-            stroke.setStrokeWidth(1.4f);
-            float ca = (float) Math.cos(world.dang[i]) * r, sa = (float) Math.sin(world.dang[i]) * r;
-            c.drawLine(x - ca, y - sa, x, y, stroke);
-        } else if (kind == World.D_ACID) {
-            fill.setColor(fadeCol(world.dcol[i], fade));
-            c.drawCircle(x, y, r, fill);
-            fill.setColor(fadeCol(0x55E8FF7A, fade));
-            c.drawCircle(x + r * 0.3f, y - r * 0.2f, r * 0.3f, fill);
-            c.drawCircle(x - r * 0.4f, y + r * 0.3f, r * 0.2f, fill);
-        } else if (kind == World.D_GLASS) {
-            stroke.setColor(fadeCol(world.dcol[i], fade));
-            stroke.setStrokeWidth(0.6f);
-            float ca = (float) Math.cos(world.dang[i]) * r, sa = (float) Math.sin(world.dang[i]) * r;
-            c.drawLine(x - ca, y - sa, x + ca, y + sa, stroke);
-        } else if (kind == World.D_PUDDLE) {
-            fill.setColor(fadeCol(world.dcol[i], fade));
-            c.drawCircle(x, y, r, fill);
-            fill.setColor(fadeCol(0x20FFFFFF, fade));
-            c.drawCircle(x - r * 0.3f, y - r * 0.3f, r * 0.35f, fill);
-        } else {
-            fill.setColor(fadeCol(world.dcol[i], fade));
-            c.drawCircle(x, y, r, fill);
-        }
-    }
+    static final float SIM_STEP = 1 / 30f;
+    /** ((22.0) How long a step of the simulation has been taking, in milliseconds (a running average). */
+    float stepMs;
 
     /** (10.59) Room for the live graph in the stats panel (dp). */
-    private static final float GRAPH_H = 58;
-
-    /** (10.59) The living (blue), the dead (green) and the armed (gold) over the game so far, in the box given. */
-    private void drawLiveGraph(Canvas c, float x0, float y0, float x1, float y1) {
-        int n = world.histCount;
-        if (y1 - y0 < 20 * dp || x1 - x0 < 40 * dp) return;
-        fill.setColor(0x40000000);
-        c.drawRect(x0, y0, x1, y1, fill);
-        if (n < 2) {
-            text.setColor(0xFF7A808A);
-            text.setTextSize(10.5f * dp);
-            c.drawText("Graph fills in as the game goes on", x0 + 6 * dp, (y0 + y1) / 2 + 4 * dp, text);
-            return;
-        }
-        int max = 10;
-        for (int i = 0; i < n; i++) max = Math.max(max, Math.max(world.histHumans[i], world.histZombies[i]));
-        int[][] series = {world.histHumans, world.histZombies, world.histArmed};
-        int[] colors = {0xFF6FA8FF, 0xFF7CC24E, 0xFFE8C547};
-        float pw = x1 - x0 - 4 * dp, ph = y1 - y0 - 6 * dp, bx = x0 + 2 * dp, by = y1 - 3 * dp;
-        // (No more than one segment a couple of pixels: a long game has hundreds of samples.)
-        int step = Math.max(1, (int) Math.ceil(n / (pw / (2 * dp))));
-        stroke.setStrokeWidth(1.6f * dp);
-        for (int sIdx = 0; sIdx < 3; sIdx++) {
-            stroke.setColor(colors[sIdx]);
-            int[] h = series[sIdx];
-            // ((12.0) On a square-root scale, as on the Stats screen: the dead and the armed were a flat line along the
-            // bottom beside thousands of people.)
-            float px = bx, py = by - ph * (float) Math.sqrt(h[0] / (float) max);
-            for (int i = step; i < n; i += step) {
-                float nx = bx + pw * i / (n - 1), ny = by - ph * (float) Math.sqrt(h[i] / (float) max);
-                c.drawLine(px, py, nx, ny, stroke);
-                px = nx;
-                py = ny;
-            }
-        }
-    }
-
-    /** (10.59) A colour with its alpha scaled down by f. */
-    private static int fadeCol(int col, float f) {
-        if (f >= 1) return col;
-        int a = (int) (((col >>> 24) & 0xFF) * f);
-        return (a << 24) | (col & 0xFFFFFF);
-    }
+    static final float GRAPH_H = 58;
 
     @Override
     protected void onDraw(Canvas c) {
+        // ((22.6) Whatever goes wrong in a frame - the sounds, the effects, the drawing - costs that frame, not the
+        // game: it used to be only the drawing that was guarded, and a crowd zoomed in on could close the app.)
+        int saves = c.getSaveCount();
+        try {
+            frame(c);
+        } catch (OutOfMemoryError oom) {
+            c.restoreToCount(saves);
+            trimMemory();
+            System.gc();
+            invalidate();
+        } catch (RuntimeException ex) {
+            c.restoreToCount(saves);
+            frameErrors++;
+            noteError("Frame", ex);
+            invalidate();
+        }
+    }
+
+    /** ((22.6) Frames that went wrong and were skipped. */
+    int frameErrors;
+
+    /** ((22.6) Something that went wrong and was got over: said on screen briefly, and in the log. */
+    void noteError(String where, Throwable ex) {
+        System.err.println("Zombie City: " + where + " failed: " + ex);
+        if (loadFailed == null) {
+            StackTraceElement[] st = ex.getStackTrace();
+            loadFailed = where + " hiccup: " + ex.getClass().getSimpleName() + (st.length > 0 ? " at " + st[0].getMethodName() + ":" + st[0].getLineNumber() : "");
+            loadFailedTime = 4;
+        }
+    }
+
+    void frame(Canvas c) {
         long now = System.nanoTime();
         float rawDt = (now - lastFrame) / 1e9f;
         float dt = Math.min(0.05f, rawDt);
@@ -1078,15 +1195,22 @@ final class GameView extends View implements Menu.Host {
                             : "";
                     loadFailed = oom ? "Not enough memory to load that game on this phone." : "That save couldn't be loaded" + reason + ".";
                     // (A broken autosave goes, so Continue doesn't keep failing; one too big for memory stays.)
-                    if (!oom && loadingFile != null && loadingFile.equals(saveFile())) loadingFile.delete();
+                    if (!oom && loadingFile != null && loadingFile.equals(saveSlots.saveFile())) loadingFile.delete();
                 } else loadFailed = oom
                         ? "Not enough memory for a city that big on this phone. Try a smaller map size."
                         : "Couldn't build that city (" + buildError.getClass().getSimpleName() + "). Try another.";
                 loadFailedTime = 6;
                 buildError = null;
                 System.gc();
+                // ((17.3) Back to the menu, with its demo city put back up.)
+                if (world == null) {
+                    menuCity();
+                    applySettings();
+                    centerCamera();
+                    menu.open(Menu.MAIN);
+                }
             } else {
-                drawLoading(c);
+                hud.drawLoading(c);
                 if (running) postInvalidateOnAnimation();
                 return;
             }
@@ -1099,6 +1223,15 @@ final class GameView extends View implements Menu.Host {
             fpsTimer = 0;
         }
 
+        // ((17.5) The game's over: the after-action report, once the ending's been shown.)
+        if (hasGame && world != null && world.missionResult != 0 && !missionRecorded) {
+            missionRecorded = true;
+            if (world.missionResult == 1) records.missionWon(world.city.cfg.mission, world.missionStars, Campaign.veterans(world));
+        }
+        if (hasGame && world != null && (world.warResult != 0 || world.missionResult != 0) && !reportShown && world.warBannerTime <= 0 && !menu.isOpen()) {
+            reportShown = true;
+            menu.open(Menu.REPORT);
+        }
         boolean inGame = !menu.isOpen();
         boolean simulate = inGame ? !simPaused : menu.liveBackground();
         if (!simulate) simAcc = 0;
@@ -1109,6 +1242,34 @@ final class GameView extends View implements Menu.Host {
             simAcc = Math.min(0.25f, simAcc + dt * (inGame ? SPEEDS[speedIdx] : 1));
             if (simAcc < SIM_STEP * 0.97f) simulate = false;
         }
+        stepSimulation(inGame, simulate);
+        // ((12.0) The tip waits while a headline is up: it was written across it.)
+        updateView(dt, inGame);
+        // Headlines: one at a time, each for a few seconds.
+        updateNewsAndSound(dt, inGame, simulate);
+
+        // ((11.3) Something going wrong while drawing (or memory running out zoomed right in) costs a frame, not
+        // the game: the map's close-ups are let go of if it's memory, and what went wrong is shown briefly.)
+        drawFrame(c, dt);
+        if (inGame && hasGame) tuneQuality(rawDt, (System.nanoTime() - now) / 1e6f);
+        if (running) {
+            // ((22.0) The city only changes thirty times a second, and nothing's drawn in between those steps: with
+            // nobody touching the screen, it's drawn as often as it changes and no more. Drawing it again at the
+            // screen's 60 or 120 a second was most of the work on a fast screen, and left the simulation short.
+            // Panning, zooming, tapping and the menus still get every frame.)
+            boolean lively = menu.isOpen() || mode != MODE_NONE || panVX != 0 || panVY != 0 || System.nanoTime() - lastInputNs < 700_000_000L;
+            paced = !lively && !settings.batterySaver();
+            if (settings.batterySaver()) postInvalidateDelayed(simPaused && !menu.isOpen() || menu.screen == Menu.PAUSE ? 100 : 33);
+            else if (lively) postInvalidateOnAnimation();
+            else {
+                long spent = (System.nanoTime() - now) / 1_000_000L;
+                postInvalidateDelayed(Math.max(1, (simPaused ? 100 : 33) - spent));
+            }
+        }
+    }
+
+    /** ((27.3) From frame.) Steps the simulation for the time gone by (at the chosen speed), in steps short enough to be stable and few enough to keep the frame rate up. */
+    void stepSimulation(boolean inGame, boolean simulate) {
         if (simulate) {
             int speed = inGame ? SPEEDS[speedIdx] : 1;
             float total = simAcc;
@@ -1116,6 +1277,11 @@ final class GameView extends View implements Menu.Host {
             // (10.50) Faster speeds take longer steps rather than only more of them: on a phone the extra steps
             // used to be cut short by the time limit below, and 2x, 4x and 8x hardly ran any faster.
             float maxStep = speed >= 8 ? 0.08f : speed >= 4 ? 0.066f : speed >= 2 ? 0.05f : 0.034f;
+            // ((22.0) On a phone where a step takes a while, longer steps rather than more of them: two slow steps a
+            // frame made each frame slower, which made for two steps the next frame, and so on - the game ran at a
+            // crawl. One longer step a frame keeps it moving; the faster speeds already step this far.)
+            if (stepMs > 22) maxStep = Math.max(maxStep, 0.066f);
+            else if (stepMs > 12) maxStep = Math.max(maxStep, 0.05f);
             int steps = Math.max(1, (int) Math.ceil(total / maxStep));
             float step = total / steps;
             // Never spend much more than about half a frame simulating: when that's used up, what's left of the
@@ -1124,7 +1290,9 @@ final class GameView extends View implements Menu.Host {
             guardMemory(frameDt);
             try {
                 for (int i = 0; i < steps; i++) {
+                    long t0 = System.nanoTime();
                     world.update(step);
+                    stepMs += ((System.nanoTime() - t0) / 1e6f - stepMs) * 0.1f;
                     if (i < steps - 1 && System.nanoTime() - simStart > 14000000L) {
                         world.update(Math.min(0.1f, step * (steps - 1 - i)));
                         break;
@@ -1142,7 +1310,10 @@ final class GameView extends View implements Menu.Host {
                 System.err.println("Zombie City: a simulation step failed: " + ex);
             }
         }
-        // ((12.0) The tip waits while a headline is up: it was written across it.)
+    }
+
+    /** ((27.3) From frame.) The hint, the order marker and the selection; the camera (flicked, with the keys, drifting on the menu, or after whoever's followed); the music's mood, pins and the records. */
+    void updateView(float dt, boolean inGame) {
         if (inGame && hintTime > 0 && headlines.isEmpty()) hintTime -= dt;
         if (orderMarker > 0) orderMarker -= dt;
         for (int i = selection.size() - 1; i >= 0; i--) if (selection.get(i).dead) selection.remove(i);
@@ -1176,7 +1347,7 @@ final class GameView extends View implements Menu.Host {
                 else if (follow.removed) {
                     // ((12.0) Gone indoors (or into a car some other way): that building's card, or that car,
                     // instead of the card just closing.)
-                    Object at = whereIs(follow);
+                    Object at = mapLabels.whereIs(follow);
                     if (at instanceof Fleet.Vehicle) followV = (Fleet.Vehicle) at;
                     else if (at instanceof City.Building && tool == TOOL_PAN) inspectB = (City.Building) at;
                 }
@@ -1198,8 +1369,8 @@ final class GameView extends View implements Menu.Host {
                 camY += (ty - camY) * k;
             }
         }
-        if (inGame) updateMood(dt);
-        if (inGame && ((int) (world.time * 2)) != ((int) ((world.time - dt) * 2))) updatePins();
+        if (inGame) audio.updateMood(dt);
+        if (inGame && ((int) (world.time * 2)) != ((int) ((world.time - dt) * 2))) mapLabels.updatePins();
         if (hasGame && inGame) {
             recordTimer -= dt;
             if (recordTimer <= 0) {
@@ -1207,9 +1378,20 @@ final class GameView extends View implements Menu.Host {
                 records.check(world);
             }
         }
-        // Headlines: one at a time, each for a few seconds.
+    }
+
+    /** ((27.3) From frame.) Banners and headlines, the music, and this frame's sounds, radio and captions. */
+    void updateNewsAndSound(float dt, boolean inGame, boolean simulate) {
         if (world.bannerSeq != seenBanner) {
             seenBanner = world.bannerSeq;
+            // ((19.0) A sting under each big announcement: bright for a win, dark for a loss, an alert for the rest.)
+            if (world.warBanner != null && hasGame && !menu.isOpen()) {
+                String b = world.warBanner;
+                boolean won = world.warResult == 1 || world.missionResult == 1, lost = world.warResult == 2 || world.missionResult == 2;
+                sound.play(won ? Sfx.STING_WIN : lost ? Sfx.STING_LOSE : Sfx.STING_ALERT, 0.8f, 0);
+                if (world.missionResult == 1 && b.startsWith("MISSION"))
+                    for (int s = 0; s < world.missionStars; s++) audio.later(1.1f + s * 0.35f, Sfx.STAR, 0.7f);
+            }
             if (world.warBanner != null) {
                 boolean good = world.warBanner.contains("SURVIVES") || world.warBanner.contains("TURNING");
                 headline(world.warBanner, world.warSub, good ? 0xFF8FB8FF : 0xFF9BE070);
@@ -1224,21 +1406,41 @@ final class GameView extends View implements Menu.Host {
         }
         sound.playTrack(inGame || menu.screen == Menu.PAUSE ? mood : Synth.TRACK_MENU);
         if (world.alarmTime > 0) sound.play(Sfx.ALARM, 0.7f, 0);
-        playSounds(inGame ? 1f : 0.35f);
+        // ((19.5) The city's bangs as things to see too, before they're played and cleared; and the effects a frame on.)
+        {
+            float vw0 = getWidth() / scale, vh0 = getHeight() / scale;
+            vfx.events(world, camX, camY, camX + vw0, camY + vh0);
+            vfx.update(world, simulate ? dt : 0, camX, camY, camX + vw0, camY + vh0, onScreen);
+        }
+        audio.playSounds(inGame ? 1f : 0.35f);
+        if (inGame) {
+            audio.heartbeat(dt, 1f);
+            audio.distantSounds(dt, 1f);
+        }
         if (world.dispatch.messageCount != lastMessageCount) {
-            if (inGame && settings.radio()) sound.play(Sfx.RADIO, 0.5f, 0);
+            if (inGame && settings.radio()) audio.radioSound();
             lastMessageCount = world.dispatch.messageCount;
         }
+        if (inGame) {
+            audio.ambience(dt);
+            audio.missionSounds();
+        } else audio.ambienceQuiet();
+        audio.playLater(dt);
+    }
 
-        // ((11.3) Something going wrong while drawing (or memory running out zoomed right in) costs a frame, not
-        // the game: the map's close-ups are let go of if it's memory, and what went wrong is shown briefly.)
+    /** ((27.3) From frame.) Draws it all - the world, the panels, the menu over them - with a drawing error noted rather than fatal; then a failed load's message and the frame rate. */
+    void drawFrame(Canvas c, float dt) {
         int saves = c.getSaveCount();
         try {
-            drawWorld(c);
+            worldRenderer.drawWorld(c);
+            // ((19.5) Over the whole screen, in the game: danger, flashes, the colour grade, cinematic bars.)
+            if (!menu.isOpen() && hasGame) vfx.drawScreen(c, getWidth(), getHeight(), intensity, hudHidden);
             if (menu.isOpen()) menu.draw(c, getWidth(), getHeight(), dt);
             else if (!hudHidden) {
-                drawUi(c);
-                if (tactical) drawTactical(c);
+                hud.drawUi(c);
+                if (tactical) hud.drawTactical(c);
+                else if (hotOpen) hud.drawHot(c);
+                else if (timeOpen) hud.drawTimeline(c);
             }
         } catch (OutOfMemoryError oom) {
             c.restoreToCount(saves);
@@ -1258,7 +1460,7 @@ final class GameView extends View implements Menu.Host {
         if (loadFailed != null) {
             loadFailedTime -= dt;
             if (loadFailedTime <= 0) loadFailed = null;
-            else drawBanner(c, loadFailed);
+            else hud.drawBanner(c, loadFailed);
         }
         if (settings.showFps()) {
             text.setTextSize(12 * dp);
@@ -1268,25 +1470,25 @@ final class GameView extends View implements Menu.Host {
                             : world.quality == World.Q_LOW ? "  (low detail)" : ""), getWidth() - 8 * dp,
                     menu.isOpen() ? getHeight() - 30 * dp : barTop - 8 * dp, text);
         }
-        if (inGame && hasGame) tuneQuality(rawDt, (System.nanoTime() - now) / 1e6f);
-        if (running) {
-            if (!settings.batterySaver()) postInvalidateOnAnimation();
-            else postInvalidateDelayed(simPaused && !menu.isOpen() || menu.screen == Menu.PAUSE ? 100 : 33);
-        }
     }
+
+    /** ((22.0) When the screen was last touched, and whether frames are being drawn only as often as the city changes. */
+    long lastInputNs;
+    boolean paced;
 
     /**
      * Keeps the game smooth on slower phones: it watches how long each frame takes (and the frame rate) and,
      * if the phone is struggling, steps the detail down - people far off screen think less often, there's
      * less background traffic, fewer sparks and specks - and steps it back up once there's room again.
      */
-    private float workMs = 8, slowT, fastT;
+    float workMs = 8, slowT, fastT;
 
-    private void tuneQuality(float rawDt, float ms) {
+    void tuneQuality(float rawDt, float ms) {
         if (rawDt > 0.25f) return; // (a hitch: the app was paused, or a GC)
         workMs += (ms - workMs) * 0.05f;
-        boolean slow = workMs > 21 || (!settings.batterySaver() && fps > 0 && fps < 38);
-        boolean fast = workMs < 11 && (settings.batterySaver() || fps > 52);
+        boolean capped = settings.batterySaver() || paced;
+        boolean slow = workMs > 21 || (!capped && fps > 0 && fps < 38);
+        boolean fast = workMs < 11 && (capped || fps > 52);
         slowT = slow ? slowT + rawDt : 0;
         fastT = fast ? fastT + rawDt : 0;
         if (slowT > 2.5f && world.quality < World.Q_LOW) {
@@ -1298,629 +1500,83 @@ final class GameView extends View implements Menu.Host {
         }
     }
 
-    /** "Building the city", over a dark screen, with a little spinner. */
-    private void drawLoading(Canvas c) {
-        c.drawColor(0xFF15171B);
-        float cx = getWidth() / 2f, cy = getHeight() / 2f;
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(20 * dp);
-        text.setColor(0xFFE8E8E8);
-        c.drawText("Building the city…", cx, cy - 18 * dp, text);
-        text.setTextSize(13 * dp);
-        text.setColor(0xFF9AA0A8);
-        String stage = City.stage;
-        c.drawText(stage == null || stage.isEmpty() ? "Streets, homes, traffic and everyone in them" : stage + "…", cx, cy + 8 * dp, text);
-        fill.setStyle(Paint.Style.FILL);
-        // (10.32) A bar that fills as the city goes up (the biggest maps take a while).
-        shownProgress += (Math.max(shownProgress, City.progress) - shownProgress) * 0.2f;
-        float bw = Math.min(getWidth() - 60 * dp, 280 * dp), by = cy + 34 * dp;
-        oval.set(cx - bw / 2, by, cx + bw / 2, by + 8 * dp);
-        fill.setColor(0xFF2A2E35);
-        c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-        oval.set(cx - bw / 2, by, cx - bw / 2 + bw * Math.min(1, shownProgress), by + 8 * dp);
-        fill.setColor(0xFF9BE070);
-        c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-        text.setTextSize(11 * dp);
-        text.setColor(0xFF7A8088);
-        c.drawText((int) (Math.min(1, shownProgress) * 100) + "%   " + (int) loadingTime + "s", cx, by + 26 * dp, text);
-    }
-
-    private float shownProgress;
-
-    /** A message across the bottom of the screen. */
-    private void drawBanner(Canvas c, String msg) {
-        text.setTextSize(14 * dp);
-        text.setTextAlign(Paint.Align.CENTER);
-        float tw = Math.min(getWidth() - 24 * dp, text.measureText(msg) + 32 * dp);
-        float y = getHeight() - 70 * dp;
-        fill.setStyle(Paint.Style.FILL);
-        fill.setColor(0xEE3A1E1E);
-        c.drawRoundRect(new RectF(getWidth() / 2f - tw / 2, y - 26 * dp, getWidth() / 2f + tw / 2, y + 12 * dp), 10 * dp, 10 * dp, fill);
-        text.setColor(0xFFFFE0E0);
-        c.drawText(msg, getWidth() / 2f, y, text);
-    }
+    float shownProgress;
 
     // ------------------------------------------------------------------ music, minimap
 
-    private int mood = Synth.TRACK_GAME, lastShots;
-    private float moodTimer, moodHold;
+    int mood = Synth.TRACK_GAME, lastShots;
+    float moodTimer, moodHold;
+    /** (14.4) How tense things are now, 0 to 1 (see updateMood), and the time to the next heartbeat under the music. */
+    float intensity;
+    float heartCd;
 
-    /** Music follows the action: calm when it's quiet, intense in a big fight. */
-    private void updateMood(float dt) {
-        moodTimer -= dt;
-        moodHold -= dt;
-        if (moodTimer > 0) return;
-        moodTimer = 1;
-        int shots = world.shotsFired - lastShots;
-        lastShots = world.shotsFired;
-        float vx0 = camX, vy0 = camY, vx1 = camX + getWidth() / scale, vy1 = camY + barTop / scale;
-        int onScreen = 0;
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
-            if (e.isZombie() && e.x > vx0 && e.x < vx1 && e.y > vy0 && e.y < vy1) onScreen++;
-        }
-        int want = world.zombieCount() == 0 ? Synth.TRACK_CALM
-                : shots >= 12 || onScreen >= 25 || !world.explosions.isEmpty() ? Synth.TRACK_ACTION : Synth.TRACK_GAME;
-        // (10.52) Each mood has three pieces: a new one, picked at random, every couple of minutes and whenever
-        // the mood changes.
-        moodPlayed += 1;
-        if (want == moodBase) {
-            if (want == Synth.TRACK_ACTION) moodHold = 15;
-            if (moodPlayed > 140) {
-                moodPlayed = 0;
-                moodVariant = (moodVariant + 1 + rnd.nextInt(2)) % 3;
-                mood = Synth.variant(moodBase, moodVariant);
-            }
-            return;
-        }
-        if (moodHold > 0 && want != Synth.TRACK_ACTION) return;
-        moodBase = want;
-        moodVariant = rnd.nextInt(3);
-        moodPlayed = 0;
-        mood = Synth.variant(moodBase, moodVariant);
-        moodHold = 20;
-    }
-
-    private int moodBase = Synth.TRACK_GAME, moodVariant;
-    private float moodPlayed;
+    int moodBase = Synth.TRACK_GAME, moodVariant;
+    float moodPlayed;
 
 
-    private final RectF miniRect = new RectF(), camChip = new RectF();
-    private android.graphics.Bitmap miniMap;
-    private World miniWorld;
-    private int[] heat;
-    private int miniCollapsed = -1;
-    private final Rect miniSrc = new Rect();
+    final RectF miniRect = new RectF(), camChip = new RectF();
+    android.graphics.Bitmap miniMap;
+    World miniWorld;
+    int[] heat;
+    int miniCollapsed = -1;
+    final Rect miniSrc = new Rect();
 
-    /** The minimap: the whole city small, with zombies, people, safe zones, vehicles and the camera view. */
-    private void drawMinimap(Canvas c) {
-        // While you're controlling someone, the attack button goes where the minimap was.
-        miniX.setEmpty();
-        mapChip.setEmpty();
-        tacBtn.setEmpty();
-        if (!settings.minimap() || world.controlled != null || miniClosed) {
-            miniRect.setEmpty();
-        } else {
-            float size = portrait ? Math.min(getWidth() - statsRect.right - 18 * dp, 120 * dp) : Math.min(130 * dp, getHeight() * 0.3f);
-            if (portrait && size < 70 * dp) size = 90 * dp;
-            if (portrait && size >= 70 * dp && getWidth() - statsRect.right - 18 * dp >= 70 * dp)
-                miniRect.set(getWidth() - 10 * dp - size, statsRect.top, getWidth() - 10 * dp, statsRect.top + size);
-            else {
-                miniRect.set(getWidth() - 10 * dp - size, uiFloor() - 10 * dp - size, getWidth() - 10 * dp, uiFloor() - 10 * dp);
-                // ((12.0) Down there it's where a card opens: hidden while one is, rather than poking out round it.)
-                if (picker < 0 && (follow != null || followV != null || (tool == TOOL_PAN && (inspectZ != null || inspectB != null))
-                        // ((12.0) Or over the open stats panel, with big text on a narrow screen.)
-                        || (!statsCollapsed && RectF.intersects(miniRect, statsShown)))) {
-                    miniRect.setEmpty();
-                    camChip.setEmpty();
-                    return;
-                }
-            }
-            // ((12.0) The fallen buildings counted once a second, not every frame: tens of thousands on a big map.)
-            if (world != miniCountWorld || world.time - miniCountAt > 1 || world.time < miniCountAt) {
-                miniCountWorld = world;
-                miniCountAt = world.time;
-                int n = 0;
-                for (int i = 0; i < world.city.buildings.size(); i++) if (world.city.buildings.get(i).collapsed) n++;
-                miniCount = n;
-            }
-            int collapsed = miniCount;
-            if (miniMap == null || miniWorld != world || miniCollapsed != collapsed) {
-                // Redrawn only when the city changes.
-                miniWorld = world;
-                miniCollapsed = collapsed;
-                miniMap = android.graphics.Bitmap.createBitmap(MINI, MINI, android.graphics.Bitmap.Config.ARGB_8888);
-                Canvas mc = new Canvas(miniMap);
-                Paint p = new Paint(Paint.FILTER_BITMAP_FLAG);
-                miniSrc.set(0, 0, world.city.bitmap.getWidth(), world.city.bitmap.getHeight());
-                roofDst.set(0, 0, MINI, MINI);
-                mc.drawBitmap(world.city.bitmap, miniSrc, roofDst, p);
-                miniTimer = 0;
-            }
-            fill.setColor(0xE0101216);
-            oval.set(miniRect.left - 3 * dp, miniRect.top - 3 * dp, miniRect.right + 3 * dp, miniRect.bottom + 3 * dp);
-            c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
-            // The people and the infection heatmap are drawn into a copy of the map a few times a second, so
-            // the minimap costs one picture per frame however many people there are.
-            miniTimer -= 1 / 60f;
-            if (miniDots == null || miniTimer <= 0) {
-                miniTimer = 0.2f;
-                drawMiniDots();
-            }
-            // (10.50) On the bigger maps it shows the part of the city round the view, not all of it at once: the
-            // whole of a big map in a corner of the screen was too small to make anything out.
-            float ww = world.city.worldW(), wh = world.city.worldH(), f = Math.min(1, 260 * City.T / Math.max(ww, wh));
-            miniW = ww * f;
-            miniH = wh * f;
-            float ccx = camX + getWidth() / scale / 2, ccy = camY + barTop / scale / 2;
-            miniX0 = Math.max(0, Math.min(ww - miniW, ccx - miniW / 2));
-            miniY0 = Math.max(0, Math.min(wh - miniH, ccy - miniH / 2));
-            miniSrc.set((int) (miniX0 / ww * MINI), (int) (miniY0 / wh * MINI), (int) ((miniX0 + miniW) / ww * MINI), (int) ((miniY0 + miniH) / wh * MINI));
-            bmpPaint.setAlpha(230);
-            c.drawBitmap(miniDots, miniSrc, miniRect, bmpPaint);
-            bmpPaint.setAlpha(255);
-            float sx = miniRect.width() / miniW;
-            c.save();
-            c.clipRect(miniRect);
-            for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) {
-                Dispatch.SafeZone z = world.dispatch.zones.get(i);
-                fill.setColor(z.military ? 0x886FBF3F : 0x884F8FE0);
-                c.drawCircle(mx(z.x), my(z.y), Math.max(2.5f * dp, z.r * sx), fill);
-            }
-            // ((12.0) The open 911 calls: a small red mark at each, bigger the more of the dead there.)
-            for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {
-                Dispatch.Incident inc = world.dispatch.incidents.get(i);
-                if (inc.resolved || inc.cordonPost >= 0 || inc.checkpointSpot != null) continue;
-                float ix = mx(inc.x), iy = my(inc.y), ir = (1.8f + Math.min(2.5f, inc.zombiesNear / 6f)) * dp;
-                fill.setColor(0xE0101216);
-                c.drawCircle(ix, iy, ir + 1.2f * dp, fill);
-                fill.setColor(inc.zombiesNear > 0 ? 0xFFFF5A4A : 0xFFFFA64D);
-                c.drawCircle(ix, iy, ir, fill);
-            }
-            if (world.rangerStation != null) {
-                // The ranger station: a green square.
-                float rx = mx(world.rangerStation.doorX), ry = my(world.rangerStation.doorY);
-                fill.setColor(0xFF3E8A3A);
-                c.drawRect(rx - 2.5f * dp, ry - 2.5f * dp, rx + 2.5f * dp, ry + 2.5f * dp, fill);
-                fill.setColor(0xFFE6E6E6);
-                c.drawRect(rx - 1f * dp, ry - 1f * dp, rx + 1f * dp, ry + 1f * dp, fill);
-            }
-            // Reinforcements on their way in: a line from the head of the column to where they're going.
-            for (int i = 0; i < world.dispatch.convoys.size(); i++) {
-                Dispatch.Convoy cv = world.dispatch.convoys.get(i);
-                int col = convoyColor(cv);
-                stroke.setColor(col);
-                stroke.setStrokeWidth(1.5f * dp);
-                float hx = mx(cv.x), hy = my(cv.y);
-                c.drawLine(hx, hy, mx(cv.toX), my(cv.toY), stroke);
-                fill.setColor(col);
-                c.drawCircle(hx, hy, (2.5f + 1.2f * (float) Math.abs(Math.sin(world.time * 5))) * dp, fill);
-            }
-            // Calls for backup: a ring going out on the minimap too.
-            for (int i = 0; i < world.dispatch.callouts.size(); i++) {
-                Dispatch.Callout co = world.dispatch.callouts.get(i);
-                stroke.setColor(alpha(co.color, Math.max(0, 1 - co.age / 6f)));
-                stroke.setStrokeWidth(1.2f * dp);
-                c.drawCircle(mx(co.x), my(co.y), (2 + (co.age * 6) % 6) * dp, stroke);
-            }
-            // ((11.5) The cars and trucks are in the picture with the people now, drawn a few times a second.)
-            // (10.50) Helicopters in the air: a rotor mark in the colour of who flies it, and a line to where it's going.
-            for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-                Fleet.Vehicle v = world.fleet.vehicles.get(i);
-                if (v.type != Fleet.HELI || !Fleet.airborne(v)) continue;
-                int col = v.rescue ? 0xFFFF8A3A : v.kind == Fleet.K_POLICE_HELI ? 0xFF6FA8FF : 0xFFFFE27A;
-                float hx = mx(v.x), hy = my(v.y);
-                if (World.hypot(v.tx - v.x, v.ty - v.y) > 60) {
-                    stroke.setColor(alpha(col, 0.7f));
-                    stroke.setStrokeWidth(1.2f * dp);
-                    c.drawLine(hx, hy, mx(v.tx), my(v.ty), stroke);
-                }
-                fill.setColor(0xE0101216);
-                c.drawCircle(hx, hy, 4.2f * dp, fill);
-                stroke.setColor(col);
-                stroke.setStrokeWidth(1.6f * dp);
-                float a = world.time * 9, rr = 3.6f * dp;
-                c.drawLine(hx - (float) Math.cos(a) * rr, hy - (float) Math.sin(a) * rr, hx + (float) Math.cos(a) * rr, hy + (float) Math.sin(a) * rr, stroke);
-                c.drawLine(hx + (float) Math.sin(a) * rr, hy - (float) Math.cos(a) * rr, hx - (float) Math.sin(a) * rr, hy + (float) Math.cos(a) * rr, stroke);
-                fill.setColor(col);
-                c.drawCircle(hx, hy, 1.4f * dp, fill);
-            }
-            // ((12.0) The people you've pinned: a gold star-point each, and whoever you're following or controlling
-            // ringed.)
-            for (int i = 0; i < pinned.size(); i++) {
-                Entity p = pinned.get(i);
-                float[] at = pinAt(p);
-                if (at == null) continue;
-                float px = mx(at[0]), py = my(at[1]);
-                fill.setColor(0xE0101216);
-                c.drawCircle(px, py, 3.4f * dp, fill);
-                fill.setColor(0xFFE8C547);
-                c.drawCircle(px, py, 2.2f * dp, fill);
-            }
-            Entity you = world.controlled != null ? world.controlled : follow;
-            if (you != null && !you.dead) {
-                stroke.setColor(0xFFFFFFFF);
-                stroke.setStrokeWidth(1.4f * dp);
-                c.drawCircle(mx(you.x), my(you.y), (3.5f + 1.5f * (float) Math.abs(Math.sin(world.time * 4))) * dp, stroke);
-            }
-            stroke.setColor(0xFFFFFFFF);
-            stroke.setStrokeWidth(1 * dp);
-            c.drawRect(mx(camX), my(camY), mx((camX + getWidth() / scale)),
-                    my((camY + barTop / scale)), stroke);
-            c.restore();
-            // (10.32) And a button in the other corner opens the tactical map.
-            tacBtn.set(miniRect.left - 2 * dp, miniRect.top - 2 * dp, miniRect.left + 16 * dp, miniRect.top + 16 * dp);
-            fill.setColor(0xE0101216);
-            c.drawCircle(tacBtn.centerX(), tacBtn.centerY(), 8 * dp, fill);
-            stroke.setColor(0xFFC8CCD2);
-            stroke.setStrokeWidth(1.4f * dp);
-            float bx = tacBtn.centerX(), by = tacBtn.centerY(), bu = 3.6f * dp;
-            c.drawRect(bx - bu, by - bu, bx + bu, by + bu, stroke);
-            c.drawLine(bx - bu, by, bx + bu, by, stroke);
-            c.drawLine(bx, by - bu, bx, by + bu, stroke);
-            // A little x in the corner closes it.
-            miniX.set(miniRect.right - 16 * dp, miniRect.top - 2 * dp, miniRect.right + 2 * dp, miniRect.top + 16 * dp);
-            fill.setColor(0xE0101216);
-            c.drawCircle(miniX.centerX(), miniX.centerY(), 8 * dp, fill);
-            stroke.setColor(0xFFC8CCD2);
-            stroke.setStrokeWidth(1.6f * dp);
-            float mx = miniX.centerX(), my = miniX.centerY(), u = 3.5f * dp;
-            c.drawLine(mx - u, my - u, mx + u, my + u, stroke);
-            c.drawLine(mx - u, my + u, mx + u, my - u, stroke);
-        }
-        // (No Auto cam since 10.50.) Closed: a chip where the minimap was opens it again.
-        camChip.setEmpty();
-        if (miniClosed && settings.minimap() && world.controlled == null) {
-            text.setTextSize(11.5f * dp);
-            text.setTextAlign(Paint.Align.CENTER);
-            float mw = text.measureText("Map") + 20 * dp;
-            float right = getWidth() - 10 * dp, top = uiFloor() - 40 * dp;
-            mapChip.set(right - mw, top, right, top + 28 * dp);
-            fill.setColor(0xE0202227);
-            c.drawRoundRect(mapChip, 9 * dp, 9 * dp, fill);
-            text.setColor(0xFFF2F2F2);
-            c.drawText("Map", mapChip.centerX(), mapChip.centerY() + 4 * dp, text);
-        }
-    }
+    // ------------------------------------------------------------------ (13.8) hot spots
+
+    /**
+     * The busiest fights right now, the most of the dead first: a call or a safe zone each, with how many of the dead
+     * and how many police and soldiers are there. Tap one to go there.
+     */
+    boolean hotOpen, hotDown;
+    final RectF hotBtn = new RectF(), hotChip = new RectF(), hotClose = new RectF();
+    java.util.List<World.HotSpot> hot = new java.util.ArrayList<World.HotSpot>();
+    final java.util.ArrayList<RectF> hotRows = new java.util.ArrayList<RectF>();
+    float hotAt = -99;
+    World hotWorld;
+    static final int HOT_MAX = 8;
+
+    // ------------------------------------------------------------------ (14.4) the outbreak's timeline
+
+    /** The key moments of this outbreak, newest first, with when; tap one that happened somewhere to go there. */
+    boolean timeOpen, timeDown;
+    final RectF timeBtn = new RectF(), timeChip = new RectF(), timeClose = new RectF();
+    final java.util.ArrayList<RectF> timeRows = new java.util.ArrayList<RectF>();
+    final java.util.ArrayList<World.Moment> timeShown = new java.util.ArrayList<World.Moment>();
 
     // ------------------------------------------------------------------ (10.32) tactical map
 
     /** The whole map full screen: where the dead are, the towns, bases, checkpoints, calls and help coming in. */
-    private boolean tactical, tacDown;
-    private final RectF tacBtn = new RectF(), tacRect = new RectF(), tacClose = new RectF();
-    private android.graphics.Bitmap tacMap;
-    private World tacWorld;
-    private int tacCollapsed = -1;
-    private int[] tacZ, tacH;
-    private float tacTimer;
-    private static final int TAC_GRID = 64;
+    boolean tactical, tacDown;
+    final RectF tacBtn = new RectF(), tacRect = new RectF(), tacClose = new RectF();
+    /** ((27.5) The overlay button on the minimap's left edge, its legend below the minimap, and the chip with the minimap closed. */
+    final RectF overlayBtn = new RectF(), overlayKey = new RectF(), overlayChip = new RectF();
+    android.graphics.Bitmap tacMap;
+    World tacWorld;
+    int tacCollapsed = -1;
+    int[] tacZ, tacH;
+    float tacTimer;
+    static final int TAC_GRID = 64;
 
-    private void drawTactical(Canvas c) {
-        City city = world.city;
-        fill.setColor(0xFA101216);
-        c.drawRect(0, 0, getWidth(), getHeight(), fill);
-        tacUsed.clear();
-        // ((12.0) Held sideways, the key goes beside the map rather than under it, and the map takes the height.)
-        boolean keySide = !portrait && getWidth() - 24 * dp - (getHeight() - 46 * dp - 16 * dp) >= 180 * dp;
-        float top = 46 * dp, size = keySide ? getHeight() - top - 16 * dp : Math.min(getWidth() - 24 * dp, getHeight() - top - 70 * dp);
-        float aspect = city.worldW() / city.worldH();
-        float mw = aspect >= 1 ? size : size * aspect, mh = aspect >= 1 ? size / aspect : size;
-        float tacL = keySide ? Math.max(12 * dp, (getWidth() - mw - 190 * dp) / 2) : (getWidth() - mw) / 2;
-        tacRect.set(tacL, top, tacL + mw, top + mh);
-        int collapsed = 0;
-        for (int i = 0; i < city.buildings.size(); i++) if (city.buildings.get(i).collapsed) collapsed++;
-        if (tacMap == null || tacWorld != world || tacCollapsed != collapsed) {
-            tacWorld = world;
-            tacCollapsed = collapsed;
-            int bw = 512, bh = Math.max(64, Math.round(512 / aspect));
-            if (tacMap == null || tacMap.getWidth() != bw || tacMap.getHeight() != bh)
-                tacMap = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888);
-            Canvas mc = new Canvas(tacMap);
-            Paint p = new Paint(Paint.FILTER_BITMAP_FLAG);
-            miniSrc.set(0, 0, city.bitmap.getWidth(), city.bitmap.getHeight());
-            roofDst.set(0, 0, bw, bh);
-            mc.drawBitmap(city.bitmap, miniSrc, roofDst, p);
-            // Dimmed, so what's on it stands out.
-            p.setColor(0x70000000);
-            mc.drawRect(0, 0, bw, bh, p);
-        }
-        miniSrc.set(0, 0, tacMap.getWidth(), tacMap.getHeight());
-        c.drawBitmap(tacMap, miniSrc, tacRect, bmpPaint);
-        float sx = tacRect.width() / city.worldW(), sy = tacRect.height() / city.worldH();
-        // The dead (red) and the living (blue), counted on a grid a couple of times a second.
-        tacTimer -= frameDt;
-        if (tacZ == null || tacTimer <= 0) {
-            tacTimer = 0.5f;
-            if (tacZ == null) {
-                tacZ = new int[TAC_GRID * TAC_GRID];
-                tacH = new int[TAC_GRID * TAC_GRID];
-            }
-            java.util.Arrays.fill(tacZ, 0);
-            java.util.Arrays.fill(tacH, 0);
-            for (int i = 0, n = world.entities.size(); i < n; i++) {
-                Entity e = world.entities.get(i);
-                if (e.dead) continue;
-                int gx = Math.min(TAC_GRID - 1, Math.max(0, (int) (e.x / city.worldW() * TAC_GRID)));
-                int gy = Math.min(TAC_GRID - 1, Math.max(0, (int) (e.y / city.worldH() * TAC_GRID)));
-                if (e.isZombie()) tacZ[gy * TAC_GRID + gx]++;
-                else tacH[gy * TAC_GRID + gx]++;
-            }
-        }
-        float cw = tacRect.width() / TAC_GRID, ch = tacRect.height() / TAC_GRID;
-        for (int k = 0; k < tacZ.length; k++) {
-            int z = tacZ[k], hu = tacH[k];
-            if (z == 0 && hu == 0) continue;
-            float x0 = tacRect.left + (k % TAC_GRID) * cw, y0 = tacRect.top + (k / TAC_GRID) * ch;
-            if (z > 0) fill.setColor(alpha(0xFFFF3A20, Math.min(0.8f, 0.25f + z * 0.05f)));
-            else fill.setColor(alpha(0xFF4F8FE0, Math.min(0.55f, 0.18f + hu * 0.015f)));
-            c.drawRect(x0, y0, x0 + cw, y0 + ch, fill);
-        }
-        // Safe zones.
-        for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) {
-            Dispatch.SafeZone z = world.dispatch.zones.get(i);
-            stroke.setColor(z.military ? 0xFF8FDF5F : 0xFF6FAFFF);
-            stroke.setStrokeWidth(2 * dp);
-            c.drawCircle(tacRect.left + z.x * sx, tacRect.top + z.y * sy, Math.max(5 * dp, z.r * sx), stroke);
-        }
-        // Calls: a ring at each open one.
-        for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {
-            Dispatch.Incident inc = world.dispatch.incidents.get(i);
-            if (inc.resolved || inc.cordonPost >= 0) continue;
-            stroke.setColor(0xFFFFC24A);
-            stroke.setStrokeWidth(1.6f * dp);
-            c.drawCircle(tacRect.left + inc.x * sx, tacRect.top + inc.y * sy, (5 + 2 * (float) Math.abs(Math.sin(world.time * 4))) * dp, stroke);
-        }
-        // Help coming in.
-        for (int i = 0; i < world.dispatch.convoys.size(); i++) {
-            Dispatch.Convoy cv = world.dispatch.convoys.get(i);
-            int col = convoyColor(cv);
-            stroke.setColor(col);
-            stroke.setStrokeWidth(2 * dp);
-            float hx = tacRect.left + cv.x * sx, hy = tacRect.top + cv.y * sy;
-            c.drawLine(hx, hy, tacRect.left + cv.toX * sx, tacRect.top + cv.toY * sy, stroke);
-            fill.setColor(col);
-            c.drawCircle(hx, hy, 4 * dp, fill);
-        }
-        float dot = 1.6f * dp;
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.type == Fleet.CAR || v.type == Fleet.TRAIN) continue;
-            fill.setColor(Fleet.army(v) ? 0xFFFFE27A : 0xFFE0E0E0);
-            c.drawCircle(tacRect.left + v.x * sx, tacRect.top + v.y * sy, dot, fill);
-        }
-        text.setTextAlign(Paint.Align.CENTER);
-        // (10.46) Infection zones.
-        for (int i = 0; i < world.infection.size(); i++) {
-            World.InfectionZone z = world.infection.get(i);
-            stroke.setColor(z.critical ? 0xFFFF4A3A : 0xFFFFB040);
-            stroke.setStrokeWidth(1.6f * dp);
-            c.drawCircle(tacRect.left + z.x * sx, tacRect.top + z.y * sy, Math.max(4 * dp, z.r * sx), stroke);
-        }
-        // Checkpoints.
-        for (int i = 0; i < city.checkpoints.size(); i++) {
-            float[] cp = city.checkpoints.get(i);
-            float x = tacRect.left + cp[0] * sx, y = tacRect.top + cp[1] * sy;
-            fill.setColor(0xFF55623A);
-            c.drawRect(x - 3.5f * dp, y - 3.5f * dp, x + 3.5f * dp, y + 3.5f * dp, fill);
-            stroke.setColor(0xFFE8E2C0);
-            stroke.setStrokeWidth(1 * dp);
-            c.drawRect(x - 3.5f * dp, y - 3.5f * dp, x + 3.5f * dp, y + 3.5f * dp, stroke);
-        }
-        // Bases, police stations, hospitals.
-        text.setTextSize(9 * dp);
-        for (int i = 0; i < city.facilities.size(); i++) {
-            City.Facility f = city.facilities.get(i);
-            // ((10.62) The fire stations aren't marked: there's no fire service any more.)
-            if (f.kind == City.FACILITY_FIRE) continue;
-            float x = tacRect.left + f.x * sx, y = tacRect.top + f.y * sy;
-            int col = f.kind == City.FACILITY_BASE ? (f.fallen ? 0xFF8A3A30 : 0xFF6F8F3F) : f.kind == City.FACILITY_POLICE ? 0xFF3A6EC5
-                    : f.kind == City.FACILITY_FIRE ? 0xFFD0402A : 0xFFE8E8E8;
-            fill.setColor(col);
-            float r = (f.kind == City.FACILITY_BASE ? 5 : 3) * dp;
-            c.drawCircle(x, y, r, fill);
-            if (f.kind == City.FACILITY_HOSPITAL) {
-                fill.setColor(0xFFD03030);
-                c.drawRect(x - r * 0.7f, y - r * 0.2f, x + r * 0.7f, y + r * 0.2f, fill);
-                c.drawRect(x - r * 0.2f, y - r * 0.7f, x + r * 0.2f, y + r * 0.7f, fill);
-            }
-            if (f.kind == City.FACILITY_BASE) {
-                String label = f.fallen ? "BASE (OVERRUN)" : "ARMY BASE";
-                x = tacX(label, x);
-                if (!tacClaim(label, x, y + r + 10 * dp)) continue;
-                text.setColor(0xFF000000);
-                c.drawText(label, x + 1, y + r + 11 * dp + 1, text);
-                text.setColor(f.fallen ? 0xFFFF8A7A : 0xFFD8E8B0);
-                c.drawText(label, x, y + r + 11 * dp, text);
-            }
-        }
-        // The towns and districts by name.
-        text.setTextSize(9.5f * dp);
-        for (int i = 0, n = city.districts.size(); i < n; i++) {
-            City.District d = city.districts.get(i);
-            if (d.tiles < 40) continue;
-            float x = tacX(d.name, tacRect.left + d.cx * sx), y = tacRect.top + d.cy * sy;
-            if (!tacClaim(d.name, x, y)) continue;
-            text.setColor(0xC0000000);
-            c.drawText(d.name, x + 1, y + 1, text);
-            text.setColor(0xFFF4EED8);
-            c.drawText(d.name, x, y, text);
-        }
-        // Where the camera is.
-        stroke.setColor(0xFFFFFFFF);
-        stroke.setStrokeWidth(1.2f * dp);
-        c.drawRect(tacRect.left + camX * sx, tacRect.top + camY * sy, tacRect.left + (camX + getWidth() / scale) * sx,
-                tacRect.top + (camY + barTop / scale) * sy, stroke);
-        // Title, key and close.
-        text.setTextSize(15 * dp);
-        text.setColor(0xFFF2F2F2);
-        // ((12.0) Short of the close button on a narrow screen.)
-        float titleRoom = getWidth() - 2 * 52 * dp;
-        String title = city.name + " - tactical map";
-        if (text.measureText(title) > titleRoom) title = city.name;
-        c.drawText(fitText(title, titleRoom), getWidth() / 2f, 30 * dp, text);
-        text.setTextSize(11 * dp);
-        text.setColor(0xFFB8BCC4);
-        int dead = 0, living = 0;
-        for (int k = 0; k < tacZ.length; k++) {
-            dead += tacZ[k];
-            living += tacH[k];
-        }
-        // ((12.0) On two lines where one won't fit: it ran off both sides of a phone held upright.)
-        String key = "Dead " + dead + "   Living (outdoors) " + living, hint = "Rings: calls   Tap to go there";
-        if (keySide) {
-            text.setTextAlign(Paint.Align.LEFT);
-            float kx = tacRect.right + 16 * dp, ky = tacRect.top + 20 * dp, kw = getWidth() - kx - 12 * dp;
-            String[] keyLines = {"Dead " + dead, "Living (outdoors) " + living, "Rings: calls", "Tap to go there"};
-            for (String l : keyLines) {
-                c.drawText(fitText(l, kw), kx, ky, text);
-                ky += 18 * dp;
-            }
-            text.setTextAlign(Paint.Align.CENTER);
-        } else if (text.measureText(key + "   " + hint) <= getWidth() - 16 * dp)
-            c.drawText(key + "   " + hint, getWidth() / 2f, tacRect.bottom + 20 * dp, text);
-        else {
-            c.drawText(fitText(key, getWidth() - 16 * dp), getWidth() / 2f, tacRect.bottom + 20 * dp, text);
-            c.drawText(fitText(hint, getWidth() - 16 * dp), getWidth() / 2f, tacRect.bottom + 36 * dp, text);
-        }
-        tacClose.set(getWidth() - 44 * dp, 8 * dp, getWidth() - 8 * dp, 40 * dp);
-        fill.setColor(0xE0303238);
-        c.drawRoundRect(tacClose, 9 * dp, 9 * dp, fill);
-        stroke.setColor(0xFFE0E0E0);
-        stroke.setStrokeWidth(2 * dp);
-        float mx = tacClose.centerX(), my = tacClose.centerY(), u = 6 * dp;
-        c.drawLine(mx - u, my - u, mx + u, my + u, stroke);
-        c.drawLine(mx - u, my + u, mx + u, my - u, stroke);
-    }
+    final java.util.ArrayList<RectF> tacUsed = new java.util.ArrayList<RectF>();
 
-    private final java.util.ArrayList<RectF> tacUsed = new java.util.ArrayList<RectF>();
-
-    /** Room for a label centred on (x, y) on the tactical map, without running into one already there. */
-    /** ((12.0) A label's middle moved in so all of it is on the map: names at the edge were cut off by it.) */
-    private float tacX(String label, float x) {
-        float half = text.measureText(label) / 2 + 2 * dp;
-        return Math.max(tacRect.left + half, Math.min(tacRect.right - half, x));
-    }
-
-    private boolean tacClaim(String label, float x, float y) {
-        float tw = text.measureText(label) / 2 + 2 * dp;
-        RectF r = new RectF(x - tw, y - text.getTextSize(), x + tw, y + 3 * dp);
-        for (int i = 0; i < tacUsed.size(); i++) if (RectF.intersects(tacUsed.get(i), r)) return false;
-        tacUsed.add(r);
-        return true;
-    }
-
-    private void tacticalTap(float x, float y) {
-        click();
-        if (tacRect.contains(x, y)) {
-            follow = null;
-            followV = null;
-            camX = (x - tacRect.left) / tacRect.width() * world.city.worldW() - getWidth() / scale / 2;
-            camY = (y - tacRect.top) / tacRect.height() * world.city.worldH() - barTop / scale / 2;
-            clampCamera();
-        }
-        tactical = false;
-    }
-
-    /** Where things sitting on the tool bar go down to (above its fold tab). */
-    private float uiFloor() {
-        return toolsFolded ? barTop : foldTab.top;
-    }
-
-    private World miniCountWorld;
-    private float miniCountAt;
-    private int miniCount;
-    private android.graphics.Bitmap miniDots;
-    private Canvas miniDotsCanvas;
-    private float miniTimer;
+    World miniCountWorld;
+    float miniCountAt;
+    int miniCount;
+    android.graphics.Bitmap miniDots;
+    Canvas miniDotsCanvas;
+    float miniTimer;
 
     /** Redraws the minimap picture: the map, the infection heatmap and a dot for (most) people. */
     /** The minimap's pictures are this many pixels across (the whole map). */
-    private static final int MINI = 512;
+    static final int MINI = 512;
     /** The part of the world the minimap shows. */
-    private float miniX0, miniY0, miniW = 1, miniH = 1;
+    float miniX0, miniY0, miniW = 1, miniH = 1;
 
-    private float mx(float x) {
-        return miniRect.left + (x - miniX0) / miniW * miniRect.width();
-    }
-
-    private float my(float y) {
-        return miniRect.top + (y - miniY0) / miniH * miniRect.height();
-    }
-
-    private int[] miniSeen;
-    private int miniStamp;
-
-    private void drawMiniDots() {
-        if (miniDots == null) {
-            miniDots = android.graphics.Bitmap.createBitmap(MINI, MINI, android.graphics.Bitmap.Config.ARGB_8888);
-            miniDotsCanvas = new Canvas(miniDots);
-        }
-        Canvas mc = miniDotsCanvas;
-        mc.drawBitmap(miniMap, 0, 0, null);
-        float sx = (float) MINI / world.city.worldW(), sy = (float) MINI / world.city.worldH();
-        // Infection heatmap: where the zombies are thickest.
-        int hg = 24;
-        if (heat == null) heat = new int[hg * hg];
-        java.util.Arrays.fill(heat, 0);
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
-            if (!e.isZombie()) continue;
-            int hx = Math.min(hg - 1, Math.max(0, (int) (e.x / world.city.worldW() * hg)));
-            int hy = Math.min(hg - 1, Math.max(0, (int) (e.y / world.city.worldH() * hg)));
-            heat[hy * hg + hx]++;
-        }
-        float cw = (float) MINI / hg;
-        for (int k = 0; k < heat.length; k++) {
-            if (heat[k] == 0) continue;
-            fill.setColor(alpha(0xFFFF3A20, Math.min(0.65f, 0.15f + heat[k] * 0.04f)));
-            float hx = (k % hg) * cw, hy = (k / hg) * cw;
-            mc.drawRect(hx, hy, hx + cw, hy + cw, fill);
-        }
-        // ((11.5) One dot per kind on each pixel of the minimap: a horde of thousands is a few hundred dots.)
-        if (miniSeen == null) miniSeen = new int[MINI * MINI];
-        miniStamp += 8;
-        if (miniStamp > Integer.MAX_VALUE - 16) {
-            miniStamp = 8;
-            java.util.Arrays.fill(miniSeen, 0);
-        }
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
-            int col, kind;
-            // (Just the police, the army and the dead: the crowd of everyone else hid them.)
-            float d = 1.4f;
-            if (e.dead) continue;
-            if (e.isZombie()) {
-                col = 0xFF7CE04A;
-                kind = 1;
-            } else if (e.type == Entity.COP || e.type == Entity.SOLDIER) {
-                col = e.type == Entity.SOLDIER ? 0xFFB8E07A : 0xFF6FA8FF;
-                kind = e.type == Entity.SOLDIER ? 3 : 2;
-                d = 1.8f;
-            } else continue;
-            float x = e.x * sx, y = e.y * sy;
-            int px = Math.max(0, Math.min(MINI - 1, (int) x)), py = Math.max(0, Math.min(MINI - 1, (int) y)), k = py * MINI + px;
-            if (miniSeen[k] == miniStamp + kind) continue;
-            miniSeen[k] = miniStamp + kind;
-            fill.setColor(col);
-            mc.drawRect(x - d, y - d, x + d, y + d, fill);
-        }
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.type == Fleet.CAR && v.parked) continue;
-            if (v.type == Fleet.HELI || v.type == Fleet.JET) continue;
-            int kind = v.type == Fleet.TANK ? 4 : v.type == Fleet.CRUISER || Fleet.policeTruck(v) ? 5 : v.type == Fleet.TRUCK ? 6 : 7;
-            int col = kind == 4 ? 0xFFFFE27A : kind == 5 ? 0xFF6FA8FF : kind == 6 ? 0xFFB8E07A : 0xB0E0E0E0;
-            float x = v.x * sx, y = v.y * sy, d = kind == 7 ? 1.1f : 1.6f;
-            int px = Math.max(0, Math.min(MINI - 1, (int) x)), py = Math.max(0, Math.min(MINI - 1, (int) y)), k = py * MINI + px;
-            if (miniSeen[k] == miniStamp + kind) continue;
-            miniSeen[k] = miniStamp + kind;
-            fill.setColor(col);
-            mc.drawRect(x - d, y - d, x + d, y + d, fill);
-        }
-    }
+    int[] miniSeen;
+    int miniStamp;
 
     /** Draws the city (no buttons) into a picture for sharing. */
-    private void screenshotNow() {
+    void screenshotNow() {
         if (shareHandler == null) {
             world.say("Screenshots aren't available here");
             return;
@@ -1928,7 +1584,7 @@ final class GameView extends View implements Menu.Host {
         try {
             android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(getWidth(), getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
             Canvas bc = new Canvas(b);
-            drawWorld(bc);
+            worldRenderer.drawWorld(bc);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setTextSize(12 * dp);
             text.setColor(0xCCFFFFFF);
@@ -1953,7 +1609,7 @@ final class GameView extends View implements Menu.Host {
     }
 
     /** Slowly glides the camera over the city behind the main menu. */
-    private void driftCamera(float dt) {
+    void driftCamera(float dt) {
         menuTime += dt;
         scale = Math.max(getWidth(), getHeight()) / (30f * City.T);
         float ww = world.city.worldW(), wh = world.city.worldH();
@@ -1966,61 +1622,48 @@ final class GameView extends View implements Menu.Host {
     /** Plays the simulation's sound events that happened on (or near) the screen. */
     // ------------------------------------------------------------------ haptics
 
-    private float lastHp = -1;
-    private int buzzShots;
-    private long lastBuzz;
+    float lastHp = -1;
+    int buzzShots;
+    long lastBuzz;
 
     /** A little buzz when you shoot, a hard one when you're hurt, and a thump for crashes and nearby blasts. */
-    private void haptics() {
-        if (!settings.vibration()) return;
-        Entity e = world.controlled;
-        int strength = 0;
-        if (e != null) {
-            if (lastHp >= 0 && e.hp < lastHp - 0.5f) strength = 2;
-            if (world.shotsFired > buzzShots && world.ctrlAttack) strength = Math.max(strength, 1);
-            lastHp = e.hp;
-        } else lastHp = -1;
-        buzzShots = world.shotsFired;
-        float vw = getWidth() / scale, vh = getHeight() / scale, cx = camX + vw / 2, cy = camY + vh / 2;
-        for (int i = 0; i < world.evCount; i++) {
-            int t = world.evType[i];
-            if (t != Sfx.EXPLOSION && t != Sfx.CRASH && t != Sfx.CANNON) continue;
-            if (Math.abs(world.evX[i] - cx) < vw * 0.6f && Math.abs(world.evY[i] - cy) < vh * 0.6f) strength = Math.max(strength, 2);
-        }
-        long now = System.currentTimeMillis();
-        if (strength == 0 || now - lastBuzz < (strength == 1 ? 90 : 160)) return;
-        lastBuzz = now;
-        performHapticFeedback(strength == 1 ? android.view.HapticFeedbackConstants.KEYBOARD_TAP
-                : android.view.HapticFeedbackConstants.LONG_PRESS);
-    }
+    float hurtHp = -1;
 
-    private void playSounds(float master) {
-        haptics();
-        float vw = getWidth() / scale, vh = getHeight() / scale;
-        float cx = camX + vw / 2, cy = camY + vh / 2, reach = Math.max(vw, vh) * 0.75f;
-        for (int i = 0; i < world.evCount; i++) {
-            float ddx = world.evX[i] - cx, ddy = world.evY[i] - cy;
-            float d = (float) Math.sqrt(ddx * ddx + ddy * ddy);
-            int type = world.evType[i];
-            // (10.32) Loud things carry: a battle, an explosion or a helicopter is heard a long way off, faintly;
-            // a groan only close by.
-            float r = reach * Sfx.carry(type);
-            if (d > r) continue;
-            float f = d / r;
-            float vol = master * (1 - 0.85f * f) * (1 - 0.15f * f * f);
-            if (type == Sfx.GROAN || type == Sfx.GROAN_DEEP || type == Sfx.SCREAM) vol *= 0.6f;
-            // ((11.7) Gunshots a bit louder, near and far.)
-            if (Sfx.gun(type)) vol *= 1.3f;
-            // ((13.4) And how far off: the mixer muffles it and gives it more echo the further away it is.)
-            sound.play(type, vol, Math.max(-1, Math.min(1, ddx / (vw / 2))) * 0.8f, f);
-        }
-        world.evCount = 0;
-    }
+    /** (14.4) Gunfire, blasts and sirens too far off to hear as they are, gathered: how many, and which way (sum of x). */
+    final int[] farCount = new int[3];
+    final float[] farX = new float[3];
+    final float[] farCd = new float[3];
+    int farGun = Sfx.RIFLE;
+
+    // ------------------------------------------------------------------ (19.0) the Sound Update
+
+    float shockCd;
+    /** ((19.5) The Visuals Update's effects. */
+    final Visuals vfx = new Visuals();
+    /** Sounds to play a moment from now: {seconds left, id, volume}. */
+    final java.util.ArrayList<float[]> soon = new java.util.ArrayList<float[]>();
+
+    /** The radio as each message comes in: a phone for a 911 call, the army's two beeps, the police's hiss; then the squelch. */
+    float radioQuietUntil;
+
+    /** ((19.0) A mission's sounds: money spent, a step towards the objective. */
+    int lastProgress = -1, lastSpent;
+
+    // ---- The ambience ----
+
+    float ambT;
+
+    // ---- Captions ----
+
+    /** On the screen now: {kind, x direction, y direction, seconds left}. */
+    final java.util.ArrayList<float[]> captions = new java.util.ArrayList<float[]>();
+    static final String[] CAPTION_TEXT = {"Gunfire", "Explosion", "Siren", "Screaming", "Alarm", "Helicopter", "Crash",
+            "Building collapsing", "Horde"};
 
     // ------------------------------------------------------------------ world rendering
 
-    private final android.graphics.Rect mapSrc = new android.graphics.Rect();
-    private final RectF mapDst = new RectF();
+    final android.graphics.Rect mapSrc = new android.graphics.Rect();
+    final RectF mapDst = new RectF();
 
     // ------------------------------------------------------------------ sharp close-ups of the map
 
@@ -2029,3131 +1672,67 @@ final class GameView extends View implements Menu.Host {
      * squares of map on screen are drawn again at several pixels per unit (in the background, a few at a time)
      * and laid over it; the last few dozen are kept.
      */
-    private static final float CHUNK = 192;
-    private static final int MAX_CHUNKS = 44;
+    static final float CHUNK = 192;
+    static final int MAX_CHUNKS = 44;
     /** How fine the close-ups being drawn are (pixels per world unit), or 0 when there are none. */
-    private int closeRes;
-    private final java.util.concurrent.ConcurrentHashMap<Long, android.graphics.Bitmap> chunks =
+    int closeRes;
+    final java.util.concurrent.ConcurrentHashMap<Long, android.graphics.Bitmap> chunks =
             new java.util.concurrent.ConcurrentHashMap<Long, android.graphics.Bitmap>();
-    private final java.util.Set<Long> chunkPending = java.util.Collections.newSetFromMap(
+    final java.util.Set<Long> chunkPending = java.util.Collections.newSetFromMap(
             new java.util.concurrent.ConcurrentHashMap<Long, Boolean>());
-    private final java.util.concurrent.LinkedBlockingDeque<Object[]> chunkJobs = new java.util.concurrent.LinkedBlockingDeque<Object[]>();
-    private final java.util.HashSet<Long> chunksWanted = new java.util.HashSet<Long>();
-    private volatile java.util.Set<Long> chunksOnScreen = new java.util.HashSet<Long>();
-    private volatile City chunkCity;
-    private volatile int chunkVersion;
-    private Thread chunkWorker;
+    final java.util.concurrent.LinkedBlockingDeque<Object[]> chunkJobs = new java.util.concurrent.LinkedBlockingDeque<Object[]>();
+    final java.util.HashSet<Long> chunksWanted = new java.util.HashSet<Long>();
+    volatile java.util.Set<Long> chunksOnScreen = new java.util.HashSet<Long>();
+    volatile City chunkCity;
+    volatile int chunkVersion;
+    Thread chunkWorker;
 
-    private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** Each building's roof lettering, looked up once per map drawing. */
-    private final java.util.IdentityHashMap<City.Building, java.util.ArrayList<City.Label>> roofLabels =
+    final java.util.IdentityHashMap<City.Building, java.util.ArrayList<City.Label>> roofLabels =
             new java.util.IdentityHashMap<City.Building, java.util.ArrayList<City.Label>>();
-    private City labelCity;
-    private int labelVersion = -1;
-
-    /**
-     * A roof's lettering (shop names, POLICE, FIRE...) drawn as text on the raised roof, so it stays sharp at any
-     * zoom: s is the roof's perspective scale about (cx, cy), a its opacity.
-     */
-    private void drawRoofLabels(Canvas c, City.Building b, float cx, float cy, float s, float a) {
-        City city = world.city;
-        if (city != labelCity || city.renderVersion != labelVersion) {
-            labelCity = city;
-            labelVersion = city.renderVersion;
-            roofLabels.clear();
-            for (City.Label l : city.labels) {
-                if (l.building < 0 || l.building >= city.buildings.size()) continue;
-                City.Building o = city.buildings.get(l.building);
-                java.util.ArrayList<City.Label> list = roofLabels.get(o);
-                if (list == null) roofLabels.put(o, list = new java.util.ArrayList<City.Label>());
-                list.add(l);
-            }
-        }
-        java.util.ArrayList<City.Label> list = roofLabels.get(b);
-        if (list == null || a <= 0.1f) return;
-        labelPaint.setTextAlign(Paint.Align.CENTER);
-        labelPaint.setFakeBoldText(true);
-        for (int i = 0; i < list.size(); i++) {
-            City.Label l = list.get(i);
-            float size = l.size * s;
-            // ((11.5) Not under five pixels tall: unreadable, and text is among the dearest things to draw.)
-            if (size * scale < 5f) continue;
-            labelPaint.setTextSize(size);
-            float lx = cx + (l.x - cx) * s, ly = cy + (l.y - cy) * s;
-            if (l.sign) {
-                // (10.52) A sign: on a dark plate, the letters centred on it.
-                float tw = labelPaint.measureText(l.text) / 2 + size * 0.35f, th = size * 0.62f;
-                fill.setColor(alpha(0xC8141618, a));
-                oval.set(lx - tw, ly - th, lx + tw, ly + th);
-                c.drawRoundRect(oval, size * 0.2f, size * 0.2f, fill);
-                ly += size * 0.36f;
-            }
-            int col = l.color;
-            // (Dark lettering on the dark plate: white instead.)
-            if (l.sign && ((col >> 16) & 0xFF) + ((col >> 8) & 0xFF) + (col & 0xFF) < 300) col = (col & 0xFF000000) | 0xF2F2F2;
-            labelPaint.setColor(col);
-            labelPaint.setAlpha((int) (((col >>> 24) & 0xFF) * a));
-            c.drawText(l.text, lx, ly, labelPaint);
-        }
-    }
-
-    private void drawCloseUps(Canvas c) {
-        City city = world.city;
-        if (city != chunkCity || city.renderVersion != chunkVersion) {
-            chunkCity = city;
-            chunkVersion = city.renderVersion;
-            chunks.clear();
-            chunkJobs.clear();
-            chunkPending.clear();
-            city.changes.clear();
-        }
-        // Small changes: the close-ups over them are drawn again, the old ones staying up until they're ready.
-        for (float[] r; (r = city.changes.poll()) != null; ) {
-            // (With room for shadows, as a close-up is drawn.)
-            int ax0 = Math.max(0, (int) ((r[0] - 30) / CHUNK)), ax1 = (int) ((r[2] + 90) / CHUNK);
-            int ay0 = Math.max(0, (int) ((r[1] - 30) / CHUNK)), ay1 = (int) ((r[3] + 90) / CHUNK);
-            for (int ky = ay0; ky <= ay1; ky++)
-                for (int kx = ax0; kx <= ax1; kx++)
-                    for (int kr = 2; kr <= 8; kr *= 2) {
-                        long key = ((long) kr << 40) | ((long) ky << 20) | kx;
-                        if (!chunks.containsKey(key)) continue;
-                        if (!chunksOnScreen.contains(key)) chunks.remove(key);
-                        else if (chunkPending.add(key)) chunkJobs.addFirst(new Object[]{city, key, kx * CHUNK, ky * CHUNK, (float) kr, chunkVersion});
-                    }
-        }
-        // Only once the map picture is being stretched noticeably.
-        closeRes = 0;
-        if (scale < city.detail * 1.6f) return;
-        // (10.26) Zoomed right in, an even finer close-up, so roofs and ground stay sharp at the closest zoom.
-        int res = scale >= 5.5f && world.quality == World.Q_FULL ? 8 : scale >= 3.2f && world.quality < World.Q_LOW ? 4 : 2;
-        closeRes = res;
-        int cx0 = Math.max(0, (int) (camX / CHUNK)), cy0 = Math.max(0, (int) (camY / CHUNK));
-        int cx1 = (int) ((camX + getWidth() / scale) / CHUNK), cy1 = (int) ((camY + barTop / scale) / CHUNK);
-        int nx = (int) Math.ceil(city.worldW() / CHUNK), ny = (int) Math.ceil(city.worldH() / CHUNK);
-        cx1 = Math.min(nx - 1, cx1);
-        cy1 = Math.min(ny - 1, cy1);
-        chunksWanted.clear();
-        float mx = camX + getWidth() / scale / 2, my = camY + barTop / scale / 2;
-        for (int cy = cy0; cy <= cy1; cy++)
-            for (int cx = cx0; cx <= cx1; cx++) {
-                long key = ((long) res << 40) | ((long) cy << 20) | cx;
-                chunksWanted.add(key);
-                android.graphics.Bitmap b = chunks.get(key);
-                if (b == null) {
-                    // A coarser one will do until the finer one is ready.
-                    b = chunks.get(((long) (res == 8 ? 4 : 6 - res) << 40) | ((long) cy << 20) | cx);
-                    if (b == null && res == 8) b = chunks.get(((long) 2 << 40) | ((long) cy << 20) | cx);
-                    if (chunkPending.add(key)) {
-                        Object[] job = {city, key, cx * CHUNK, cy * CHUNK, (float) res, chunkVersion};
-                        // Nearest the middle of the screen first.
-                        if (Math.abs((cx + 0.5f) * CHUNK - mx) < CHUNK && Math.abs((cy + 0.5f) * CHUNK - my) < CHUNK) chunkJobs.addFirst(job);
-                        else chunkJobs.addLast(job);
-                    }
-                }
-                if (b == null) continue;
-                mapSrc.set(0, 0, b.getWidth(), b.getHeight());
-                mapDst.set(cx * CHUNK, cy * CHUNK, (cx + 1) * CHUNK, (cy + 1) * CHUNK);
-                c.drawBitmap(b, mapSrc, mapDst, bmpPaint);
-            }
-        // Just off the edges too (at the usual sharpness), so panning doesn't show the soft picture first.
-        if (res == 2)
-            for (int cy = Math.max(0, cy0 - 1); cy <= Math.min(ny - 1, cy1 + 1); cy++)
-                for (int cx = Math.max(0, cx0 - 1); cx <= Math.min(nx - 1, cx1 + 1); cx++) {
-                    if (cx >= cx0 && cx <= cx1 && cy >= cy0 && cy <= cy1) continue;
-                    long key = ((long) res << 40) | ((long) cy << 20) | cx;
-                    chunksWanted.add(key);
-                    if (!chunks.containsKey(key) && chunkPending.add(key))
-                        chunkJobs.addLast(new Object[]{city, key, cx * CHUNK, cy * CHUNK, (float) res, chunkVersion});
-                }
-        chunksOnScreen = new java.util.HashSet<Long>(chunksWanted);
-        // Forget the ones furthest from view when there are too many.
-        // (The finest close-ups are big: fewer of those are kept.)
-        int keep = res == 8 ? 18 : MAX_CHUNKS;
-        if (chunks.size() > keep)
-            for (Long k : chunks.keySet()) {
-                if (chunks.size() <= keep) break;
-                if (!chunksWanted.contains(k)) chunks.remove(k);
-            }
-        if (chunkWorker == null) {
-            chunkWorker = new Thread(new Runnable() {
-                public void run() {
-                    while (true) {
-                        Object[] job;
-                        try {
-                            job = chunkJobs.takeFirst();
-                        } catch (InterruptedException e) {
-                            return;
-                        }
-                        City jc = (City) job[0];
-                        long key = (Long) job[1];
-                        // (Skipped if the view has moved on, or the map has changed since.)
-                        if (jc != chunkCity || (Integer) job[5] != chunkVersion || !chunksOnScreen.contains(key)) {
-                            // (An out-of-date one isn't kept for later either.)
-                            if (jc == chunkCity && (Integer) job[5] == chunkVersion) chunks.remove(key);
-                            chunkPending.remove(key);
-                            continue;
-                        }
-                        try {
-                            android.graphics.Bitmap b = jc.renderRegion((Float) job[2], (Float) job[3], CHUNK, (Float) job[4]);
-                            if (jc == chunkCity && (Integer) job[5] == chunkVersion) chunks.put(key, b);
-                        } catch (Throwable t) {
-                            // (Out of memory or similar: the soft picture will do.)
-                        }
-                        chunkPending.remove(key);
-                    }
-                }
-            }, "map close-ups");
-            chunkWorker.setDaemon(true);
-            // (Not the lowest priority: on a phone that left the close-ups waiting on everything else.)
-            chunkWorker.setPriority(Thread.NORM_PRIORITY - 1);
-            chunkWorker.start();
-        }
-    }
+    City labelCity;
+    int labelVersion = -1;
 
     /** Which sides already have a dot in each patch of the screen this frame (frame number << 8 | sides). */
-    private int[] dotSeen;
-    private int dotFrame;
-
-    private void drawWorld(Canvas c) {
-        c.drawColor(0xFF1B1C1F);
-        c.save();
-        if (world.shake > 0 && settings.shake()) {
-            float s = world.shake * 5 * dp;
-            c.translate((rnd.nextFloat() - 0.5f) * s, (rnd.nextFloat() - 0.5f) * s);
-        }
-        c.scale(scale, scale);
-        c.translate(-camX, -camY);
-        world.viewX0 = camX;
-        world.viewY0 = camY;
-        world.viewX1 = camX + getWidth() / scale;
-        world.viewY1 = camY + getHeight() / scale;
-        // Realistic graphics smooth the map when zoomed in; classic keeps the crisp pixels.
-        bmpPaint.setFilterBitmap(realistic || scale < 1.5f);
-        if (world.city.detail >= 0.999f) c.drawBitmap(world.city.bitmap, 0, 0, bmpPaint);
-        else {
-            mapSrc.set(0, 0, world.city.bitmap.getWidth(), world.city.bitmap.getHeight());
-            mapDst.set(0, 0, world.city.worldW(), world.city.worldH());
-            c.drawBitmap(world.city.bitmap, mapSrc, mapDst, bmpPaint);
-        }
-        drawCloseUps(c);
-
-        float vx0 = camX - 20, vy0 = camY - 20;
-        float vx1 = camX + getWidth() / scale + 20, vy1 = camY + getHeight() / scale + 20;
-        boolean detailed = scale > 1.1f;
-        // ((11.5) Who's on screen, found in one pass: the loops below that draw people only look at them, not at
-        // every one of the thousands in a big outbreak, again and again.)
-        viewL = vx0;
-        viewT = vy0;
-        viewR = vx1;
-        viewB = vy1;
-        onScreen.clear();
-        world.collectInView(vx0, vy0, vx1, vy1, onScreen);
-        if (scale > 0.8f && (world.city.waterKind != CityConfig.W_NONE || world.city.elev != null)) drawWaterLife(c, vx0, vy0, vx1, vy1);
-
-        for (int i = 0; i < world.dcount; i++) {
-            float x = world.dx[i], y = world.dy[i], r = world.dr[i];
-            if (r <= 0 || x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-            byte kind = world.dkind[i];
-            // ((10.59) Fading away.)
-            float fade = world.decalFade(i);
-            if (fade <= 0) continue;
-            drawDecal(c, i, x, y, r, kind, fade);
-        }
-
-        if (scale > 0.7f) drawMarks(c, vx0, vy0, vx1, vy1);
-
-        for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) drawZone(c, world.dispatch.zones.get(i));
-        for (int i = 0, n = world.holdouts.size(); i < n; i++) {
-            World.Holdout h = world.holdouts.get(i);
-            if (h.b.x1 + 40 < vx0 || h.b.x0 - 40 > vx1 || h.b.y1 + 40 < vy0 || h.b.y0 - 40 > vy1) continue;
-            drawHoldout(c, h);
-        }
-
-        for (int i = 0, n = world.barriers.size(); i < n; i++) {
-            float[] b = world.barriers.get(i);
-            if (b[0] < vx0 || b[0] > vx1 || b[1] < vy0 || b[1] > vy1) continue;
-            // Planks and sandbags; they splinter as they take hits.
-            fill.setColor(0x55000000);
-            c.drawRect(b[0] - 7, b[1] - 5, b[0] + 9, b[1] + 8, fill);
-            for (int k = 0; k < 3; k++) {
-                fill.setColor(k % 2 == 0 ? 0xFFA38D5E : 0xFF917C50);
-                c.drawCircle(b[0] - 5 + k * 5, b[1] + 3, 3, fill);
-            }
-            fill.setColor(0xFF8A6238);
-            c.drawRect(b[0] - 8, b[1] - 4, b[0] + 8, b[1] - 1.5f, fill);
-            if (b[2] > 110) c.drawRect(b[0] - 7, b[1] - 1, b[0] + 7, b[1] + 1.2f, fill);
-            fill.setColor(0xFFE8C547);
-            c.drawRect(b[0] - 6, b[1] - 4, b[0] - 3, b[1] - 1.5f, fill);
-            c.drawRect(b[0] + 2, b[1] - 4, b[0] + 5, b[1] - 1.5f, fill);
-        }
-        for (int i = 0, n = world.pickups.size(); i < n; i++) {
-            World.Pickup p = world.pickups.get(i);
-            if (p.x < vx0 || p.x > vx1 || p.y < vy0 || p.y > vy1) continue;
-            if (p.uses > 0) {
-                // Supply crate (on a parachute while it drops).
-                float h = Math.max(0, p.drop) * 30;
-                fill.setColor(0x55000000);
-                c.drawRect(p.x - 5 + h * 0.3f, p.y - 4 + h * 0.4f, p.x + 6 + h * 0.3f, p.y + 5 + h * 0.4f, fill);
-                float cy = p.y - h;
-                if (p.drop > 0) {
-                    fill.setColor(0xE0E8E8E8);
-                    oval.set(p.x - 12, cy - 22, p.x + 12, cy - 8);
-                    c.drawOval(oval, fill);
-                    stroke.setColor(0xAA555555);
-                    stroke.setStrokeWidth(0.5f);
-                    c.drawLine(p.x - 11, cy - 14, p.x - 3, cy - 3, stroke);
-                    c.drawLine(p.x + 11, cy - 14, p.x + 3, cy - 3, stroke);
-                }
-                fill.setColor(0xFF4F5E36);
-                c.drawRect(p.x - 5, cy - 4, p.x + 5, cy + 4, fill);
-                fill.setColor(0xFFF2F2F2);
-                c.drawRect(p.x - 0.8f, cy - 3, p.x + 0.8f, cy + 3, fill);
-                c.drawRect(p.x - 3, cy - 0.8f, p.x + 3, cy + 0.8f, fill);
-                continue;
-            }
-            // A dropped weapon, gently pulsing so it can be spotted.
-            fill.setColor(alpha(0xFFFFE27A, 0.25f + 0.15f * (float) Math.sin(world.time * 4)));
-            c.drawCircle(p.x, p.y, 5.5f, fill);
-            stroke.setStrokeWidth(1.4f);
-            if (p.melee == Entity.M_BAT) {
-                stroke.setColor(0xFF9A6A3A);
-                stroke.setStrokeWidth(1.8f);
-                c.drawLine(p.x - 4, p.y + 2, p.x + 4, p.y - 2, stroke);
-            } else if (p.melee == Entity.M_AXE) {
-                stroke.setColor(0xFF7A5030);
-                c.drawLine(p.x - 4, p.y + 2, p.x + 3, p.y - 2, stroke);
-                fill.setColor(0xFFC8302A);
-                c.drawRect(p.x + 2, p.y - 4, p.x + 4.5f, p.y, fill);
-            } else if (p.melee == Entity.M_MACHETE || p.melee == Entity.M_CROWBAR) {
-                stroke.setColor(p.melee == Entity.M_MACHETE ? 0xFFC8CCD0 : 0xFF7A1E1A);
-                stroke.setStrokeWidth(1.6f);
-                c.drawLine(p.x - 4, p.y + 2, p.x + 4, p.y - 2, stroke);
-                if (p.melee == Entity.M_CROWBAR) c.drawLine(p.x + 4, p.y - 2, p.x + 5, p.y + 0.5f, stroke);
-            } else if (p.weapon == Entity.W_SHOTGUN || p.weapon == Entity.W_RIFLE || p.weapon == Entity.W_HUNTING || p.weapon >= Entity.W_SMG) {
-                stroke.setColor(0xFF1A1A1A);
-                c.drawLine(p.x - 4.5f, p.y + 1, p.x + 5, p.y - 1, stroke);
-                stroke.setColor(p.weapon == Entity.W_SHOTGUN || p.weapon == Entity.W_HUNTING ? 0xFF8A5A30 : 0xFF3A4430);
-                stroke.setStrokeWidth(2f);
-                c.drawLine(p.x - 4.5f, p.y + 1, p.x - 2, p.y + 0.5f, stroke);
-            } else {
-                stroke.setColor(0xFF1A1A1A);
-                c.drawLine(p.x - 3, p.y, p.x + 3.5f, p.y - 1, stroke);
-                c.drawLine(p.x - 2.5f, p.y, p.x - 3, p.y + 2.2f, stroke);
-            }
-        }
-        // Deer and foxes.
-        for (int i = 0, n = world.animals.size(); i < n; i++) {
-            World.Animal a = world.animals.get(i);
-            if (a.x < vx0 - 10 || a.x > vx1 + 10 || a.y < vy0 - 10 || a.y > vy1 + 10) continue;
-            if (scale < 0.3f) {
-                // (A speck from up here.)
-                fill.setColor(a.kind == 0 ? 0xFF8A6238 : 0xFFC8682A);
-                c.drawCircle(a.x, a.y, 3, fill);
-                continue;
-            }
-            c.save();
-            c.translate(a.x, a.y);
-            c.rotate((float) Math.toDegrees(a.angle));
-            boolean deer = a.kind == 0;
-            fill.setColor(0x33000000);
-            oval.set(-4 + 1.5f, -2 + 1.5f, 4 + 1.5f, 2 + 1.5f);
-            c.drawOval(oval, fill);
-            fill.setColor(deer ? 0xFF8A6238 : 0xFFC8682A);
-            oval.set(deer ? -4.5f : -3.5f, deer ? -2 : -1.5f, deer ? 3.5f : 2.5f, deer ? 2 : 1.5f);
-            c.drawOval(oval, fill);
-            c.drawCircle(deer ? 4.2f : 3.2f, 0, deer ? 1.4f : 1.2f, fill);
-            if (deer) {
-                fill.setColor(0xFFF2E8D8);
-                c.drawCircle(-4.3f, 0, 0.8f, fill);
-            } else {
-                fill.setColor(0xFFF2E8D8);
-                c.drawCircle(-4.2f, 0, 0.9f, fill);
-            }
-            c.restore();
-        }
-        for (int i = 0, n = world.birds.size(); i < n; i++) {
-            World.Bird b = world.birds.get(i);
-            if (b.flying || b.x < vx0 || b.x > vx1 || b.y < vy0 || b.y > vy1) continue;
-            fill.setColor(0xFF7D8088);
-            c.drawCircle(b.x, b.y, 1.5f, fill);
-            fill.setColor(0xFF4C5058);
-            c.drawCircle(b.x + (float) Math.cos(b.flap) * 1.2f, b.y + (float) Math.sin(b.flap) * 0.6f, 0.8f, fill);
-        }
-        for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
-            City.Building b = world.city.buildings.get(i);
-            if (!b.doorBroken || b.collapsed || b.doorX < vx0 || b.doorX > vx1 || b.doorY < vy0 || b.doorY > vy1) continue;
-            drawBrokenDoor(c, b);
-        }
-        for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
-            City.Building b = world.city.buildings.get(i);
-            if (b.occupants.isEmpty() || b.doorX < vx0 || b.doorX > vx1 || b.doorY < vy0 || b.doorY > vy1) continue;
-            // Boarded-up door.
-            fill.setColor(0xFF7A5634);
-            c.drawRect(b.doorX - 5, b.doorY - 1.5f, b.doorX + 5, b.doorY + 0.2f, fill);
-            c.drawRect(b.doorX - 4, b.doorY + 1.2f, b.doorX + 4, b.doorY + 2.9f, fill);
-        }
-
-        for (int i = 0, n = world.boats.size(); i < n; i++) {
-            float[] b = world.boats.get(i);
-            if (b[0] < vx0 - 30 || b[0] > vx1 + 30 || b[1] < vy0 - 30 || b[1] > vy1 + 30) continue;
-            // (Out of sight under a bridge.)
-            if (world.city.isBridge((int) (b[0] / City.T), (int) (b[1] / City.T))) continue;
-            drawBoat(c, b);
-        }
-        // Waterfalls: white water streaming down and spray drifting up from the foot.
-        for (int i = 0, n = world.city.falls.size(); i < n; i++) {
-            float[] f = world.city.falls.get(i);
-            if (f[0] < vx0 - 30 || f[0] > vx1 + 30 || f[1] < vy0 - 30 || f[1] > vy1 + 30) continue;
-            // (Spread across the width of the stream at the lip, falling away downstream of it.)
-            float half = f.length > 4 ? f[4] - 3 : 5;
-            for (int k = 0; k < 6; k++) {
-                float ph = (world.time * 1.6f + k / 6f) % 1f, side = (k - 2.5f) / 2.5f * half * 0.8f;
-                float along = -1 + ph * 12;
-                float px = f[0] + f[2] * along - f[3] * side, py = f[1] + f[3] * along + f[2] * side;
-                fill.setColor(alpha(0xFFF4FAFC, 0.85f * (1 - ph)));
-                c.drawCircle(px, py, 1.1f + ph * 1.6f, fill);
-            }
-        }
-        for (int i = 0, n = world.corpses.size(); i < n; i++) {
-            World.Corpse k = world.corpses.get(i);
-            if (k.x < vx0 || k.x > vx1 || k.y < vy0 || k.y > vy1) continue;
-            drawCorpse(c, k);
-        }
-        for (int i = 0, n = world.medkits.size(); i < n; i++) {
-            float[] m = world.medkits.get(i);
-            fill.setColor(alpha(0xFF63E06B, 0.18f + 0.1f * (float) Math.sin(world.time * 3)));
-            c.drawCircle(m[0], m[1], 40, fill);
-            fill.setColor(0xFFF2F2F2);
-            c.drawRect(m[0] - 4, m[1] - 3, m[0] + 4, m[1] + 3, fill);
-            fill.setColor(0xFFD83A3A);
-            c.drawRect(m[0] - 0.7f, m[1] - 2.2f, m[0] + 0.7f, m[1] + 2.2f, fill);
-            c.drawRect(m[0] - 2.2f, m[1] - 0.7f, m[0] + 2.2f, m[1] + 0.7f, fill);
-        }
-
-        if (scale < 1.8f) drawDanger(c, vx0, vy0, vx1, vy1);
-        // Zoomed out, a crowd is a heap of dots on top of each other: one dot per side in each little patch
-        // of the screen looks the same and saves drawing thousands.
-        float patch = 2.6f * dp / scale;
-        int pw = 0, ph = 0;
-        if (!detailed) {
-            pw = (int) ((vx1 - vx0) / patch) + 2;
-            ph = (int) ((vy1 - vy0) / patch) + 2;
-            if (dotSeen == null || dotSeen.length < pw * ph) dotSeen = new int[pw * ph];
-            dotFrame++;
-        }
-        for (int i = 0, n = onScreen.size(); i < n; i++) {
-            Entity e = onScreen.get(i);
-            if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
-            if (detailed && e.job == Entity.J_FISHER && e.jobStep == 1 && e.type == Entity.CIVILIAN && !e.aware) {
-                // A line out over the water, the float bobbing.
-                float ca = (float) Math.cos(e.angle), sa = (float) Math.sin(e.angle);
-                float tipX = e.x + ca * 13, tipY = e.y + sa * 13;
-                stroke.setColor(0xFF4A3A2A);
-                stroke.setStrokeWidth(0.8f);
-                c.drawLine(e.x + ca * 3, e.y + sa * 3, tipX, tipY, stroke);
-                float bob = (float) Math.sin(world.time * 2.2f + e.nameSeed) * 0.6f;
-                float fx = e.x + ca * 22, fy = e.y + sa * 22 + bob;
-                stroke.setColor(0x90E8E8E8);
-                stroke.setStrokeWidth(0.4f);
-                c.drawLine(tipX, tipY, fx, fy, stroke);
-                fill.setColor(0xFFE83A2A);
-                c.drawCircle(fx, fy, 1.1f, fill);
-            }
-            if (detailed) drawEntity(c, e, settings.healthBars());
-            else {
-                // Zoomed out: a dot in the colour of their side (the same colours as the counts), outlined so it
-                // stands out on any ground, and never smaller than a few pixels.
-                int side = e.isZombie() ? 3 : e.type == Entity.COP ? 1 : e.type == Entity.SOLDIER ? 2 : 0;
-                if (e != world.controlled && e != follow) {
-                    int cell = (int) ((e.y - vy0) / patch) * pw + (int) ((e.x - vx0) / patch);
-                    int mark = (dotFrame << 8) | (1 << side);
-                    int seen = dotSeen[cell];
-                    if ((seen >>> 8) == (dotFrame & 0xFFFFFF) && (seen & (1 << side)) != 0) continue;
-                    dotSeen[cell] = (seen >>> 8) == (dotFrame & 0xFFFFFF) ? seen | (1 << side) : mark;
-                }
-                // ((11.5) Gathered up and drawn below, each side's dots in one go, not two circles for each person.)
-                boolean civ = side == 0 && e.type == Entity.CIVILIAN;
-                int k = side * 2 + (civ ? 1 : 0);
-                float[] b = dotBuf[k];
-                if (b == null || dotN[k] + 2 > b.length) dotBuf[k] = b = java.util.Arrays.copyOf(b == null ? new float[256] : b, Math.max(256, dotN[k] * 2));
-                b[dotN[k]++] = e.x;
-                b[dotN[k]++] = e.y;
-            }
-        }
-        if (!detailed) {
-            // (Civilians are the crowd, not the story: smaller, see-through, with a faint edge.)
-            float base = Math.max(4 * 1.35f, 2.6f * dp / scale);
-            for (int k = 0; k < dotBuf.length; k++) {
-                if (dotN[k] == 0) continue;
-                boolean civ = (k & 1) == 1;
-                float r = civ ? base * 0.7f : base;
-                dotPaint.setColor(civ ? 0x60101010 : 0xD0101010);
-                dotPaint.setStrokeWidth(2 * (r + (civ ? 0.6f : 1.1f) * dp / scale));
-                c.drawPoints(dotBuf[k], 0, dotN[k], dotPaint);
-                int col = ROW_COLORS[k / 2];
-                dotPaint.setColor(civ ? (col & 0x00FFFFFF) | 0x99000000 : col);
-                dotPaint.setStrokeWidth(2 * r);
-                c.drawPoints(dotBuf[k], 0, dotN[k], dotPaint);
-                dotN[k] = 0;
-            }
-        }
-        if (boxing) {
-            fill.setColor(0x22FFD24A);
-            c.drawRect(Math.min(boxX0, boxX1), Math.min(boxY0, boxY1), Math.max(boxX0, boxX1), Math.max(boxY0, boxY1), fill);
-            stroke.setColor(0xCCFFD24A);
-            stroke.setStrokeWidth(1.2f);
-            c.drawRect(Math.min(boxX0, boxX1), Math.min(boxY0, boxY1), Math.max(boxX0, boxX1), Math.max(boxY0, boxY1), stroke);
-        }
-        for (int i = 0, n = selection.size(); i < n; i++) {
-            Entity e = selection.get(i);
-            stroke.setColor(0xFFFFD24A);
-            stroke.setStrokeWidth(1.2f);
-            c.drawCircle(e.x, e.y, e.radius + 4, stroke);
-        }
-        if (orderMarker > 0) {
-            stroke.setColor(alpha(0xFFFFD24A, Math.min(1, orderMarker)));
-            stroke.setStrokeWidth(1.5f);
-            c.drawCircle(orderX, orderY, 6 + (1.5f - orderMarker) * 14, stroke);
-        }
-        drawCrossings(c, vx0, vx1, vy0, vy1);
-        drawSignals(c, vx0, vx1, vy0, vy1);
-        // What the dead can hear: rings spreading out from gunfire, alarms, horns and screams.
-        stroke.setStrokeWidth(1.5f / Math.max(0.5f, scale) * 2);
-        for (int i = 0, n = world.noiseRings.size(); i < n; i++) {
-            float[] r = world.noiseRings.get(i);
-            float t = r[3] / 1.4f, rad = r[2] * Math.min(1, t * 1.6f);
-            if (r[0] + rad < vx0 || r[0] - rad > vx1 || r[1] + rad < vy0 || r[1] - rad > vy1) continue;
-            stroke.setColor(alpha(0xFFFFE8B0, 0.35f * (1 - t)));
-            c.drawCircle(r[0], r[1], rad, stroke);
-        }
-        if (world.firebombTime > 0) {
-            // The target area, pulsing.
-            float pulse = 0.5f + 0.5f * (float) Math.sin(world.time * 6);
-            fill.setColor(alpha(0xFFFF2A1A, 0.08f + 0.08f * pulse));
-            c.drawCircle(world.firebombX, world.firebombY, 230, fill);
-            stroke.setColor(alpha(0xFFFF3A2A, 0.6f + 0.4f * pulse));
-            stroke.setStrokeWidth(3f);
-            c.drawCircle(world.firebombX, world.firebombY, 230, stroke);
-        }
-        // Emergency lights wash the road around them in red and blue.
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.broken || Fleet.airborne(v)) continue;
-            if (!v.lightsOn() || v.x < vx0 - 30 || v.x > vx1 + 30 || v.y < vy0 - 30 || v.y > vy1 + 30) continue;
-            boolean blink = ((int) (v.anim * 8)) % 2 == 0;
-            int col = blink ? 0xFFFF3A30 : 0xFF3A7BFF;
-            float side = blink ? -1 : 1, ox = (float) -Math.sin(v.angle) * side * 4, oy = (float) Math.cos(v.angle) * side * 4;
-            for (int k = 0; k < 3; k++) {
-                fill.setColor(alpha(col, 0.07f));
-                c.drawCircle(v.x + ox, v.y + oy, 10 + k * 7, fill);
-            }
-        }
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (Fleet.airborne(v)) continue;
-            // Trains are long, so they get a wider margin before they count as off screen.
-            float m = v.type == Fleet.TRAIN ? Fleet.TRAIN_LENGTH + 20 : 20;
-            if (v.x < vx0 - m || v.x > vx1 + m || v.y < vy0 - m || v.y > vy1 + m) continue;
-            drawVehicle(c, v);
-            if (v.cones) {
-                // A line of traffic cones across the road in front of the roadblock.
-                boolean vertical = v.blockDir == 1;
-                for (int k = -2; k <= 2; k++) {
-                    float cx = v.x + (vertical ? k * 6 : 14), cy = v.y + (vertical ? 14 : k * 6);
-                    fill.setColor(0x50000000);
-                    c.drawCircle(cx + 0.6f, cy + 0.8f, 2f, fill);
-                    fill.setColor(0xFFFF7A1A);
-                    c.drawCircle(cx, cy, 1.9f, fill);
-                    fill.setColor(0xFFF2F2F2);
-                    c.drawCircle(cx, cy, 1.1f, fill);
-                    fill.setColor(0xFFFF7A1A);
-                    c.drawCircle(cx, cy, 0.6f, fill);
-                }
-            }
-        }
-        drawRailBridge(c, vx0, vx1, vy0, vy1);
-        drawOverpasses(c, vx0, vx1, vy0, vy1);
-
-        if (detailed) {
-            for (int i = 0, n = onScreen.size(); i < n; i++) {
-                Entity e = onScreen.get(i);
-                if (e.phoneTimer <= 0 && e.talkTimer <= 0) continue;
-                if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
-                drawSpeechIcon(c, e);
-            }
-        }
-
-        for (int i = 0, n = world.grenades.size(); i < n; i++) {
-            World.Grenade g = world.grenades.get(i);
-            float t = g.t / g.dur;
-            float x = g.sx + (g.tx - g.sx) * t, y = g.sy + (g.ty - g.sy) * t;
-            float hgt = (float) Math.sin(t * Math.PI) * 22;
-            fill.setColor(0x55000000);
-            c.drawCircle(x, y, 1.6f, fill);
-            fill.setColor(0xFF2F3A1E);
-            c.drawCircle(x, y - hgt, 1.9f, fill);
-        }
-
-
-        for (int i = 0; i < World.MAXP; i++) {
-            float life = world.plife[i];
-            if (life <= 0) continue;
-            float x = world.px[i], y = world.py[i];
-            if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-            float f = life / world.pmax[i];
-            int col = world.pcol[i];
-            float size = world.psize[i];
-            switch (world.ptype[i]) {
-                case World.P_SMOKE:
-                    fill.setColor(alpha(col, 0.4f * f));
-                    break;
-                case World.P_FIRE:
-                    fill.setColor(alpha(col, f));
-                    size *= 0.4f + f * 0.6f;
-                    break;
-                case World.P_FLASH:
-                    // The flash lights up the ground around the muzzle.
-                    fill.setColor(0x1CFFD27A);
-                    c.drawCircle(x, y, size * 3, fill);
-                    fill.setColor(alpha(col, 0.9f));
-                    break;
-                case World.P_CASING:
-                    fill.setColor(alpha(col, Math.min(1, f * 3)));
-                    c.drawRect(x - 0.45f, y - 0.25f, x + 0.45f, y + 0.25f, fill);
-                    continue;
-                case World.P_DEBRIS:
-                    fill.setColor(alpha(col, Math.min(1, f * 2)));
-                    c.drawRect(x - size, y - size * 0.7f, x + size, y + size * 0.7f, fill);
-                    continue;
-                default:
-                    fill.setColor(alpha(col, Math.min(1, f * 2)));
-                    break;
-            }
-            c.drawCircle(x, y, size, fill);
-        }
-
-        stroke.setStrokeWidth(0.9f);
-        for (int i = 0; i < World.MAXT; i++) {
-            float life = world.tlife[i];
-            if (life <= 0) continue;
-            stroke.setColor(alpha(0xFFFFE08A, life / 0.08f));
-            c.drawLine(world.tx0[i], world.ty0[i], world.tx1[i], world.ty1[i], stroke);
-        }
-
-        drawBuildings(c, vx0, vy0, vx1, vy1, detailed);
-        drawHaze(c, vx0, vy0, vx1, vy1);
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.type == Fleet.HELI) drawHeli(c, v);
-            else if (v.type == Fleet.JET) drawJet(c, v);
-        }
-        for (int i = 0, n = world.birds.size(); i < n; i++) {
-            World.Bird b = world.birds.get(i);
-            if (!b.flying || b.x < vx0 || b.x > vx1 || b.y < vy0 || b.y > vy1) continue;
-            float wing = (float) Math.sin(b.flap) * 2.2f;
-            fill.setColor(0x30000000);
-            c.drawCircle(b.x + 10, b.y + 14, 1.4f, fill);
-            stroke.setColor(0xFF6E717A);
-            stroke.setStrokeWidth(0.9f);
-            c.drawLine(b.x - 2.5f, b.y - wing, b.x, b.y, stroke);
-            c.drawLine(b.x, b.y, b.x + 2.5f, b.y - wing, stroke);
-        }
-
-        // (10.46) Infection zones: a dashed hazard ring round each, red while it's held, amber while it waits its turn.
-        for (int i = 0, n = world.infection.size(); i < n; i++) {
-            World.InfectionZone z = world.infection.get(i);
-            // ((11.0) Its quarantine wall: concrete barriers with a chain-link fence along the top.)
-            float wx0 = camX - 20, wy0 = camY - 20, wx1 = camX + getWidth() / scale + 20, wy1 = camY + getHeight() / scale + 20;
-            int cw = world.city.w;
-            for (int k = 0, m = z.wall.size(); k < m; k++) {
-                int t = z.wall.get(k)[0];
-                float x = (t % cw) * City.T, y = (t / cw) * City.T;
-                if (x > wx1 || y > wy1 || x + City.T < wx0 || y + City.T < wy0) continue;
-                fill.setColor(0xFF9A9A92);
-                c.drawRect(x + 1, y + 1, x + City.T - 1, y + City.T - 1, fill);
-                fill.setColor(0xFF6E6E68);
-                c.drawRect(x + 1, y + City.T * 0.62f, x + City.T - 1, y + City.T - 1, fill);
-                stroke.setStrokeWidth(0.8f);
-                stroke.setColor(0xFFD8D8D0);
-                c.drawLine(x + 1, y + 2, x + City.T - 1, y + 2, stroke);
-                c.drawLine(x + City.T * 0.5f, y + 1, x + City.T * 0.5f, y + City.T - 1, stroke);
-            }
-            int col = z.critical ? 0xFFFF4A3A : 0xFFFFB040;
-            fill.setColor(alpha(col, 0.06f));
-            c.drawCircle(z.x, z.y, z.r, fill);
-            stroke.setStrokeWidth(2.4f / Math.max(0.4f, scale) + 0.4f);
-            stroke.setColor(alpha(col, 0.8f));
-            int segs = Math.max(40, (int) (z.r / 5)) / 2 * 2;
-            float spin = world.time * 0.04f;
-            for (int k = 0; k < segs; k += 2) {
-                float a0 = 6.2832f * k / segs + spin, a1 = 6.2832f * (k + 1) / segs + spin;
-                c.drawLine(z.x + (float) Math.cos(a0) * z.r, z.y + (float) Math.sin(a0) * z.r,
-                        z.x + (float) Math.cos(a1) * z.r, z.y + (float) Math.sin(a1) * z.r, stroke);
-            }
-        }
-        for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {
-            Dispatch.Incident inc = world.dispatch.incidents.get(i);
-            float pulse = (world.time * 1.5f + i * 0.3f) % 1f;
-            stroke.setStrokeWidth(2f / Math.max(0.5f, scale) + 0.6f);
-            stroke.setColor(alpha(0xFFFF4A3A, 1 - pulse));
-            c.drawCircle(inc.x, inc.y, 8 + pulse * 18, stroke);
-            stroke.setColor(0xCCFF4A3A);
-            c.drawCircle(inc.x, inc.y, 5, stroke);
-        }
-        // ((10.60) Who's on their way to a call. No more straight lines across the rooftops from each car and truck:
-        // a badge over each call with how many police and soldiers are coming, a thin ring in their colour round it,
-        // and for whoever you're following, the way they'll actually go, faintly, along the streets.)
-        {
-            float lx0 = camX - 60, ly0 = camY - 60, lx1 = camX + getWidth() / scale + 60, ly1 = camY + getHeight() / scale + 60;
-            // ((11.5) Counted twice a second, not every frame: it means going through everyone.)
-            if (world.time - inboundAt > 0.5f || world.time < inboundAt) {
-                inboundAt = world.time;
-                inbound.clear();
-                for (int i = 0, n = world.entities.size(); i < n; i++) {
-                    Entity e = world.entities.get(i);
-                    if (e.dead || e.task != Dispatch.T_RESPOND || e.incident == null || e.onScene || e.incident.resolved) continue;
-                    tally(e.incident, e.type == Entity.SOLDIER, 1);
-                }
-                for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-                    Fleet.Vehicle v = world.fleet.vehicles.get(i);
-                    Dispatch.Incident inc = v.incident;
-                    if (inc == null || inc.resolved || v.broken || (v.state != Fleet.DRIVE && v.state != Fleet.MUSTER)) continue;
-                    int aboard = v.crew.size() + v.passengers;
-                    if (aboard > 0) tally(inc, Fleet.army(v) || v.passengerType == Entity.SOLDIER, aboard);
-                }
-            }
-            float u = 1f / Math.max(0.35f, scale);
-            text.setTextSize(10.5f * dp * u);
-            text.setTextAlign(Paint.Align.LEFT);
-            for (java.util.Map.Entry<Dispatch.Incident, int[]> en : inbound.entrySet()) {
-                Dispatch.Incident inc = en.getKey();
-                int[] k = en.getValue();
-                // (A lone officer on the way needs no badge: only calls with a response worth showing.)
-                if (k[0] + k[1] < 2 || inc.resolved || inc.x < lx0 || inc.x > lx1 || inc.y < ly0 || inc.y > ly1) continue;
-                int col = k[1] > k[0] ? 0xFFA8E070 : 0xFF70B0FF;
-                stroke.setStrokeWidth(1.4f * u);
-                stroke.setColor(alpha(col, 0.45f + 0.25f * (float) Math.sin(world.time * 4)));
-                c.drawCircle(inc.x, inc.y, 30, stroke);
-                // The badge: a dark pill with a blue dot and the police coming, a green one and the soldiers.
-                String sp = k[0] > 0 ? String.valueOf(k[0]) : null, ss = k[1] > 0 ? String.valueOf(k[1]) : null;
-                float dot = 3.2f * dp * u, gap = 3 * dp * u, padX = 5 * dp * u, hh = 8 * dp * u;
-                float wP = sp == null ? 0 : dot * 2 + gap + text.measureText(sp), wS = ss == null ? 0 : dot * 2 + gap + text.measureText(ss);
-                float wTot = padX * 2 + wP + wS + (sp != null && ss != null ? 6 * dp * u : 0);
-                float bx = inc.x - wTot / 2, by = inc.y - 30 - 6 * dp * u - hh * 2;
-                fill.setColor(0xD0101418);
-                badgeRect.set(bx, by, bx + wTot, by + hh * 2);
-                c.drawRoundRect(badgeRect, hh, hh, fill);
-                float x = bx + padX, cy = by + hh;
-                if (sp != null) {
-                    fill.setColor(0xFF70B0FF);
-                    c.drawCircle(x + dot, cy, dot, fill);
-                    text.setColor(0xFFE8F0FF);
-                    c.drawText(sp, x + dot * 2 + gap, cy + text.getTextSize() * 0.36f, text);
-                    x += wP + 6 * dp * u;
-                }
-                if (ss != null) {
-                    fill.setColor(0xFFA8E070);
-                    c.drawCircle(x + dot, cy, dot, fill);
-                    text.setColor(0xFFEFFFE0);
-                    c.drawText(ss, x + dot * 2 + gap, cy + text.getTextSize() * 0.36f, text);
-                }
-            }
-            // The followed one's way there.
-            if (follow != null && !follow.dead && follow.task == Dispatch.T_RESPOND && follow.incident != null && !follow.onScene
-                    && follow.path != null && follow.path.length > 0) {
-                int col = follow.type == Entity.SOLDIER ? 0xFFA8E070 : 0xFF70B0FF;
-                drawRoute(c, follow.x, follow.y, follow.path, follow.pathIdx, follow.path.length, col, u);
-            }
-            if (followV != null && followV.state == Fleet.DRIVE && followV.field != null) {
-                int n = world.fleet.traceRoute(followV, routeBuf);
-                int col = Fleet.army(followV) ? 0xFFA8E070 : 0xFF70B0FF;
-                drawRoute(c, followV.x, followV.y, routeBuf, 0, n, col, u);
-            }
-        }
-        // Calls for help on the radio: rings going out from where the call was made.
-        for (int i = 0, n = world.dispatch.callouts.size(); i < n; i++) {
-            Dispatch.Callout co = world.dispatch.callouts.get(i);
-            for (int k = 0; k < 3; k++) {
-                float ring = (co.age * 0.9f + k / 3f) % 1f;
-                stroke.setStrokeWidth(1.6f / Math.max(0.5f, scale) + 0.4f);
-                stroke.setColor(alpha(co.color, (1 - ring) * Math.max(0, 1 - co.age / 6f)));
-                c.drawCircle(co.x, co.y, 6 + ring * 34, stroke);
-            }
-        }
-
-        if (follow != null) {
-            stroke.setColor(0xCCFFFFFF);
-            stroke.setStrokeWidth(1f);
-            c.drawCircle(follow.x, follow.y, follow.radius + 4 + (float) Math.sin(world.time * 6), stroke);
-        }
-        if (followV != null) {
-            stroke.setColor(0xCCFFFFFF);
-            stroke.setStrokeWidth(1.2f);
-            c.drawCircle(followV.x, followV.y, followV.length() + 5 + (float) Math.sin(world.time * 6), stroke);
-        }
-
-        // ((11.0) Police drones: a little quadcopter, its shadow below, rotors blurring, lights blinking, and the patch
-        // of ground its camera's watching.)
-        for (int i = 0, n = world.drones.size(); i < n; i++) {
-            World.Drone d = world.drones.get(i);
-            boolean up = d.state != World.DRONE_DOCKED;
-            if (up) {
-                fill.setColor(0x10A0C8FF);
-                c.drawCircle(d.x, d.y, World.DRONE_SEE, fill);
-                fill.setColor(0x40000000);
-                c.drawCircle(d.x + 6, d.y + 9, 3.2f, fill);
-            }
-            float h = 0, r = 2.6f;
-            fill.setColor(0xFF2A2F36);
-            c.drawRect(d.x - 1.6f, d.y - 1.6f - h, d.x + 1.6f, d.y + 1.6f - h, fill);
-            stroke.setStrokeWidth(0.7f);
-            stroke.setColor(0xFF2A2F36);
-            c.drawLine(d.x - r, d.y - r, d.x + r, d.y + r, stroke);
-            c.drawLine(d.x - r, d.y + r, d.x + r, d.y - r, stroke);
-            fill.setColor(up ? 0x70C8D0D8 : 0xFF6A7078);
-            for (int k = 0; k < 4; k++) c.drawCircle(d.x + (k % 2 == 0 ? -r : r), d.y + (k < 2 ? -r : r), up ? 1.7f : 1f, fill);
-            boolean blink = ((int) (world.time * 3 + i)) % 2 == 0;
-            fill.setColor(blink ? 0xFFFF3030 : 0xFF3060FF);
-            c.drawCircle(d.x, d.y, 0.8f, fill);
-        }
-
-        for (int i = 0, n = world.explosions.size(); i < n; i++) {
-            World.Explosion ex = world.explosions.get(i);
-            float t = 1 - ex.life / ex.max;
-            float r = ex.r * (0.3f + 0.9f * t);
-            fill.setColor(alpha(0xFFFF8A20, (1 - t) * 0.8f));
-            c.drawCircle(ex.x, ex.y, r, fill);
-            fill.setColor(alpha(0xFFFFF2B0, (1 - t)));
-            c.drawCircle(ex.x, ex.y, r * 0.5f, fill);
-            stroke.setStrokeWidth(2f);
-            stroke.setColor(alpha(0xFFFFFFFF, (1 - t) * 0.6f));
-            c.drawCircle(ex.x, ex.y, ex.r * (0.5f + t), stroke);
-        }
-        c.restore();
-    }
+    int[] dotSeen;
+    int dotFrame;
 
     /**
      * Draws trees and buildings standing up, GTA 2 style: a camera hangs above the middle of the screen,
      * so anything tall leans away from the centre and you see the walls that face the camera.
      */
-    private final Path pinePath = new Path();
+    final Path pinePath = new Path();
 
-    private void drawBuildings(Canvas c, float vx0, float vy0, float vx1, float vy1, boolean detailed) {
-        float cx = camX + getWidth() / scale / 2, cy = camY + getHeight() / scale / 2;
-        // Camera height grows with the visible area so the lean looks the same at every zoom level.
-        float camH = Math.max(Math.max(getWidth(), getHeight()) / scale * 0.9f,
-                Math.max(260f, world.city.maxHeight * 1.7f));
-        boolean in3d = settings.buildings3d();
-        // Zoomed right in, roofs (and walls) turn see-through so you can look inside.
-        float see = Math.max(0, Math.min(1, (scale / dp - 2.2f) / 1.3f));
-
-        float ts = in3d ? camH / (camH - City.TREE_HEIGHT) : 1f;
-        // (The trees are sorted top to bottom: just the rows that can be on screen.)
-        float rowTop = Math.min(vy0, cy + (vy0 - cy) / ts) - 14, rowBottom = Math.max(vy1, cy + (vy1 - cy) / ts) + 14;
-        // Zoomed well out on a big map, the treetops are already in the map picture.
-        int firstTree = scale < world.city.canopyZoom() ? world.city.trees.size() : world.city.firstTreeAt(rowTop);
-        for (int i = firstTree, n = world.city.trees.size(); i < n; i++) {
-            float[] t = world.city.trees.get(i);
-            if (t[1] > rowBottom) break;
-            float x = cx + (t[0] - cx) * ts, y = cy + (t[1] - cy) * ts, r = t[2] * ts;
-            if (x + r < vx0 || x - r > vx1 || y + r < vy0 || y - r > vy1) continue;
-            int kind = t.length > 3 ? (int) t[3] : 0;
-            if (kind == Country.TK_PINE) {
-                // A pine: dark, pointed boughs round a lighter tip.
-                float a = 1 - see * 0.5f, spin = t[0] * 0.13f + t[1] * 0.07f;
-                for (int layer = 0; layer < 2; layer++) {
-                    float lr = layer == 0 ? r : r * 0.62f, ox = layer == 0 ? 0 : -r * 0.12f;
-                    pinePath.reset();
-                    for (int k = 0; k < 16; k++) {
-                        double ang = k * Math.PI / 8 + spin;
-                        float rr = k % 2 == 0 ? lr : lr * 0.6f;
-                        float px = x + ox + (float) Math.cos(ang) * rr, py = y + ox + (float) Math.sin(ang) * rr;
-                        if (k == 0) pinePath.moveTo(px, py);
-                        else pinePath.lineTo(px, py);
-                    }
-                    pinePath.close();
-                    fill.setColor(alpha(layer == 0 ? 0xFF1C3E26 : 0xFF2C5C36, a));
-                    c.drawPath(pinePath, fill);
-                }
-                fill.setColor(alpha(0xFF447A4E, a));
-                c.drawCircle(x - r * 0.15f, y - r * 0.15f, r * 0.16f, fill);
-                continue;
-            }
-            fill.setColor(alpha(0xFF2C5A22, 1 - see * 0.5f));
-            c.drawCircle(x, y, r, fill);
-            // The canopy sways gently in the breeze.
-            float sway = (float) Math.sin(world.time * 1.3f + t[0] * 0.07f + t[1] * 0.05f) * 0.9f * ts;
-            if (realistic && scale > 2.5f) {
-                drawRealTree(c, x, y, r, sway, ts, 1 - see * 0.5f, (int) (t[0] * 7 + t[1] * 13));
-                continue;
-            }
-            fill.setColor(alpha(0xFF3B742D, 1 - see * 0.5f));
-            c.drawCircle(x - 1.5f * ts + sway * 0.6f, y - 1.5f * ts + sway * 0.3f, r * 0.65f, fill);
-            fill.setColor(alpha(0xFF4C8A3A, 1 - see * 0.5f));
-            c.drawCircle(x - 2.5f * ts + sway, y - 2.5f * ts + sway * 0.5f, r * 0.3f, fill);
-        }
-        if (!in3d) {
-            // Bird's-eye: the flat roofs are already in the ground bitmap.
-            for (int i = 0, count = world.city.buildings.size(); i < count; i++) {
-                City.Building b = world.city.buildings.get(i);
-                if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
-                drawDamage(c, b, b.x0, b.y0, b.x1, b.y1, 1);
-                if (b.flash > 0) drawGunGlow(c, b, b.x0, b.y0, b.x1, b.y1);
-                if (see > 0) drawInterior(c, b, see);
-                // (The lettering isn't in the ground bitmap any more: it's drawn here, sharp at any zoom.)
-                drawRoofLabels(c, b, cx, cy, 1, 1 - 0.82f * see);
-            }
-            return;
-        }
-
-        int n = 0;
-        for (int i = 0, count = world.city.buildings.size(); i < count; i++) {
-            City.Building b = world.city.buildings.get(i);
-            if (b.collapsed) continue;
-            float s = camH / (camH - b.height);
-            float rx0 = cx + (b.x0 - cx) * s, rx1 = cx + (b.x1 - cx) * s;
-            float ry0 = cy + (b.y0 - cy) * s, ry1 = cy + (b.y1 - cy) * s;
-            if (Math.max(b.x1, rx1) < vx0 || Math.min(b.x0, rx0) > vx1
-                    || Math.max(b.y1, ry1) < vy0 || Math.min(b.y0, ry0) > vy1) continue;
-            if (n == visible.length) {
-                City.Building[] nb = new City.Building[n * 2];
-                float[] nk = new float[n * 2];
-                System.arraycopy(visible, 0, nb, 0, n);
-                System.arraycopy(visibleKey, 0, nk, 0, n);
-                visible = nb;
-                visibleKey = nk;
-            }
-            float ddx = (b.x0 + b.x1) / 2 - cx, ddy = (b.y0 + b.y1) / 2 - cy;
-            // Short buildings first, then the far ones: tall and near buildings end up in front.
-            float key = b.height * 10000f - (float) Math.sqrt(ddx * ddx + ddy * ddy);
-            int j = n++;
-            while (j > 0 && visibleKey[j - 1] > key) {
-                visible[j] = visible[j - 1];
-                visibleKey[j] = visibleKey[j - 1];
-                j--;
-            }
-            visible[j] = b;
-            visibleKey[j] = key;
-        }
-
-        // Windows are only a few pixels tall when zoomed out, and there are thousands of them: skip them then.
-        boolean windows = scale > 2.2f;
-        wallFade = 1 - 0.55f * see;
-        for (int i = 0; i < n; i++) {
-            City.Building b = visible[i];
-            float s = camH / (camH - b.height);
-            float rx0 = cx + (b.x0 - cx) * s, rx1 = cx + (b.x1 - cx) * s;
-            float ry0 = cy + (b.y0 - cy) * s, ry1 = cy + (b.y1 - cy) * s;
-            if (see > 0) drawInterior(c, b, 1);
-            if (cy < b.y0) drawWall(c, b, b.x0, b.y0, b.x1, b.y0, rx0, ry0, rx1, ry0, 0.8f, windows, 0);
-            if (cy > b.y1) drawWall(c, b, b.x1, b.y1, b.x0, b.y1, rx1, ry1, rx0, ry1, 0.52f, windows, 1);
-            if (cx < b.x0) drawWall(c, b, b.x0, b.y1, b.x0, b.y0, rx0, ry1, rx0, ry0, 0.9f, windows, 2);
-            if (cx > b.x1) drawWall(c, b, b.x1, b.y0, b.x1, b.y1, rx1, ry0, rx1, ry1, 0.62f, windows, 3);
-            float dl = world.city.detail;
-            roofSrc.set((int) (b.x0 * dl), (int) (b.y0 * dl), (int) Math.ceil(b.x1 * dl), (int) Math.ceil(b.y1 * dl));
-            roofDst.set(rx0, ry0, rx1, ry1);
-            // ((10.53) All the way off when zoomed right in: a faint ghost of the roof - its skylights and plant - lay
-            // blurred over the rooms.)
-            float roofA = 1 - see;
-            bmpPaint.setAlpha((int) (255 * roofA));
-            c.drawBitmap(world.city.bitmap, roofSrc, roofDst, bmpPaint);
-            bmpPaint.setAlpha(255);
-            if (roofA >= 0.999f) sharpRoof(c, b, s, cx, cy);
-            drawDamage(c, b, rx0, ry0, rx1, ry1, roofA);
-            if (b.flash > 0) drawGunGlow(c, b, rx0, ry0, rx1, ry1);
-            drawRoofLabels(c, b, cx, cy, s, 1 - 0.82f * see);
-        }
-        wallFade = 1;
-    }
-
-    /**
-     * (10.26) A roof raised up in 3D, taken from the sharp close-ups of the map (where they're ready) instead of
-     * the whole-map picture, which is much coarser and went blurry as soon as you zoomed in.
-     */
-    private void sharpRoof(Canvas c, City.Building b, float s, float cx, float cy) {
-        int res = closeRes;
-        if (res == 0) return;
-        int kx0 = (int) (b.x0 / CHUNK), kx1 = (int) ((b.x1 - 0.01f) / CHUNK);
-        int ky0 = (int) (b.y0 / CHUNK), ky1 = (int) ((b.y1 - 0.01f) / CHUNK);
-        for (int ky = ky0; ky <= ky1; ky++)
-            for (int kx = kx0; kx <= kx1; kx++) {
-                android.graphics.Bitmap bm = chunks.get(((long) res << 40) | ((long) ky << 20) | kx);
-                if (bm == null) continue;
-                float ox = kx * CHUNK, oy = ky * CHUNK;
-                float ax0 = Math.max(b.x0, ox), ay0 = Math.max(b.y0, oy), ax1 = Math.min(b.x1, ox + CHUNK), ay1 = Math.min(b.y1, oy + CHUNK);
-                if (ax1 <= ax0 || ay1 <= ay0) continue;
-                roofSrc.set((int) ((ax0 - ox) * res), (int) ((ay0 - oy) * res),
-                        Math.min(bm.getWidth(), (int) Math.ceil((ax1 - ox) * res)), Math.min(bm.getHeight(), (int) Math.ceil((ay1 - oy) * res)));
-                roofDst.set(cx + (ax0 - cx) * s, cy + (ay0 - cy) * s, cx + (ax1 - cx) * s, cy + (ay1 - cy) * s);
-                c.drawBitmap(bm, roofSrc, roofDst, bmpPaint);
-            }
-    }
-
-    /**
-     * A survivor group's defences, growing as they work: boards over the door, then a ring of sandbags
-     * round the building (gap at the door), then a plank wall further out.
-     */
-    private void drawHoldout(Canvas c, World.Holdout h) {
-        City.Building b = h.b;
-        float f = h.fort;
-        if (f >= 10) {
-            // Boards nailed across the door.
-            stroke.setColor(0xFF8A6238);
-            stroke.setStrokeWidth(1.6f);
-            float dx = b.doorX, dy = b.doorY;
-            c.drawLine(dx - 4, dy - 3, dx + 4, dy + 3, stroke);
-            c.drawLine(dx - 4, dy + 3, dx + 4, dy - 3, stroke);
-        }
-        if (f >= 25) ringOf(c, b, 6, Math.min(1, (f - 25) / 40f), 0xFFC4AA78, 0xFF6E5A36, 4.2f, b.doorX, b.doorY);
-        if (f >= 65) ringOf(c, b, 14, Math.min(1, (f - 65) / 35f), 0xFF7A5634, 0xFF3E2A18, 3f, b.doorX, b.doorY);
-    }
-
-    /** Sandbags (or planks) laid round a building at margin m, the first part of the way round so far. */
-    private void ringOf(Canvas c, City.Building b, float m, float part, int col, int edge, float size, float gx, float gy) {
-        float x0 = b.x0 - m, y0 = b.y0 - m, x1 = b.x1 + m, y1 = b.y1 + m;
-        float w = x1 - x0, h = y1 - y0, per = 2 * (w + h);
-        float step = size * 1.5f;
-        int count = (int) (per / step), show = (int) (count * part);
-        for (int k = 0; k < show; k++) {
-            float t = k * step, px, py;
-            boolean across;
-            if (t < w) { px = x0 + t; py = y0; across = true; }
-            else if (t < w + h) { px = x1; py = y0 + t - w; across = false; }
-            else if (t < 2 * w + h) { px = x1 - (t - w - h); py = y1; across = true; }
-            else { px = x0; py = y1 - (t - 2 * w - h); across = false; }
-            // A gap to get in and out by the door.
-            if (Math.abs(px - gx) < 7 && Math.abs(py - gy) < m + 7) continue;
-            City.Building o = world.city.buildingAt(px, py);
-            if (o != null && o != b) continue;
-            float hw = across ? size * 0.75f : size * 0.45f, hh = across ? size * 0.45f : size * 0.75f;
-            fill.setColor(edge);
-            c.drawRect(px - hw - 0.4f, py - hh - 0.4f, px + hw + 0.4f, py + hh + 0.4f, fill);
-            fill.setColor(col);
-            c.drawRect(px - hw, py - hh, px + hw, py + hh, fill);
-        }
-    }
-
-    /** Gunfire inside lights up the windows: a flicker along the walls, seen from anywhere. */
-    private void drawGunGlow(Canvas c, City.Building b, float x0, float y0, float x1, float y1) {
-        int k = (int) (world.time * 30) + b.seed;
-        float w = x1 - x0, h = y1 - y0;
-        for (int n = 0; n < 2; n++) {
-            int side = (k + n * 3) & 3;
-            float t = ((k * 37 + n * 101) % 100) / 100f;
-            float px = side < 2 ? x0 + 3 + t * (w - 6) : side == 2 ? x0 + 1.5f : x1 - 1.5f;
-            float py = side >= 2 ? y0 + 3 + t * (h - 6) : side == 0 ? y0 + 1.5f : y1 - 1.5f;
-            fill.setColor(0x80FFD27A);
-            c.drawCircle(px, py, 5, fill);
-            fill.setColor(0xF0FFF4C8);
-            c.drawCircle(px, py, 1.8f, fill);
-        }
-    }
-
-    /** Cracks and scorch marks on the roof of a building that has taken blast damage. */
-    private void drawDamage(Canvas c, City.Building b, float x0, float y0, float x1, float y1, float a) {
-        float dmg = b.maxHp > 0 ? 1 - b.hp / b.maxHp : 0;
-        if (a > 0.05f) drawWear(c, b, x0, y0, x1, y1, a, dmg);
-        if (dmg < 0.12f || a <= 0.05f) return;
-        float w = x1 - x0, h = y1 - y0;
-        int n = 2 + (int) (dmg * 9);
-        int hsh = b.seed * 1103515245 + 12345;
-        for (int k = 0; k < n; k++) {
-            hsh = hsh * 1103515245 + 12345;
-            float u = ((hsh >>> 8) & 1023) / 1023f;
-            hsh = hsh * 1103515245 + 12345;
-            float v = ((hsh >>> 8) & 1023) / 1023f;
-            hsh = hsh * 1103515245 + 12345;
-            float r = 2 + ((hsh >>> 8) & 255) / 255f * 5 * dmg;
-            fill.setColor(alpha(0x80141210, a * Math.min(1, dmg * 1.6f)));
-            c.drawCircle(x0 + u * w, y0 + v * h, r, fill);
-            stroke.setColor(alpha(0xC0201C18, a));
-            stroke.setStrokeWidth(0.8f);
-            float ex = x0 + u * w + (((hsh >>> 4) & 15) - 7.5f) * 1.6f, ey = y0 + v * h + (((hsh >>> 12) & 15) - 7.5f) * 1.6f;
-            c.drawLine(x0 + u * w, y0 + v * h, Math.max(x0, Math.min(x1, ex)), Math.max(y0, Math.min(y1, ey)), stroke);
-        }
-        if (dmg > 0.6f && world.rnd.nextFloat() < 0.15f) {
-            // Still smouldering.
-            world.particle(x0 + world.rnd.nextFloat() * w, y0 + world.rnd.nextFloat() * h, 3, -8, 1.5f, 2.5f, 0xFF3A3A3A,
-                    World.P_SMOKE);
-        }
-    }
-
-    // ------------------------------------------------------------------ wear and tear (10.17)
-
-    /**
-     * A building shows what it's been through, in stages: windows broken (in a fight inside, a blast, a
-     * shop smashed in), soot spreading over it after a fire, and at worst the roof caved in, with the beams
-     * showing and rubble below.
-     */
-    private void drawWear(Canvas c, City.Building b, float x0, float y0, float x1, float y1, float a, float dmg) {
-        float w = x1 - x0, h = y1 - y0;
-        if (w < 4 || h < 4) return;
-        int hsh = b.seed * 69069 + 1;
-        // Broken windows round the edge of the roof: dark holes, a glint of glass.
-        int windows = (int) (b.shotUp * 8 + (b.smashed ? 4 : 0) + (dmg > 0.12f ? dmg * 8 : 0) + b.scorch * 4);
-        for (int k = 0; k < windows; k++) {
-            hsh = hsh * 1103515245 + 12345;
-            int side = (hsh >>> 20) & 3;
-            float t = 0.12f + ((hsh >>> 8) & 1023) / 1023f * 0.76f;
-            float px = side < 2 ? x0 + t * w : side == 2 ? x0 + 1.4f : x1 - 1.4f;
-            float py = side >= 2 ? y0 + t * h : side == 0 ? y0 + 1.4f : y1 - 1.4f;
-            boolean across = side < 2;
-            float hw = across ? 2.6f : 1.3f, hh = across ? 1.3f : 2.6f;
-            if (b.scorch > 0.3f) {
-                // Soot licked up out of a burnt-out window.
-                fill.setColor(alpha(0xFF141110, a * 0.35f * b.scorch));
-                c.drawCircle(px, py, 4.5f, fill);
-            }
-            fill.setColor(alpha(0xF00C0F12, a));
-            c.drawRect(px - hw, py - hh, px + hw, py + hh, fill);
-            // ((11.5) The glass only close enough to see it.)
-            if (scale < 1.2f) continue;
-            // Jagged glass left in the frame.
-            stroke.setColor(alpha(0xD0CFE8F2, a));
-            stroke.setStrokeWidth(0.45f);
-            c.drawLine(px - hw, py - hh, px - hw * 0.2f, py + hh * 0.1f, stroke);
-            c.drawLine(px + hw, py + hh, px + hw * 0.3f, py - hh * 0.2f, stroke);
-        }
-        // Soot from a fire: blotches spreading from where it burned, the roof edge blackened at the end.
-        if (b.scorch > 0.05f) {
-            int blots = 3 + (int) (b.scorch * 7);
-            hsh = b.seed * 31 + 7;
-            for (int k = 0; k < blots; k++) {
-                hsh = hsh * 1103515245 + 12345;
-                float u = ((hsh >>> 8) & 1023) / 1023f, v = ((hsh >>> 18) & 1023) / 1023f;
-                float r = (3 + ((hsh >>> 4) & 15) / 15f * 6) * (0.4f + b.scorch);
-                // (Soft-edged: rings of thinner soot round a darker middle.)
-                float sa = a * Math.min(0.75f, b.scorch * 0.9f);
-                for (int ring = 0; ring < 3; ring++) {
-                    fill.setColor(alpha(0xFF141110, sa * 0.32f));
-                    c.drawCircle(x0 + u * w, y0 + v * h, r * (1 - ring * 0.3f), fill);
-                }
-            }
-            if (b.scorch > 0.5f) {
-                stroke.setColor(alpha(0xFF0E0C0B, a * (b.scorch - 0.4f)));
-                stroke.setStrokeWidth(1.6f);
-                c.drawRect(x0 + 0.8f, y0 + 0.8f, x1 - 0.8f, y1 - 0.8f, stroke);
-            }
-        }
-        // The roof caved in: a ragged hole, beams across it, rubble round it.
-        float cave = Math.max(dmg > 0.5f ? (dmg - 0.5f) * 2 : 0, b.scorch > 0.85f ? (b.scorch - 0.85f) * 6 : 0);
-        if (cave > 0) {
-            cave = Math.min(1, cave);
-            hsh = b.seed * 7919 + 3;
-            hsh = hsh * 1103515245 + 12345;
-            float cx = x0 + w * (0.35f + ((hsh >>> 8) & 255) / 255f * 0.3f);
-            hsh = hsh * 1103515245 + 12345;
-            float cy = y0 + h * (0.35f + ((hsh >>> 8) & 255) / 255f * 0.3f);
-            float rx = w * (0.12f + 0.22f * cave), ry = h * (0.12f + 0.22f * cave);
-            wearPath.reset();
-            for (int k = 0; k < 10; k++) {
-                hsh = hsh * 1103515245 + 12345;
-                double ang = k * Math.PI / 5;
-                float rr = 0.7f + ((hsh >>> 8) & 255) / 255f * 0.45f;
-                float px = cx + (float) Math.cos(ang) * rx * rr, py = cy + (float) Math.sin(ang) * ry * rr;
-                if (k == 0) wearPath.moveTo(px, py);
-                else wearPath.lineTo(px, py);
-            }
-            wearPath.close();
-            fill.setColor(alpha(0xF0181412, a));
-            c.drawPath(wearPath, fill);
-            stroke.setColor(alpha(0xFF6E4E30, a));
-            stroke.setStrokeWidth(0.9f);
-            for (int k = -1; k <= 1; k++)
-                c.drawLine(cx - rx * 0.9f, cy + k * ry * 0.45f - ry * 0.1f, cx + rx * 0.9f, cy + k * ry * 0.45f + ry * 0.1f, stroke);
-            for (int k = 0; k < 14; k++) {
-                hsh = hsh * 1103515245 + 12345;
-                double ang = ((hsh >>> 8) & 1023) / 1023f * Math.PI * 2;
-                float rr = 1 + ((hsh >>> 18) & 255) / 255f * 0.5f;
-                fill.setColor(alpha(k % 2 == 0 ? 0xFF8A8478 : 0xFF6A645A, a));
-                float px = cx + (float) Math.cos(ang) * rx * rr, py = cy + (float) Math.sin(ang) * ry * rr;
-                float rs = 1.2f + ((hsh >>> 4) & 7) * 0.35f;
-                c.drawRect(px - rs, py - rs * 0.7f, px + rs, py + rs * 0.7f, fill);
-            }
-        }
-    }
-
-    private final android.graphics.Path wearPath = new android.graphics.Path();
-
-    /** A door the dead broke in: hanging off, splinters on the step (boarded back up once it's been fixed). */
-    private void drawBrokenDoor(Canvas c, City.Building b) {
-        float x = b.doorX, y = b.doorY;
-        if (b.barricade >= 60) {
-            // Patched up: planks nailed across the gap.
-            fill.setColor(0xFF8A6238);
-            c.drawRect(x - 4.5f, y - 2.2f, x + 4.5f, y - 1f, fill);
-            c.drawRect(x - 4f, y + 0.2f, x + 4f, y + 1.4f, fill);
-            fill.setColor(0xFF4A3420);
-            c.drawCircle(x - 3.5f, y - 1.6f, 0.35f, fill);
-            c.drawCircle(x + 3.5f, y + 0.8f, 0.35f, fill);
-            return;
-        }
-        fill.setColor(0xE0141210);
-        c.drawRect(x - 3.2f, y - 1.6f, x + 3.2f, y + 1.6f, fill);
-        // The door itself, knocked askew.
-        stroke.setColor(0xFF7A5634);
-        stroke.setStrokeWidth(1.4f);
-        c.drawLine(x - 3.6f, y + 1.8f, x + 1.8f, y + 3.6f, stroke);
-        fill.setColor(0xFFB08A5C);
-        int hsh = b.seed;
-        for (int k = 0; k < 6; k++) {
-            hsh = hsh * 1103515245 + 12345;
-            float u = (((hsh >>> 8) & 255) / 255f - 0.5f) * 9, v = 2 + ((hsh >>> 16) & 255) / 255f * 4;
-            c.drawRect(x + u - 0.6f, y + v - 0.2f, x + u + 0.6f, y + v + 0.2f, fill);
-        }
-    }
-
-    // ------------------------------------------------------------------ marks on the ground (10.17)
-
-    /** Footprints, blood trails, drag marks and spent cases, fading with age. */
-    private void drawMarks(Canvas c, float vx0, float vy0, float vx1, float vy1) {
-        boolean close = scale > 1.8f;
-        float now = world.time;
-        stroke.setStrokeWidth(1.5f);
-        for (int i = 0; i < world.mcount; i++) {
-            float x = world.mx[i], y = world.my[i];
-            if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-            byte kind = world.mkind[i];
-            float age = (now - world.mborn[i]) / World.MARK_LIFE[kind];
-            if (age >= 1 || age < 0) continue;
-            float f = 1 - age;
-            float ca = (float) Math.cos(world.mang[i]), sa = (float) Math.sin(world.mang[i]);
-            switch (kind) {
-                case World.M_FOOT:
-                    // Toe and heel.
-                    fill.setColor(alpha(0x70302418, f));
-                    c.drawCircle(x + ca * 0.75f, y + sa * 0.75f, 0.62f, fill);
-                    c.drawCircle(x - ca * 0.55f, y - sa * 0.55f, 0.48f, fill);
-                    break;
-                case World.M_PAW:
-                    fill.setColor(alpha(0x60302418, f));
-                    c.drawCircle(x, y, 0.5f, fill);
-                    c.drawCircle(x + ca * 0.8f - sa * 0.35f, y + sa * 0.8f + ca * 0.35f, 0.25f, fill);
-                    c.drawCircle(x + ca * 0.8f + sa * 0.35f, y + sa * 0.8f - ca * 0.35f, 0.25f, fill);
-                    break;
-                case World.M_DRIP:
-                    fill.setColor(alpha(world.mside[i] == 1 ? 0xC0600606 : 0x9A6E0A0A, f));
-                    c.drawCircle(x, y, world.mside[i] == 1 ? 0.9f : 0.6f, fill);
-                    break;
-                case World.M_DRAG:
-                    stroke.setColor(alpha(0x70520606, f));
-                    c.drawLine(x - ca * 3, y - sa * 3, x + ca * 3, y + sa * 3, stroke);
-                    break;
-                case World.M_CASING:
-                    if (!close) break;
-                    // Brass, dulling as it lies there.
-                    fill.setColor(alpha(age < 0.3f ? 0xFFC9A442 : 0xFF8F7A48, Math.min(1, f * 2.5f)));
-                    c.drawRect(x - ca * 0.45f - 0.2f, y - sa * 0.45f - 0.2f, x + ca * 0.45f + 0.2f, y + sa * 0.45f + 0.2f, fill);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-
-    /** Gunsmoke drifting off a firefight. */
-    private void drawHaze(Canvas c, float vx0, float vy0, float vx1, float vy1) {
-        float now = world.time;
-        for (int i = 0; i < World.MAXH; i++) {
-            float age = now - world.hborn[i];
-            if (world.hsize[i] <= 0 || age < 0 || age >= World.HAZE_LIFE) continue;
-            float x = world.hx[i] + age * 2.6f, y = world.hy[i] - age * 1.1f;
-            if (x < vx0 - 20 || x > vx1 + 20 || y < vy0 - 20 || y > vy1 + 20) continue;
-            float k = age / World.HAZE_LIFE, f = k < 0.1f ? k * 10 : 1 - (k - 0.1f) / 0.9f;
-            fill.setColor(alpha(0xFFCFCFC6, 0.2f * f));
-            c.drawCircle(x, y, world.hsize[i] + age * 1.7f, fill);
-        }
-    }
+    final android.graphics.Path wearPath = new android.graphics.Path();
 
     /** What you see through a see-through roof: the floor, rooms, furniture and anyone hiding inside. */
-    private int ihash;
-    private float ia;
+    int ihash;
+    float ia;
 
-    /** The next number from the building's own sequence, 0 to 1 (so its furniture never moves). */
-    private float irand() {
-        ihash = ihash * 1103515245 + 12345;
-        return ((ihash >>> 8) & 0xFFFF) / 65535f;
-    }
+    Entity[] puppets;
+    final java.util.HashMap<City.Building, Integer[]> byDoor = new java.util.HashMap<City.Building, Integer[]>();
 
-    private void box(Canvas c, float l, float t, float r, float b, int color) {
-        fill.setColor(alpha(color, ia));
-        c.drawRect(l, t, r, b, fill);
-    }
+    final java.util.HashMap<City.Building, Interiors.Plan> plans = new java.util.HashMap<City.Building, Interiors.Plan>();
+    final java.util.HashMap<City.Building, java.util.ArrayList<float[]>> loose = new java.util.HashMap<City.Building, java.util.ArrayList<float[]>>();
 
-    /**
-     * What you see through a see-through roof: the floor and furniture laid out for what the building is, the
-     * damage if it has been smashed or looted, and whoever (or whatever) is inside.
-     */
-    private void drawInterior(Canvas c, City.Building b, float a) {
-        float x0 = b.x0 + 1, y0 = b.y0 + 1, x1 = b.x1 - 1, y1 = b.y1 - 1, w = x1 - x0, h = y1 - y0;
-        ia = a;
-        ihash = b.seed * 69069 + 7;
-        boolean wide = w >= h;
-        int k = b.kind;
-        int floorCol;
-        switch (k) {
-            case City.HOUSE: case City.BARN: floorCol = 0xFFB8946A; break;
-            case City.APARTMENT: floorCol = 0xFFA88A6A; break;
-            case City.CHURCH: case City.SPIRE: case City.CRYPT: floorCol = 0xFF9C8C76; break;
-            case City.MARKET: case City.KIOSK: case City.PHARMACY: case City.MALL: floorCol = 0xFFDCDCD4; break;
-            case City.HOSPITAL: floorCol = 0xFFD8E2E6; break;
-            case City.WAREHOUSE: case City.POWER: case City.GARAGE: case City.FIRE_STATION: case City.WORKS: floorCol = 0xFF8A8A84; break;
-            case City.BARRACKS: case City.TOWER: floorCol = 0xFF7E806E; break;
-            case City.STATION: floorCol = 0xFFB4B8BE; break;
-            case City.SCHOOL: floorCol = 0xFFC8B89A; break;
-            case City.SHOP: floorCol = b.shopType == 2 ? 0xFFD8D0C0 : 0xFFC8C0B0; break;
-            default: floorCol = 0xFFC4BFB4; break;
-        }
-        box(c, x0, y0, x1, y1, floorCol);
-        int dark = City.darken(floorCol, 0.62f);
-        int inside = Interiors.insideOf(b);
-        Interiors.Plan plan = inside >= 0 ? planOf(b, inside) : null;
-        if (plan != null) {
-            drawPlan(c, plan, a);
-            // (10.53) Windows along the outside walls, a pane every few steps (none on a warehouse or a barn).
-            if (k != City.WAREHOUSE && k != City.BARN && k != City.GARAGE) {
-                fill.setColor(alpha(0xFF9CC4DA, a));
-                float pane = 4.5f, step = 10;
-                for (float u = x0 + 4; u + pane < x1 - 3; u += step) {
-                    c.drawRect(u, y0 - 0.6f, u + pane, y0 + 0.9f, fill);
-                    c.drawRect(u, y1 - 0.9f, u + pane, y1 + 0.6f, fill);
-                }
-                for (float u = y0 + 4; u + pane < y1 - 3; u += step) {
-                    c.drawRect(x0 - 0.6f, u, x0 + 0.9f, u + pane, fill);
-                    c.drawRect(x1 - 0.9f, u, x1 + 0.6f, u + pane, fill);
-                }
-            }
-        }
-        else switch (k) {
-            case City.HOUSE: case City.APARTMENT: {
-                // Rooms: a kitchen, a living room with a sofa and rug, bedrooms, a bathroom.
-                float mx = x0 + w * (0.45f + irand() * 0.1f), my = y0 + h * (0.45f + irand() * 0.1f);
-                box(c, x0 + 2, y0 + 2, mx - 2, y0 + 5, 0xFFE8E4DA); // kitchen counter
-                box(c, x0 + 2, y0 + 2, x0 + 5, my - 2, 0xFFE8E4DA);
-                box(c, mx + 3, y0 + 3, Math.min(x1 - 3, mx + 12), y0 + 10, 0xFF8A3A3A); // rug
-                box(c, mx + 3, y0 + 2, Math.min(x1 - 3, mx + 12), y0 + 5, 0xFF4E5A7A); // sofa
-                box(c, x0 + 3, my + 3, x0 + 11, my + 13, 0xFFE8E8F0); // bed
-                box(c, x0 + 3, my + 3, x0 + 11, my + 6, 0xFFB0C0E0);
-                box(c, x1 - 9, y1 - 7, x1 - 2, y1 - 2, 0xFFF4F4F4); // bath
-                stroke.setColor(alpha(City.darken(b.wall, 0.7f), a));
-                stroke.setStrokeWidth(1.2f);
-                c.drawLine(mx, y0, mx, my - 4, stroke);
-                c.drawLine(mx, my + 4, mx, y1, stroke);
-                c.drawLine(x0, my, mx - 4, my, stroke);
-                c.drawLine(mx + 4, my, x1, my, stroke);
-                break;
-            }
-            case City.SHOP: case City.KIOSK: case City.PHARMACY: {
-                if (k == City.SHOP && b.shopType == 2) {
-                    // Diner: booths along the wall, a counter with stools.
-                    for (float t = 3; t < (wide ? w : h) - 8; t += 9) {
-                        float u = (wide ? x0 : y0) + t;
-                        if (wide) {
-                            box(c, u, y0 + 2, u + 7, y0 + 4, 0xFFB83A30);
-                            box(c, u + 1, y0 + 4, u + 6, y0 + 8, 0xFFE8E0D0);
-                            box(c, u, y0 + 8, u + 7, y0 + 10, 0xFFB83A30);
-                        } else {
-                            box(c, x0 + 2, u, x0 + 4, u + 7, 0xFFB83A30);
-                            box(c, x0 + 4, u + 1, x0 + 8, u + 6, 0xFFE8E0D0);
-                            box(c, x0 + 8, u, x0 + 10, u + 7, 0xFFB83A30);
-                        }
-                    }
-                    box(c, wide ? x0 + 3 : x1 - 6, wide ? y1 - 6 : y0 + 3, wide ? x1 - 3 : x1 - 3, wide ? y1 - 3 : y1 - 3, 0xFF6A4A30);
-                } else if (k == City.SHOP && b.shopType == 1) {
-                    // Gun store: display cases and racks of rifles on the walls.
-                    for (float t = 4; t < (wide ? w : h) - 4; t += 5) {
-                        float u = (wide ? x0 : y0) + t;
-                        if (b.stock > 0 || irand() < 0.2f) {
-                            if (wide) box(c, u, y0 + 2, u + 1, y0 + 9, 0xFF2A2A2A);
-                            else box(c, x0 + 2, u, x0 + 9, u + 1, 0xFF2A2A2A);
-                        }
-                    }
-                    box(c, x0 + w * 0.2f, y0 + h * 0.55f, x0 + w * 0.8f, y0 + h * 0.55f + 4, 0xFF9CC3D9);
-                } else {
-                    // Shelves round the walls, a counter and till by the door.
-                    int shelf = k == City.PHARMACY ? 0xFFF2F2F2 : dark;
-                    box(c, x0 + 2, y0 + 2, x1 - 2, y0 + 4, shelf);
-                    box(c, x0 + 2, y0 + 2, x0 + 4, y1 - 2, shelf);
-                    box(c, x1 - 4, y0 + 2, x1 - 2, y1 - 2, shelf);
-                    // Goods on the top shelf (fewer once the place has been looted).
-                    int[] goods = {0xFFE05050, 0xFF5080E0, 0xFFE0C050, 0xFF50B060};
-                    for (float u = x0 + 3; u < x1 - 3; u += 2.5f)
-                        if (!b.looted || irand() < 0.2f) box(c, u, y0 + 2.3f, u + 1.6f, y0 + 3.8f, goods[(int) (irand() * 4) % 4]);
-                    box(c, x0 + w * 0.3f, y1 - 7, x0 + w * 0.7f, y1 - 4, 0xFF6A4A30);
-                }
-                break;
-            }
-            case City.MARKET: case City.MALL: {
-                // Aisles of colourful shelves, checkouts at the front. The mall has a fountain in its atrium.
-                int[] goods = {0xFFE05050, 0xFF5080E0, 0xFFE0C050, 0xFF50B060, 0xFFE08840};
-                for (float t = y0 + 8; t < y1 - 12; t += 9) {
-                    box(c, x0 + 8, t, x1 - 8, t + 3, dark);
-                    for (float u = x0 + 9; u < x1 - 9; u += 3)
-                        box(c, u, t + 0.5f, u + 2, t + 2.5f, goods[(int) (irand() * goods.length)]);
-                }
-                for (float u = x0 + 8; u < x1 - 10; u += 12) box(c, u, y1 - 9, u + 6, y1 - 6, 0xFF5A5E66);
-                if (k == City.MALL) {
-                    float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-                    box(c, cx - 14, cy - 14, cx + 14, cy + 14, 0xFFE8E4DA);
-                    fill.setColor(alpha(0xFF6FA8DC, a));
-                    c.drawCircle(cx, cy, 8, fill);
-                }
-                break;
-            }
-            case City.HOSPITAL: {
-                // Wards: rows of beds with blue sheets, a nurses' station.
-                for (float t = y0 + 4; t < y1 - 10; t += 11)
-                    for (float u = x0 + 4; u < x1 - 8; u += 10) {
-                        box(c, u, t, u + 6, t + 8, 0xFFF4F4F4);
-                        box(c, u, t + 3, u + 6, t + 8, 0xFF7AA8D8);
-                    }
-                box(c, x0 + w * 0.4f, y1 - 8, x0 + w * 0.6f, y1 - 3, 0xFFD83A3A);
-                break;
-            }
-            case City.STATION: {
-                // Desks up front, holding cells with bars at the back.
-                for (float u = x0 + 5; u < x1 - 8; u += 10) box(c, u, y1 - 12, u + 6, y1 - 8, dark);
-                float cy = y0 + h * 0.35f;
-                box(c, x0 + 2, y0 + 2, x1 - 2, cy, 0xFF9A9EA4);
-                stroke.setColor(alpha(0xFF3A3E44, a));
-                stroke.setStrokeWidth(0.6f);
-                for (float u = x0 + 3; u < x1 - 2; u += 2.5f) c.drawLine(u, cy - 2, u, cy, stroke);
-                for (float u = x0 + w / 3; u < x1 - 2; u += w / 3) c.drawLine(u, y0 + 2, u, cy, stroke);
-                break;
-            }
-            case City.SCHOOL: {
-                // Classrooms of little desks facing the board.
-                for (float t = y0 + 6; t < y1 - 6; t += 7)
-                    for (float u = x0 + 6; u < x1 - 6; u += 7) box(c, u, t, u + 4, t + 3, 0xFFB08A5A);
-                box(c, x0 + 3, y0 + 2, x0 + w * 0.5f, y0 + 3.5f, 0xFF2E4A36);
-                break;
-            }
-            case City.CHURCH: case City.SPIRE: {
-                for (float t = 6; t < (wide ? w : h) - 8; t += 5) {
-                    if (wide) {
-                        box(c, x0 + t, y0 + 4, x0 + t + 2, y0 + h / 2 - 3, dark);
-                        box(c, x0 + t, y0 + h / 2 + 3, x0 + t + 2, y1 - 4, dark);
-                    } else {
-                        box(c, x0 + 4, y0 + t, x0 + w / 2 - 3, y0 + t + 2, dark);
-                        box(c, x0 + w / 2 + 3, y0 + t, x1 - 4, y0 + t + 2, dark);
-                    }
-                }
-                box(c, wide ? x1 - 6 : x0 + w / 2 - 4, wide ? y0 + h / 2 - 4 : y1 - 6, wide ? x1 - 3 : x0 + w / 2 + 4,
-                        wide ? y0 + h / 2 + 4 : y1 - 3, 0xFFE8D24A);
-                break;
-            }
-            case City.WAREHOUSE: case City.BARN: {
-                // Pallets and crates (hay bales in a barn), and a forklift.
-                int crate = k == City.BARN ? 0xFFD8B860 : 0xFFA0784A;
-                for (float t = y0 + 4; t < y1 - 8; t += 9)
-                    for (float u = x0 + 4; u < x1 - 8; u += 9)
-                        if (irand() < 0.7f) box(c, u, t, u + 6, t + 6, crate);
-                box(c, x0 + w * 0.6f, y1 - 9, x0 + w * 0.6f + 5, y1 - 4, 0xFFE8B830);
-                break;
-            }
-            case City.BARRACKS: {
-                for (float t = y0 + 3; t < y1 - 6; t += 7)
-                    for (float u = x0 + 3; u < x1 - 9; u += 11) {
-                        box(c, u, t, u + 8, t + 4, 0xFF5B6B3A);
-                        box(c, u, t, u + 2, t + 4, 0xFFE8E8E0);
-                    }
-                break;
-            }
-            case City.POWER: {
-                for (int n = 0; n < 3; n++) {
-                    fill.setColor(alpha(0xFF6A7078, a));
-                    c.drawCircle(x0 + w * (0.2f + n * 0.3f), (y0 + y1) / 2, Math.min(w, h) * 0.14f, fill);
-                    fill.setColor(alpha(0xFF9AA0A8, a));
-                    c.drawCircle(x0 + w * (0.2f + n * 0.3f), (y0 + y1) / 2, Math.min(w, h) * 0.07f, fill);
-                }
-                break;
-            }
-            default: {
-                // Offices: desk clusters with glowing screens, a meeting room and a few plants.
-                for (float t = y0 + 5; t < y1 - 8; t += 12)
-                    for (float u = x0 + 5; u < x1 - 10; u += 13) {
-                        if (irand() < 0.2f) continue;
-                        box(c, u, t, u + 8, t + 4, dark);
-                        box(c, u + 1, t + 0.5f, u + 3, t + 1.5f, 0xFF7FB0D8);
-                        box(c, u + 5, t + 0.5f, u + 7, t + 1.5f, 0xFF7FB0D8);
-                    }
-                if (w > 30 && h > 30) {
-                    stroke.setColor(alpha(0xFF9CC3D9, a));
-                    stroke.setStrokeWidth(1f);
-                    c.drawRect(x1 - w * 0.3f, y0 + 2, x1 - 2, y0 + h * 0.3f, stroke);
-                }
-                for (int n = 0; n < 3; n++) {
-                    fill.setColor(alpha(0xFF3E8A34, a));
-                    c.drawCircle(x0 + 3 + irand() * (w - 6), y0 + 3 + irand() * (h - 6), 1.8f, fill);
-                }
-                break;
-            }
-        }
-        // Damage: overturned shelves and litter after looting, glass inside smashed shop windows, blood where
-        // zombies have been.
-        if (b.looted || b.smashed) {
-            for (int n = 0; n < 8; n++) {
-                float px = x0 + 3 + irand() * (w - 6), py = y0 + 3 + irand() * (h - 6);
-                box(c, px, py, px + 2 + irand() * 3, py + 1 + irand() * 2, n % 2 == 0 ? dark : 0xFFE0D8C8);
-            }
-        }
-        if (b.lurkers > 0 || b.infestKnown) {
-            for (int n = 0; n < 5; n++) {
-                fill.setColor(alpha(0x996E0A0A, a));
-                c.drawCircle(x0 + 3 + irand() * (w - 6), y0 + 3 + irand() * (h - 6), 1.5f + irand() * 2.5f, fill);
-            }
-        }
-        stroke.setColor(alpha(City.darken(b.wall, 0.6f), a));
-        stroke.setStrokeWidth(2f);
-        oval.set(x0, y0, x1, y1);
-        c.drawRect(oval, stroke);
-        if (a < 0.5f) return;
-        // The people inside, each at their own spot (a seat, a desk, a bed...), moving between them now
-        // and then. Whoever doesn't fit on the ground floor is upstairs.
-        java.util.ArrayList<float[]> spots = plan != null ? plan.spots : looseSpots(b, x0, y0, x1, y1);
-        int ns = spots.size();
-        if (b.fighting && ns > 1) {
-            drawFightInside(c, b, spots, a);
-            return;
-        }
-        for (int i = 0, n = Math.min(ns, b.occupants.size() + b.visitors.size()); i < n; i++) {
-            Entity o = i < b.occupants.size() ? b.occupants.get(i) : b.visitors.get(i - b.occupants.size());
-            placeInside(o, i, b, spots, plan);
-            o.aiming = false;
-            drawEntity(c, o, false);
-        }
-        // Zombies waiting in the dark: only a close look through the roof gives them away.
-        for (int i = 0; i < b.lurkers; i++) {
-            float lx = x0 + 5 + ((b.seed * 31 + i * 57) % Math.max(1, (int) (w - 10)));
-            float ly = y0 + 5 + ((b.seed * 17 + i * 43) % Math.max(1, (int) (h - 10)));
-            float sway = (float) Math.sin(world.time * 1.5f + i) * 1.2f;
-            fill.setColor(alpha(0xFF3E5A2A, a * 0.75f));
-            c.drawCircle(lx + sway, ly, 3.4f, fill);
-            fill.setColor(alpha(0xFF7C9A5E, a * 0.75f));
-            c.drawCircle(lx + sway + 0.4f, ly, 2f, fill);
-        }
-    }
+    /** (17.1) The walls to draw for the plan being drawn: the building's own, as people walk round them. */
+    float[] planWalls;
 
-    private Entity[] puppets;
-    private final java.util.HashMap<City.Building, Integer[]> byDoor = new java.util.HashMap<City.Building, Integer[]>();
+    final Path carPath = new Path();
 
-    /**
-     * A fight inside, seen through the roof: the dead have the rooms by the door, the people inside are
-     * pushed back to the far end, facing them, with guns flashing.
-     */
-    private void drawFightInside(Canvas c, final City.Building b, final java.util.ArrayList<float[]> spots, float a) {
-        Integer[] order = doorOrder(b, spots);
-        if (puppets == null) {
-            puppets = new Entity[10];
-            for (int i = 0; i < puppets.length; i++) puppets[i] = world.puppetZombie(i);
-        }
-        int ns = order.length;
-        int dead = Math.min(Math.min(puppets.length, b.lurkers), Math.max(1, ns / 2));
-        float fx = 0, fy = 0;
-        for (int i = 0; i < dead; i++) {
-            float[] sp = spots.get(order[i]);
-            Entity z = puppets[i];
-            // Shuffling forwards, pulled back, forwards again.
-            float lunge = (float) Math.sin(world.time * 2.2f + i * 1.7f) * 2.5f;
-            float[] far = spots.get(order[ns - 1]);
-            float dx = far[0] - sp[0], dy = far[1] - sp[1], d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
-            z.x = sp[0] + dx / d * lunge;
-            z.y = sp[1] + dy / d * lunge;
-            z.angle = (float) Math.atan2(dy, dx);
-            z.phase = world.time * 3 + i;
-            drawEntity(c, z, false);
-            fx += z.x;
-            fy += z.y;
-        }
-        if (dead > 0) {
-            fx /= dead;
-            fy /= dead;
-        }
-        int people = Math.min(b.occupants.size(), ns - dead);
-        for (int i = 0; i < people; i++) {
-            Entity o = b.occupants.get(i);
-            float[] sp = spots.get(order[ns - 1 - i]);
-            o.x = sp[0];
-            o.y = sp[1];
-            o.angle = (float) Math.atan2(fy - o.y, fx - o.x);
-            o.aiming = o.canShoot() && dead > 0;
-            drawEntity(c, o, false);
-            if (o.aiming && b.flash > 0 && (i & 1) == ((int) (world.time * 20) & 1)) {
-                float ca = (float) Math.cos(o.angle), sa = (float) Math.sin(o.angle);
-                fill.setColor(alpha(0xFFFFE08A, a));
-                c.drawCircle(o.x + ca * 7, o.y + sa * 7, 2.2f, fill);
-                stroke.setColor(alpha(0x99FFF2C0, a));
-                stroke.setStrokeWidth(0.6f);
-                c.drawLine(o.x + ca * 7, o.y + sa * 7, fx, fy, stroke);
-            }
-        }
-    }
+    /** ((25.0) How much bigger a giant is drawn than the room it takes up. */
+    static final float GIANT_DRAW = 2.3f;
 
-    private final java.util.HashMap<City.Building, Interiors.Plan> plans = new java.util.HashMap<City.Building, Interiors.Plan>();
-    private final java.util.HashMap<City.Building, java.util.ArrayList<float[]>> loose = new java.util.HashMap<City.Building, java.util.ArrayList<float[]>>();
+    static final int[] LEAF_DARK = {0xFF24481C, 0xFF2A4E1E, 0xFF2E4A22};
+    static final int[] LEAF_MID = {0xFF33662A, 0xFF3A6E2C, 0xFF3F6A30};
+    static final int[] LEAF_LIGHT = {0xFF4E8A3C, 0xFF5A9444, 0xFF55883E};
 
-    private Interiors.Plan planOf(City.Building b, int inside) {
-        Interiors.Plan p = plans.get(b);
-        if (p == null) {
-            if (plans.size() > 400) plans.clear();
-            p = Interiors.make(b, inside);
-            plans.put(b, p);
-        }
-        return p;
-    }
-
-    /** Floors, furniture and inside walls of a floor plan. */
-    private void drawPlan(Canvas c, Interiors.Plan p, float a) {
-        // (10.53) Floors with a grain to them: boards in the homes and hotel rooms, tiles in the kitchens and
-        // bathrooms, carpet tiles in the offices; then the furniture standing up off them, the walls with their
-        // doors, and windows round the outside.
-        for (int i = 0, n = p.rooms.size(); i < n; i++) {
-            float[] r = p.rooms.get(i);
-            int kind = (int) r[4], col = Interiors.floorOf(kind);
-            box(c, r[0], r[1], r[2], r[3], col);
-            floorGrain(c, r[0], r[1], r[2], r[3], kind, col, a);
-        }
-        for (int i = 0, n = p.items.size(); i < n; i++) {
-            float[] it = p.items.get(i);
-            int col = (int) it[4];
-            if (it[5] > 0) {
-                float x = (it[0] + it[2]) / 2, y = (it[1] + it[3]) / 2, rad = (it[2] - it[0]) / 2;
-                fill.setColor(alpha(0x33000000, a));
-                c.drawCircle(x + 0.7f, y + 0.9f, rad, fill);
-                fill.setColor(alpha(col, a));
-                c.drawCircle(x, y, rad, fill);
-                fill.setColor(alpha(City.lighten(col, 0.25f), a));
-                c.drawCircle(x - rad * 0.3f, y - rad * 0.3f, rad * 0.45f, fill);
-            } else {
-                box(c, it[0] + 0.7f, it[1] + 0.9f, it[2] + 0.7f, it[3] + 0.9f, 0x33000000);
-                box(c, it[0], it[1], it[2], it[3], col);
-                // A lit edge along the top and left, a shaded one along the bottom: it stands up off the floor.
-                float e = Math.min(0.9f, Math.min(it[2] - it[0], it[3] - it[1]) * 0.18f);
-                if (e > 0.25f) {
-                    box(c, it[0], it[1], it[2], it[1] + e, City.lighten(col, 0.22f));
-                    box(c, it[0], it[1], it[0] + e, it[3], City.lighten(col, 0.12f));
-                    box(c, it[0], it[3] - e, it[2], it[3], City.darken(col, 0.78f));
-                }
-            }
-        }
-        // Walls: a dark edge and a lighter top, like a wall seen from above.
-        for (int pass = 0; pass < 2; pass++) {
-            stroke.setColor(alpha(pass == 0 ? 0xFF3A3430 : 0xFF6E655C, a));
-            stroke.setStrokeWidth(pass == 0 ? 1.6f : 0.7f);
-            for (int i = 0, n = p.walls.size(); i < n; i++) {
-                float[] wl = p.walls.get(i);
-                c.drawLine(wl[0], wl[1], wl[2], wl[3], stroke);
-            }
-        }
-        // Each room's door, swung open into it.
-        stroke.setColor(alpha(0x99584C40, a));
-        stroke.setStrokeWidth(0.5f);
-        for (int i = 0, n = p.rooms.size(); i < n; i++) {
-            float[] r = p.rooms.get(i);
-            if (r.length < 7 || r[5] <= 0) continue;
-            float dx = r[5], dy = r[6];
-            if (dx < r[0] - 3 || dx > r[2] + 3 || dy < r[1] - 3 || dy > r[3] + 3) continue;
-            // (Which wall it's in: the nearest edge of the room.)
-            float dl = Math.abs(dx - r[0]), dr = Math.abs(dx - r[2]), dt = Math.abs(dy - r[1]), db = Math.abs(dy - r[3]);
-            float m = Math.min(Math.min(dl, dr), Math.min(dt, db)), len = 3.2f;
-            float hx = dx, hy = dy, ox = 0, oy = 0;
-            if (m == dl) { hx = r[0]; ox = 1; }
-            else if (m == dr) { hx = r[2]; ox = -1; }
-            else if (m == dt) { hy = r[1]; oy = 1; }
-            else { hy = r[3]; oy = -1; }
-            float px = hx - oy * len * 0.5f, py = hy - ox * len * 0.5f;
-            c.drawLine(px, py, px + ox * len, py + oy * len, stroke);
-            int steps = 5;
-            float lx = px + ox * len, ly = py + oy * len;
-            for (int k = 1; k <= steps; k++) {
-                double an = Math.PI / 2 * k / steps;
-                float qx = px + (float) (ox * Math.cos(an) + oy * Math.sin(an)) * len, qy = py + (float) (oy * Math.cos(an) + ox * Math.sin(an)) * len;
-                c.drawLine(lx, ly, qx, qy, stroke);
-                lx = qx;
-                ly = qy;
-            }
-        }
-    }
-
-    /** (10.53) The look of a floor: boards, tiles or carpet squares, faintly lined over its colour. */
-    private void floorGrain(Canvas c, float x0, float y0, float x1, float y1, int kind, int col, float a) {
-        int style;
-        switch (kind) {
-            case Interiors.LIVING: case Interiors.BEDROOM: case Interiors.DINING: case Interiors.HOTELROOM:
-            case Interiors.BARROOM: case Interiors.BOOKS: case Interiors.DORMROOM: case Interiors.GYMFLOOR: style = 1; break;
-            case Interiors.KITCHEN: case Interiors.BATH: case Interiors.COOKING: case Interiors.LAUNDRY: case Interiors.BAKERY:
-            case Interiors.LAB: case Interiors.WARD: case Interiors.SALON: style = 2; break;
-            case Interiors.OPENPLAN: case Interiors.MEETING: case Interiors.CLASS: case Interiors.LOBBY: style = 3; break;
-            default: return;
-        }
-        float w = x1 - x0, h = y1 - y0;
-        if (w < 4 || h < 4) return;
-        stroke.setColor(alpha(City.darken(col, style == 2 ? 0.86f : 0.9f), a * (style == 3 ? 0.5f : 0.75f)));
-        stroke.setStrokeWidth(0.3f);
-        if (style == 1) {
-            // Boards along the room's long side, their ends staggered.
-            boolean along = w >= h;
-            float gap = 2.2f;
-            int row = 0;
-            for (float v = (along ? y0 : x0) + gap; v < (along ? y1 : x1); v += gap, row++) {
-                if (along) c.drawLine(x0, v, x1, v, stroke);
-                else c.drawLine(v, y0, v, y1, stroke);
-                float off = (row * 7.3f) % 9;
-                for (float u = (along ? x0 : y0) + off; u < (along ? x1 : y1); u += 9) {
-                    if (along) c.drawLine(u, v - gap, u, v, stroke);
-                    else c.drawLine(v - gap, u, v, u, stroke);
-                }
-            }
-        } else {
-            float g = style == 2 ? 3f : 6f;
-            for (float x = x0 + g; x < x1; x += g) c.drawLine(x, y0, x, y1, stroke);
-            for (float y = y0 + g; y < y1; y += g) c.drawLine(x0, y, x1, y, stroke);
-        }
-    }
-
-    /** Spots spread over the floor of a building without a plan (a warehouse floor, a barracks...). */
-    private java.util.ArrayList<float[]> looseSpots(City.Building b, float x0, float y0, float x1, float y1) {
-        java.util.ArrayList<float[]> s = loose.get(b);
-        if (s != null) return s;
-        if (loose.size() > 400) loose.clear();
-        s = new java.util.ArrayList<float[]>();
-        java.util.Random r = new java.util.Random(b.seed);
-        for (float y = y0 + 6; y < y1 - 4; y += 12)
-            for (float x = x0 + 6; x < x1 - 4; x += 12)
-                s.add(new float[]{x + r.nextFloat() * 4 - 2, y + r.nextFloat() * 4 - 2, 0, r.nextFloat() * 6.28f});
-        loose.put(b, s);
-        return s;
-    }
-
-    /**
-     * Where someone inside is right now: at one spot for a while, then walking to the next (through the
-     * doorways if it's in another room). Everyone in a building moves on the same beat to different spots,
-     * so nobody ends up on top of anyone else.
-     */
-    /** The spots inside a building, nearest the door first. */
-    private Integer[] doorOrder(final City.Building b, final java.util.ArrayList<float[]> spots) {
-        Integer[] order = byDoor.get(b);
-        if (order == null || order.length != spots.size()) {
-            if (byDoor.size() > 100) byDoor.clear();
-            order = new Integer[spots.size()];
-            for (int i = 0; i < order.length; i++) order[i] = i;
-            java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
-                public int compare(Integer p, Integer q) {
-                    float[] u = spots.get(p), v = spots.get(q);
-                    return Float.compare(Math.abs(u[0] - b.doorX) + Math.abs(u[1] - b.doorY), Math.abs(v[0] - b.doorX) + Math.abs(v[1] - b.doorY));
-                }
-            });
-            byDoor.put(b, order);
-        }
-        return order;
-    }
-
-    private void placeInside(Entity o, int i, City.Building b, java.util.ArrayList<float[]> spots, Interiors.Plan plan) {
-        int n = spots.size();
-        // ((11.5) The dead at the door: two of them put their backs to it (the strongest, or whoever has a gun),
-        // everyone else gets as far from it as the place allows and keeps still - no wandering from room to room.)
-        if (i < b.occupants.size() && b.barricade < 99 && b.calmTimer < 2 && n > 2) {
-            Integer[] order = doorOrder(b, spots);
-            float cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-            float ix = cx - b.doorX, iy = cy - b.doorY, il = (float) Math.sqrt(ix * ix + iy * iy) + 0.001f;
-            ix /= il;
-            iy /= il;
-            if (i < 2) {
-                float side = i == 0 ? 3.5f : -3.5f;
-                o.x = b.doorX + ix * 6 - iy * side;
-                o.y = b.doorY + iy * 6 + ix * side;
-                o.angle = (float) Math.atan2(-iy, -ix);
-                // (Shoving back as the door shakes.)
-                float shove = (float) Math.sin(world.time * 9 + i * 2) * (b.barricade < 50 ? 1.2f : 0.6f);
-                o.x -= ix * shove;
-                o.y -= iy * shove;
-                return;
-            }
-            float[] sp = spots.get(order[Math.max(0, n - 1 - (i - 2) % Math.max(1, n - 2))]);
-            o.x = sp[0];
-            o.y = sp[1];
-            o.angle = (float) Math.atan2(b.doorY - sp[1], b.doorX - sp[0]);
-            return;
-        }
-        // ((11.5) With the city under attack, those sheltering here move about a lot less.)
-        float cycle = (14 + (b.seed & 7)) * (world.alert >= 1 && i < b.occupants.size() ? 2.5f : 1);
-        float t = world.time + (b.seed & 255) * 0.13f;
-        int k = (int) (t / cycle);
-        float f = t / cycle - k;
-        int off = (b.seed >>> 4) & 1023;
-        float[] A = spots.get((i + k * 3 + off) % n), B = spots.get((i + (k + 1) * 3 + off) % n);
-        // Some stay put through a whole cycle (sitting at a desk, in bed, reading).
-        boolean stays = ((o.nameSeed >>> (k & 15)) & 3) == 0;
-        float walkFrom = 0.7f + ((o.nameSeed & 15) / 15f) * 0.12f;
-        if (stays || f < walkFrom || A == B) {
-            o.x = A[0];
-            o.y = A[1];
-            o.angle = A[3];
-            if (stays) {
-                B = A;
-            }
-            return;
-        }
-        float g = (f - walkFrom) / (1 - walkFrom);
-        float px, py, qx, qy;
-        if (plan != null && A[2] != B[2]) {
-            // Out through this room's doorway and in through the other's.
-            float[] ra = plan.rooms.get((int) A[2]), rb = plan.rooms.get((int) B[2]);
-            float[][] pts = {{A[0], A[1]}, {ra[5], ra[6]}, {rb[5], rb[6]}, {B[0], B[1]}};
-            float seg = g * 3;
-            int si = Math.min(2, (int) seg);
-            float u = seg - si;
-            px = pts[si][0];
-            py = pts[si][1];
-            qx = pts[si + 1][0];
-            qy = pts[si + 1][1];
-            o.x = px + (qx - px) * u;
-            o.y = py + (qy - py) * u;
-        } else {
-            px = A[0];
-            py = A[1];
-            qx = B[0];
-            qy = B[1];
-            o.x = px + (qx - px) * g;
-            o.y = py + (qy - py) * g;
-        }
-        if (Math.abs(qx - px) + Math.abs(qy - py) > 0.5f) o.angle = (float) Math.atan2(qy - py, qx - px);
-        o.phase += 0.2f;
-    }
-
-    /** Draws one wall from ground edge a-b up to roof edge ta-tb, with windows and doors on it. */
-    private void drawWall(Canvas c, City.Building b, float ax, float ay, float bx, float by, float tax, float tay,
-                          float tbx, float tby, float shade, boolean windows, int side) {
-        float len = Math.abs(bx - ax) + Math.abs(by - ay), hgt = b.height;
-        wallSrc[0] = 0;
-        wallSrc[1] = 0;
-        wallSrc[2] = len;
-        wallSrc[3] = 0;
-        wallSrc[4] = len;
-        wallSrc[5] = hgt;
-        wallSrc[6] = 0;
-        wallSrc[7] = hgt;
-        wallDst[0] = ax;
-        wallDst[1] = ay;
-        wallDst[2] = bx;
-        wallDst[3] = by;
-        wallDst[4] = tbx;
-        wallDst[5] = tby;
-        wallDst[6] = tax;
-        wallDst[7] = tay;
-        if (!wallMatrix.setPolyToPoly(wallSrc, 0, wallDst, 0, 4)) return;
-        c.save();
-        c.concat(wallMatrix);
-        fill.setColor(fade(City.darken(b.wall, shade)));
-        c.drawRect(0, 0, len, hgt, fill);
-        if (windows) {
-            int floors = (int) (hgt / City.FLOOR);
-            int cols = Math.max(1, (int) (len / City.T));
-            float cw = len / cols;
-            float glass = 0.55f + shade * 0.45f;
-            int litMask = 7;
-            boolean block = b.kind == City.OFFICE || b.kind == City.APARTMENT;
-            for (int k = 0; k < floors; k++) {
-                float v0 = k * City.FLOOR;
-                for (int i = 0; i < cols; i++) {
-                    float u0 = i * cw;
-                    int hsh = (b.seed * 73856093) ^ (side * 19349663) ^ (k * 83492791) ^ (i * 26544357);
-                    boolean lit = ((hsh >>> 9) & litMask) == 0;
-                    int litColor = 0xFFF0D98C;
-                    if (b.kind == City.SHOP && k == 0) {
-                        // Shopfront: big window under a striped awning.
-                        fill.setColor(fade(City.darken(0xFF6F8EA6, glass)));
-                        c.drawRect(u0 + 1.5f, 0.5f, u0 + cw - 1.5f, 7, fill);
-                        int awn = SHOP_AWNINGS[(b.seed + i) % SHOP_AWNINGS.length];
-                        for (int st = 0; st < 4; st++) {
-                            fill.setColor(fade(City.darken(st % 2 == 0 ? awn : 0xFFF2F2F2, glass)));
-                            c.drawRect(u0 + cw * st / 4f, 7.5f, u0 + cw * (st + 1) / 4f, 10.5f, fill);
-                        }
-                    } else if (b.kind == City.CHURCH || b.kind == City.SPIRE) {
-                        // Tall stained-glass windows spanning the floors.
-                        if (k == 0 && i % 2 == 1) {
-                            fill.setColor(fade(City.darken(i % 4 == 1 ? 0xFF6A4E9A : 0xFF3F7AA8, glass)));
-                            c.drawRect(u0 + cw * 0.35f, 2, u0 + cw * 0.65f, Math.min(hgt - 4, City.FLOOR * floors - 3), fill);
-                        }
-                    } else if (b.kind == City.FIRE_STATION && k == 0) {
-                        fill.setColor(fade(City.darken(0xFFC8302A, glass)));
-                        c.drawRect(u0 + 1.5f, 0, u0 + cw - 1.5f, 9.5f, fill);
-                        fill.setColor(fade(City.darken(0xFFE8E8E8, glass)));
-                        for (float v = 2; v < 9; v += 2.5f) c.drawRect(u0 + 1.5f, v, u0 + cw - 1.5f, v + 0.5f, fill);
-                    } else if (b.kind == City.STADIUM || b.kind == City.SILO) {
-                        // Bare concrete with ribs.
-                        if (k == 0 && i % 2 == 0) {
-                            fill.setColor(fade(City.darken(b.wall, shade * 0.85f)));
-                            c.drawRect(u0 + cw * 0.4f, 0, u0 + cw * 0.6f, hgt, fill);
-                        }
-                    } else if (b.kind == City.BARN) {
-                        if (k == 0 && i == cols / 2) {
-                            fill.setColor(fade(City.darken(0xFFE8E0D0, glass)));
-                            c.drawRect(u0 + 1, 0, u0 + cw - 1, 10, fill);
-                            fill.setColor(fade(City.darken(0xFF7A2A20, glass)));
-                            c.drawRect(u0 + 2, 1, u0 + cw - 2, 9, fill);
-                        }
-                    } else if ((b.kind == City.MARKET || b.kind == City.KIOSK || b.kind == City.MALL) && k == 0) {
-                        fill.setColor(fade(City.darken(0xFF7FA6C0, glass)));
-                        c.drawRect(u0, 0.5f, u0 + cw, 8.5f, fill);
-                        fill.setColor(fade(City.darken(b.kind == City.KIOSK ? 0xFFD83A3A : 0xFF3E8A4A, glass)));
-                        c.drawRect(u0, 8.5f, u0 + cw, 11, fill);
-                    } else if (b.kind == City.CRYPT) {
-                        if (k == 0 && i == cols / 2) {
-                            fill.setColor(fade(City.darken(0xFF3A3632, glass)));
-                            c.drawRect(u0 + cw * 0.3f, 0, u0 + cw * 0.7f, 8, fill);
-                        }
-                    } else if (b.kind == City.WAREHOUSE || b.kind == City.POWER) {
-                        if (k == 0 && i % 2 == 0) {
-                            fill.setColor(fade(City.darken(0xFFA4A8AC, glass)));
-                            c.drawRect(u0 + 2, 0, u0 + cw - 2, 9, fill);
-                            fill.setColor(fade(City.darken(0xFF7E8286, glass)));
-                            for (float v = 2; v < 9; v += 2.2f) c.drawRect(u0 + 2, v, u0 + cw - 2, v + 0.6f, fill);
-                        } else if (k == floors - 1) {
-                            fill.setColor(fade(lit ? litColor : City.darken(0xFF3A4652, glass)));
-                            c.drawRect(u0 + 1, v0 + 5, u0 + cw - 1, v0 + 8, fill);
-                        }
-                    } else if (b.kind == City.HOUSE) {
-                        boolean door = k == 0 && side == 1 && i == cols / 2;
-                        if (door) {
-                            fill.setColor(fade(City.darken(0xFF5A3A28, glass)));
-                            c.drawRect(u0 + cw * 0.35f, 0, u0 + cw * 0.65f, 8, fill);
-                        } else {
-                            fill.setColor(fade(City.darken(0xFFEEEEEE, glass)));
-                            c.drawRect(u0 + cw * 0.25f, v0 + 3.5f, u0 + cw * 0.75f, v0 + 9.5f, fill);
-                            fill.setColor(fade(lit ? litColor : City.darken(0xFF34414E, glass)));
-                            c.drawRect(u0 + cw * 0.25f + 1, v0 + 4.5f, u0 + cw * 0.75f - 1, v0 + 8.5f, fill);
-                        }
-                    } else if (k == 0) {
-                        fill.setColor(fade(City.darken(0xFF5A7890, glass)));
-                        c.drawRect(u0 + 2, v0 + 1.5f, u0 + cw - 2, v0 + 8.5f, fill);
-                    } else {
-                        fill.setColor(fade(lit ? litColor : City.darken(0xFF27313B, glass)));
-                        c.drawRect(u0 + 3, v0 + 3.5f, u0 + cw - 3, v0 + 9.5f, fill);
-                        if (realistic && scale > 6f) {
-                            // Sky reflected in the top of the glass, and a sill beneath (only when close enough to see).
-                            fill.setColor(fade(lit ? 0x30FFFFFF : 0x2A9CC3E8));
-                            c.drawRect(u0 + 3, v0 + 3.5f, u0 + cw - 3, v0 + 5.5f, fill);
-                            fill.setColor(fade(0x40000000));
-                            c.drawRect(u0 + 2.5f, v0 + 9.5f, u0 + cw - 2.5f, v0 + 10.3f, fill);
-                        }
-                    }
-                }
-            }
-            fill.setColor(fade(City.darken(b.wall, shade * 0.8f)));
-            c.drawRect(0, hgt - 2.5f, len, hgt, fill);
-        }
-        if (realistic && scale > 2f) {
-            // Soft light: darker towards the ground, a lit cornice along the top.
-            float band = Math.min(hgt * 0.35f, 14);
-            fill.setColor(fade(0x14000000));
-            c.drawRect(0, hgt - band, len, hgt, fill);
-            fill.setColor(fade(0x18000000));
-            c.drawRect(0, hgt - band * 0.45f, len, hgt, fill);
-            fill.setColor(fade(0x30FFFFFF));
-            c.drawRect(0, 0, len, 1.2f, fill);
-            fill.setColor(fade(0x22000000));
-            c.drawRect(0, 1.2f, len, 2f, fill);
-        }
-        // Bullet holes and scorch marks from the fighting.
-        for (int m = 0; m < b.markCount; m++) {
-            int k = m * 4;
-            if ((int) b.marks[k] != side) continue;
-            float u = b.marks[k + 1], v = b.marks[k + 2], sz = b.marks[k + 3];
-            if (u > len || v > hgt) continue;
-            if (sz > 2) {
-                fill.setColor(fade(0x66141210));
-                c.drawRect(u - sz, Math.max(0, v - sz * 0.6f), u + sz, Math.min(hgt, v + sz * 1.6f), fill);
-                fill.setColor(fade(0x88141210));
-                c.drawRect(u - sz * 0.5f, Math.max(0, v - sz * 0.2f), u + sz * 0.5f, Math.min(hgt, v + sz), fill);
-            } else {
-                fill.setColor(fade(0xFF2A2622));
-                c.drawRect(u - sz, v - sz, u + sz, v + sz, fill);
-            }
-        }
-        c.restore();
-    }
-
-    /** A car, police cruiser, army truck or ambulance, with its damage showing. */
-    private void drawVehicle(Canvas c, Fleet.Vehicle v) {
-        if (v.type == Fleet.TANK) {
-            drawTank(c, v);
-            return;
-        }
-        if (v.type == Fleet.TRAIN) {
-            drawTrain(c, v);
-            return;
-        }
-        if (v.type == Fleet.BOAT) {
-            drawLandingCraft(c, v);
-            return;
-        }
-        if (v.kind == Fleet.K_BIKE) {
-            drawBike(c, v);
-            return;
-        }
-        boolean truck = v.type == Fleet.TRUCK, amb = v.type == Fleet.AMBULANCE;
-        float hl = truck || amb ? 9.5f : 8f, hw = truck ? 5.2f : amb ? 4.9f : 4.4f;
-        if (v.kind == Fleet.K_APC) {
-            hl = 11;
-            hw = 5.6f;
-        } else if (v.kind == Fleet.K_HUMVEE) {
-            hl = 8.5f;
-            hw = 4.9f;
-        } else if (v.kind == Fleet.K_BEARCAT) {
-            hl = 10.2f;
-            hw = 5.4f;
-        }
-        int model = v.type == Fleet.CAR ? v.model : -1;
-        if (model >= 0) {
-            hl = Fleet.MODEL_HL[model];
-            hw = Fleet.MODEL_HW[model];
-        }
-        // Shadow, always down and to the right like everything else.
-        c.save();
-        c.translate(v.x + 1.6f, v.y + 2.2f);
-        c.rotate((float) Math.toDegrees(v.angle));
-        fill.setColor(0x48000000);
-        oval.set(-hl - 0.5f, -hw - 0.5f, hl + 0.5f, hw + 0.5f);
-        c.drawRoundRect(oval, 2.5f, 2.5f, fill);
-        c.restore();
-        c.save();
-        c.translate(v.x, v.y);
-        c.rotate((float) Math.toDegrees(v.angle));
-        // Zoomed well out a vehicle is a couple of pixels: just its shape in its colour.
-        // ((11.5) Everyday cars from further in than before - a dozen pixels long, the wheels, windows and lamps were
-        // dozens of drawing calls no one could make out - police, army and ambulances once they're a bit smaller.)
-        boolean speck = scale < (v.type == Fleet.CAR ? 0.8f : 0.5f);
-        if (!v.burnt && !speck) {
-            // Tyres poking out at the corners.
-            fill.setColor(0xFF111214);
-            float wx = hl * 0.62f, ww = truck ? 1.8f : 1.5f;
-            for (int sx = -1; sx <= 1; sx += 2) {
-                c.drawRect(sx * wx - ww, -hw - 0.5f, sx * wx + ww, -hw + 1f, fill);
-                c.drawRect(sx * wx - ww, hw - 1f, sx * wx + ww, hw + 0.5f, fill);
-            }
-        }
-        boolean civ = v.type == Fleet.CAR;
-        Country land0 = world.city.country;
-        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.recon ? 0xFF9C8A5E
-                : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
-                : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? 0xFFF2F2F2
-                : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
-        if (v.burnt) body = 0xFF2B2623;
-        else if (v.broken) body = City.darken(body, 0.65f);
-        fill.setColor(body);
-        oval.set(-hl, -hw, hl, hw);
-        boolean shell = shellModel(v);
-        if (shell) carShell(c, hl, hw, hw * (v.model == Fleet.M_SUV || v.model == Fleet.M_PICKUP ? 0.38f : 0.55f), hw * 0.32f);
-        else if (model == Fleet.M_BEETLE) c.drawRoundRect(oval, hw, hw * 0.9f, fill);
-        else c.drawRoundRect(oval, model == Fleet.M_KEI || model == Fleet.M_BUS || model == Fleet.M_VAN ? 1.2f : 2.5f,
-                model == Fleet.M_KEI || model == Fleet.M_BUS || model == Fleet.M_VAN ? 1.2f : 2.5f, fill);
-        if (speck) {
-            c.restore();
-            return;
-        }
-        if (v.burnt) {
-            // A burnt-out shell.
-            fill.setColor(0xFF4A2F22);
-            c.drawRect(-hl + 2, -hw + 1.2f, hl - 2, hw - 1.2f, fill);
-            fill.setColor(0xFF151312);
-            c.drawRect(-2, -hw + 1.5f, 3, hw - 1.5f, fill);
-            c.restore();
-            return;
-        }
-        // ((11.5) Police, army and ambulances zoomed out: the body and, on a call, the lights; the cab, lamps, markings
-        // and wear are too small to see, and were a couple of dozen drawing calls a vehicle.)
-        if (!civ && scale < 0.9f) {
-            if (!v.broken && (v.type == Fleet.CRUISER || amb)) lightBar(c, amb ? hl * 0.44f : hl * 0.06f, hw, v.lightsOn(), v.anim);
-            c.restore();
-            return;
-        }
-        // ((11.0) The sheen of the light along the body.)
-        if (!civ) {
-            fill.setColor(0x24FFFFFF);
-            c.drawRect(-hl * 0.6f, -hw * 0.82f, hl * 0.75f, -hw * 0.38f, fill);
-        }
-        if (civ) {
-            drawCarBody(c, v, body, hl, hw);
-            fill.setColor(0x1EFFFFFF);
-            c.drawRect(-hl * 0.5f, -hw * 0.8f, hl * 0.6f, -hw * 0.42f, fill);
-            if (!v.parked && !shell) {
-                fill.setColor(0xFFFFF4C0);
-                c.drawCircle(hl - 0.8f, -hw + 1.3f, 0.8f, fill);
-                c.drawCircle(hl - 0.8f, hw - 1.3f, 0.8f, fill);
-            }
-            if (!v.riders.isEmpty()) {
-                // Heads of the people riding along.
-                fill.setColor(0xFF4A2E1A);
-                for (int k = 0; k < Math.min(3, v.riders.size()); k++)
-                    c.drawCircle(-1.8f + (k == 2 ? -2.5f : 0), k % 2 == 0 ? -1.6f : 1.6f, 1.1f, fill);
-            }
-        } else if (v.kind == Fleet.K_APC) {
-            // An eight-wheeled armoured personnel carrier: sloped glacis, hatches and a gun turret.
-            fill.setColor(0xFF111214);
-            for (int k = 0; k < 4; k++) {
-                float wx = -hl * 0.7f + k * hl * 0.45f;
-                c.drawRect(wx - 1.6f, -hw - 0.6f, wx + 1.6f, -hw + 0.8f, fill);
-                c.drawRect(wx - 1.6f, hw - 0.8f, wx + 1.6f, hw + 0.6f, fill);
-            }
-            fill.setColor(City.darken(body, 0.8f));
-            c.drawRect(-hl + 1, -hw + 1, hl - 1, hw - 1, fill);
-            fill.setColor(City.lighten(body, 0.12f));
-            c.drawRect(hl * 0.55f, -hw + 1, hl - 0.5f, hw - 1, fill);
-            fill.setColor(City.darken(body, 0.65f));
-            c.drawRect(-hl * 0.75f, -2.2f, -hl * 0.45f, -0.6f, fill);
-            c.drawRect(-hl * 0.75f, 0.6f, -hl * 0.45f, 2.2f, fill);
-            drawRoofGun(c, v, 0, 3.2f, 7.5f, body);
-        } else if (v.kind == Fleet.K_HUMVEE) {
-            // A Humvee: broad and low, the windscreen, and the gunner's ring on the roof.
-            fill.setColor(City.darken(body, 0.85f));
-            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.2f, hw - 0.8f, fill);
-            fill.setColor(0xFF1E2A33);
-            c.drawRect(hl * 0.25f, -hw + 1, hl * 0.45f, hw - 1, fill);
-            fill.setColor(City.lighten(body, 0.1f));
-            c.drawRect(hl * 0.5f, -hw + 1, hl - 0.6f, hw - 1, fill);
-            drawRoofGun(c, v, -hl * 0.2f, 2.4f, 6f, body);
-        } else if (v.kind == Fleet.K_RIOT_VAN) {
-            // The riot van: a high box with grilles over the windows and a light bar.
-            fill.setColor(v.broken ? 0xFF9A9A9A : land0.cruiserDoor);
-            c.drawRect(-hl + 1, -hw, hl * 0.3f, -hw + 1.2f, fill);
-            c.drawRect(-hl + 1, hw - 1.2f, hl * 0.3f, hw, fill);
-            fill.setColor(0xFF2A2C30);
-            for (float gx = -hl + 2; gx < hl * 0.2f; gx += 2.6f) c.drawRect(gx, -hw + 1.6f, gx + 0.6f, hw - 1.6f, fill);
-            fill.setColor(0xFF1E2A33);
-            c.drawRect(hl * 0.45f, -hw + 1, hl * 0.7f, hw - 1, fill);
-            if (!v.broken) {
-                boolean on = v.state == 1 || v.state == 0, blink = ((int) (v.anim * 8)) % 2 == 0;
-                fill.setColor(on && blink ? 0xFFFF3A30 : 0xFF5A1A18);
-                c.drawRect(hl * 0.33f, -hw + 1, hl * 0.42f, 0, fill);
-                fill.setColor(on && !blink ? 0xFF3A7BFF : 0xFF1A2A5A);
-                c.drawRect(hl * 0.33f, 0, hl * 0.42f, hw - 1, fill);
-            }
-        } else if (v.kind == Fleet.K_BEARCAT) {
-            // ((11.0) The BearCat: an armoured black truck, a push bar on the front, a roof hatch and a light bar.)
-            fill.setColor(0xFF0E0F12);
-            c.drawRect(hl - 0.4f, -hw + 0.6f, hl + 1.4f, hw - 0.6f, fill);
-            fill.setColor(v.broken ? 0xFF2A2A2A : 0xFF262A30);
-            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.35f, hw - 0.8f, fill);
-            fill.setColor(0xFF3A3F47);
-            c.drawCircle(-hl * 0.3f, 0, 2, fill);
-            fill.setColor(0xFF0F1418);
-            c.drawRect(hl * 0.45f, -hw + 1.2f, hl * 0.62f, hw - 1.2f, fill);
-            fill.setColor(0xFFE8E8E8);
-            c.drawRect(-hl + 1, -hw, hl * 0.35f, -hw + 0.7f, fill);
-            c.drawRect(-hl + 1, hw - 0.7f, hl * 0.35f, hw, fill);
-            if (!v.parked && !v.broken) {
-                boolean blink = ((int) (v.anim * 8)) % 2 == 0;
-                fill.setColor(blink ? 0xFFFF3A30 : 0xFF3A7BFF);
-                c.drawRect(hl * 0.36f, -hw + 1, hl * 0.43f, 0, fill);
-                fill.setColor(blink ? 0xFF3A7BFF : 0xFFFF3A30);
-                c.drawRect(hl * 0.36f, 0, hl * 0.43f, hw - 1, fill);
-            }
-        } else if (truck && v.swat) {
-            // The SWAT van: armoured black box body, a white band and a light bar.
-            fill.setColor(v.broken ? 0xFF2A2A2A : 0xFF2C3036);
-            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.3f, hw - 0.8f, fill);
-            fill.setColor(0xFFE8E8E8);
-            c.drawRect(-hl + 1, -hw, hl * 0.3f, -hw + 0.9f, fill);
-            c.drawRect(-hl + 1, hw - 0.9f, hl * 0.3f, hw, fill);
-            fill.setColor(0xFF1E2A33);
-            c.drawRect(hl * 0.45f, -hw + 1, hl * 0.7f, hw - 1, fill);
-            if (!v.parked && !v.broken) {
-                boolean blink = ((int) (v.anim * 8)) % 2 == 0;
-                fill.setColor(blink ? 0xFFFF3A30 : 0xFF3A7BFF);
-                c.drawRect(hl * 0.33f, -hw + 1, hl * 0.42f, 0, fill);
-                fill.setColor(blink ? 0xFF3A7BFF : 0xFFFF3A30);
-                c.drawRect(hl * 0.33f, 0, hl * 0.42f, hw - 1, fill);
-            }
-        } else if (truck) {
-            fill.setColor(v.broken ? 0xFF3C4428 : 0xFF5F6B40);
-            c.drawRect(-hl + 0.8f, -hw + 0.8f, hl * 0.3f, hw - 0.8f, fill);
-            fill.setColor(0xFF1E2A33);
-            c.drawRect(hl * 0.45f, -hw + 1, hl * 0.7f, hw - 1, fill);
-        } else if (amb) {
-            fill.setColor(0xFF1E2A33);
-            c.drawRect(hl * 0.55f, -hw + 1, hl * 0.78f, hw - 1, fill);
-            fill.setColor(0xFFD83A3A);
-            c.drawRect(-hl, -hw, hl * 0.5f, -hw + 1, fill);
-            c.drawRect(-hl, hw - 1, hl * 0.5f, hw, fill);
-            c.drawRect(-3.5f, -0.8f, 0.5f, 0.8f, fill);
-            c.drawRect(-2.3f, -2f, -0.7f, 2f, fill);
-            // (10.44) The cab's roof, its light bar, and flashers on the back corners of the box.
-            fill.setColor(0xFFE4E4E4);
-            c.drawRect(hl * 0.5f, -hw + 0.4f, hl * 0.55f, hw - 0.4f, fill);
-            lightBar(c, hl * 0.44f, hw, v.lightsOn(), v.anim);
-            boolean blink = ((int) (v.anim * 8)) % 2 == 0;
-            fill.setColor(v.lightsOn() && !blink ? 0xFFFF4A3A : 0xFF8A2A24);
-            c.drawRect(-hl + 0.2f, -hw + 0.2f, -hl + 1.2f, -hw + 1.2f, fill);
-            fill.setColor(v.lightsOn() && blink ? 0xFFFF4A3A : 0xFF8A2A24);
-            c.drawRect(-hl + 0.2f, hw - 1.2f, -hl + 1.2f, hw - 0.2f, fill);
-        } else {
-            // (10.44) A patrol car: a saloon in its force's colours, the doors marked out, and the light bar across
-            // the roof just behind the windscreen.
-            Country land = world.city.country;
-            boolean city = v.agency == 0;
-            int door = v.broken ? 0xFFA0A0A0 : v.agency == 1 ? land.hpDoor : v.agency == 2 ? land.ruralDoor : v.agency == 3 ? 0xFFD8C898
-                    : v.agency == 4 ? 0xFF15171A : land.cruiserDoor;
-            if (city && land.cruiserChecks) {
-                // A chequered band down each side.
-                for (int q = 0; q < 6; q++) {
-                    float x0 = -hl + 1.5f + q * (hl * 2 - 3) / 6f, x1 = x0 + (hl * 2 - 3) / 6f;
-                    fill.setColor(v.broken ? 0xFF9A9A9A : q % 2 == 0 ? land.checkA : land.checkB);
-                    c.drawRect(x0, -hw + 0.15f, x1, -hw + 1.3f, fill);
-                    fill.setColor(v.broken ? 0xFF9A9A9A : q % 2 == 0 ? land.checkB : land.checkA);
-                    c.drawRect(x0, hw - 1.3f, x1, hw - 0.15f, fill);
-                }
-            } else {
-                // The doors in the force's second colour (a stripe the length of the car, out on the highway).
-                float d0 = city ? -hl * 0.5f : -hl + 1.2f, d1 = city ? hl * 0.3f : hl - 1.5f;
-                fill.setColor(door);
-                c.drawRect(d0, -hw + 0.15f, d1, -hw + 1.4f, fill);
-                c.drawRect(d0, hw - 1.4f, d1, hw - 0.15f, fill);
-            }
-            int roof = city && land.cruiserRoof != 0 ? (v.broken ? 0xFFA0A0A0 : land.cruiserRoof) : body;
-            cabin(c, hl, hw, roof, 0.42f, 0.14f, -0.46f, -0.68f);
-            if (city && land.cruiserRoof != 0) {
-                fill.setColor(roof);
-                c.drawRect(-hl * 0.46f + 0.3f, -hw + 1.6f, hl * 0.14f - 0.3f, hw - 1.6f, fill);
-            }
-            // The unit number on the roof, for the helicopter.
-            fill.setColor(City.darken(roof, 0.55f));
-            c.drawRect(-hl * 0.32f, -0.9f, -hl * 0.3f + 0.5f, 0.9f, fill);
-            c.drawRect(-hl * 0.22f, -0.9f, -hl * 0.2f + 0.5f, 0.9f, fill);
-            // A push bar on the front.
-            fill.setColor(0xFF1A1B1E);
-            c.drawRect(hl - 0.1f, -hw * 0.55f, hl + 0.7f, hw * 0.55f, fill);
-            if (!v.broken) lightBar(c, hl * 0.06f, hw, v.lightsOn(), v.anim);
-        }
-        if (!v.broken && shell) lamps(c, hl, hw, !v.parked, !v.parked && v.speed < 25);
-        else if (!v.broken) {
-            // Brake lights: bright red when slowing or stopped in traffic.
-            boolean braking = !v.parked && v.speed < 25;
-            fill.setColor(braking ? 0xFFFF2A20 : 0xFF7A1410);
-            c.drawRect(-hl, -hw + 0.8f, -hl + 0.9f, -hw + 2f, fill);
-            c.drawRect(-hl, hw - 2f, -hl + 0.9f, hw - 0.8f, fill);
-            if (braking) {
-                fill.setColor(0x40FF2A20);
-                c.drawCircle(-hl - 1, -hw + 1.4f, 2f, fill);
-                c.drawCircle(-hl - 1, hw - 1.4f, 2f, fill);
-            }
-            // A glint on the windscreen.
-            stroke.setColor(0x66FFFFFF);
-            stroke.setStrokeWidth(0.5f);
-            float wsx = civ ? 3f : truck ? hl * 0.57f : amb ? hl * 0.66f : 3.7f;
-            c.drawLine(wsx - 0.6f, -hw + 1.6f, wsx + 0.6f, -hw * 0.1f, stroke);
-        }
-        if (realistic && !v.burnt) {
-            // Shading: a sheen along the roof, darker flanks and a crisp outline.
-            fill.setColor(0x22FFFFFF);
-            c.drawRect(-hl + 2, -hw * 0.35f, hl - 2.5f, hw * 0.05f, fill);
-            fill.setColor(0x1E000000);
-            c.drawRect(-hl + 1, hw * 0.55f, hl - 1, hw - 0.3f, fill);
-            stroke.setColor(0x55000000);
-            stroke.setStrokeWidth(0.45f);
-            oval.set(-hl, -hw, hl, hw);
-            if (!shell) c.drawRoundRect(oval, 2.5f, 2.5f, stroke);
-            // Wing mirrors.
-            fill.setColor(City.darken(civ ? v.color : 0xFF333333, 0.8f));
-            c.drawRect(hl * 0.35f, -hw - 1f, hl * 0.35f + 1.2f, -hw, fill);
-            c.drawRect(hl * 0.35f, hw, hl * 0.35f + 1.2f, hw + 1f, fill);
-        }
-        float dmg = 1 - Math.max(0, v.hp) / v.maxHp;
-        if (dmg > 0.3f) {
-            // Dents, scrapes and a cracked windscreen.
-            stroke.setColor(0xAAD8D8D8);
-            stroke.setStrokeWidth(0.5f);
-            c.drawLine(hl * 0.3f, -hw * 0.6f, hl * 0.55f, hw * 0.2f, stroke);
-            fill.setColor(0x66000000);
-            c.drawCircle(hl - 2, -hw + 1.5f, 1.3f, fill);
-            if (dmg > 0.6f) {
-                c.drawCircle(-hl + 2.5f, hw - 1.5f, 1.6f, fill);
-                c.drawLine(-hl * 0.2f, hw * 0.7f, hl * 0.1f, -hw * 0.3f, stroke);
-            }
-        }
-        c.restore();
-    }
-
-    private final Path carPath = new Path();
-
-    /** (10.44) Car-shaped models (not the boxes: vans, buses, kei cars, Beetles), and patrol cars. */
-    private static boolean shellModel(Fleet.Vehicle v) {
-        if (v.type == Fleet.CRUISER) return v.kind != Fleet.K_RIOT_VAN && v.kind != Fleet.K_BIKE;
-        if (v.type != Fleet.CAR) return false;
-        int m = v.model;
-        return m == Fleet.M_SEDAN || m == Fleet.M_TAXI || m == Fleet.M_HATCH || m == Fleet.M_SUV || m == Fleet.M_PICKUP;
-    }
-
-    /** (10.44) A car's outline seen from above: a rounded nose, squarer tail, slightly pinched at the cabin. */
-    private void carShell(Canvas c, float hl, float hw, float nose, float tail) {
-        Path pa = carPath;
-        pa.reset();
-        float pinch = hw * 0.06f;
-        pa.moveTo(-hl + tail, -hw);
-        pa.lineTo(-hl * 0.1f, -hw + pinch);
-        pa.lineTo(hl - nose, -hw);
-        pa.quadTo(hl, -hw, hl, -hw + nose);
-        pa.lineTo(hl, hw - nose);
-        pa.quadTo(hl, hw, hl - nose, hw);
-        pa.lineTo(-hl * 0.1f, hw - pinch);
-        pa.lineTo(-hl + tail, hw);
-        pa.quadTo(-hl, hw, -hl, hw - tail);
-        pa.lineTo(-hl, -hw + tail);
-        pa.quadTo(-hl, -hw, -hl + tail, -hw);
-        pa.close();
-        c.drawPath(pa, fill);
-    }
-
-    /** A pane of glass seen from above: wider at one end (w0, at x0) than the other (w1, at x1). */
-    private void pane(Canvas c, float x0, float w0, float x1, float w1) {
-        Path pa = carPath;
-        pa.reset();
-        pa.moveTo(x0, -w0);
-        pa.lineTo(x1, -w1);
-        pa.lineTo(x1, w1);
-        pa.lineTo(x0, w0);
-        pa.close();
-        c.drawPath(pa, fill);
-    }
-
-    /**
-     * (10.44) The cabin of a car from above, as fractions of its half-length (front +1, back -1): the windscreen
-     * from wsF back to wsR, the roof from there to rwF, the rear window back to rwR, with the side windows along
-     * it, a glint on the glass and the bonnet's crease.
-     */
-    private void cabin(Canvas c, float hl, float hw, int body, float wsF, float wsR, float rwF, float rwR) {
-        int glass = 0xFF1C2630;
-        float in = hw - 0.9f, top = hw - 1.6f;
-        fill.setColor(glass);
-        pane(c, hl * wsF, in, hl * wsR, top);
-        if (rwR < rwF) pane(c, hl * rwR, in - 0.2f, hl * rwF, top);
-        // Side windows.
-        fill.setColor(0xFF2A3540);
-        c.drawRect(hl * rwF, -in, hl * wsR, -top + 0.25f, fill);
-        c.drawRect(hl * rwF, top - 0.25f, hl * wsR, in, fill);
-        // The roof, catching the light.
-        fill.setColor(City.lighten(body, 0.12f));
-        c.drawRect(hl * rwF + 0.3f, -top, hl * wsR - 0.3f, top, fill);
-        fill.setColor(0x26FFFFFF);
-        c.drawRect(hl * rwF + 0.6f, -top + 0.4f, hl * wsR - 0.6f, -top * 0.2f, fill);
-        // A glint across the windscreen.
-        stroke.setColor(0x70FFFFFF);
-        stroke.setStrokeWidth(0.45f);
-        c.drawLine(hl * (wsF * 0.7f + wsR * 0.3f), -in + 0.6f, hl * (wsF * 0.35f + wsR * 0.65f), -top * 0.15f, stroke);
-        // The bonnet: a crease down the middle.
-        stroke.setColor(City.darken(body, 0.82f));
-        stroke.setStrokeWidth(0.35f);
-        c.drawLine(hl * wsF + 0.6f, 0, hl - 1.2f, 0, stroke);
-    }
-
-    /** (10.44) Head and tail lamps, set into the corners of a car's shell. */
-    private void lamps(Canvas c, float hl, float hw, boolean lit, boolean braking) {
-        fill.setColor(lit ? 0xFFFFF6D0 : 0xFFD8D4C4);
-        c.drawRect(hl - 1.1f, -hw + 0.9f, hl - 0.3f, -hw + 2.3f, fill);
-        c.drawRect(hl - 1.1f, hw - 2.3f, hl - 0.3f, hw - 0.9f, fill);
-        fill.setColor(braking ? 0xFFFF2A20 : 0xFF8A1A14);
-        c.drawRect(-hl + 0.3f, -hw + 0.8f, -hl + 1.0f, -hw + 2.4f, fill);
-        c.drawRect(-hl + 0.3f, hw - 2.4f, -hl + 1.0f, hw - 0.8f, fill);
-        if (braking) {
-            fill.setColor(0x40FF2A20);
-            c.drawCircle(-hl - 1, -hw + 1.6f, 2f, fill);
-            c.drawCircle(-hl - 1, hw - 1.6f, 2f, fill);
-        }
-    }
-
-    /** (10.44) A patrol car's light bar across the roof: red one side, blue the other, flashing in turn. */
-    private void lightBar(Canvas c, float x, float hw, boolean on, float anim) {
-        boolean blink = ((int) (anim * 8)) % 2 == 0;
-        float y = hw - 1.1f;
-        fill.setColor(0xFF2A2C30);
-        c.drawRect(x - 0.95f, -y, x + 0.95f, y, fill);
-        fill.setColor(!on ? 0xFF6A2420 : blink ? 0xFFFF4A3A : 0xFF7A2A24);
-        c.drawRect(x - 0.7f, -y + 0.25f, x + 0.7f, -0.3f, fill);
-        fill.setColor(!on ? 0xFF22346A : !blink ? 0xFF4A8AFF : 0xFF2A3C7A);
-        c.drawRect(x - 0.7f, 0.3f, x + 0.7f, y - 0.25f, fill);
-        if (on) {
-            fill.setColor(blink ? 0x55FF4A3A : 0x554A8AFF);
-            c.drawCircle(x, blink ? -y * 0.5f : y * 0.5f, 2.6f, fill);
-        }
-    }
-
-    /**
-     * The top of an everyday car, by model: windscreens, roof and the things that set it apart (a pickup's
-     * bed, a taxi's roof sign, a bus's roof hatches, a Beetle's round wings).
-     */
-    private void drawCarBody(Canvas c, Fleet.Vehicle v, int body, float hl, float hw) {
-        int glass = 0xFF1E2A33;
-        int roofCol = City.lighten(body, 0.15f);
-        switch (v.model) {
-            case Fleet.M_PICKUP:
-                cabin(c, hl, hw, body, 0.55f, 0.3f, -0.02f, -0.12f);
-                // The open bed, with something tied down in it now and then.
-                fill.setColor(City.darken(body, 0.55f));
-                c.drawRect(-hl + 1.0f, -hw + 1.0f, -hl * 0.2f, hw - 1.0f, fill);
-                fill.setColor(City.darken(body, 0.42f));
-                for (float x = -hl + 2.2f; x < -hl * 0.25f; x += 2.2f) c.drawRect(x, -hw + 1.2f, x + 0.35f, hw - 1.2f, fill);
-                if ((v.number & 1) == 0) {
-                    fill.setColor(0xFF8A6A48);
-                    c.drawRect(-hl * 0.8f, -hw * 0.45f, -hl * 0.42f, hw * 0.35f, fill);
-                }
-                break;
-            case Fleet.M_SUV:
-                cabin(c, hl, hw, body, 0.5f, 0.24f, -0.7f, -0.88f);
-                // Roof rails.
-                fill.setColor(0xFF2A2C30);
-                c.drawRect(-hl * 0.62f, -hw + 1.7f, hl * 0.16f, -hw + 2.2f, fill);
-                c.drawRect(-hl * 0.62f, hw - 2.2f, hl * 0.16f, hw - 1.7f, fill);
-                break;
-            case Fleet.M_KEI:
-                // A tall little box: the windscreen right at the front.
-                fill.setColor(glass);
-                c.drawRect(hl * 0.42f, -hw + 0.8f, hl * 0.78f, hw - 0.8f, fill);
-                fill.setColor(roofCol);
-                c.drawRect(-hl * 0.85f, -hw + 1f, hl * 0.4f, hw - 1f, fill);
-                fill.setColor(glass);
-                c.drawRect(-hl * 0.97f, -hw + 1f, -hl * 0.86f, hw - 1f, fill);
-                break;
-            case Fleet.M_HATCH:
-                cabin(c, hl, hw, body, 0.46f, 0.16f, -0.66f, -0.88f);
-                break;
-            case Fleet.M_VAN:
-                fill.setColor(glass);
-                c.drawRect(hl * 0.55f, -hw + 0.9f, hl * 0.8f, hw - 0.9f, fill);
-                fill.setColor(roofCol);
-                c.drawRect(-hl + 1, -hw + 1, hl * 0.53f, hw - 1, fill);
-                fill.setColor(City.darken(body, 0.85f));
-                for (float x = -hl + 3; x < hl * 0.45f; x += 3) c.drawRect(x, -hw + 1.2f, x + 0.4f, hw - 1.2f, fill);
-                break;
-            case Fleet.M_BUS: {
-                Country land = world.city.country;
-                fill.setColor(glass);
-                c.drawRect(hl - 2.2f, -hw + 0.8f, hl - 0.6f, hw - 0.8f, fill);
-                fill.setColor(roofCol);
-                c.drawRect(-hl + 1, -hw + 1, hl - 2.6f, hw - 1, fill);
-                // Roof hatches and the air conditioning.
-                fill.setColor(0xFFB8BCC0);
-                c.drawRect(-hl * 0.2f, -hw * 0.55f, hl * 0.25f, hw * 0.55f, fill);
-                fill.setColor(City.darken(body, 0.75f));
-                c.drawRect(-hl * 0.75f, -1.6f, -hl * 0.55f, 1.6f, fill);
-                c.drawRect(hl * 0.45f, -1.6f, hl * 0.65f, 1.6f, fill);
-                if (land.id == Country.USA) {
-                    // School bus: black rub rails down the sides.
-                    fill.setColor(0xFF1A1A1A);
-                    c.drawRect(-hl + 0.5f, -hw + 0.3f, hl - 0.5f, -hw + 0.8f, fill);
-                    c.drawRect(-hl + 0.5f, hw - 0.8f, hl - 0.5f, hw - 0.3f, fill);
-                } else {
-                    int stripe = 0xFF1F3F8A;
-                    fill.setColor(stripe);
-                    c.drawRect(-hl + 0.5f, -hw + 0.3f, hl - 0.5f, -hw + 1f, fill);
-                    c.drawRect(-hl + 0.5f, hw - 1f, hl - 0.5f, hw - 0.3f, fill);
-                }
-                break;
-            }
-            case Fleet.M_BEETLE:
-                // Round wings at the corners and a domed roof.
-                fill.setColor(City.darken(body, 0.82f));
-                for (int sx = -1; sx <= 1; sx += 2)
-                    for (int sy = -1; sy <= 1; sy += 2) c.drawCircle(sx * hl * 0.6f, sy * (hw - 0.8f), 1.5f, fill);
-                fill.setColor(glass);
-                oval.set(-hl * 0.55f, -hw + 1f, hl * 0.35f, hw - 1f);
-                c.drawOval(oval, fill);
-                fill.setColor(roofCol);
-                oval.set(-hl * 0.4f, -hw + 1.6f, hl * 0.18f, hw - 1.6f);
-                c.drawOval(oval, fill);
-                break;
-            default:
-                cabin(c, hl, hw, body, 0.42f, 0.12f, -0.44f, -0.66f);
-                if (v.model == Fleet.M_TAXI) {
-                    // The roof sign (and the chequered stripe down the sides).
-                    fill.setColor(0xFFF2E8A0);
-                    c.drawRect(-1.6f, -1.6f, 0.2f, 1.6f, fill);
-                    for (int q = 0; q < 6; q++) {
-                        fill.setColor(q % 2 == 0 ? 0xFF1A1A1A : 0xFFF2F2F2);
-                        float x0 = -hl + 2 + q * 1.6f;
-                        c.drawRect(x0, -hw + 0.2f, x0 + 1.6f, -hw + 0.9f, fill);
-                        c.drawRect(x0, hw - 0.9f, x0 + 1.6f, hw - 0.2f, fill);
-                    }
-                }
-                break;
-        }
-    }
-
-    /** A passenger train: a locomotive pulling three carriages along the line. */
-    /**
-     * Traffic lights on the corners of the big junctions (two show the north-south lights, two the east-west
-     * ones) and stop signs at the small ones.
-     */
-    private void drawSignals(Canvas c, float vx0, float vx1, float vy0, float vy1) {
-        City city = world.city;
-        if (scale < 1.2f) return;
-        for (int i = 0, n = city.junctions.size(); i < n; i++) {
-            int[] j = city.junctions.get(i);
-            float x0 = j[0] * City.T - 4, y0 = j[1] * City.T - 4, x1 = (j[2] + 1) * City.T + 4, y1 = (j[3] + 1) * City.T + 4;
-            if (x1 < vx0 - 10 || x0 > vx1 + 10 || y1 < vy0 - 10 || y0 > vy1 + 10) continue;
-            if (j[4] == City.J_LIGHTS) {
-                int ns = city.lightState(i, true, world.time), ew = city.lightState(i, false, world.time);
-                signal(c, x0, y0, ns);
-                signal(c, x1, y1, ns);
-                signal(c, x1, y0, ew);
-                signal(c, x0, y1, ew);
-            } else if (j[4] == City.J_STOP) {
-                stopSign(c, x0, y0);
-                stopSign(c, x1, y1);
-                stopSign(c, x1, y0);
-                stopSign(c, x0, y1);
-            }
-        }
-    }
-
-    private void signal(Canvas c, float x, float y, int state) {
-        fill.setColor(0x50000000);
-        c.drawRect(x - 1.4f, y - 3.6f, x + 3, y + 4.6f, fill);
-        fill.setColor(0xFF1E2024);
-        c.drawRect(x - 2, y - 4.2f, x + 2, y + 4.2f, fill);
-        int[] on = {0xFF3AE070, 0xFFF0B020, 0xFFFF3A30};
-        for (int k = 0; k < 3; k++) {
-            boolean lit = state == 2 - k;
-            fill.setColor(lit ? on[2 - k] : 0xFF3A3C40);
-            c.drawCircle(x, y - 2.6f + k * 2.6f, 1.05f, fill);
-        }
-        int lit = state == 0 ? on[0] : state == 1 ? on[1] : on[2];
-        fill.setColor(alpha(lit, 0.22f));
-        c.drawCircle(x, y - 2.6f + (2 - state) * 2.6f, 2.6f, fill);
-    }
-
-    private void stopSign(Canvas c, float x, float y) {
-        fill.setColor(0xFF8A8C90);
-        c.drawRect(x - 0.4f, y, x + 0.4f, y + 3, fill);
-        fill.setColor(0xFFD02A2A);
-        c.drawCircle(x, y, 2.4f, fill);
-        fill.setColor(0xFFF2F2F2);
-        c.drawRect(x - 1.5f, y - 0.35f, x + 1.5f, y + 0.35f, fill);
-    }
-
-    /** Level crossings: the barriers are up, or down with the red lights flashing while a train is near. */
-    private void drawCrossings(Canvas c, float vx0, float vx1, float vy0, float vy1) {
-        City city = world.city;
-        if (city.railY0 < 0 || city.crossings.isEmpty()) return;
-        float y0 = city.railY0 * City.T, y1 = (city.railY0 + city.railRows) * City.T;
-        if (y1 < vy0 - 20 || y0 > vy1 + 20) return;
-        boolean blink = ((int) (world.time * 3)) % 2 == 0;
-        for (int k = 0, n = city.crossings.size(); k < n; k++) {
-            int[] cr = city.crossings.get(k);
-            float x0 = cr[0] * City.T, x1 = cr[1] * City.T;
-            if (x1 < vx0 - 20 || x0 > vx1 + 20) continue;
-            boolean closed = world.fleet.crossingClosed((x0 + x1) / 2);
-            for (int side = 0; side < 2; side++) {
-                // A post on the kerb at each end, the arm across the road on the approach side.
-                float px = side == 0 ? x0 - 1.5f : x1 + 1.5f, py = side == 0 ? y0 - 2.5f : y1 + 2.5f, dir = side == 0 ? 1 : -1;
-                float len = closed ? x1 - x0 + 1 : 4;
-                for (float a = 0; a < len; a += 3) {
-                    fill.setColor(((int) (a / 3)) % 2 == 0 ? 0xFFD83A3A : 0xFFF2F2F2);
-                    float ax = px + dir * a, bx = px + dir * Math.min(len, a + 3);
-                    c.drawRect(Math.min(ax, bx), py - 0.8f, Math.max(ax, bx), py + 0.8f, fill);
-                }
-                fill.setColor(0xFF2C2C2E);
-                c.drawCircle(px, py, 1.8f, fill);
-                if (closed) {
-                    float ly = py - dir * 3;
-                    fill.setColor(blink ? 0xFFFF3A2A : 0xFF4A1414);
-                    c.drawCircle(px, ly, 1.3f, fill);
-                    if (blink) {
-                        fill.setColor(0x33FF3A2A);
-                        c.drawCircle(px, ly, 5, fill);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Where the railway crosses the highway it's on a bridge: the deck is drawn over the traffic underneath
-     * (with its shadow on the road), and any train on it over the deck.
-     */
-    /**
-     * (10.32) The road bridges over the highway: drawn over the traffic going underneath, with a shadow below,
-     * concrete parapets and the road across; then whatever is driving over them, on top.
-     */
-    private void drawOverpasses(Canvas c, float vx0, float vx1, float vy0, float vy1) {
-        City city = world.city;
-        if (city.overpasses.isEmpty()) return;
-        boolean ew = city.hwyAxis == 0;
-        for (float[] o : city.overpasses) {
-            if (o[2] < vx0 || o[0] > vx1 || o[3] < vy0 || o[1] > vy1) continue;
-            // The shadow it throws on the highway.
-            fill.setColor(0x48000000);
-            if (ew) c.drawRect(o[2], o[1] + 4, o[2] + 7, o[3] - 4, fill);
-            else c.drawRect(o[0] + 4, o[3], o[2] - 4, o[3] + 7, fill);
-            // Deck and road.
-            fill.setColor(0xFF8E8A82);
-            c.drawRect(o[0] - (ew ? 2 : 0), o[1] - (ew ? 0 : 2), o[2] + (ew ? 2 : 0), o[3] + (ew ? 0 : 2), fill);
-            fill.setColor(0xFF3A3C40);
-            c.drawRect(o[0] + (ew ? 1.5f : 0), o[1] + (ew ? 0 : 1.5f), o[2] - (ew ? 1.5f : 0), o[3] - (ew ? 0 : 1.5f), fill);
-            // Parapets along both sides.
-            fill.setColor(0xFFC4C0B6);
-            if (ew) {
-                c.drawRect(o[0] - 2, o[1], o[0] + 1.5f, o[3], fill);
-                c.drawRect(o[2] - 1.5f, o[1], o[2] + 2, o[3], fill);
-            } else {
-                c.drawRect(o[0], o[1] - 2, o[2], o[1] + 1.5f, fill);
-                c.drawRect(o[0], o[3] - 1.5f, o[2], o[3] + 2, fill);
-            }
-            // A line down the middle.
-            fill.setColor(0xD0E8C440);
-            float mid = ew ? (o[0] + o[2]) / 2 : (o[1] + o[3]) / 2;
-            for (float t = ew ? o[1] + 3 : o[0] + 3; t < (ew ? o[3] : o[2]) - 3; t += 9) {
-                if (ew) c.drawRect(mid - 0.5f, t, mid + 0.5f, t + 5, fill);
-                else c.drawRect(t, mid - 0.5f, t + 5, mid + 0.5f, fill);
-            }
-            for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-                Fleet.Vehicle v = world.fleet.vehicles.get(i);
-                if (Fleet.offRoad(v) || !world.fleet.onBridge(v)) continue;
-                if (v.x < o[0] - 10 || v.x > o[2] + 10 || v.y < o[1] - 10 || v.y > o[3] + 10) continue;
-                drawVehicle(c, v);
-            }
-        }
-    }
-
-    private void drawRailBridge(Canvas c, float vx0, float vx1, float vy0, float vy1) {
-        City city = world.city;
-        if (city.railY0 < 0 || city.hwyAxis != 1) return;
-        float x0 = (city.hwyAt - 1) * City.T, x1 = (city.hwyAt + 8) * City.T;
-        float y0 = city.railY0 * City.T - 3, y1 = (city.railY0 + city.railRows) * City.T + 3;
-        if (x1 < vx0 || x0 > vx1 || y1 < vy0 || y0 > vy1) return;
-        fill.setColor(0x40000000);
-        c.drawRect(x0, y1, x1, y1 + 7, fill);
-        // Deck, parapets and the track across it.
-        fill.setColor(0xFF8E8A82);
-        c.drawRect(x0, y0, x1, y1, fill);
-        fill.setColor(0xFFB4B0A6);
-        c.drawRect(x0, y0, x1, y0 + 2.5f, fill);
-        c.drawRect(x0, y1 - 2.5f, x1, y1, fill);
-        fill.setColor(0xFF6E5A46);
-        float ry = (city.railY0 + city.railRows / 2f) * City.T;
-        for (float x = x0 + 2; x < x1; x += 5) c.drawRect(x, ry - 7, x + 2.5f, ry + 7, fill);
-        fill.setColor(0xFFB8BCC2);
-        c.drawRect(x0, ry - 4.5f, x1, ry - 3.5f, fill);
-        c.drawRect(x0, ry + 3.5f, x1, ry + 4.5f, fill);
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.type != Fleet.TRAIN) continue;
-            float dir = (float) Math.cos(v.angle), back = v.x - dir * Fleet.TRAIN_LENGTH;
-            if (Math.max(v.x, back) < x0 || Math.min(v.x, back) > x1) continue;
-            c.save();
-            c.clipRect(x0, y0 - 10, x1, y1 + 10);
-            drawTrain(c, v);
-            c.restore();
-        }
-    }
-
-    /**
-     * (11.0) The water moving: glints of light drifting over it, and a line of surf along every shore that swells
-     * and fades. Only on screen, and only close enough in to see it.
-     */
-    private void drawWaterLife(Canvas c, float vx0, float vy0, float vx1, float vy1) {
-        City city = world.city;
-        int tx0 = Math.max(1, (int) (vx0 / City.T)), ty0 = Math.max(1, (int) (vy0 / City.T));
-        int tx1 = Math.min(city.w - 2, (int) (vx1 / City.T)), ty1 = Math.min(city.h - 2, (int) (vy1 / City.T));
-        if ((long) (tx1 - tx0) * (ty1 - ty0) > 40000) return;
-        float t = world.time, T = City.T;
-        stroke.setStyle(Paint.Style.STROKE);
-        for (int y = ty0; y <= ty1; y++)
-            for (int x = tx0; x <= tx1; x++) {
-                int i = y * city.w + x;
-                if (city.tiles[i] != City.WATER || city.isBridge(x, y)) continue;
-                int hsh = (x * 73856093) ^ (y * 19349663);
-                float px = x * T, py = y * T;
-                if ((hsh & 7) == 0) {
-                    // A glint, drifting slowly with the current and catching the light now and then.
-                    float ph = t * 0.9f + (hsh >>> 8 & 255) * 0.0245f;
-                    float a = (float) Math.sin(ph);
-                    if (a > 0.35f) {
-                        float gx = px + ((hsh >>> 4 & 15) + t * 3) % T, gy = py + (hsh >>> 12 & 15);
-                        stroke.setColor(alpha(0xFFE8F4FA, (a - 0.35f) * 0.55f));
-                        stroke.setStrokeWidth(0.9f);
-                        c.drawLine(gx - 2.5f, gy, gx + 2.5f, gy, stroke);
-                    }
-                }
-                // Surf where the water meets the land.
-                byte up = city.tiles[i - city.w], dn = city.tiles[i + city.w], lf = city.tiles[i - 1], rt = city.tiles[i + 1];
-                boolean su = shore(up), sd = shore(dn), sl = shore(lf), sr = shore(rt);
-                if (!su && !sd && !sl && !sr) continue;
-                float swell = 0.5f + 0.5f * (float) Math.sin(t * 1.4f + x * 0.35f + y * 0.21f);
-                stroke.setColor(alpha(0xFFF4FAFC, 0.18f + 0.3f * swell));
-                stroke.setStrokeWidth(1.1f + swell * 0.9f);
-                float in = 1.2f + swell * 1.6f;
-                if (su) c.drawLine(px, py + in, px + T, py + in, stroke);
-                if (sd) c.drawLine(px, py + T - in, px + T, py + T - in, stroke);
-                if (sl) c.drawLine(px + in, py, px + in, py + T, stroke);
-                if (sr) c.drawLine(px + T - in, py, px + T - in, py + T, stroke);
-            }
-        stroke.setStyle(Paint.Style.STROKE);
-    }
-
-    /** Land a wave breaks on (not a bridge's water, a pier or more water). */
-    private static boolean shore(byte t) {
-        return t == City.SAND || t == City.GRASS || t == City.ROCK || t == City.TREE || t == City.SIDEWALK || t == City.DIRT;
-    }
-
-    /** (11.0) A Marine landing craft: a grey hull with a ramp at the bow, the Marines in rows, and its wake. */
-    private void drawLandingCraft(Canvas c, Fleet.Vehicle v) {
-        float hl = 13, hw = 5.5f;
-        c.save();
-        c.translate(v.x, v.y);
-        c.rotate((float) Math.toDegrees(v.angle));
-        if (v.speed > 5) {
-            fill.setColor(0x60FFFFFF);
-            for (int k = 1; k <= 3; k++) {
-                float back = -hl - k * 5, spread = hw + k * 2.2f;
-                c.drawRect(back - 2, -spread, back, -spread + 1.4f, fill);
-                c.drawRect(back - 2, spread - 1.4f, back, spread, fill);
-            }
-            fill.setColor(0x40FFFFFF);
-            c.drawRect(-hl - 14, -2, -hl, 2, fill);
-        }
-        fill.setColor(0x38000000);
-        oval.set(-hl + 1.5f, -hw + 2, hl + 1.5f, hw + 2);
-        c.drawRoundRect(oval, 2, 2, fill);
-        fill.setColor(0xFF5E666C);
-        oval.set(-hl, -hw, hl, hw);
-        c.drawRoundRect(oval, 2, 2, fill);
-        fill.setColor(0xFF41484D);
-        c.drawRect(-hl + 1.5f, -hw + 1.2f, hl - 2.5f, hw - 1.2f, fill);
-        fill.setColor(0xFF6E777D);
-        c.drawRect(hl - 2.5f, -hw, hl, hw, fill);
-        fill.setColor(0xFF2E3337);
-        c.drawRect(-hl + 1, -2, -hl + 4.5f, 2, fill);
-        if (v.passengers > 0) {
-            fill.setColor(0xFF3E4E62);
-            for (int k = 0; k < Math.min(8, v.passengers); k++)
-                c.drawCircle(-hl + 7 + (k / 2) * 3.8f, (k % 2 == 0 ? -1.8f : 1.8f), 1.3f, fill);
-        }
-        c.restore();
-    }
-
-    private void drawTrain(Canvas c, Fleet.Vehicle v) {
-        float dir = (float) Math.cos(v.angle);
-        for (int k = 0; k < 4; k++) {
-            float front = v.x - dir * k * 34, back = front - dir * 32;
-            float x0 = Math.min(front, back), x1 = Math.max(front, back);
-            fill.setColor(0x55000000);
-            c.drawRect(x0 + 2, v.y - 6, x1 + 2, v.y + 9, fill);
-            boolean loco = k == 0;
-            fill.setColor(loco ? 0xFFB8302A : 0xFF3A5A8A);
-            oval.set(x0, v.y - 7, x1, v.y + 7);
-            c.drawRoundRect(oval, 3, 3, fill);
-            fill.setColor(loco ? 0xFF8E2420 : 0xFF2E4A72);
-            c.drawRect(x0 + 1, v.y - 7, x1 - 1, v.y - 5.5f, fill);
-            if (loco) {
-                // Cab windows at the front.
-                fill.setColor(0xFF1E2A33);
-                float cab = front - dir * 6;
-                c.drawRect(Math.min(front, cab) + 0.5f, v.y - 5, Math.max(front, cab) - 0.5f, v.y + 5, fill);
-                fill.setColor(0xFFFFF4C0);
-                c.drawCircle(front - dir * 0.5f, v.y - 4, 0.9f, fill);
-                c.drawCircle(front - dir * 0.5f, v.y + 4, 0.9f, fill);
-            } else {
-                fill.setColor(0xFFCFE0EE);
-                for (float x = x0 + 3; x < x1 - 3; x += 5) c.drawRect(x, v.y - 5.5f, x + 3, v.y + 5.5f, fill);
-                fill.setColor(0xFF3A5A8A);
-                c.drawRect(x0 + 2, v.y - 4.5f, x1 - 2, v.y + 4.5f, fill);
-            }
-        }
-    }
-
-    /** A strike jet high overhead: its shadow far below, swept wings and a contrail (drawn as smoke). */
-    private void drawJet(Canvas c, Fleet.Vehicle v) {
-        c.save();
-        c.translate(v.x + 40, v.y + 55);
-        c.rotate((float) Math.toDegrees(v.angle));
-        fill.setColor(0x30000000);
-        drawJetShape(c, 0.9f);
-        c.restore();
-        c.save();
-        c.translate(v.x, v.y);
-        c.rotate((float) Math.toDegrees(v.angle));
-        fill.setColor(0xFF6E7680);
-        drawJetShape(c, 1f);
-        fill.setColor(0xFF2E3A48);
-        c.drawRect(6, -1.2f, 11, 1.2f, fill);
-        c.restore();
-    }
-
-    private void drawJetShape(Canvas c, float s) {
-        android.graphics.Path p = new android.graphics.Path();
-        p.moveTo(16 * s, 0);
-        p.lineTo(2 * s, -3 * s);
-        p.lineTo(-4 * s, -14 * s);
-        p.lineTo(-8 * s, -14 * s);
-        p.lineTo(-6 * s, -3 * s);
-        p.lineTo(-14 * s, -3 * s);
-        p.lineTo(-17 * s, -7 * s);
-        p.lineTo(-19 * s, -7 * s);
-        p.lineTo(-18 * s, 0);
-        p.lineTo(-19 * s, 7 * s);
-        p.lineTo(-17 * s, 7 * s);
-        p.lineTo(-14 * s, 3 * s);
-        p.lineTo(-6 * s, 3 * s);
-        p.lineTo(-8 * s, 14 * s);
-        p.lineTo(-4 * s, 14 * s);
-        p.lineTo(2 * s, 3 * s);
-        p.close();
-        c.drawPath(p, fill);
-    }
-
-    /** A tank: tracks, hull and a turret that turns on its own. */
-    private void drawTank(Canvas c, Fleet.Vehicle v) {
-        float hl = 11, hw = 7;
-        c.save();
-        c.translate(v.x, v.y);
-        c.rotate((float) Math.toDegrees(v.angle));
-        fill.setColor(0x55000000);
-        c.drawRect(-hl + 2, -hw + 2, hl + 2, hw + 2, fill);
-        fill.setColor(0xFF2B2E24);
-        c.drawRect(-hl, -hw, hl, -hw + 2.6f, fill);
-        c.drawRect(-hl, hw - 2.6f, hl, hw, fill);
-        // Track links rolling by.
-        fill.setColor(0xFF454A3A);
-        float off = (v.anim * v.speed * 0.3f) % 2.5f;
-        for (float x = -hl + off; x < hl; x += 2.5f) {
-            c.drawRect(x, -hw, x + 0.8f, -hw + 2.6f, fill);
-            c.drawRect(x, hw - 2.6f, x + 0.8f, hw, fill);
-        }
-        fill.setColor(v.broken ? 0xFF3A3E2C : 0xFF55623A);
-        c.drawRect(-hl + 1, -hw + 2.4f, hl - 0.5f, hw - 2.4f, fill);
-        fill.setColor(0xFF4A5532);
-        c.drawRect(-hl + 1, -1, -hl + 4, 1, fill);
-        c.rotate((float) Math.toDegrees(v.turret - v.angle));
-        stroke.setColor(0xFF3A4228);
-        stroke.setStrokeWidth(1.6f);
-        float recoil = v.cannonCd > 3.2f ? -2 : 0;
-        c.drawLine(3 + recoil, 0, 17 + recoil, 0, stroke);
-        fill.setColor(v.broken ? 0xFF434830 : 0xFF627042);
-        oval.set(-5, -4.2f, 5, 4.2f);
-        c.drawRoundRect(oval, 2, 2, fill);
-        fill.setColor(0xFF3E4829);
-        c.drawCircle(-1.5f, -1.5f, 1.3f, fill);
-        c.restore();
-    }
-
-    /** The helicopter: its shadow on the ground (further off the higher it flies), body, tail and rotor. */
-    /** A gun turret on a vehicle's roof at (x, 0) (in its own frame), turned to v.turret. */
-    private void drawRoofGun(Canvas c, Fleet.Vehicle v, float x, float ring, float barrel, int body) {
-        fill.setColor(City.darken(body, 0.6f));
-        c.drawCircle(x, 0, ring, fill);
-        fill.setColor(City.lighten(body, 0.05f));
-        c.drawCircle(x, 0, ring * 0.75f, fill);
-        float a = v.turret - v.angle;
-        stroke.setColor(0xFF161616);
-        stroke.setStrokeWidth(1.1f);
-        c.drawLine(x, 0, x + (float) Math.cos(a) * barrel, (float) Math.sin(a) * barrel, stroke);
-    }
-
-    /** A police motorcycle: the bike, its officer in a white helmet, and lights front and back. */
-    private void drawBike(Canvas c, Fleet.Vehicle v) {
-        c.save();
-        c.translate(v.x + 1, v.y + 1.4f);
-        c.rotate((float) Math.toDegrees(v.angle));
-        fill.setColor(0x40000000);
-        oval.set(-5, -1.8f, 5, 1.8f);
-        c.drawOval(oval, fill);
-        c.restore();
-        c.save();
-        c.translate(v.x, v.y);
-        c.rotate((float) Math.toDegrees(v.angle));
-        fill.setColor(0xFF111214);
-        c.drawRect(-5, -0.7f, -3, 0.7f, fill);
-        c.drawRect(3, -0.6f, 5, 0.6f, fill);
-        fill.setColor(v.broken ? 0xFF6A6A6A : world.city.country.cruiserBody == 0xFF1C1D22 ? 0xFFF2F2F2 : world.city.country.cruiserBody);
-        oval.set(-4, -1.5f, 4, 1.5f);
-        c.drawRoundRect(oval, 1.2f, 1.2f, fill);
-        fill.setColor(world.city.country.cruiserDoor);
-        c.drawRect(-3.5f, -1.6f, -1.5f, 1.6f, fill);
-        // (10.44) Handlebars with their mirrors, a windscreen, and the panniers either side of the back wheel.
-        fill.setColor(0xFF1A1B1E);
-        c.drawRect(2.2f, -2.4f, 2.8f, 2.4f, fill);
-        c.drawRect(2.4f, -2.9f, 3.0f, -2.3f, fill);
-        c.drawRect(2.4f, 2.3f, 3.0f, 2.9f, fill);
-        fill.setColor(0x99A8C8E0);
-        c.drawRect(3.0f, -1.3f, 3.6f, 1.3f, fill);
-        fill.setColor(v.broken ? 0xFF6A6A6A : 0xFFE8E8E8);
-        c.drawRect(-4.6f, -2.6f, -2.4f, -1.5f, fill);
-        c.drawRect(-4.6f, 1.5f, -2.4f, 2.6f, fill);
-        if (!v.crew.isEmpty() && !v.parked) {
-            fill.setColor(0xFF23408E);
-            c.drawCircle(-0.5f, 0, 1.9f, fill);
-            fill.setColor(0xFFF2F2F2);
-            c.drawCircle(-0.3f, 0, 1.2f, fill);
-        }
-        if (v.lightsOn()) {
-            boolean blink = ((int) (v.anim * 8)) % 2 == 0;
-            fill.setColor(blink ? 0xFFFF3A30 : 0xFF3A7BFF);
-            c.drawCircle(4.2f, 0, 0.8f, fill);
-            fill.setColor(blink ? 0xFF3A7BFF : 0xFFFF3A30);
-            c.drawCircle(-4.6f, 0, 0.7f, fill);
-        }
-        c.restore();
-    }
-
-    private void drawHeli(Canvas c, Fleet.Vehicle v) {
-        boolean rescue = v.kind == Fleet.K_RESCUE_HELI;
-        boolean police = v.kind == Fleet.K_POLICE_HELI || rescue;
-        if (rescue && v.team != null) {
-            // The winch line down to anyone on it.
-            for (int i = 0; i < v.team.size(); i++) {
-                Entity s = v.team.get(i);
-                if (s.dead || s.roping <= 0) continue;
-                stroke.setColor(0xE0E8E8E0);
-                stroke.setStrokeWidth(0.7f);
-                c.drawLine(v.x, v.y, s.x, s.y, stroke);
-            }
-        }
-        float alt = v.alt;
-        fill.setColor(alpha(0x40000000, 0.5f + 0.5f * (1 - alt)));
-        c.drawCircle(v.x + 4 + 16 * alt, v.y + 5 + 21 * alt, 11 - 2 * alt, fill);
-        c.save();
-        c.translate(v.x, v.y);
-        c.rotate((float) Math.toDegrees(v.angle));
-        // Bigger when it's high (closer to the camera), squashed sideways when it banks.
-        float sz = 0.85f + 0.3f * alt;
-        c.scale(sz, sz * (1 - Math.min(0.3f, Math.abs(v.bank) * 0.25f)));
-        stroke.setColor(police ? 0xFF1F3F8A : 0xFF3E4A2C);
-        stroke.setStrokeWidth(2.4f);
-        c.drawLine(-6, 0, -20, 0, stroke);
-        c.drawLine(-19, -3, -19, 3, stroke);
-        // Skids.
-        stroke.setColor(0xFF2A2E22);
-        stroke.setStrokeWidth(0.9f);
-        c.drawLine(-6, -5.5f, 7, -5.5f, stroke);
-        c.drawLine(-6, 5.5f, 7, 5.5f, stroke);
-        fill.setColor(police ? 0xFFF2F2F2 : 0xFF4F5E36);
-        oval.set(-8, -5, 9, 5);
-        c.drawOval(oval, fill);
-        if (rescue) {
-            // Rescue colours: red and white, the winch arm out of the door.
-            fill.setColor(0xFFD8302A);
-            c.drawRect(-7, -1.6f, 6, 1.6f, fill);
-            fill.setColor(0xFFF2F2F2);
-            c.drawRect(-1, -1.6f, 1, 1.6f, fill);
-            stroke.setColor(0xFF3A3A3A);
-            stroke.setStrokeWidth(1);
-            c.drawLine(1, 4.5f, 1, 7.5f, stroke);
-        } else if (police) {
-            // Police colours down the side.
-            fill.setColor(0xFF1F3F8A);
-            c.drawRect(-7, -1.2f, 6, 1.2f, fill);
-        }
-        fill.setColor(0xFF7FA3B8);
-        oval.set(3, -3.2f, 9, 3.2f);
-        c.drawOval(oval, fill);
-        boolean blink = ((int) (v.anim * 3)) % 2 == 0;
-        fill.setColor(blink ? 0xFFFF3A30 : 0xFF3AFF6A);
-        c.drawCircle(-19, 0, 0.9f, fill);
-        // Rotor: a blurred disc when spinning fast, separate blades while spooling up or landing.
-        // (Still on the pad, idling while the team's out, or spinning up before take-off.)
-        float spin = v.state == Fleet.IDLE || v.state == Fleet.MUSTER ? 0 : v.state == Fleet.STANDBY && v.alt <= 0 ? 10
-                : v.state == Fleet.SPOOL ? 2 + 28 * Math.max(0, 1 - v.timer / Math.max(1, v.spoolTime)) : 30;
-        fill.setColor(alpha(0x30000000, Math.min(1, spin / 30)));
-        c.drawCircle(0, 0, 17, fill);
-        stroke.setColor(0xB0202020);
-        stroke.setStrokeWidth(1.4f);
-        float a = v.anim * spin;
-        for (int k = 0; k < 2; k++) {
-            float ca = (float) Math.cos(a + k * Math.PI / 2) * 17, sa = (float) Math.sin(a + k * Math.PI / 2) * 17;
-            c.drawLine(-ca, -sa, ca, sa, stroke);
-        }
-        c.restore();
-    }
-
-    /**
-     * A safe zone: the compound tinted, its wall (concrete barriers with fencing on top; broken sections as
-     * rubble and a sagging fence), the gates (a boom, sandbags either side), and the tents inside: rows to
-     * sleep in, the medical tent with its red cross and the food tent with crates stacked by it.
-     */
-    private void drawZone(Canvas c, Dispatch.SafeZone z) {
-        // ((11.5) Not at all when it's off screen, and only the bits of wall that are on it.)
-        if (z.right() < viewL || z.left() > viewR || z.bottom() < viewT || z.top() > viewB) return;
-        int tint = z.military ? 0xFF6FBF3F : 0xFF4F8FE0;
-        float T = City.T;
-        int W = world.city.w;
-        fill.setColor(alpha(tint, z.open ? (z.fallingBack ? 0.08f : 0.13f) : 0.06f));
-        c.drawRect(z.left() + T, z.top() + T, z.right() - T, z.bottom() - T, fill);
-        // ((11.5) Zoomed out, each section of wall is a grey block: the barriers, fence and posts are too small to see.)
-        boolean plain = scale < 1.6f;
-        // The wall.
-        for (int k = 0; k < z.wall.length; k++) {
-            int t = z.wall[k], tx = t % W, ty = t / W;
-            float x0 = tx * T, y0 = ty * T;
-            if (x0 + T < viewL || x0 > viewR || y0 + T < viewT || y0 > viewB) continue;
-            boolean horizontal = ty == z.ty0 || ty == z.ty1;
-            if (z.up[k] && plain) {
-                fill.setColor(0xFF8E8A80);
-                if (horizontal) c.drawRect(x0, y0 + 2.5f, x0 + T, y0 + T - 2.5f, fill);
-                else c.drawRect(x0 + 2.5f, y0, x0 + T - 2.5f, y0 + T, fill);
-            } else if (z.up[k]) {
-                // Concrete barriers in a line, a fence along the top with a post at each.
-                fill.setColor(0x66000000);
-                c.drawRect(x0 + 2, y0 + 3, x0 + T + 2, y0 + T + 3, fill);
-                fill.setColor(0xFF56534C);
-                if (horizontal) c.drawRect(x0, y0 + 2.5f, x0 + T, y0 + T - 2.5f, fill);
-                else c.drawRect(x0 + 2.5f, y0, x0 + T - 2.5f, y0 + T, fill);
-                fill.setColor(0xFFA8A49A);
-                if (horizontal) c.drawRect(x0 + 0.6f, y0 + 3.5f, x0 + T - 0.6f, y0 + T - 3.5f, fill);
-                else c.drawRect(x0 + 3.5f, y0 + 0.6f, x0 + T - 3.5f, y0 + T - 0.6f, fill);
-                fill.setColor(0xFFCAC6BC);
-                if (horizontal) c.drawRect(x0 + 0.6f, y0 + 5.5f, x0 + T - 0.6f, y0 + T - 7, fill);
-                else c.drawRect(x0 + 5.5f, y0 + 0.6f, x0 + T - 7, y0 + T - 0.6f, fill);
-                stroke.setColor(0xFF2E3236);
-                stroke.setStrokeWidth(1.3f);
-                if (horizontal) c.drawLine(x0, y0 + T / 2, x0 + T, y0 + T / 2, stroke);
-                else c.drawLine(x0 + T / 2, y0, x0 + T / 2, y0 + T, stroke);
-                stroke.setStrokeWidth(0.5f);
-                stroke.setColor(0x9033363A);
-                for (int q = 1; q < 4; q++) {
-                    if (horizontal) c.drawLine(x0 + q * 4, y0 + T / 2 - 2, x0 + q * 4 + 2, y0 + T / 2 + 2, stroke);
-                    else c.drawLine(x0 + T / 2 - 2, y0 + q * 4, x0 + T / 2 + 2, y0 + q * 4 + 2, stroke);
-                }
-                fill.setColor(0xFF22262A);
-                c.drawCircle(x0 + T / 2, y0 + T / 2, 1.5f, fill);
-                if (z.hp[k] < 60) {
-                    // Dented and buckling.
-                    fill.setColor(0x80302820);
-                    c.drawCircle(x0 + T / 2 + 2, y0 + T / 2 - 1, 2.4f, fill);
-                }
-            } else if (z.built >= 1 || z.hp[k] <= 0) {
-                // A breach: barriers knocked aside, the fence torn down.
-                fill.setColor(0xFF8E8A80);
-                c.drawRect(x0 + 1, y0 + 2, x0 + 6, y0 + 5, fill);
-                c.drawRect(x0 + T - 6, y0 + T - 5, x0 + T - 1, y0 + T - 2, fill);
-                stroke.setColor(0xFF5E6266);
-                stroke.setStrokeWidth(0.6f);
-                c.drawLine(x0 + 2, y0 + T / 2, x0 + T * 0.4f, y0 + T * 0.7f, stroke);
-            } else if (k < (int) (z.built * z.wall.length) + 4) {
-                // The next sections, waiting to go up.
-                fill.setColor(0xFF9E9A90);
-                c.drawRect(x0 + 3, y0 + 3, x0 + T - 3, y0 + 7, fill);
-            }
-        }
-        // The gates.
-        for (int g = 0; g < z.gateTiles.length; g++) {
-            float gx = (z.gateOut[g][0] + z.gateIn[g][0]) / 2, gy = (z.gateOut[g][1] + z.gateIn[g][1]) / 2;
-            float dx = z.gateOut[g][0] - z.gateIn[g][0], dy = z.gateOut[g][1] - z.gateIn[g][1], l = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
-            dx /= l;
-            dy /= l;
-            float px = -dy, py = dx;
-            // Sandbags either side, on the inside.
-            for (int s = -1; s <= 1; s += 2)
-                for (int q = 0; q < 3; q++) {
-                    float bx = gx + px * s * (T + 4) - dx * (5 + q * 3), by = gy + py * s * (T + 4) - dy * (5 + q * 3);
-                    fill.setColor(0x60000000);
-                    c.drawCircle(bx + 0.8f, by + 1, 3, fill);
-                    fill.setColor(q % 2 == 0 ? 0xFFA38D5E : 0xFF917C50);
-                    c.drawCircle(bx, by, 3, fill);
-                }
-            if (z.gateHp[g] <= 0) continue;
-            if (!z.open) continue;
-            // The boom: across the gap when shut, swung up when open.
-            float len = z.gateOpen[g] ? 6 : T * 2 - 2;
-            float sx = gx - px * (T - 1), sy = gy - py * (T - 1);
-            for (int q = 0; q < 4; q++) {
-                float s0 = len * q / 4, s1 = len * (q + 1) / 4;
-                stroke.setColor(q % 2 == 0 ? 0xFFE03A30 : 0xFFF2F2F2);
-                stroke.setStrokeWidth(1.6f);
-                c.drawLine(sx + px * s0, sy + py * s0, sx + px * s1, sy + py * s1, stroke);
-            }
-            fill.setColor(0xFF3A3E42);
-            c.drawCircle(sx, sy, 1.6f, fill);
-        }
-        // The tents.
-        int canvas = z.military ? 0xFF5B6B3A : 0xFF3F64A6, ridge = z.military ? 0xFF6F8048 : 0xFF5A7EC0;
-        for (int i = 0; i < z.tents.size(); i++) {
-            float[] t = z.tents.get(i);
-            drawTent(c, t[0], t[1], 11, 7, canvas, ridge);
-        }
-        if (z.medX > 0) {
-            drawTent(c, z.medX, z.medY, 13, 8, 0xFFEDEDED, 0xFFFFFFFF);
-            fill.setColor(0xFFD83A3A);
-            c.drawRect(z.medX - 1.2f, z.medY - 4, z.medX + 1.2f, z.medY + 4, fill);
-            c.drawRect(z.medX - 4, z.medY - 1.2f, z.medX + 4, z.medY + 1.2f, fill);
-        }
-        if (z.foodX > 0) {
-            drawTent(c, z.foodX, z.foodY, 13, 8, 0xFFB09068, 0xFFC8A880);
-            int crates = z.foodMax > 0 ? (int) Math.ceil(5 * z.food / z.foodMax) : 0;
-            for (int q = 0; q < crates; q++) {
-                float cx = z.foodX + 16 + (q % 2) * 5, cy = z.foodY - 5 + (q / 2) * 5;
-                fill.setColor(0xFF7A5A34);
-                c.drawRect(cx - 2.2f, cy - 2.2f, cx + 2.2f, cy + 2.2f, fill);
-                fill.setColor(0xFF9A7A4E);
-                c.drawRect(cx - 1.6f, cy - 1.6f, cx + 1.6f, cy - 0.4f, fill);
-            }
-        }
-        // A flag on a pole by the medical tent.
-        float fx = z.medX > 0 ? z.medX - 18 : z.x, fy = z.medX > 0 ? z.medY : z.y;
-        stroke.setColor(0xFFDDDDDD);
-        stroke.setStrokeWidth(1f);
-        c.drawLine(fx, fy + 6, fx, fy - 12, stroke);
-        fill.setColor(tint);
-        c.drawRect(fx, fy - 12, fx + 8, fy - 7, fill);
-    }
-
-    private void drawTent(Canvas c, float x, float y, float hw, float hh, int canvas, int ridge) {
-        fill.setColor(0x55000000);
-        c.drawRect(x - hw + 2, y - hh + 2.5f, x + hw + 2, y + hh + 2.5f, fill);
-        fill.setColor(canvas);
-        c.drawRect(x - hw, y - hh, x + hw, y + hh, fill);
-        fill.setColor(ridge);
-        c.drawRect(x - hw, y - hh, x + hw, y - 0.6f, fill);
-        stroke.setColor(City.darken(canvas, 0.7f));
-        stroke.setStrokeWidth(0.7f);
-        c.drawLine(x - hw, y, x + hw, y, stroke);
-    }
-
-    private static final int[] LEAF_DARK = {0xFF24481C, 0xFF2A4E1E, 0xFF2E4A22};
-    private static final int[] LEAF_MID = {0xFF33662A, 0xFF3A6E2C, 0xFF3F6A30};
-    private static final int[] LEAF_LIGHT = {0xFF4E8A3C, 0xFF5A9444, 0xFF55883E};
-
-    /** A leafy canopy: overlapping clumps, shaded underneath and lit on top, each tree a little different. */
-    private void drawRealTree(Canvas c, float x, float y, float r, float sway, float ts, float a, int seed) {
-        int v = (seed & 0x7FFFFFFF) % 3;
-        fill.setColor(alpha(LEAF_DARK[v], a));
-        c.drawCircle(x + 0.8f * ts, y + 0.8f * ts, r, fill);
-        for (int k = 0; k < 5; k++) {
-            double ang = k * 1.2566 + (seed % 7) * 0.3;
-            float lx = x + (float) Math.cos(ang) * r * 0.45f + sway * 0.4f, ly = y + (float) Math.sin(ang) * r * 0.45f + sway * 0.2f;
-            fill.setColor(alpha(LEAF_MID[(v + k) % 3], a));
-            c.drawCircle(lx - 0.6f * ts, ly - 0.6f * ts, r * 0.52f, fill);
-        }
-        fill.setColor(alpha(LEAF_LIGHT[v], a));
-        c.drawCircle(x - r * 0.3f + sway * 0.8f, y - r * 0.3f + sway * 0.4f, r * 0.38f, fill);
-        fill.setColor(alpha(0xFF7AB05A, a * 0.6f));
-        c.drawCircle(x - r * 0.42f + sway, y - r * 0.45f + sway * 0.5f, r * 0.16f, fill);
-    }
-
-    /** A phone above someone calling 911, or a radio bubble above a unit that just spoke. */
-    private void drawSpeechIcon(Canvas c, Entity e) {
-        float x = e.x + e.radius + 2, y = e.y - e.radius - 7;
-        if (e.phoneTimer > 0) {
-            fill.setColor(0xFF1B1B1B);
-            oval.set(x - 2.2f, y - 3.6f, x + 2.2f, y + 3.6f);
-            c.drawRoundRect(oval, 0.8f, 0.8f, fill);
-            fill.setColor((int) (world.time * 4) % 2 == 0 ? 0xFF7FE0FF : 0xFFFFFFFF);
-            c.drawRect(x - 1.5f, y - 2.6f, x + 1.5f, y + 1.8f, fill);
-        } else {
-            int col = e.type == Entity.SOLDIER ? 0xFFA6DC72 : 0xFF7FB0FF;
-            fill.setColor(0xEEFFFFFF);
-            oval.set(x - 4.5f, y - 3f, x + 4.5f, y + 3f);
-            c.drawRoundRect(oval, 2f, 2f, fill);
-            c.drawCircle(x - 2.5f, y + 3.5f, 1f, fill);
-            fill.setColor(col);
-            for (int k = -1; k <= 1; k++) c.drawCircle(x + k * 2.2f, y, 0.8f, fill);
-        }
-    }
-
-    private float screenX(float wx) {
+    float screenX(float wx) {
         return (wx - camX) * scale;
     }
 
-    private float screenY(float wy) {
+    float screenY(float wy) {
         return (wy - camY) * scale;
     }
 
@@ -5163,1195 +1742,34 @@ final class GameView extends View implements Menu.Host {
      * Zoomed out, where the dead are thick on the ground glows red (the more of them, the stronger), so the
      * front lines read at a glance. Counted on a coarse grid a few times a second.
      */
-    private int[] dangerGrid;
-    private float dangerTimer;
-    private static final int DANGER_CELL = 96;
-
-    private void drawDanger(Canvas c, float vx0, float vy0, float vx1, float vy1) {
-        int gw = (int) (world.city.worldW() / DANGER_CELL) + 1, gh = (int) (world.city.worldH() / DANGER_CELL) + 1;
-        if (dangerGrid == null || dangerGrid.length != gw * gh) dangerGrid = new int[gw * gh];
-        dangerTimer -= 1 / 60f;
-        if (dangerTimer <= 0) {
-            dangerTimer = 0.3f;
-            java.util.Arrays.fill(dangerGrid, 0);
-            for (int i = 0, n = world.entities.size(); i < n; i++) {
-                Entity e = world.entities.get(i);
-                if (e.dead || !e.isZombie()) continue;
-                int gx = (int) (e.x / DANGER_CELL), gy = (int) (e.y / DANGER_CELL);
-                if (gx >= 0 && gy >= 0 && gx < gw && gy < gh) dangerGrid[gy * gw + gx]++;
-            }
-        }
-        float alphaScale = Math.min(1, (1.8f - scale) / 0.8f);
-        for (int gy = Math.max(0, (int) (vy0 / DANGER_CELL)); gy <= Math.min(gh - 1, (int) (vy1 / DANGER_CELL)); gy++)
-            for (int gx = Math.max(0, (int) (vx0 / DANGER_CELL)); gx <= Math.min(gw - 1, (int) (vx1 / DANGER_CELL)); gx++) {
-                int n = dangerGrid[gy * gw + gx];
-                if (n < 2) continue;
-                float a = Math.min(0.42f, 0.08f + n * 0.025f) * alphaScale;
-                float cx = (gx + 0.5f) * DANGER_CELL, cy = (gy + 0.5f) * DANGER_CELL;
-                fill.setColor(alpha(0xFFE0302A, a * 0.5f));
-                c.drawCircle(cx, cy, DANGER_CELL * 0.95f, fill);
-                fill.setColor(alpha(0xFFE0302A, a));
-                c.drawCircle(cx, cy, DANGER_CELL * 0.6f, fill);
-            }
-    }
+    int[] dangerGrid;
+    float dangerTimer;
+    static final int DANGER_CELL = 96;
 
     /** (11.5) The districts' names, letter-spaced for the map. */
-    private final java.util.HashMap<City.District, String> spacedNames = new java.util.HashMap<City.District, String>();
+    final java.util.HashMap<City.District, String> spacedNames = new java.util.HashMap<City.District, String>();
 
     /** Map labels already placed this frame: a label that would land on one of them (or on the panels) is skipped. */
-    private final RectF[] placed = new RectF[80];
-    private int placedCount;
+    final RectF[] placed = new RectF[80];
+    int placedCount;
 
-    private boolean claim(RectF r) {
-        if (uiCovers(r)) return false;
-        for (int i = 0; i < placedCount; i++) if (overlaps(r, placed[i])) return false;
-        if (placedCount < placed.length) {
-            if (placed[placedCount] == null) placed[placedCount] = new RectF();
-            placed[placedCount++].set(r);
-        }
-        return true;
-    }
-
-    private boolean uiCovers(RectF r) {
-        if (overlaps(r, statsShown) || overlaps(r, meterRect)) return true;
-        for (int i = 0; i < feedCount; i++) if (overlaps(r, feedLines[i])) return true;
-        for (RectF t : topRects) if (overlaps(r, t)) return true;
-        if (overlaps(r, miniRect) || overlaps(r, camChip) || overlaps(r, mapChip) || overlaps(r, foldTab)) return true;
-        return r.bottom > barTop;
-    }
-
-    private static boolean overlaps(RectF a, RectF b) {
-        return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-    }
-
-    private void drawMapLabels(Canvas c) {
-        text.setTextAlign(Paint.Align.CENTER);
-        placedCount = 0;
-        // Further out still, on the Islands: each island's town, in big letters.
-        City city0 = world.city;
-        float islandAlpha = Math.max(0, Math.min(1, (1.9f - scale / dp) / 0.8f));
-        if (city0.islandRects != null && islandAlpha > 0) {
-            text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(24 * dp);
-            for (int i = 0; i < city0.islandRects.length; i++) {
-                int[] q = city0.islandRects[i];
-                float sx = screenX((q[0] + q[2]) / 2f * City.T), sy = screenY((q[1] + q[3]) / 2f * City.T);
-                if (sx < -200 * dp || sx > getWidth() + 200 * dp || sy < 20 * dp || sy > barTop) continue;
-                String label = city0.islandNames[i].toUpperCase();
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2, sy - 22 * dp, sx + tw / 2, sy + 4 * dp);
-                if (!claim(oval)) continue;
-                text.setColor(alpha(0xFF000000, islandAlpha * 0.6f));
-                c.drawText(label, sx + 2 * dp, sy + 2 * dp, text);
-                text.setColor(alpha(0xFFFFF4C8, islandAlpha * 0.95f));
-                c.drawText(label, sx, sy, text);
-            }
-        }
-
-        // Out in the country: the park, the mountains, a lake, the falls and the campsites, by name.
-        float natureAlpha = Math.max(0, Math.min(1, (3.2f - scale / dp) / 1.2f));
-        if (!city0.natureNames.isEmpty() && natureAlpha > 0) {
-            for (int i = 0; i < city0.natureNames.size(); i++) {
-                float[] q = city0.natureSpots.get(i);
-                int kind = (int) q[2];
-                // (Campsites and the falls only once you're closer in; the park from far out.)
-                float a = kind == City.NL_PARK ? Math.max(0, Math.min(1, (4f - scale / dp) / 1.2f))
-                        : kind == City.NL_CAMP || kind == City.NL_FALLS ? Math.max(0, Math.min(1, (scale / dp - 0.45f) / 0.3f)) * natureAlpha : natureAlpha;
-                if (a <= 0) continue;
-                text.setTextSize((kind == City.NL_PARK ? 15 : kind == City.NL_PEAK ? 12.5f : 11) * dp);
-                float sx = screenX(q[0]), sy = screenY(q[1]);
-                if (sx < -200 * dp || sx > getWidth() + 200 * dp || sy < 20 * dp || sy > barTop) continue;
-                String label = kind == City.NL_PARK ? city0.natureNames.get(i).toUpperCase(java.util.Locale.ROOT) : city0.natureNames.get(i);
-                if (kind == City.NL_PEAK) label = "\u25B2 " + label;
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2, sy - text.getTextSize(), sx + tw / 2, sy + 3 * dp);
-                if (!claim(oval)) continue;
-                int col = kind == City.NL_LANDMARK ? 0xFFF2D27A : kind == City.NL_LAKE || kind == City.NL_FALLS ? 0xFFBFE6F2 : kind == City.NL_CAMP ? 0xFFF2DDB0
-                        : kind == City.NL_PEAK ? 0xFFF2F2EA : 0xFFD8F0C0;
-                text.setColor(alpha(0xFF000000, a * 0.6f));
-                c.drawText(label, sx + 1.5f * dp, sy + 1.5f * dp, text);
-                text.setColor(alpha(col, a * 0.95f));
-                c.drawText(label, sx, sy, text);
-            }
-        }
-
-        // Most important first: what can't be missed gets its place, the rest fits round it.
-        text.setTextSize(11.5f * dp);
-        for (int i = 0, n = world.dispatch.zones.size(); i < n; i++) {
-            Dispatch.SafeZone z = world.dispatch.zones.get(i);
-            float sx = screenX(z.x), sy = screenY(z.y - z.r) - 10 * dp;
-            if (sx < -100 * dp || sx > getWidth() + 100 * dp || sy < 0 || sy > barTop) continue;
-            String label = !z.open ? (z.military ? "MILITARY" : "POLICE") + " SAFE ZONE  -  SETTING UP " + (int) (z.built * 100)
-                    + "%" + (z.onSite == 0 ? " (on the way)" : "")
-                    : (z.military ? "MILITARY" : "POLICE") + " SAFE ZONE  -  " + z.sheltered + "/" + z.capacity
-                    + (z.full ? "  FULL" : z.fallingBack ? "  FALLING BACK" : z.breaches > 0 ? "  BREACHED" : "")
-                    + "  -  food " + (z.foodMax > 0 ? (int) (100 * z.food / z.foodMax) : 0) + "%  ammo " + z.ammo + (z.supplyComing ? " (truck coming)" : "");
-            float tw = text.measureText(label);
-            oval.set(sx - tw / 2 - 8 * dp, sy - 14 * dp, sx + tw / 2 + 8 * dp, sy + 5 * dp);
-            if (!claim(oval)) continue;
-            fill.setColor(z.military ? 0xD0304A20 : 0xD0203A66);
-            c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
-            text.setColor(0xFFFFFFFF);
-            c.drawText(label, sx, sy, text);
-        }
-        // 911 calls: a small tag, "911 12" (the dead there), and a blue dot with how many units are coming.
-        // Zoomed out, only the big ones.
-        text.setTextSize(10.5f * dp);
-        // Survivor groups: their name, how many, and how well dug in.
-        text.setTextSize(10.5f * dp);
-        for (int i = 0, n = world.holdouts.size(); i < n; i++) {
-            World.Holdout h = world.holdouts.get(i);
-            float sx = screenX((h.b.x0 + h.b.x1) / 2), sy = screenY(h.b.y0) - 8 * dp;
-            if (sx < -100 * dp || sx > getWidth() + 100 * dp || sy < 0 || sy > barTop) continue;
-            String label = h.name.toUpperCase(java.util.Locale.ROOT) + "  -  " + h.count + "  -  "
-                    + (h.fort >= 100 ? "walled in" : "fortified " + (int) h.fort + "%");
-            float tw = text.measureText(label);
-            oval.set(sx - tw / 2 - 7 * dp, sy - 13 * dp, sx + tw / 2 + 7 * dp, sy + 5 * dp);
-            if (!claim(oval)) continue;
-            fill.setColor(0xD04A3A1C);
-            c.drawRoundRect(oval, 7 * dp, 7 * dp, fill);
-            text.setColor(0xFFF2E2B8);
-            c.drawText(label, sx, sy, text);
-        }
-        for (int i = 0, n = world.dispatch.incidents.size(); i < n; i++) {
-            Dispatch.Incident inc = world.dispatch.incidents.get(i);
-            if (scale / dp < 0.6f && inc.zombiesNear < 6) continue;
-            float sx = screenX(inc.x), sy = screenY(inc.y) - 14 * dp;
-            if (sx < -40 * dp || sx > getWidth() + 40 * dp || sy < 0 || sy > barTop) continue;
-            int coming = inc.cops + inc.soldiers + world.fleet.inbound(inc);
-            boolean backup = inc.backupNeed > 0;
-            String label = (backup ? "BACKUP " : "911 ") + inc.zombiesNear;
-            // (10.24) Who's coming, spelled out: police, the army, or both.
-            String units = coming <= 0 ? null : inc.soldiers > 0 && inc.cops + world.fleet.inbound(inc) > 0
-                    ? "POLICE " + (inc.cops + world.fleet.inbound(inc)) + " + ARMY " + inc.soldiers
-                    : inc.soldiers > 0 ? "ARMY " + inc.soldiers : "POLICE " + coming;
-            float tw = text.measureText(label), uw = units == null ? 0 : Math.max(12 * dp, text.measureText(units) + 7 * dp);
-            float w = tw + 10 * dp + (units == null ? 0 : uw + 3 * dp);
-            oval.set(sx - w / 2, sy - 10 * dp, sx + w / 2, sy + 3.5f * dp);
-            if (!claim(oval)) continue;
-            fill.setColor(backup ? 0xE02A58C0 : units == null ? 0xE0C0281E : 0xD08A1E16);
-            c.drawRoundRect(oval, 6 * dp, 6 * dp, fill);
-            text.setColor(0xFFFFFFFF);
-            text.setTextAlign(Paint.Align.LEFT);
-            c.drawText(label, oval.left + 5 * dp, sy, text);
-            if (units != null) {
-                float ux = oval.right - 2 * dp - uw;
-                RectF u = oval2;
-                u.set(ux, oval.top + 2 * dp, oval.right - 2 * dp, oval.bottom - 2 * dp);
-                fill.setColor(inc.soldiers > 0 && inc.cops == 0 ? 0xFF4A7A2A : 0xFF2E6AD0);
-                c.drawRoundRect(u, 5 * dp, 5 * dp, fill);
-                text.setTextAlign(Paint.Align.CENTER);
-                c.drawText(units, u.centerX(), sy, text);
-            }
-            text.setTextAlign(Paint.Align.CENTER);
-        }
-        text.setTextSize(10.5f * dp);
-        for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
-            City.Building b = world.city.buildings.get(i);
-            if (b.occupants.isEmpty()) continue;
-            // (Zoomed out, only the ones under attack.)
-            boolean attacked = b.fighting || b.barricade < 99 && world.countZombiesNear(b.doorX, b.doorY, 40) > 0;
-            if (scale / dp < 1.3f && !attacked) continue;
-            float sx = screenX(b.doorX), sy = screenY(b.doorY) - 12 * dp;
-            if (sx < -60 * dp || sx > getWidth() + 60 * dp || sy < 0 || sy > barTop) continue;
-            String label = b.fighting ? b.occupants.size() + " FIGHTING " + b.lurkers + " INSIDE"
-                    : b.occupants.size() + " hiding" + (attacked ? " - UNDER ATTACK" : "");
-            float tw = text.measureText(label);
-            oval.set(sx - tw / 2 - 6 * dp, sy - 12 * dp, sx + tw / 2 + 6 * dp, sy + 7 * dp);
-            if (!claim(oval)) continue;
-            fill.setColor(attacked ? 0xD0802018 : 0xC0302418);
-            c.drawRoundRect(oval, 6 * dp, 6 * dp, fill);
-            text.setColor(0xFFFFFFFF);
-            c.drawText(label, sx, sy, text);
-            float f = Math.max(0, b.barricade) / 100f;
-            fill.setColor(f > 0.5f ? 0xFFB08A5A : 0xFFFF6B4A);
-            c.drawRect(oval.left + 4 * dp, oval.bottom - 3 * dp, oval.left + 4 * dp + (oval.width() - 8 * dp) * f,
-                    oval.bottom - 1.5f * dp, fill);
-        }
-        text.setTextSize(11.5f * dp);
-        text.setTextSize(10.5f * dp);
-        // The National Guard armory is labelled like the base.
-        City.Building arm = world.city.armory;
-        if (arm != null) {
-            float sx = screenX((arm.x0 + arm.x1) / 2), sy = screenY(arm.y1) + 22 * dp;
-            if (sx > -100 * dp && sx < getWidth() + 100 * dp && sy > 0 && sy < barTop) {
-                String label = arm.name.toUpperCase();
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 7 * dp, sy - 13 * dp, sx + tw / 2 + 7 * dp, sy + 5 * dp);
-                if (claim(oval)) {
-                    fill.setColor(0xB0303A1E);
-                    c.drawRoundRect(oval, 7 * dp, 7 * dp, fill);
-                    text.setColor(0xFFE6E6E6);
-                    c.drawText(label, sx, sy, text);
-                }
-            }
-        }
-        for (int i = 0, n = world.city.facilities.size(); i < n; i++) {
-            City.Facility f = world.city.facilities.get(i);
-            if (f.kind == City.FACILITY_FIRE) continue;
-            boolean zoned = false;
-            for (int k = 0; k < world.dispatch.zones.size(); k++) {
-                Dispatch.SafeZone z = world.dispatch.zones.get(k);
-                if (World.hypot(z.x - f.x, z.y - f.y) < 150) zoned = true;
-            }
-            // (With a safe zone there, its name goes just above the zone's own label.)
-            float sx = screenX(f.x), sy = screenY(f.y) + (zoned ? -6 : 26) * dp;
-            if (sx < -100 * dp || sx > getWidth() + 100 * dp || sy < 0 || sy > barTop) continue;
-            String label = f.name.toUpperCase();
-            float tw = text.measureText(label);
-            oval.set(sx - tw / 2 - 7 * dp, sy - 13 * dp, sx + tw / 2 + 7 * dp, sy + 5 * dp);
-            if (!claim(oval)) continue;
-            fill.setColor(f.kind == City.FACILITY_BASE ? 0xB0303A1E : f.kind == City.FACILITY_FIRE ? 0xB0802018
-                    : f.kind == City.FACILITY_HOSPITAL ? 0xB0703030 : 0xB01E2E50);
-            c.drawRoundRect(oval, 7 * dp, 7 * dp, fill);
-            text.setColor(0xFFE6E6E6);
-            c.drawText(label, sx, sy, text);
-        }
-        // The ranger station, labelled like the stations in town.
-        City.Building rs = world.rangerStation;
-        if (rs != null && !rs.collapsed) {
-            float sx = screenX(rs.doorX), sy = screenY(rs.doorY) + 26 * dp;
-            if (sx > -100 * dp && sx < getWidth() + 100 * dp && sy > 0 && sy < barTop) {
-                String label = rs.name.split(",")[0].toUpperCase();
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 7 * dp, sy - 13 * dp, sx + tw / 2 + 7 * dp, sy + 5 * dp);
-                if (claim(oval)) {
-                    fill.setColor(0xB02E4A24);
-                    c.drawRoundRect(oval, 7 * dp, 7 * dp, fill);
-                    text.setColor(0xFFE6E6E6);
-                    c.drawText(label, sx, sy, text);
-                }
-            }
-        }
-        // Names over people when zoomed right in, and the outbreak's first victim.
-        if (settings.nameTags() && scale / dp > 3f) {
-            text.setTextSize(9.5f * dp);
-            int placed = 0;
-            for (int i = 0, n = onScreen.size(); i < n; i++) {
-                Entity e = onScreen.get(i);
-                float sx = screenX(e.x), sy = screenY(e.y) - (e.radius * scale + 12 * dp);
-                if (sx < 0 || sx > getWidth() || sy < 0 || sy > barTop) continue;
-                String label = e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG ? Names.dog(e.nameSeed)
-                        : e.isZombie() ? null : e.isArmed() ? Dispatch.name(e) : Names.person(e.nameSeed).split(" ")[0];
-                if (label == null) continue;
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 3 * dp, sy - 9 * dp, sx + tw / 2 + 3 * dp, sy + 3 * dp);
-                // (Skipped if it would sit on a panel, or on a tag already drawn in a crowd.)
-                if (!claim(oval)) continue;
-                if (++placed > 60) break;
-                fill.setColor(0x90000000);
-                c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-                text.setColor(e.isArmed() ? 0xFFA8C8FF : 0xFFF2F2F2);
-                c.drawText(label, sx, sy, text);
-            }
-        }
-        Entity p0 = world.patientZero;
-        if (p0 != null && !p0.dead) {
-            text.setTextSize(10 * dp);
-            float sx = screenX(p0.x), sy = screenY(p0.y) - (p0.radius * scale + 16 * dp);
-            if (sx > 0 && sx < getWidth() && sy > 0 && sy < barTop) {
-                String label = "PATIENT ZERO";
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 5 * dp, sy - 11 * dp, sx + tw / 2 + 5 * dp, sy + 4 * dp);
-                if (claim(oval)) {
-                    fill.setColor(0xD04A7A1A);
-                    c.drawRoundRect(oval, 6 * dp, 6 * dp, fill);
-                    text.setColor(0xFFFFFFFF);
-                    c.drawText(label, sx, sy, text);
-                }
-            }
-        }
-        // What each vehicle is up to.
-        boolean close = scale / dp > 0.9f;
-        text.setTextSize(10 * dp);
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.type == Fleet.CAR && !close) continue;
-            // Zoomed out, only the ones on a call (lights going) or in the air.
-            if (!close && !v.lightsOn() && !Fleet.airborne(v) && v.type != Fleet.TANK) continue;
-            // ((12.0) Only those on screen have their label worked out: it was put together for every vehicle on the map, every frame.)
-            float sx = screenX(v.x), sy = screenY(v.y) - (v.type == Fleet.HELI ? 22 + 14 * v.alt : 14) * dp;
-            if (sx < -80 * dp || sx > getWidth() + 80 * dp || sy < 0 || sy > barTop) continue;
-            String label = world.fleet.status(v);
-            if (label == null) continue;
-            float tw = text.measureText(label);
-            oval.set(sx - tw / 2 - 6 * dp, sy - 11 * dp, sx + tw / 2 + 6 * dp, sy + 4 * dp);
-            if (!claim(oval)) continue;
-            int col = Fleet.army(v) ? 0xC8304A20
-                    : v.type == Fleet.AMBULANCE ? 0xC8A03030
-                    : v.type == Fleet.CRUISER || Fleet.policeTruck(v) || v.type == Fleet.HELI ? 0xC8203A66 : 0xB0202226;
-            fill.setColor(col);
-            c.drawRoundRect(oval, 6 * dp, 6 * dp, fill);
-            text.setColor(0xFFF2F2F2);
-            c.drawText(label, sx, sy, text);
-        }
-            text.setTextAlign(Paint.Align.CENTER);
-        // Zoomed out: the names of the districts across the map.
-        float districtAlpha = Math.max(0, Math.min(1, (3.2f - scale) / 1.2f));
-        if (districtAlpha > 0) {
-            // ((11.5) As on a printed map: letter-spaced capitals, bigger for a bigger district, with a dark outline
-            // to stand off the streets; and when something else has its middle, a clear spot just beside it instead
-            // of no name at all.)
-            for (int i = 0, n = world.city.districts.size(); i < n; i++) {
-                City.District d = world.city.districts.get(i);
-                if (d.tiles < 40) continue;
-                float sx0 = screenX(d.cx), sy0 = screenY(d.cy);
-                if (sx0 < -200 * dp || sx0 > getWidth() + 200 * dp || sy0 < -40 * dp || sy0 > barTop + 40 * dp) continue;
-                String label = spacedNames.get(d);
-                if (label == null) {
-                    StringBuilder sb = new StringBuilder();
-                    String up = d.name.toUpperCase(java.util.Locale.ROOT);
-                    for (int k = 0; k < up.length(); k++) {
-                        if (k > 0) sb.append(up.charAt(k) == ' ' || up.charAt(k - 1) == ' ' ? " " : "\u200A");
-                        if (up.charAt(k) != ' ') sb.append(up.charAt(k));
-                        else sb.append(' ');
-                    }
-                    label = sb.toString();
-                    spacedNames.put(d, label);
-                }
-                float size = Math.max(12.5f, Math.min(19, 11 + (float) Math.sqrt(d.tiles) / 14)) * dp;
-                text.setTextSize(size);
-                float tw = text.measureText(label);
-                boolean put = false;
-                float sx = sx0, sy = sy0;
-                for (int k = 0; k < 5 && !put; k++) {
-                    sx = sx0 + (k == 3 ? -tw * 0.4f : k == 4 ? tw * 0.4f : 0);
-                    sy = sy0 + (k == 1 ? -size * 1.8f : k == 2 ? size * 1.8f : 0);
-                    if (sy < size || sy > barTop) continue;
-                    oval.set(sx - tw / 2 - 3 * dp, sy - size, sx + tw / 2 + 3 * dp, sy + 4 * dp);
-                    put = claim(oval);
-                }
-                if (!put) continue;
-                text.setStyle(Paint.Style.STROKE);
-                text.setStrokeWidth(3.2f * dp);
-                text.setColor(alpha(0xFF101418, districtAlpha * 0.55f));
-                c.drawText(label, sx, sy, text);
-                text.setStyle(Paint.Style.FILL);
-                text.setColor(alpha(d.type == City.DT_INDUSTRIAL ? 0xFFE6DCC8 : d.type == City.DT_PARKSIDE ? 0xFFDDEFC8 : 0xFFF6F1E2, districtAlpha * 0.92f));
-                c.drawText(label, sx, sy, text);
-            }
-            // (10.46) Infection zones: their name, how many of the dead are in them, and whether they're held.
-            text.setTextSize(11 * dp);
-            for (int i = 0; i < world.infection.size(); i++) {
-                World.InfectionZone z = world.infection.get(i);
-                float sx = screenX(z.x), sy = screenY(z.y - z.r) - 6 * dp;
-                if (sx < -120 * dp || sx > getWidth() + 120 * dp || sy < 12 * dp || sy > barTop) continue;
-                String label = "INFECTION ZONE \u00b7 " + z.zombies + (z.critical ? "" : " \u00b7 WAITING");
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 5 * dp, sy - 11 * dp, sx + tw / 2 + 5 * dp, sy + 4 * dp);
-                if (!claim(oval)) continue;
-                fill.setColor(z.critical ? 0xDD8A1E16 : 0xDD8A5A10);
-                c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-                text.setColor(0xFFFFF0E8);
-                c.drawText(label, sx, sy, text);
-            }
-            // (10.49) Where the evacuation buses pick up (and the station, for the trains), while people are leaving.
-            if (world.exodusOn() && world.byTransit()) {
-                text.setTextSize(10 * dp);
-                for (int i = 0; i <= world.evacStops.size(); i++) {
-                    boolean train = i == world.evacStops.size();
-                    if (train && world.city.stationX < 0) break;
-                    World.EvacStop st = train ? null : world.evacStops.get(i);
-                    float wx = train ? world.city.stationX : st.x, wy = train ? world.city.stationY : st.y;
-                    float sx = screenX(wx), sy = screenY(wy) - 12 * dp;
-                    if (sx < -80 * dp || sx > getWidth() + 80 * dp || sy < 12 * dp || sy > barTop) continue;
-                    int n = world.waitingFor(train ? World.STOP_TRAIN : i, wx, wy, true);
-                    String label = (train ? "EVACUATION TRAINS" : st.closed ? "BUS STOP CLOSED" : "EVACUATION BUS") + (n > 0 ? " \u00b7 " + n : "");
-                    float tw = text.measureText(label);
-                    oval.set(sx - tw / 2 - 4 * dp, sy - 10 * dp, sx + tw / 2 + 4 * dp, sy + 3 * dp);
-                    if (!claim(oval)) continue;
-                    fill.setColor(st != null && st.closed ? 0xDD5A5A5A : 0xDD1F5A9A);
-                    c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-                    text.setColor(0xFFF2F6FA);
-                    c.drawText(label, sx, sy, text);
-                }
-            }
-            // (10.32) The army's checkpoints, and a base that's been overrun.
-            text.setTextSize(10 * dp);
-            for (int i = 0; i < world.city.checkpoints.size(); i++) {
-                float[] cp = world.city.checkpoints.get(i);
-                float sx = screenX(cp[0]), sy = screenY(cp[1]) - 14 * dp;
-                if (sx < -60 * dp || sx > getWidth() + 60 * dp || sy < 0 || sy > barTop) continue;
-                String label = "CHECKPOINT";
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 4 * dp, sy - 10 * dp, sx + tw / 2 + 4 * dp, sy + 3 * dp);
-                if (!claim(oval)) continue;
-                fill.setColor(alpha(0xFF3C4A2A, districtAlpha * 0.8f));
-                c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-                text.setColor(alpha(0xFFE8E2C0, districtAlpha));
-                c.drawText(label, sx, sy, text);
-            }
-            for (int i = 0; i < world.city.facilities.size(); i++) {
-                City.Facility f = world.city.facilities.get(i);
-                if (f.kind != City.FACILITY_BASE || !f.fallen) continue;
-                float sx = screenX(f.x), sy = screenY(f.y) + 20 * dp;
-                if (sx < -80 * dp || sx > getWidth() + 80 * dp || sy < 0 || sy > barTop) continue;
-                String label = "BASE OVERRUN";
-                float tw = text.measureText(label);
-                oval.set(sx - tw / 2 - 4 * dp, sy - 10 * dp, sx + tw / 2 + 4 * dp, sy + 3 * dp);
-                if (!claim(oval)) continue;
-                fill.setColor(alpha(0xFF6A2018, districtAlpha * 0.85f));
-                c.drawRoundRect(oval, 4 * dp, 4 * dp, fill);
-                text.setColor(alpha(0xFFFFD8D0, districtAlpha));
-                c.drawText(label, sx, sy, text);
-            }
-        }
-    }
-
-    /** Takes in new radio messages and lets them onto the screen one at a time, a few seconds apart. */
-    private void paceFeed(float dt, int maxLines) {
-        Dispatch d = world.dispatch;
-        if (d.messageCount < feedSeen) feedSeen = d.messageCount;
-        int fresh = Math.min(d.messageCount - feedSeen, d.log.size());
-        for (int i = d.log.size() - fresh; i < d.log.size(); i++) feedQueue.add(d.log.get(i));
-        feedSeen = d.messageCount;
-        // A backlog: what's old news by now is dropped (calls for help are kept over chatter).
-        while (feedQueue.size() > 4) {
-            int drop = 0;
-            for (int i = 0; i < feedQueue.size() - 1; i++)
-                if (!feedQueue.get(i).who.equals("911")) {
-                    drop = i;
-                    break;
-                }
-            feedQueue.remove(drop);
-        }
-        for (int i = feedOn.size() - 1; i >= 0; i--) {
-            float age = feedOnAge.get(i) + dt;
-            if (age > FEED_LIFE) {
-                feedOn.remove(i);
-                feedOnAge.remove(i);
-            } else feedOnAge.set(i, age);
-        }
-        // (Fewer lines chosen in Settings: down to that many now.)
-        while (feedOn.size() > maxLines) {
-            feedOn.remove(0);
-            feedOnAge.remove(0);
-        }
-        feedGap -= dt;
-        if (!feedQueue.isEmpty() && feedGap <= 0) {
-            // Full: the oldest line makes way (but only once it's been up a while).
-            if (feedOn.size() >= maxLines && feedOnAge.get(0) < 6) return;
-            if (feedOn.size() >= maxLines) {
-                feedOn.remove(0);
-                feedOnAge.remove(0);
-            }
-            feedOn.add(feedQueue.remove(0));
-            feedOnAge.add(0f);
-            feedGap = FEED_EVERY;
-        }
-    }
-
-    /** The last few radio messages. Tapping one moves the camera to where it happened. */
-    private void drawFeed(Canvas c) {
-        feedCount = 0;
-        feedBottom = 0;
-        if (!settings.radio()) return;
-        // ((12.0) As many as the setting says.)
-        int maxLines = settings.feedLines();
-        paceFeed(frameDt, maxLines);
-        int shown = feedOn.size();
-        float lineH = 22 * dp, gap = 3 * dp, y = feedRect.top;
-        // (10.50) With the stats folded to one line, the messages take the space the panel leaves: just under
-        // that line, from the left.
-        boolean underStats = statsCollapsed && !statsShown.isEmpty();
-        float left = underStats ? statsRect.left : feedRect.left;
-        if (underStats) y = statsShown.bottom + 8 * dp;
-        // In portrait the war meter sits where the messages start: they go below it.
-        // ((12.0) Under the folded stats in landscape too: it was drawn on top of the meter there.)
-        if ((portrait || underStats) && meterBottom > 0) y = Math.max(y, meterBottom + 8 * dp);
-        // Never down over the Auto cam switch (or the minimap) on the right.
-        float limit = portrait ? barTop : (camChip.isEmpty() ? barTop : camChip.top) - 6 * dp;
-        while (shown > 0 && y + shown * (lineH + gap) > limit) shown--;
-        feedBottom = y;
-        text.setTextSize(11.5f * dp);
-        for (int k = 0; k < shown; k++) {
-            int idx = feedOn.size() - shown + k;
-            Dispatch.Message m = feedOn.get(idx);
-            float age = feedOnAge.get(idx);
-            float a = Math.min(Math.min(1, age / 0.3f), (FEED_LIFE - age) / 1.5f);
-            String who = m.who + ": ";
-            text.setTextAlign(Paint.Align.LEFT);
-            float whoW = text.measureText(who);
-            // (Never under the minimap.)
-            float rightLimit = feedRect.right;
-            if ((portrait || underStats) && !miniRect.isEmpty() && y < miniRect.bottom && y + lineH > miniRect.top && miniRect.left > left)
-                rightLimit = Math.min(rightLimit, miniRect.left - 6 * dp);
-            float maxText = rightLimit - left - whoW - 20 * dp;
-            // ((12.0) Cut to fit once, not a letter at a time again every frame it's up.)
-            String body = feedFit.get(m);
-            if (body == null || feedFitW.get(m) != maxText) {
-                body = m.text;
-                if (text.measureText(body) > maxText) {
-                    // (A first guess from the widths, then letter by letter from there.)
-                    int guess = Math.max(4, (int) (body.length() * maxText / text.measureText(body)));
-                    if (guess < body.length()) body = body.substring(0, guess);
-                    while (body.length() > 4 && text.measureText(body + "...") > maxText) body = body.substring(0, body.length() - 1);
-                    body = body + "...";
-                }
-                feedFit.put(m, body);
-                feedFitW.put(m, maxText);
-            }
-            float lw = whoW + text.measureText(body) + 16 * dp;
-            RectF r = feedLines[feedCount];
-            r.set(feedRect.right - lw, y, feedRect.right, y + lineH);
-            if (portrait || underStats) r.offsetTo(left, y);
-            fill.setColor(alpha(0xC8000000, a));
-            c.drawRoundRect(r, 7 * dp, 7 * dp, fill);
-            text.setColor(alpha(m.color, a));
-            c.drawText(who, r.left + 8 * dp, y + lineH * 0.68f, text);
-            text.setColor(alpha(0xFFFFFFFF, a));
-            c.drawText(body, r.left + 8 * dp + whoW, y + lineH * 0.68f, text);
-            feedMsgs[feedCount++] = m;
-            y += lineH + gap;
-            feedBottom = y;
-        }
-    }
+    /** ((16.3) The place the camera is over, named for a moment as it moves into it, close in. */
+    City.District bannerDistrict;
+    String bannerTitle, bannerSub;
+    float bannerT;
 
     /** ((12.0) Each radio line as cut to fit the screen, and the width it was cut for.) */
-    private final java.util.WeakHashMap<Dispatch.Message, String> feedFit = new java.util.WeakHashMap<Dispatch.Message, String>();
-    private final java.util.WeakHashMap<Dispatch.Message, Float> feedFitW = new java.util.WeakHashMap<Dispatch.Message, Float>();
+    final java.util.WeakHashMap<Dispatch.Message, String> feedFit = new java.util.WeakHashMap<Dispatch.Message, String>();
+    final java.util.WeakHashMap<Dispatch.Message, Float> feedFitW = new java.util.WeakHashMap<Dispatch.Message, Float>();
 
-    private int fade(int color) {
-        return wallFade >= 1 ? color : alpha(color, wallFade);
-    }
-
-    private static int alpha(int color, float a) {
+    static int alpha(int color, float a) {
         int base = (color >>> 24) & 0xFF;
         int na = (int) (base * Math.max(0, Math.min(1, a)));
         return (na << 24) | (color & 0xFFFFFF);
     }
 
-    private void drawDog(Canvas c, Entity e, boolean healthBar) {
-        float r = e.radius;
-        c.save();
-        c.translate(e.x, e.y);
-        c.rotate((float) Math.toDegrees(e.angle));
-        fill.setColor(0x44000000);
-        oval.set(-r * 1.1f + 0.8f, -r * 0.6f + 0.8f, r * 1.2f + 0.8f, r * 0.6f + 0.8f);
-        c.drawOval(oval, fill);
-        float sw = (float) Math.sin(e.phase * 1.6f) * r * 0.4f;
-        stroke.setColor(City.darken(e.body, 0.7f));
-        stroke.setStrokeWidth(r * 0.3f);
-        c.drawLine(r * 0.55f, -r * 0.4f, r * 0.55f + sw, -r * 0.72f, stroke);
-        c.drawLine(r * 0.55f, r * 0.4f, r * 0.55f - sw, r * 0.72f, stroke);
-        c.drawLine(-r * 0.6f, -r * 0.4f, -r * 0.6f - sw, -r * 0.72f, stroke);
-        c.drawLine(-r * 0.6f, r * 0.4f, -r * 0.6f + sw, r * 0.72f, stroke);
-        // Wagging tail.
-        stroke.setColor(e.body);
-        stroke.setStrokeWidth(r * 0.25f);
-        float wag = (float) Math.sin(world.time * (e.fleeTimer > 0 ? 6 : 14) + e.phase) * r * 0.45f;
-        c.drawLine(-r * 0.9f, 0, -r * 1.6f, wag, stroke);
-        fill.setColor(e.body);
-        oval.set(-r * 1.05f, -r * 0.5f, r * 0.85f, r * 0.5f);
-        c.drawOval(oval, fill);
-        if (e.role == Entity.ROLE_K9) {
-            // Police dog vest.
-            fill.setColor(0xFF1E2E5A);
-            oval.set(-r * 0.6f, -r * 0.52f, r * 0.5f, r * 0.52f);
-            c.drawRoundRect(oval, r * 0.2f, r * 0.2f, fill);
-            fill.setColor(0xFFE8E8E8);
-            c.drawRect(-r * 0.3f, -r * 0.1f, r * 0.2f, r * 0.1f, fill);
-        }
-        fill.setColor(e.head);
-        c.drawCircle(r * 1.05f, 0, r * 0.48f, fill);
-        fill.setColor(City.darken(e.head, 0.7f));
-        c.drawCircle(r * 0.9f, -r * 0.38f, r * 0.2f, fill);
-        c.drawCircle(r * 0.9f, r * 0.38f, r * 0.2f, fill);
-        fill.setColor(0xFF1A1A1A);
-        c.drawCircle(r * 1.5f, 0, r * 0.14f, fill);
-        if (e.isZombie()) {
-            // Red eyes and a bloody muzzle.
-            fill.setColor(0xFFFF3B2F);
-            c.drawCircle(r * 1.2f, -r * 0.2f, r * 0.1f, fill);
-            c.drawCircle(r * 1.2f, r * 0.2f, r * 0.1f, fill);
-            fill.setColor(0xAA6E0A0A);
-            c.drawCircle(r * 1.45f, 0, r * 0.22f, fill);
-        }
-        if (e.hurt > 0) {
-            fill.setColor(alpha(0xFFFFFFFF, e.hurt * 0.7f));
-            c.drawCircle(0, 0, r * 1.1f, fill);
-        }
-        c.restore();
-        if (healthBar && e.hp < e.maxHp && e.hp > 0) {
-            float bw = 8, bx = e.x - bw / 2, by = e.y - r - 3.5f;
-            fill.setColor(0xAA000000);
-            c.drawRect(bx - 0.4f, by - 0.4f, bx + bw + 0.4f, by + 1.9f, fill);
-            float f = e.hp / e.maxHp;
-            fill.setColor(f > 0.5f ? 0xFF4CD964 : f > 0.25f ? 0xFFFFCC00 : 0xFFFF3B30);
-            c.drawRect(bx, by, bx + bw * f, by + 1.5f, fill);
-        }
-    }
-
-    private static final int[] HAIR = {0xFF1A1410, 0xFF3B2A1A, 0xFF6B4A2A, 0xFFC8A060, 0xFF8A3A1A, 0xFF8A8A8A};
-    private static final int[] HATS = {0xFFD83A3A, 0xFF2E5FB0, 0xFF3C8A4E, 0xFFE0C050, 0xFF222428, 0xFFE07A2E};
-
-    /** Hair, caps and beanies, picked from the person's name so they keep the same look. */
-    private void drawHair(Canvas c, Entity e, float r) {
-        int seed = e.nameSeed & 0x7FFFFFFF;
-        int style = seed % 7, hair = HAIR[(seed / 7) % HAIR.length], hat = HATS[(seed / 49) % HATS.length];
-        boolean zombie = e.isZombie();
-        if (zombie) {
-            if (style == 0 || style == 3) style = 4; // Hats are long gone.
-            hair = City.darken(hair, 0.8f);
-        }
-        switch (style) {
-            case 0: // Baseball cap.
-                fill.setColor(hat);
-                c.drawCircle(-r * 0.04f, 0, r * 0.5f, fill);
-                fill.setColor(City.darken(hat, 0.75f));
-                oval.set(r * 0.3f, -r * 0.3f, r * 0.8f, r * 0.3f);
-                c.drawOval(oval, fill);
-                break;
-            case 1: // Long hair.
-                fill.setColor(hair);
-                oval.set(-r * 0.62f, -r * 0.54f, r * 0.12f, r * 0.54f);
-                c.drawOval(oval, fill);
-                break;
-            case 2: // Bald.
-                break;
-            case 3: // Beanie.
-                fill.setColor(hat);
-                c.drawCircle(-r * 0.06f, 0, r * 0.5f, fill);
-                fill.setColor(City.lighten(hat, 0.3f));
-                c.drawCircle(-r * 0.12f, 0, r * 0.14f, fill);
-                break;
-            case 5: // Hair in a bun.
-                fill.setColor(hair);
-                c.drawCircle(-r * 0.1f, 0, r * 0.44f, fill);
-                c.drawCircle(-r * 0.58f, 0, r * 0.2f, fill);
-                break;
-            default: // Short hair.
-                fill.setColor(hair);
-                c.drawCircle(-r * 0.12f, 0, r * 0.44f, fill);
-                if (zombie) {
-                    fill.setColor(e.head);
-                    c.drawCircle(-r * 0.2f, r * 0.2f, r * 0.14f, fill);
-                }
-                break;
-        }
-    }
-
-    private void drawEntity(Canvas c, Entity e, boolean healthBar) {
-        if (e.type == Entity.CIVILIAN && world.onTowel(e)) {
-            // ((11.1) A beach towel on the sand, and now and then a parasol.)
-            int[] towels = {0xFFE0505A, 0xFF3A8AD8, 0xFFF0C040, 0xFF40B080, 0xFFE07AB0};
-            float tx = e.spot[0], ty = e.spot[1];
-            fill.setColor(towels[e.nameSeed % towels.length & 0x7FFFFFFF]);
-            c.drawRect(tx - 3.5f, ty - 6.5f, tx + 3.5f, ty + 6.5f, fill);
-            fill.setColor(0xCCF4F4F0);
-            c.drawRect(tx - 3.5f, ty - 6.5f, tx + 3.5f, ty - 5.2f, fill);
-            c.drawRect(tx - 3.5f, ty + 5.2f, tx + 3.5f, ty + 6.5f, fill);
-            if ((e.nameSeed & 3) == 0) {
-                fill.setColor(0x30000000);
-                c.drawCircle(tx + 7, ty - 1, 7, fill);
-                fill.setColor((e.nameSeed & 4) == 0 ? 0xFFE8463A : 0xFF2E7DC8);
-                c.drawCircle(tx + 6, ty - 3, 6.5f, fill);
-                fill.setColor(0xFFF4F4F0);
-                c.drawCircle(tx + 6, ty - 3, 3.2f, fill);
-            }
-        }
-        if (e.type == Entity.CIVILIAN && world.atStall(e)) {
-            // The food cart: a striped umbrella over a little stall.
-            float cx = e.x + 7, cy = e.y - 2;
-            fill.setColor(0x40000000);
-            c.drawRect(cx - 3.5f, cy - 2, cx + 5, cy + 5, fill);
-            fill.setColor(0xFFB8BCC0);
-            c.drawRect(cx - 4, cy - 2.5f, cx + 4, cy + 3.5f, fill);
-            fill.setColor(0xFF2A2A2A);
-            c.drawCircle(cx - 3, cy + 3.8f, 1, fill);
-            c.drawCircle(cx + 3, cy + 3.8f, 1, fill);
-            fill.setColor(0xFFE04A3A);
-            c.drawCircle(cx, cy - 1, 5.5f, fill);
-            fill.setColor(0xFFF2F2F2);
-            c.drawCircle(cx, cy - 1, 3.6f, fill);
-            fill.setColor(0xFFE04A3A);
-            c.drawCircle(cx, cy - 1, 1.8f, fill);
-        }
-        if (e.hidden && scale < 5f) {
-            // A crawler lying low: just a dark shape in the grass, if you look closely.
-            fill.setColor(0x40263018);
-            oval.set(e.x - e.radius * 1.3f, e.y - e.radius * 0.7f, e.x + e.radius * 1.3f, e.y + e.radius * 0.7f);
-            c.drawOval(oval, fill);
-            return;
-        }
-        if (e.type == Entity.DOG || e.type == Entity.ZOMBIE_DOG) {
-            drawDog(c, e, healthBar);
-            return;
-        }
-        float r = e.radius;
-        // ((11.5) Small on screen - a dozen pixels across - just the body, the head and any gun drawn (see below), and
-        // no separate shadow: the dark outline does that job at this size.)
-        boolean small = scale < 1.8f && !healthBar && e != world.controlled && e.type != Entity.CRAWLER;
-        // One light source for everything: shadows fall down and to the right.
-        if (small) {
-            // (None.)
-        } else if (realistic && scale > 3f) {
-            // A soft shadow: a pale outer edge round a darker core.
-            fill.setColor(0x1C000000);
-            c.drawCircle(e.x + r * 0.4f, e.y + r * 0.55f, r * 1.2f, fill);
-            fill.setColor(0x30000000);
-            c.drawCircle(e.x + r * 0.35f, e.y + r * 0.5f, r * 0.85f, fill);
-        } else {
-            fill.setColor(0x40000000);
-            c.drawCircle(e.x + r * 0.35f, e.y + r * 0.5f, r * 0.95f, fill);
-        }
-        c.save();
-        c.translate(e.x, e.y);
-        c.rotate((float) Math.toDegrees(e.angle));
-        float now = world.time, spd = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
-        boolean anim = scale > 1.6f;
-        if (anim) {
-            // Attacks: the dead lunge as they bite, guns kick back.
-            float bite = 1 - Math.min(1, (now - e.biteAt) / 0.25f);
-            if (bite > 0 && e.isZombie()) c.translate(r * 0.5f * bite, 0);
-            float kick = 1 - Math.min(1, (now - e.shotAt) / 0.12f);
-            if (kick > 0 && !e.isZombie()) c.translate(-r * 0.2f * kick, 0);
-            if (spd > 4 && e.type != Entity.CRAWLER) {
-                // Walking: a bob in the stride; the dead lurch from side to side.
-                float bob = (float) Math.sin(e.phase * 2);
-                if (e.isZombie() && e.type != Entity.RUNNER) c.rotate((float) Math.sin(e.phase * 0.5f + (e.nameSeed & 7)) * 9);
-                c.scale(1 + 0.05f * bob, 1 - 0.03f * bob);
-            }
-            if (e.type == Entity.BLOATER) {
-                // Swelling and sagging with each breath.
-                float pu = 1 + 0.07f * (float) Math.sin(now * 3 + (e.nameSeed & 15));
-                c.scale(pu, pu);
-            }
-            if (e.isZombie() && e.fresh > 44) {
-                // Just got up: still unfolding.
-                float t = Math.max(0, 45 - e.fresh);
-                c.scale(0.7f + 0.3f * t, 0.7f + 0.3f * t);
-            }
-        }
-
-        // ((11.5) The arms, legs, hats, badges and holsters were a dozen drawing calls each for a crowd of hundreds.)
-        if (small) {
-            oval.set(-r * 0.62f, -r, r * 0.62f, r);
-            if (scale > 1.2f) {
-                fill.setColor(0x8C000000);
-                float o = Math.min(r * 0.18f, 0.9f / scale + 0.25f);
-                oval.inset(-o, -o);
-                c.drawOval(oval, fill);
-                oval.inset(o, o);
-            }
-            fill.setColor(e.body);
-            c.drawOval(oval, fill);
-            if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
-                stroke.setColor(0xFF161616);
-                stroke.setStrokeWidth(r * 0.38f);
-                c.drawLine(r * 0.5f, r * 0.3f, e.type == Entity.SOLDIER ? r * 2.5f : r * 2f, r * 0.3f, stroke);
-            } else if (e.isZombie()) {
-                // (Arms out in front.)
-                stroke.setColor(e.skin);
-                stroke.setStrokeWidth(r * 1.3f);
-                c.drawLine(r * 0.2f, 0, r * 1.4f, 0, stroke);
-            }
-            fill.setColor(e.head);
-            c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
-        } else {
-            if (e.type != Entity.CRAWLER && scale > 2.5f) {
-                // Legs stepping out in front and behind as they walk.
-                float step = (float) Math.sin(e.phase) * r * 0.55f;
-                fill.setColor(e.isZombie() ? City.darken(e.skin, 0.55f) : e.type == Entity.SOLDIER ? 0xFF2E3320 : 0xFF26282C);
-                oval.set(step - r * 0.3f, -r * 0.55f, step + r * 0.3f, -r * 0.12f);
-                c.drawOval(oval, fill);
-                oval.set(-step - r * 0.3f, r * 0.12f, -step + r * 0.3f, r * 0.55f);
-                c.drawOval(oval, fill);
-            }
-
-            if (e.type == Entity.CRAWLER) {
-                // Dragging itself along on its arms: long low body, no legs.
-                float sw = (float) Math.sin(e.phase * 1.5f) * r * 0.4f;
-                stroke.setColor(e.skin);
-                stroke.setStrokeWidth(r * 0.42f);
-                c.drawLine(r * 0.3f, -r * 0.6f, r * 1.7f + sw, -r * 0.9f, stroke);
-                c.drawLine(r * 0.3f, r * 0.6f, r * 1.7f - sw, r * 0.9f, stroke);
-                fill.setColor(0x906E0A0A);
-                c.drawCircle(-r * 1.3f, 0, r * 0.5f, fill);
-            } else if (e.isZombie()) {
-                float sw = (float) Math.sin(e.phase) * r * 0.2f;
-                stroke.setColor(e.skin);
-                if (e.type == Entity.RUNNER && spd > 30) {
-                    // Sprinting: arms flung back.
-                    stroke.setStrokeWidth(r * 0.36f);
-                    c.drawLine(-r * 0.1f, -r * 0.72f, -r * 1.25f - sw, -r * 1.0f, stroke);
-                    c.drawLine(-r * 0.1f, r * 0.72f, -r * 1.25f + sw, r * 1.0f, stroke);
-                } else if (e.type == Entity.BRUTE) {
-                    // Huge arms ending in fists.
-                    stroke.setStrokeWidth(r * 0.62f);
-                    c.drawLine(r * 0.1f, -r * 0.85f, r * 1.4f + sw, -r * 0.8f, stroke);
-                    c.drawLine(r * 0.1f, r * 0.85f, r * 1.4f - sw, r * 0.8f, stroke);
-                    fill.setColor(City.darken(e.skin, 0.8f));
-                    c.drawCircle(r * 1.45f + sw, -r * 0.8f, r * 0.36f, fill);
-                    c.drawCircle(r * 1.45f - sw, r * 0.8f, r * 0.36f, fill);
-                } else {
-                    stroke.setStrokeWidth(r * 0.42f);
-                    c.drawLine(r * 0.1f, -r * 0.72f, r * 1.55f + sw, -r * 0.55f, stroke);
-                    c.drawLine(r * 0.1f, r * 0.72f, r * 1.55f - sw, r * 0.55f, stroke);
-                }
-            } else if ((e.isArmed() && world.weaponsOut(e)) || (e.hasGun && e.aiming)) {
-                boolean soldier = e.type == Entity.SOLDIER;
-                stroke.setColor(e.skin);
-                stroke.setStrokeWidth(r * 0.36f);
-                c.drawLine(0, -r * 0.8f, r * 1.05f, r * 0.15f, stroke);
-                c.drawLine(0, r * 0.8f, r * 1.3f, r * 0.35f, stroke);
-                stroke.setColor(0xFF161616);
-                int role = soldier ? e.role : 0;
-                boolean marksman = e.role == Entity.ROLE_MARKSMAN;
-                stroke.setStrokeWidth(role == Entity.ROLE_GUNNER ? r * 0.6f : role == Entity.ROLE_COMMANDER ? r * 0.3f
-                        : soldier || marksman ? r * 0.42f : r * 0.32f);
-                float muzzle = role == Entity.ROLE_SNIPER || marksman ? r * 3.3f : role == Entity.ROLE_GUNNER ? r * 2.6f
-                        : role == Entity.ROLE_COMMANDER ? r * 1.8f : soldier ? r * 2.5f : r * 2f;
-                // ((11.4) Each gun its own length: a stubby submachine gun, a long marksman rifle, a wooden-stocked shotgun.)
-                int gun = e.weapon;
-                if (gun == Entity.W_SMG) muzzle = r * 1.9f;
-                else if (gun == Entity.W_CARBINE) muzzle = r * 2.4f;
-                else if (gun == Entity.W_DMR || gun == Entity.W_HUNTING) muzzle = r * 3.0f;
-                else if (gun == Entity.W_SHOTGUN) muzzle = r * 2.5f;
-                if (gun == Entity.W_SHOTGUN || gun == Entity.W_HUNTING) stroke.setColor(0xFF5A3A20);
-                c.drawLine(r * 0.6f, r * 0.3f, muzzle, r * 0.3f, stroke);
-                stroke.setColor(0xFF161616);
-                if (gun == Entity.W_SMG) {
-                    // The magazine sticking down.
-                    fill.setColor(0xFF161616);
-                    c.drawRect(r * 1.1f, r * 0.4f, r * 1.3f, r * 0.85f, fill);
-                } else if (gun == Entity.W_DMR || gun == Entity.W_HUNTING) {
-                    fill.setColor(0xFF0E0E0E);
-                    c.drawRect(r * 1.1f, r * 0.05f, r * 1.8f, r * 0.2f, fill);
-                }
-                if (role == Entity.ROLE_GRENADIER) {
-                    // The launcher slung under the barrel.
-                    fill.setColor(0xFF34362A);
-                    c.drawRect(r * 0.9f, r * 0.45f, r * 1.9f, r * 0.85f, fill);
-                } else if (role == Entity.ROLE_CORPSMAN) {
-                    // A white armband with a red cross, and the medic's bag on the back.
-                    fill.setColor(0xFFF2F2F2);
-                    c.drawCircle(0, -r * 0.82f, r * 0.3f, fill);
-                    fill.setColor(0xFFD83A3A);
-                    c.drawRect(-r * 0.2f, -r * 0.86f, r * 0.2f, -r * 0.78f, fill);
-                    c.drawRect(-r * 0.04f, -r * 1.02f, r * 0.04f, -r * 0.62f, fill);
-                    fill.setColor(0xFF6A6E52);
-                    c.drawRect(-r * 1.0f, -r * 0.45f, -r * 0.55f, r * 0.45f, fill);
-                }
-                if (role == Entity.ROLE_SNIPER || marksman) {
-                    // Scope.
-                    fill.setColor(0xFF0E0E0E);
-                    c.drawRect(r * 1.1f, r * 0.05f, r * 1.9f, r * 0.2f, fill);
-                } else if (role == Entity.ROLE_GUNNER) {
-                    // Ammo box and belt.
-                    fill.setColor(0xFF4A4A30);
-                    c.drawRect(r * 0.9f, r * 0.55f, r * 1.5f, r * 1.1f, fill);
-                    fill.setColor(0xFFC8A040);
-                    c.drawRect(r * 1.0f, r * 0.45f, r * 1.9f, r * 0.55f, fill);
-                }
-            } else {
-                float sw = (float) Math.sin(e.phase) * r * 0.55f;
-                fill.setColor(e.skin);
-                c.drawCircle(sw, -r * 0.95f, r * 0.28f, fill);
-                c.drawCircle(-sw, r * 0.95f, r * 0.28f, fill);
-            }
-
-            if (anim && !e.isZombie() && now - e.swingAt < 0.3f) {
-                // A swing: the arm (and bat, axe or rifle butt) sweeps across in front.
-                float t = (now - e.swingAt) / 0.3f;
-                double a = Math.toRadians(-70 + 120 * t);
-                float hx = (float) Math.cos(a) * r * 1.6f, hy = (float) Math.sin(a) * r * 1.6f;
-                stroke.setColor(e.skin);
-                stroke.setStrokeWidth(r * 0.34f);
-                c.drawLine(0, r * 0.5f, hx * 0.6f, hy * 0.6f + r * 0.2f, stroke);
-                stroke.setColor(e.melee == Entity.M_AXE ? 0xFF8A2A1E : e.melee == Entity.M_BAT ? 0xFF9A7448
-                        : e.melee == Entity.M_MACHETE ? 0xFFC8CCD0 : e.melee == Entity.M_CROWBAR ? 0xFF7A1E1A : 0xFF2A2A2A);
-                stroke.setStrokeWidth(r * 0.28f);
-                c.drawLine(hx * 0.55f, hy * 0.55f + r * 0.2f, hx * 1.2f, hy * 1.2f + r * 0.2f, stroke);
-                stroke.setColor(0x55FFFFFF);
-                stroke.setStrokeWidth(r * 0.12f);
-                oval.set(-r * 1.9f, -r * 1.9f, r * 1.9f, r * 1.9f);
-                stroke.setStyle(Paint.Style.STROKE);
-                c.drawArc(oval, -70, 120 * t, false, stroke);
-            }
-
-            if (e.type == Entity.CRAWLER) oval.set(-r * 1.2f, -r * 0.7f, r * 0.62f, r * 0.7f);
-            else oval.set(-r * 0.62f, -r, r * 0.62f, r);
-            if (scale > 1.2f) {
-                // ((11.0) A dark outline, so everyone stands out from the ground at any zoom.)
-                fill.setColor(0x8C000000);
-                float o = Math.min(r * 0.18f, 0.9f / scale + 0.25f);
-                oval.inset(-o, -o);
-                c.drawOval(oval, fill);
-                oval.inset(o, o);
-            }
-            fill.setColor(e.body);
-            c.drawOval(oval, fill);
-            if (scale > 2.2f) {
-                // ((11.0) And the light catching the shoulders, from the north-west like everything else.)
-                fill.setColor(0x2EFFFFFF);
-                oval.set(-r * 0.5f, -r * 0.85f, r * 0.25f, r * 0.1f);
-                c.drawOval(oval, fill);
-            }
-            if (e.armored) {
-                // (10.32) The dead in body armour: the vest over the torso, dark and torn.
-                fill.setColor(0xFF2A3038);
-                c.drawRect(-r * 0.5f, -r * 0.78f, r * 0.42f, r * 0.78f, fill);
-                fill.setColor(0xFF3E4652);
-                c.drawRect(-r * 0.36f, -r * 0.6f, r * 0.28f, r * 0.6f, fill);
-            }
-            if (e.isArmed() && !world.weaponsOut(e) && !e.isZombie()) {
-                // (10.24) No emergency: the rifle slung across the back, the pistol in its holster.
-                fill.setColor(0xFF161616);
-                if (e.type == Entity.SOLDIER) {
-                    stroke.setColor(0xFF161616);
-                    stroke.setStrokeWidth(r * 0.3f);
-                    c.drawLine(-r * 0.7f, -r * 0.9f, -r * 0.3f, r * 1.0f, stroke);
-                } else c.drawRect(-r * 0.15f, r * 0.6f, r * 0.35f, r * 0.85f, fill);
-            }
-            if (e.hasGun && !e.aiming) {
-                // A gun tucked in a belt.
-                fill.setColor(0xFF1A1A1A);
-                c.drawRect(-r * 0.2f, r * 0.55f, r * 0.45f, r * 0.8f, fill);
-            }
-            if (e.type == Entity.SOLDIER) {
-                fill.setColor(0xFF3E4829);
-                oval.set(-r * 0.8f, -r * 0.5f, -r * 0.25f, r * 0.5f);
-                c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
-            } else if (e.type == Entity.COP) {
-                fill.setColor(0xFFE8C547);
-                c.drawCircle(r * 0.3f, -r * 0.55f, r * 0.14f, fill);
-                if (e.role == Entity.ROLE_SWAT) {
-                    // Body armour plates and a helmet.
-                    fill.setColor(0xFF3A3F48);
-                    oval.set(-r * 0.55f, -r * 0.7f, r * 0.45f, r * 0.7f);
-                    c.drawRoundRect(oval, r * 0.2f, r * 0.2f, fill);
-                    fill.setColor(0xFF15181C);
-                    c.drawCircle(0, 0, r * 0.42f, fill);
-                    fill.setColor(0xFFE8E8E8);
-                    c.drawRect(-r * 0.5f, -r * 0.08f, -r * 0.2f, r * 0.08f, fill);
-                }
-                if (e.role == Entity.ROLE_RIOT) {
-                    // Riot shield in front.
-                    fill.setColor(0xB0202A3A);
-                    oval.set(r * 0.9f, -r * 1.25f, r * 1.35f, r * 1.25f);
-                    c.drawRoundRect(oval, r * 0.15f, r * 0.15f, fill);
-                    fill.setColor(0xCCE8E8E8);
-                    c.drawRect(r * 1.05f, -r * 0.5f, r * 1.2f, r * 0.5f, fill);
-                }
-            } else if (e.type == Entity.BLOATER) {
-                // Swollen, covered in boils.
-                fill.setColor(0xFF9CAA5A);
-                c.drawCircle(-r * 0.1f, 0, r * 0.95f, fill);
-                fill.setColor(0xFFB8C86A);
-                c.drawCircle(-r * 0.4f, -r * 0.4f, r * 0.22f, fill);
-                c.drawCircle(r * 0.1f, r * 0.45f, r * 0.18f, fill);
-                c.drawCircle(-r * 0.5f, r * 0.3f, r * 0.15f, fill);
-            } else if (e.type == Entity.BRUTE) {
-                // A hunched hump of shoulders, wider than the rest of it.
-                fill.setColor(0xFF3A2E3C);
-                oval.set(-r * 0.55f, -r * 1.2f, r * 0.4f, r * 1.2f);
-                c.drawOval(oval, fill);
-                fill.setColor(0xFF4C3E4E);
-                oval.set(-r * 0.4f, -r * 0.8f, r * 0.2f, r * 0.8f);
-                c.drawOval(oval, fill);
-            }
-
-            fill.setColor(e.head);
-            c.drawCircle(r * 0.08f, 0, r * 0.56f, fill);
-            if (scale > 2.5f && (e.type == Entity.CIVILIAN || e.type == Entity.ZOMBIE
-                    || e.type == Entity.RUNNER)) drawHair(c, e, r);
-            if (e.type == Entity.COP) {
-                if (e.agency == 4) {
-                    // Federal agents: bareheaded, a dark cap of hair.
-                    fill.setColor(0xFF2A2420);
-                    c.drawCircle(r * 0.08f, 0, r * 0.4f, fill);
-                } else if (e.agency > 0) {
-                    // Troopers, deputies and park rangers: a wide-brimmed hat.
-                    fill.setColor(e.agency == 2 ? 0xFF5A4630 : e.agency == 3 ? 0xFF6E5A36 : 0xFF8A7650);
-                    c.drawCircle(r * 0.08f, 0, r * 0.62f, fill);
-                    fill.setColor(e.agency == 2 ? 0xFF6E5A3E : e.agency == 3 ? 0xFF8C7448 : 0xFFA08C62);
-                    c.drawCircle(r * 0.08f, 0, r * 0.36f, fill);
-                } else if (e.role == Entity.ROLE_SAR) {
-                    // Rescue: a white helmet.
-                    fill.setColor(0xFFF2F2F2);
-                    c.drawCircle(r * 0.08f, 0, r * 0.5f, fill);
-                    fill.setColor(0xFFD8302A);
-                    c.drawRect(-r * 0.05f, -r * 0.12f, r * 0.21f, r * 0.12f, fill);
-                } else {
-                    fill.setColor(0xFF0B1022);
-                    oval.set(r * 0.35f, -r * 0.45f, r * 0.85f, r * 0.45f);
-                    c.drawOval(oval, fill);
-                }
-            } else if (e.type == Entity.SOLDIER) {
-                if (e.role == Entity.ROLE_COMMANDER) {
-                    // Beret with a gold badge.
-                    fill.setColor(0xFF6E1414);
-                    c.drawCircle(-r * 0.12f, -r * 0.12f, r * 0.38f, fill);
-                    fill.setColor(0xFFF2C94C);
-                    c.drawCircle(r * 0.18f, -r * 0.2f, r * 0.14f, fill);
-                } else if (e.role == Entity.ROLE_SNIPER) {
-                    // Ghillie hood.
-                    fill.setColor(0xFF4E5A2E);
-                    c.drawCircle(-r * 0.1f, r * 0.15f, r * 0.22f, fill);
-                    c.drawCircle(-r * 0.2f, -r * 0.25f, r * 0.2f, fill);
-                } else {
-                    fill.setColor(0xFF4C5833);
-                    c.drawCircle(r * 0.0f, -r * 0.1f, r * 0.2f, fill);
-                }
-            } else if (e.isZombie()) {
-                fill.setColor(0xFF5A1414);
-                c.drawCircle(-r * 0.1f, r * 0.18f, r * 0.2f, fill);
-                if (e.type == Entity.RUNNER) {
-                    fill.setColor(0xFFFF3B2F);
-                    c.drawCircle(r * 0.45f, -r * 0.18f, r * 0.08f, fill);
-                    c.drawCircle(r * 0.45f, r * 0.18f, r * 0.08f, fill);
-                }
-            }
-        }
-        if (e.infected) {
-            fill.setColor(alpha(0xFF7CFF3A, 0.35f + 0.25f * (float) Math.sin(world.time * 5)));
-            c.drawCircle(r * 0.08f, 0, r * 0.58f, fill);
-        }
-        if (e.hurt > 0) {
-            fill.setColor(alpha(0xFFFFFFFF, e.hurt * 0.7f));
-            c.drawCircle(0, 0, r * 1.05f, fill);
-        }
-        c.restore();
-        if (anim && e.type == Entity.RUNNER && spd > 30) {
-            // Speed lines behind a sprinting runner.
-            float ux = -e.vx / spd, uy = -e.vy / spd;
-            stroke.setStrokeWidth(0.6f);
-            stroke.setColor(0x55FFFFFF);
-            for (int k = -1; k <= 1; k++) {
-                float ox = -uy * k * r * 0.6f, oy = ux * k * r * 0.6f;
-                c.drawLine(e.x + ux * r * 1.4f + ox, e.y + uy * r * 1.4f + oy, e.x + ux * r * (2.6f + (k & 1)) + ox, e.y + uy * r * (2.6f + (k & 1)) + oy, stroke);
-            }
-        }
-        if (realistic && e.type != Entity.CRAWLER && scale > 3f) {
-            // Light from the top left: a soft highlight on the shoulders and head, shade on the far side.
-            fill.setColor(0x26FFFFFF);
-            c.drawCircle(e.x - r * 0.28f, e.y - r * 0.3f, r * 0.42f, fill);
-            fill.setColor(0x1A000000);
-            c.drawCircle(e.x + r * 0.3f, e.y + r * 0.32f, r * 0.4f, fill);
-        }
-        if (e.stun > 0 && e.isZombie()) {
-            // Dazed: little stars spinning over its head.
-            fill.setColor(0xFFFFE27A);
-            for (int k = 0; k < 3; k++) {
-                double a = world.time * 6 + k * 2.1;
-                c.drawCircle(e.x + (float) Math.cos(a) * r, e.y - r - 2 + (float) Math.sin(a) * 1.5f, 0.8f, fill);
-            }
-        }
-        if (healthBar && e.canShoot() && e.magSize > 0) {
-            // Ammo: magazine plus spare rounds, as a thin yellow bar.
-            int full = e.type == Entity.SOLDIER ? 180 : e.type == Entity.COP ? 60 : 30;
-            float f = Math.min(1, (e.ammo + e.reserve) / (float) full);
-            float bw = Math.max(10, r * 3), bx = e.x - bw / 2, by = e.y - r - 2.2f;
-            fill.setColor(0x88000000);
-            c.drawRect(bx - 0.3f, by - 0.3f, bx + bw + 0.3f, by + 1.1f, fill);
-            fill.setColor(f > 0 ? 0xFFE8C547 : 0xFFFF3B30);
-            c.drawRect(bx, by, bx + bw * Math.max(f, 0.05f), by + 0.8f, fill);
-        }
-
-        // ((10.59) A veteran's rank: a gold chevron for each, zoomed in.)
-        int rk = e.isZombie() ? 0 : World.rank(e);
-        if (rk >= 2 && scale > 2.2f) {
-            stroke.setColor(0xFFF2C94C);
-            stroke.setStrokeWidth(0.5f);
-            float cy = e.y - r - 6.5f;
-            for (int k = 0; k < rk - 1; k++) {
-                float yy = cy - k * 1.1f;
-                c.drawLine(e.x - 1.6f, yy, e.x, yy - 0.9f, stroke);
-                c.drawLine(e.x, yy - 0.9f, e.x + 1.6f, yy, stroke);
-            }
-        }
-        if (healthBar && e.hp < e.maxHp && e.hp > 0) {
-            float bw = Math.max(10, r * 3), bx = e.x - bw / 2, by = e.y - r - 4.5f;
-            fill.setColor(0xAA000000);
-            c.drawRect(bx - 0.4f, by - 0.4f, bx + bw + 0.4f, by + 1.9f, fill);
-            float f = e.hp / e.maxHp;
-            fill.setColor(e.isZombie() ? 0xFFB5E04A : (f > 0.5f ? 0xFF4CD964 : f > 0.25f ? 0xFFFFCC00 : 0xFFFF3B30));
-            c.drawRect(bx, by, bx + bw * f, by + 1.5f, fill);
-        }
-    }
-
-    /** A boat under way, with its wake. */
-    private void drawBoat(Canvas c, float[] b) {
-        int kind = (int) b[5];
-        float len = kind == 0 ? 10 : kind == 3 ? 13 : 16, wid = kind == 0 ? 3.5f : 5;
-        c.save();
-        c.translate(b[0], b[1]);
-        c.rotate((float) Math.toDegrees(Math.atan2(b[3], b[2])));
-        // The wake fanning out behind.
-        fill.setColor(0x40F2F6F8);
-        for (int k = 1; k <= 4; k++) {
-            float wx = -len - k * 5 * (kind == 0 ? 0.5f : 1), sp = wid * 0.6f + k * 1.6f;
-            c.drawRect(wx, -sp, wx + 3, -sp + 0.8f, fill);
-            c.drawRect(wx, sp - 0.8f, wx + 3, sp, fill);
-        }
-        fill.setColor(0x30000000);
-        c.drawOval(new RectF(-len + 1.5f, -wid + 2, len + 1.5f, wid + 2), fill);
-        android.graphics.Path hull = new android.graphics.Path();
-        hull.moveTo(-len, -wid);
-        hull.lineTo(len * 0.5f, -wid);
-        hull.lineTo(len, 0);
-        hull.lineTo(len * 0.5f, wid);
-        hull.lineTo(-len, wid);
-        hull.close();
-        fill.setColor(kind == 0 ? 0xFF9A6A3E : kind == 3 ? 0xFF2A3A4E : kind == 2 ? 0xFFE8E4DA : 0xFFF2F2F2);
-        c.drawPath(hull, fill);
-        if (kind == 0) {
-            fill.setColor(0xFF6E4A2A);
-            c.drawRect(-2, -wid, 0, wid, fill);
-        } else if (kind == 2) {
-            fill.setColor(0xFFF8F8F4);
-            android.graphics.Path sail = new android.graphics.Path();
-            sail.moveTo(0, 0);
-            sail.lineTo(-len * 0.7f, -wid - 7);
-            sail.lineTo(-len * 0.7f, 0);
-            sail.close();
-            c.drawPath(sail, fill);
-        } else {
-            fill.setColor(kind == 3 ? 0xFFE0A030 : 0xFF2A4A6A);
-            c.drawRect(-len * 0.4f, -wid + 1.5f, len * 0.15f, wid - 1.5f, fill);
-            if (kind == 1) {
-                fill.setColor(0xFFD83A3A);
-                c.drawRect(-len, -wid, len * 0.5f, -wid + 1, fill);
-            }
-        }
-        c.restore();
-    }
-
-    private void drawCorpse(Canvas c, World.Corpse k) {
-        float r = k.radius;
-        c.save();
-        c.translate(k.x, k.y);
-        float a = k.angle;
-        if (k.rise > 0 && k.rise < 1.8f) a += (float) Math.sin(world.time * 30) * 0.12f;
-        c.rotate((float) Math.toDegrees(a));
-        if (settings.gore()) {
-            fill.setColor(0x886E0A0A);
-            c.drawCircle(r * 0.2f, 0, r * 1.5f, fill);
-        }
-        fill.setColor(City.darken(k.body, 0.75f));
-        oval.set(-r * 1.2f, -r * 0.62f, r * 0.95f, r * 0.62f);
-        c.drawOval(oval, fill);
-        float up = k.rise > 0 && k.rise < 1.5f ? 1 - k.rise / 1.5f : 0;
-        if (up > 0) {
-            // Turning: arms lifting off the ground, the head coming up, the colour draining to grey-green.
-            stroke.setColor(City.darken(k.body, 0.6f));
-            stroke.setStrokeWidth(r * 0.36f);
-            float reach = r * (0.5f + 1.3f * up), lift = r * (0.9f - 0.4f * up);
-            c.drawLine(r * 0.4f, -r * 0.5f, r * 0.4f + reach, -lift, stroke);
-            c.drawLine(r * 0.4f, r * 0.5f, r * 0.4f + reach, lift, stroke);
-            fill.setColor(alpha(0xFF6E8A4A, up * 0.55f));
-            oval.set(-r * 1.2f, -r * 0.62f, r * 0.95f, r * 0.62f);
-            c.drawOval(oval, fill);
-        }
-        fill.setColor(City.darken(k.head, 0.85f));
-        c.drawCircle(r * (1.3f - 0.5f * up), 0, r * (0.5f + 0.08f * up), fill);
-        if (k.rise > 0) {
-            fill.setColor(alpha(0xFF7CFF3A, 0.25f + 0.2f * (float) Math.sin(world.time * 8)));
-            c.drawCircle(0, 0, r * 1.3f, fill);
-        }
-        c.restore();
-    }
+    static final int[] HAIR = {0xFF1A1410, 0xFF3B2A1A, 0xFF6B4A2A, 0xFFC8A060, 0xFF8A3A1A, 0xFF8A8A8A};
+    static final int[] HATS = {0xFFD83A3A, 0xFF2E5FB0, 0xFF3C8A4E, 0xFFE0C050, 0xFF222428, 0xFFE07A2E};
 
     // ------------------------------------------------------------------ UI rendering
 
@@ -6360,2316 +1778,108 @@ final class GameView extends View implements Menu.Host {
      * marker slides as the battle swings, and a big banner marks turning points and the end of the war.
      */
     /** Where the war meter's panel ends (0 when it isn't shown), and the space it takes. */
-    private float meterBottom;
-    private final RectF meterRect = new RectF();
-
-    /** The text, cut short with "..." to fit the width (in the current text size). */
-    /** ((12.0) Each of the lines on one line or two, as {@link #wrap2} has it, at the text size set now.) */
-    private java.util.ArrayList<String> wrapAll(java.util.List<String> lines, float width) {
-        java.util.ArrayList<String> out = new java.util.ArrayList<String>();
-        for (String l : lines) out.addAll(wrap2(l, width));
-        return out;
-    }
-
-    /** ((12.0) s on one line if it fits in width, else on two, broken between words (the second cut to fit if it must). */
-    private java.util.List<String> wrap2(String s, float width) {
-        if (text.measureText(s) <= width) return java.util.Collections.singletonList(s);
-        int cut = s.length();
-        while (true) {
-            int sp = s.lastIndexOf(' ', cut - 1);
-            if (sp <= 0) return java.util.Collections.singletonList(s);
-            cut = sp;
-            if (text.measureText(s.substring(0, cut)) <= width) break;
-        }
-        return java.util.Arrays.asList(s.substring(0, cut), s.substring(cut + 1).trim());
-    }
-
-    /** ((12.0) s at the text size set now, or a little smaller (down to 80%) if that's what it takes, then cut to fit.) */
-    private String shrinkToFit(String s, float width) {
-        float size = text.getTextSize(), w = text.measureText(s);
-        if (w > width) text.setTextSize(Math.max(size * 0.8f, size * width / w));
-        return fitText(s, width);
-    }
-
-    private String fitText(String s, float width) {
-        if (text.measureText(s) <= width) return s;
-        while (s.length() > 4 && text.measureText(s + "...") > width) s = s.substring(0, s.length() - 1);
-        return s + "...";
-    }
-
-    private void drawWarMeter(Canvas c) {
-        meterBottom = 0;
-        meterRect.setEmpty();
-        if (world.outbreak || world.warBannerTime > 0) {
-            float left = statsShown.left, right = Math.max(statsShown.right, left + 200 * dp), top = statsShown.bottom + 8 * dp;
-            if (!portrait) right = Math.min(right, Math.max(statsRect.right, topRects[0].left - 8 * dp));
-            float bh = 10 * dp, b = Math.max(0.03f, Math.min(0.97f, world.warBalance));
-            // An air strike on the way gets a red line of its own inside the panel.
-            boolean strike = world.firebombTime > 0 && world.firebombPlace != null;
-            // (Where there's no room under the meter, the warning sits beside it.)
-            boolean inside = strike && top + bh + 38 * dp < barTop - 6 * dp;
-            oval.set(left, top, right, top + bh + 18 * dp + (inside ? 20 * dp : 0));
-            meterRect.set(oval);
-            meterBottom = oval.bottom;
-            fill.setColor(0xB0101114);
-            c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
-            if (strike) {
-                text.setTextSize(11 * dp);
-                text.setTextAlign(Paint.Align.LEFT);
-                String msg = "AIR STRIKE: " + world.firebombPlace + " in " + (int) Math.ceil(world.firebombTime) + "s";
-                float tx = left + 10 * dp, ty = oval.bottom - 7 * dp;
-                if (!inside) {
-                    float tw = Math.min(text.measureText(msg), 260 * dp) + 20 * dp;
-                    oval.set(right + 8 * dp, top, right + 8 * dp + tw, top + 24 * dp);
-                    fill.setColor(0xD0601010);
-                    c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
-                    meterRect.set(meterRect.left, meterRect.top, oval.right, Math.max(meterRect.bottom, oval.bottom));
-                    tx = oval.left + 10 * dp;
-                    ty = oval.bottom - 8 * dp;
-                }
-                text.setColor(((int) (world.time * 3)) % 2 == 0 ? 0xFFFF6A5A : 0xFFFFB0A0);
-                c.drawText(fitText(msg, inside ? right - left - 20 * dp : 260 * dp), tx, ty, text);
-            }
-            float bx0 = left + 10 * dp, bx1 = right - 10 * dp, by = top + 15 * dp, split = bx0 + (bx1 - bx0) * b;
-            fill.setColor(0xFF4F7BE0);
-            c.drawRect(bx0, by, split, by + bh * 0.6f, fill);
-            fill.setColor(0xFF6FB03A);
-            c.drawRect(split, by, bx1, by + bh * 0.6f, fill);
-            fill.setColor(0xFFFFFFFF);
-            c.drawRect(split - 1.5f * dp, by - 3 * dp, split + 1.5f * dp, by + bh * 0.6f + 3 * dp, fill);
-            text.setTextSize(10 * dp);
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setColor(0xFFB8C8F0);
-            c.drawText("PEOPLE " + (int) (b * 100) + "%", bx0, top + 11 * dp, text);
-            text.setTextAlign(Paint.Align.RIGHT);
-            text.setColor(0xFFB8E09A);
-            c.drawText((int) ((1 - b) * 100) + "% ZOMBIES", bx1, top + 11 * dp, text);
-        }
-    }
-
-    private void drawUi(Canvas c) {
-        int w = getWidth(), h = getHeight();
-
-        // Once the outbreak starts the panel shrinks to one line (tap for the rest), to leave the map clear.
-        if (world.outbreak && !autoCollapsed) {
-            autoCollapsed = true;
-            statsCollapsed = true;
-        }
-        // Stats panel: one column in landscape, two in portrait. Tap it to collapse to one line.
-        float lh = 17 * dp;
-        Dispatch d = world.dispatch;
-        int[] rows = {world.civilians, world.counts[Entity.COP], world.counts[Entity.SOLDIER], world.zombieCount()};
-        text.setTextSize(12.5f * dp);
-        if (statsCollapsed) {
-            int at = (int) world.afterTime;
-            String phase = world.aftermath == World.AFTER_RECOVERY ? "   Recovery " + World.clock(at)
-                    : world.aftermath == World.AFTER_FALLEN ? "   City fallen" : "";
-            int secs0 = (int) world.time;
-            String line = "People " + (world.humanCount() + world.hiding + world.riding + world.visiting) + "   Zombies " + world.zombieCount()
-                    + phase + "   " + World.clock(secs0);
-            // (Short of the buttons along the top in landscape.)
-            float room = (portrait ? getWidth() - 10 * dp : topRects[0].left - 8 * dp) - statsRect.left - 24 * dp;
-            String clock = "   " + World.clock(secs0);
-            if (text.measureText(line) > room) line = line.substring(0, line.length() - clock.length());
-            if (text.measureText(line) > room && !phase.isEmpty()) line = line.substring(0, line.length() - phase.length());
-            float tw = Math.min(text.measureText(line), room);
-            oval.set(statsRect.left, statsRect.top, statsRect.left + tw + 24 * dp, statsRect.top + 28 * dp);
-            statsShown.set(oval);
-            fill.setColor(0xB0101114);
-            c.drawRoundRect(oval, 10 * dp, 10 * dp, fill);
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setColor(0xFFE6E6E6);
-            c.drawText(fitText(line, room), statsRect.left + 12 * dp, statsRect.top + 19 * dp, text);
-        } else {
-            statsShown.set(statsRect);
-            fill.setColor(0xB0101114);
-            c.drawRoundRect(statsRect, 10 * dp, 10 * dp, fill);
-            int perCol = portrait ? 2 : rows.length;
-            float colW = portrait ? statsRect.width() / 2 : statsRect.width();
-            // ((12.0) Every row at the one size the longest fits at: each shrank on its own, "Civilians 14921" small
-            // beside a large "Cops 414".)
-            float rowScale = 1;
-            for (int t = 0; t < rows.length; t++) {
-                float need = text.measureText(ROW_LABELS[t]) + text.measureText(String.valueOf(rows[t]));
-                rowScale = Math.min(rowScale, (colW - 46 * dp) / need);
-            }
-            for (int t = 0; t < rows.length; t++) {
-                float x0 = statsRect.left + (t / perCol) * colW;
-                float ty = statsRect.top + 6 * dp + lh * 0.8f + (t % perCol) * lh;
-                fill.setColor(ROW_COLORS[t]);
-                c.drawCircle(x0 + 14 * dp, ty - 4.5f * dp, 4.5f * dp, fill);
-                text.setColor(0xFFE6E6E6);
-                text.setTextAlign(Paint.Align.LEFT);
-                // Label and number never run into each other: shrink the row if the column is narrow.
-                String num = String.valueOf(rows[t]);
-                float size = text.getTextSize();
-                if (rowScale < 1) text.setTextSize(size * rowScale);
-                c.drawText(ROW_LABELS[t], x0 + 26 * dp, ty, text);
-                text.setTextAlign(Paint.Align.RIGHT);
-                c.drawText(num, x0 + colW - 12 * dp, ty, text);
-                text.setTextSize(size);
-            }
-            text.setTextAlign(Paint.Align.LEFT);
-            float pad = statsRect.left;
-            float y = statsRect.top + 6 * dp + lh * 0.8f + perCol * lh;
-            text.setColor(0xFFA0A4AA);
-            text.setTextSize(11.5f * dp);
-            // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
-            float lineRoom = statsRect.width() - 24 * dp;
-            c.drawText(shrinkToFit("Turned " + world.turned + "   Killed " + world.zombiesKilled
-                    + (world.recruits + world.refused > 0 ? "   Recruits " + world.recruits : ""), lineRoom), pad + 12 * dp, y, text);
-            text.setTextSize(11.5f * dp);
-            y += lh;
-            c.drawText(shrinkToFit("911 calls " + d.calls + "   Safe zones " + d.zones.size(), lineRoom), pad + 12 * dp, y, text);
-            text.setTextSize(11.5f * dp);
-            y += lh;
-            c.drawText(shrinkToFit("Sheltered " + d.sheltered + "   Hiding " + world.hiding + "   In cars " + world.riding, lineRoom),
-                    pad + 12 * dp, y, text);
-            text.setTextSize(11.5f * dp);
-            y += lh;
-            // ((12.0) Cut to the panel: on a narrow screen it ran off the edge.)
-            c.drawText(shrinkToFit("Outside help: " + d.policeReserve + " police, " + (d.squadReserve + d.airReserve) + " army"
-                    + (d.armyCalled && !d.armyArrived ? " (convoy in " + Math.max(0, (int) d.armyEta) + "s)" : "")
-                    + (d.pressure > 0 ? "   " + PRESSURE[d.pressure] : ""), statsRect.width() - 24 * dp),
-                    pad + 12 * dp, y, text);
-            text.setTextSize(11.5f * dp);
-            y += lh;
-            int secs = (int) world.time;
-            c.drawText("Time " + World.clock(secs), pad + 12 * dp, y, text);
-            // ((10.59) The war so far: the living, the dead and those with guns, over the whole game.)
-            drawLiveGraph(c, statsRect.left + 12 * dp, y + 8 * dp, statsRect.right - 12 * dp, statsRect.bottom - 8 * dp);
-        }
-
-        // The minimap and war meter go first so the radio feed can stack round them, then the feed so
-        // map labels can keep out of its way.
-        drawMinimap(c);
-        drawWarMeter(c);
-        drawFeed(c);
-        drawMapLabels(c);
-        drawPopups(c);
-        // Top buttons.
-        String[] top = {"", SPEEDS[speedIdx] + "x", "Brush " + BRUSHES[brushIdx], settings.buildings3d() ? "3D" : "Top", "Clear", "Menu", "Kills"};
-        text.setTextSize((portrait ? 11 : 12) * dp);
-        text.setTextAlign(Paint.Align.CENTER);
-        for (int i = 0; i < TOP_BUTTONS; i++) {
-            RectF r = topRects[i];
-            boolean hot = i == BTN_PAUSE && simPaused;
-            fill.setColor(hot ? 0xE0D9534F : 0xC0202227);
-            c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
-            stroke.setColor(0x40FFFFFF);
-            stroke.setStrokeWidth(1 * dp);
-            c.drawRoundRect(r, 9 * dp, 9 * dp, stroke);
-            text.setColor(0xFFF2F2F2);
-            float base = text.getTextSize(), fit = text.measureText(top[i]);
-            if (fit > r.width() - 8 * dp) text.setTextSize(base * (r.width() - 8 * dp) / fit);
-            if (i == BTN_PAUSE) {
-                // Pause bars, or a play triangle.
-                fill.setColor(0xFFF2F2F2);
-                float cx = r.centerX(), cy = r.centerY(), u = 6 * dp;
-                if (simPaused) {
-                    android.graphics.Path tri = new android.graphics.Path();
-                    tri.moveTo(cx - u * 0.7f, cy - u);
-                    tri.lineTo(cx + u, cy);
-                    tri.lineTo(cx - u * 0.7f, cy + u);
-                    tri.close();
-                    c.drawPath(tri, fill);
-                } else {
-                    c.drawRect(cx - u * 0.8f, cy - u, cx - u * 0.25f, cy + u, fill);
-                    c.drawRect(cx + u * 0.25f, cy - u, cx + u * 0.8f, cy + u, fill);
-                }
-            } else c.drawText(top[i], r.centerX(), r.centerY() + 4.5f * dp, text);
-            text.setTextSize(base);
-        }
-
-        // Bottom tool bar (or, folded away, a strip to bring it back).
-        fill.setColor(0xD80E0F12);
-        c.drawRect(0, barTop, w, h, fill);
-        text.setTextAlign(Paint.Align.CENTER);
-        if (toolsFolded) {
-            text.setTextSize(12 * dp);
-            text.setColor(0xFFC8CCD2);
-            String name = tool == TOOL_ZOMBIE ? Entity.NAMES[ZOMBIE_VARIANTS[zombieVariant]] : tool == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
-                    : tool == TOOL_MIL ? MIL_NAMES[milVariant] : tool == TOOL_COP ? copNames()[copVariant] : TOOL_NAMES[tool];
-            c.drawText("\u25B2  Tools  -  " + name, w / 2f, barTop + 19 * dp, text);
-        } else {
-            fill.setColor(0xD80E0F12);
-            c.drawRoundRect(foldTab, 8 * dp, 8 * dp, fill);
-            stroke.setColor(0xFFC8CCD2);
-            stroke.setStrokeWidth(2 * dp);
-            float fx = foldTab.centerX(), fy = foldTab.centerY() + 1 * dp;
-            c.drawLine(fx - 6 * dp, fy - 3 * dp, fx, fy + 3 * dp, stroke);
-            c.drawLine(fx, fy + 3 * dp, fx + 6 * dp, fy - 3 * dp, stroke);
-        }
-        text.setTextSize(11.5f * dp);
-        for (int i = 0; i < toolRects.length; i++) {
-            RectF r = toolRects[i];
-            if (r.isEmpty()) continue;
-            boolean sel = i == tool;
-            fill.setColor(sel ? 0xFF3A6EA5 : 0xFF23262C);
-            c.drawRoundRect(r, 10 * dp, 10 * dp, fill);
-            if (sel) {
-                stroke.setColor(0xFFA8D0FF);
-                stroke.setStrokeWidth(2 * dp);
-                c.drawRoundRect(r, 10 * dp, 10 * dp, stroke);
-            }
-            float cx = r.centerX(), cy = r.top + r.height() * 0.4f;
-            drawToolIcon(c, i, cx, cy, r.height() * 0.26f);
-            text.setColor(sel ? 0xFFFFFFFF : 0xFFC8CCD2);
-            String name = i == TOOL_ZOMBIE ? Entity.NAMES[ZOMBIE_VARIANTS[zombieVariant]]
-                    : i == TOOL_CIV ? Entity.NAMES[CIV_VARIANTS[civVariant]]
-                    : i == TOOL_MIL ? MIL_NAMES[milVariant]
-                    : i == TOOL_COP ? copNames()[copVariant]
-                    : i == TOOL_PLACE ? PLACE_NAMES[placeVariant] : i == TOOL_EVENT ? EVENT_NAMES[eventVariant]
-                    : i == TOOL_BUILD ? BUILD_NAMES[buildVariant] : TOOL_NAMES[i];
-            float fit = text.measureText(name);
-            if (fit > r.width() - 6 * dp) text.setTextSize(11.5f * dp * (r.width() - 6 * dp) / fit);
-            c.drawText(name, cx, r.bottom - 7 * dp, text);
-            text.setTextSize(11.5f * dp);
-            if (hasPicker(i)) {
-                // A small arrow: this button opens a picker.
-                fill.setColor(sel ? 0xFFFFFFFF : 0xFF8A9099);
-                float ax = r.right - 9 * dp, ay = r.top + 8 * dp;
-                c.drawCircle(ax, ay, 2 * dp, fill);
-            }
-        }
-        if (picker >= 0) drawPicker(c);
-
-        drawHeadlines(c);
-        // ((12.0) Clear of the tab that folds the tool bar away: cards and lines here used to sit over it.)
-        float infoY = barTop - 24 * dp;
-        drawConvoys(c);
-        drawPins(c);
-        text.setTextSize(13 * dp);
-        if (tool == TOOL_ORDER && follow == null) {
-            Entity lead = selection.isEmpty() ? null : selection.get(0);
-            drawBanner(c, lead == null ? "Orders: tap a cop or soldier to select them."
-                    : "Selected " + Dispatch.name(lead) + (selection.size() > 1 ? " and " + (selection.size() - 1) + " more" : "")
-                    + ". Tap where to send them, or tap them again to release.", w / 2f, infoY);
-        } else if (world.controlled != null) {
-            drawControls(c, world.controlled);
-        } else if (follow != null && picker < 0 && !clearMenu) {
-            drawInspect(c, follow);
-        } else if (followV != null && picker < 0 && !clearMenu) {
-            drawVehicleCard(c, followV);
-        } else if (inspectZ != null && tool == TOOL_PAN && !clearMenu) {
-            // ((12.0) Cards make way for the Clear menu: they were drawn over it.)
-            if (inspectZ.removed) inspectZ = null;
-            else drawZoneInspect(c, inspectZ);
-        } else if (inspectB != null && tool == TOOL_PAN && !clearMenu) {
-            drawBuildingInspect(c, inspectB);
-        } else if (hintTime > 0 && picker < 0 && headlines.isEmpty()) {
-            drawBanner(c, "Pick a unit or tool below, then tap the city.  Use Move to drag around, pinch to zoom.",
-                    w / 2f, infoY);
-        } else if (simPaused) {
-            drawBanner(c, "PAUSED", w / 2f, infoY);
-        }
-    }
-
-    /**
-     * The headline band (one announcement at a time, across the whole screen) and, under it, the short
-     * line about what you just did. In portrait they go below the radio feed; in landscape across the middle.
-     */
-    private void drawHeadlines(Canvas c) {
-        int w = getWidth();
-        float top = portrait ? Math.max(feedBottom, Math.max(meterBottom, statsShown.bottom)) + 12 * dp : barTop * 0.4f;
-        text.setTextAlign(Paint.Align.CENTER);
-        // ((12.0) Not over the Clear menu while it's open: its lower choices were hidden under the band.)
-        // ((12.0) Nor over an open picker, or the buttons while you're controlling someone.)
-        // ((12.0) Nor, held sideways, across the stats panel while it's open.)
-        if (!headlines.isEmpty() && !clearMenu && picker < 0 && world.controlled == null && (portrait || statsCollapsed)) {
-            Object[] hd = headlines.get(0);
-            float a = Math.min(1, Math.min(headTime * 4, (HEAD_SECONDS - headTime) / 0.6f));
-            String title = (String) hd[0], sub = (String) hd[1];
-            // ((12.0) The line under the headline goes onto a second line where it must, rather than being cut short.)
-            String sub2 = null;
-            if (sub != null) {
-                text.setTextSize(13 * dp);
-                float room = w - 24 * dp;
-                if (text.measureText(sub) > room) {
-                    int cut = sub.length();
-                    while (cut > 0) {
-                        int sp = sub.lastIndexOf(' ', cut - 1);
-                        if (sp <= 0) break;
-                        cut = sp;
-                        if (text.measureText(sub.substring(0, cut)) <= room) break;
-                    }
-                    if (cut > 0 && cut < sub.length()) {
-                        sub2 = sub.substring(cut + 1);
-                        sub = sub.substring(0, cut);
-                    }
-                }
-            }
-            float bandH = sub == null ? 44 * dp : sub2 == null ? 64 * dp : 82 * dp;
-            // ((12.0) Not when an open stats panel has pushed it down onto the tool bar: the panel is what's being
-            // looked at then.)
-            if (top + bandH <= barTop - 8 * dp) {
-                fill.setColor(alpha(0xE6101114, a));
-                c.drawRect(0, top, w, top + bandH, fill);
-                fill.setColor(alpha((Integer) hd[2], a));
-                c.drawRect(0, top, w, top + 2 * dp, fill);
-                text.setTextSize(Math.min(26 * dp, w / 18f));
-                text.setColor(alpha((Integer) hd[2], a));
-                c.drawText(fitText(title, w - 24 * dp), w / 2f, top + 32 * dp, text);
-                if (sub != null) {
-                    text.setTextSize(13 * dp);
-                    text.setColor(alpha(0xFFE6E6E6, a));
-                    c.drawText(fitText(sub, w - 24 * dp), w / 2f, top + 53 * dp, text);
-                    if (sub2 != null) c.drawText(fitText(sub2, w - 24 * dp), w / 2f, top + 71 * dp, text);
-                }
-                top += bandH + 8 * dp;
-            }
-        }
-        // ((12.0) Not over an open picker: it was drawn across the top of it.)
-        if (world.messageTime > 0 && world.message != null && picker < 0 && !clearMenu) {
-            float a = Math.min(1, world.messageTime);
-            text.setTextSize(17 * dp);
-            // Fit between whatever else is on screen at that height (stats, meter, minimap, Auto cam).
-            float bottom = top + 34 * dp, l = 10 * dp, rr = w - 10 * dp;
-            RectF[] around = {statsShown, meterRect, miniRect, camChip};
-            for (RectF o : around) {
-                if (o.isEmpty() || o.bottom < top || o.top > bottom) continue;
-                if (o.centerX() < w / 2f) l = Math.max(l, o.right + 8 * dp);
-                else rr = Math.min(rr, o.left - 8 * dp);
-            }
-            if (rr - l < 120 * dp) {
-                l = 10 * dp;
-                rr = w - 10 * dp;
-            }
-            String msg = fitText(world.message, rr - l - 28 * dp);
-            if (text.measureText(world.message) > rr - l - 28 * dp) {
-                text.setTextSize(14 * dp);
-                msg = fitText(world.message, rr - l - 28 * dp);
-            }
-            float tw = text.measureText(msg) + 28 * dp, mid = (l + rr) / 2;
-            oval.set(mid - tw / 2, top, mid + tw / 2, bottom);
-            fill.setColor(alpha(0xD8101114, a));
-            c.drawRoundRect(oval, 10 * dp, 10 * dp, fill);
-            text.setColor(alpha(0xFFFFE27A, a));
-            c.drawText(msg, mid, oval.centerY() + 6 * dp, text);
-        }
-    }
+    float meterBottom;
+    final RectF meterRect = new RectF();
 
     /** ((12.0) When Clear Everyone was first tapped (nanoTime), waiting for the second tap. */
-    private long clearArmedAt;
+    long clearArmedAt;
 
-    /** The Clear menu under the Clear button, and the Undo button above the tool bar. */
-    private void drawPopups(Canvas c) {
-        if (!lastAction.isEmpty()) {
-            text.setTextSize(13 * dp);
-            text.setTextAlign(Paint.Align.CENTER);
-            undoRect.set(10 * dp, barTop - 44 * dp, 10 * dp + 84 * dp, barTop - 10 * dp);
-            fill.setColor(0xE0202227);
-            c.drawRoundRect(undoRect, 9 * dp, 9 * dp, fill);
-            stroke.setColor(0x60FFFFFF);
-            stroke.setStrokeWidth(1 * dp);
-            c.drawRoundRect(undoRect, 9 * dp, 9 * dp, stroke);
-            text.setColor(0xFFF2F2F2);
-            c.drawText("Undo", undoRect.centerX(), undoRect.centerY() + 4.5f * dp, text);
-        } else undoRect.setEmpty();
-        if (!clearMenu) return;
-        RectF b = topRects[BTN_CLEAR];
-        // ((12.0) Shorter rows where five at 40 won't fit above the tool bar: on a short screen held sideways the
-        // last of them were under it, out of reach.)
-        float mw = Math.max(b.width(), 150 * dp), ih = Math.max(26 * dp, Math.min(40 * dp, (barTop - b.bottom - 6 * dp) / clearRects.length - 4 * dp));
-        float left = Math.min(b.left, getWidth() - mw - 8 * dp);
-        text.setTextSize(13 * dp);
-        text.setTextAlign(Paint.Align.LEFT);
-        for (int i = 0; i < clearRects.length; i++) {
-            RectF r = clearRects[i];
-            r.set(left, b.bottom + 6 * dp + i * (ih + 4 * dp), left + mw, b.bottom + 6 * dp + i * (ih + 4 * dp) + ih);
-            fill.setColor(i == 0 ? 0xF0802020 : 0xF0202227);
-            c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
-            text.setColor(0xFFF2F2F2);
-            boolean sure = i == 0 && System.nanoTime() - clearArmedAt < 3000000000L;
-            c.drawText(sure ? "Tap again to clear" : (i == 0 ? "Clear " : "") + CLEAR_NAMES[i], r.left + 12 * dp, r.centerY() + 4.5f * dp, text);
-        }
-    }
-
-    /** A civilian with no home of their own (one who turned up after the city was built). */
-    private boolean homeless(Entity e) {
-        return e.type == Entity.CIVILIAN && e.home == null && e.homeChecked && world.city.cfg.nature();
-    }
-
-    /** A card about the person being followed: who they are, what they're doing and what they carry. */
-    private void drawInspect(Canvas c, Entity e) {
-        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String title;
-        if (e.type == Entity.DOG) title = Names.dog(e.nameSeed) + "  -  Dog";
-        else if (e.type == Entity.ZOMBIE_DOG) title = Names.dog(e.nameSeed) + "  -  Zombie dog";
-        else if (e.isZombie()) title = (e.armored ? "Armored " : "") + Entity.NAMES[e.type] + (e.origin >= 0 ? "  -  was " + Names.person(e.nameSeed) : "");
-        else if (e.type == Entity.COP && e.role == Entity.ROLE_SWAT)
-            title = Country.swat()[1] + " " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
-        else if (e.type == Entity.COP && e.role == Entity.ROLE_SAR) title = "Rescue specialist " + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
-        else if (e.type == Entity.COP) title = (e.agency == 1 ? world.city.country.hpName + " " : e.agency == 2 ? world.city.country.ruralName + "'s deputy "
-                : e.agency == 3 ? "Park ranger " : e.agency == 4 ? Dispatch.federal(world.city.country) + " agent " : e.role == Entity.ROLE_PILOT ? "Pilot "
-                // ((12.0) The specialists say what they are.)
-                : e.role == Entity.ROLE_RIOT ? "Riot officer " : e.role == Entity.ROLE_K9 ? "K9 handler " : e.role == Entity.ROLE_MARKSMAN ? "Marksman " : "Officer ")
-                + Names.person(e.nameSeed) + "  -  " + Dispatch.name(e);
-        else if (e.type == Entity.SOLDIER) title = Names.person(e.nameSeed) + "  -  " + Entity.ROLE_NAMES[e.role] + ", " + Dispatch.name(e);
-        else if (homeless(e)) title = Names.person(e.nameSeed) + "  -  Homeless";
-        else title = Names.person(e.nameSeed) + "  -  " + Entity.NAMES[e.type];
-        lines.add(doing(e));
-        String life = world.jobTitle(e);
-        if (life != null) lines.add(life + (e.home != null ? ", lives on " + world.city.placeName(e.home.doorX, e.home.doorY).split(" & ")[0]
-                : homeless(e) ? ", no home" : ""));
-        else if (homeless(e)) lines.add("Homeless: has nowhere of their own to go");
-        String health = "Health " + Math.max(0, (int) e.hp) + "/" + (int) e.maxHp;
-        if (e.infected) health += "   BITTEN: turns in " + Math.max(0, (int) e.infectTimer) + "s";
-        if (e.fresh > 0) health += "   Freshly turned";
-        lines.add(health);
-        if (!e.canShoot() && e.melee > 0 && !e.isZombie()) lines.add("Carrying " + (e.melee == Entity.M_AXE ? "an axe" : "a " + Entity.MELEE_NAMES[e.melee].toLowerCase()));
-        // ((12.0) What one of the dead was in life.)
-        if (e.isZombie() && e.origin >= 0 && e.origin != Entity.CIVILIAN)
-            lines.add(e.origin == Entity.COP ? "Was a police officer" : e.origin == Entity.SOLDIER ? "Was a soldier" : "Was a " + Entity.NAMES[e.origin].toLowerCase());
-        // ((12.0) The gun by name, and a bat or axe if they carry one.)
-        if (e.canShoot()) lines.add(e.gunName() + " " + e.ammo + " + " + e.reserve + (e.grenades > 0 ? "   Grenades " + e.grenades : "")
-                + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "")
-                + "   Aim +" + Math.round((World.aimBonus(e) + 0.05f * World.rank(e)) * 100) + "%" + (e.kills > 0 ? "   Kills " + e.kills : ""));
-        // ((10.59) Their rank, with a star for each.)
-        int rk = World.rank(e);
-        if (rk > 0 && !e.isZombie()) lines.add(World.RANK_NAMES[rk] + " " + "\u2605\u2605\u2605\u2605".substring(0, rk)
-                + (rk < World.RANK_KILLS.length - 1 ? "   next at " + World.RANK_KILLS[rk + 1] + " kills" : ""));
-        if (e.leader != null && !e.isZombie()) {
-            String who = e.leader.type == Entity.DOG ? Names.dog(e.leader.nameSeed) : Names.person(e.leader.nameSeed);
-            lines.add(e.type == Entity.DOG ? "Owner: " + who : e.type == Entity.SOLDIER ? "Sticking with " + who : "With " + who);
-        }
-        int followers = world.followers(e);
-        if (followers > 0 && !e.isArmed()) lines.add((e.task == Dispatch.T_PATROL ? "Leading a patrol of " : "Looking after ")
-                + followers + (followers == 1 ? " other" : " others"));
-        if (e.leadsHorde) lines.add("Leading a horde of about " + e.hordeSize);
-        // Who bit whom.
-        Integer biter = world.bitBy.get(e.nameSeed);
-        if (biter != null) lines.add((e.isZombie() ? "Turned by " : "Bitten by ") + Names.person(biter));
-        Integer turnedN = world.victims.get(e.nameSeed);
-        if (e.isZombie() && turnedN != null) lines.add("Has turned " + turnedN + (turnedN == 1 ? " person" : " people"));
-        if (e.nameSeed == world.patientZeroSeed && world.patientZeroSeed != 0) lines.add("PATIENT ZERO");
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(14 * dp);
-        float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
-        // ((12.0) The first line clear of the star and Control buttons: below them, where it's too long to go beside.)
-        boolean narrowCard = cw < 380 * dp;
-        float besideRoom = cw - 14 * dp - (narrowCard ? 76 * dp : 110 * dp) - 30 * dp - 28 * dp;
-        text.setTextSize(12.5f * dp);
-        float drop = !lines.isEmpty() && text.measureText(lines.get(0)) > besideRoom ? 10 * dp : 0;
-        text.setTextSize(14 * dp);
-        float ch = 30 * dp + lines.size() * lh + 8 * dp + drop;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
-        oval.set(left, top, left + cw, top + ch);
-        fill.setColor(0xE8101216);
-        c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
-        fill.setColor(e.isZombie() ? 0xFF7CC24E : e.isArmed() ? 0xFF4F7BE0 : 0xFFF0AD4E);
-        c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
-        text.setColor(0xFFFFFFFF);
-        // ((12.0) Cut to fit, clear of the buttons: a long name or a long street ran off the card, or under them.)
-        // ((12.0) Narrower buttons on a narrow card, so the name still has room.)
-        boolean narrow = cw < 380 * dp;
-        float bw = narrow ? 76 * dp : 110 * dp, bh = 30 * dp;
-        // (A little smaller before it's cut short.)
-        float titleRoom = cw - 14 * dp - bw - bh - 28 * dp, titleW = text.measureText(title);
-        if (titleW > titleRoom) text.setTextSize(Math.max(11.5f * dp, 14 * dp * titleRoom / titleW));
-        c.drawText(fitText(title, titleRoom), left + 14 * dp, top + 22 * dp, text);
-        text.setTextSize(12.5f * dp);
-        text.setColor(0xFFB8BDC4);
-        for (int i = 0; i < lines.size(); i++)
-            c.drawText(fitText(lines.get(i), i == 0 && drop == 0 ? besideRoom : cw - 24 * dp), left + 14 * dp, top + 22 * dp + drop + (i + 1) * lh, text);
-        // Pin them (a star), and take control of them.
-        takeRect.set(left + cw - bw - 10 * dp, top + 8 * dp, left + cw - 10 * dp, top + 8 * dp + bh);
-        pinRect.set(takeRect.left - bh - 8 * dp, takeRect.top, takeRect.left - 8 * dp, takeRect.bottom);
-        boolean isPinned = pinned.contains(e);
-        fill.setColor(isPinned ? 0xFFE8C547 : 0xFF2A2E34);
-        c.drawRoundRect(pinRect, 8 * dp, 8 * dp, fill);
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(16 * dp);
-        text.setColor(isPinned ? 0xFF1A1A1A : 0xFFE8C547);
-        c.drawText("\u2605", pinRect.centerX(), pinRect.centerY() + 6 * dp, text);
-        fill.setColor(0xFF3A6EA5);
-        c.drawRoundRect(takeRect, 8 * dp, 8 * dp, fill);
-        text.setTextSize(12.5f * dp);
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setColor(0xFFFFFFFF);
-        c.drawText(narrow ? "Control" : "Take control", takeRect.centerX(), takeRect.centerY() + 4.5f * dp, text);
-    }
-
-    /** The card for a vehicle being followed: what it is, what it's doing, how fast, who's aboard, damage. */
-    private void drawVehicleCard(Canvas c, Fleet.Vehicle v) {
-        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String title = world.fleet.describe(v);
-        String st = world.fleet.status(v);
-        if (st != null && st.indexOf(": ") > 0) st = st.substring(st.indexOf(": ") + 2);
-        // ((12.0) And where an everyday car is going.)
-        String to = v.field != null && (v.tx > 0 || v.ty > 0) ? world.city.placeName(v.tx, v.ty) : null;
-        lines.add(st != null ? st : v.parked ? "Parked" : (Math.abs(v.speed) < 3 ? "Waiting" : "Driving") + (to != null ? ", on the way to " + to : ""));
-        // (Against the size of a car: about 0.15 m a unit at the pace things move here.)
-        int kmh = Math.round(Math.abs(v.speed) * 0.55f);
-        int aboard = v.crew.size() + v.riders.size() + v.passengers;
-        // ((11.3) A police car or army truck out with nobody else aboard has its own driver, by name.)
-        String driver = v.driver != null ? (v.driver.type == Entity.COP ? "Officer " : v.driver.type == Entity.SOLDIER ? "Pvt. " : "")
-                + Names.person(v.driver.nameSeed) : null;
-        String people = aboard == 0 ? (v.player != null ? "you're driving" : driver != null ? "driver only (" + driver + ")"
-                : v.occupied() ? "driver only" : "nobody aboard")
-                : (aboard + (v.driver != null ? 1 : 0)) + " aboard";
-        // ((12.0) A helicopter still on its pad isn't "flying".)
-        boolean flying = Fleet.airborne(v) && (v.type != Fleet.HELI || v.alt > 0.05f);
-        lines.add((flying ? "flying" : Fleet.airborne(v) ? "on the ground" : kmh < 2 ? "stopped" : kmh + " km/h") + (v.lightsOn() ? ", lights and siren" : "")
-                + "  -  " + people + "  -  " + (v.maxHp > 0 ? Math.max(0, Math.round(100 * v.hp / v.maxHp)) + "% condition" : "")
-                // ((12.0) And how much is in the tank: everyday cars run dry, and are left where they stop.)
-                + (v.type == Fleet.CAR && v.player == null && v.model != Fleet.M_BUS && !v.broken ? "  -  fuel " + Math.round(v.fuel * 100) + "%" : ""));
-        // ((12.0) Who's aboard, by name: the crew of a police car or truck, those who climbed in.)
-        StringBuilder who = new StringBuilder();
-        int named = 0, more = 0;
-        for (int k = 0; k < v.crew.size() + v.riders.size(); k++) {
-            Entity o = k < v.crew.size() ? v.crew.get(k) : v.riders.get(k - v.crew.size());
-            if (o == v.driver) continue;
-            if (named >= 3) {
-                more++;
-                continue;
-            }
-            who.append(named++ == 0 ? "" : ", ").append(Names.person(o.nameSeed));
-        }
-        if (named > 0) lines.add("With " + who + (more > 0 ? " and " + more + " more" : ""));
-        // ((12.0) And its own people out of it, on foot at the scene.)
-        if (v.type == Fleet.CRUISER || v.type == Fleet.TRUCK) {
-            int out = world.fleet.crewOnFoot(v);
-            if (out > 0) lines.add((v.type == Fleet.CRUISER || Fleet.policeTruck(v) ? World.count(out, "officer", "officers") : World.count(out, "soldier", "soldiers")) + " out on foot");
-        }
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(14 * dp);
-        float lh = 16 * dp, cw = Math.min(getWidth() - 20 * dp, 420 * dp);
-        // ((12.0) A line too long for the card goes on to a second one rather than being cut short.)
-        text.setTextSize(12.5f * dp);
-        lines = wrapAll(lines, cw - 24 * dp);
-        text.setTextSize(14 * dp);
-        float ch = 30 * dp + lines.size() * lh + 8 * dp;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
-        oval.set(left, top, left + cw, top + ch);
-        fill.setColor(0xE8101216);
-        c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
-        fill.setColor(v.lightsOn() ? 0xFF4F7BE0 : v.broken ? 0xFF8A9099 : 0xFFF0AD4E);
-        c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
-        text.setColor(0xFFFFFFFF);
-        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
-        text.setTextSize(12.5f * dp);
-        for (int i = 0; i < lines.size(); i++) {
-            text.setColor(0xFFB8BDC4);
-            c.drawText(fitText(lines.get(i), cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
-        }
-    }
+    final RectF driveRect = new RectF();
 
     // ------------------------------------------------------------------ taking control
 
-    private final RectF takeRect = new RectF(), releaseRect = new RectF(), pinRect = new RectF();
+    final RectF takeRect = new RectF(), releaseRect = new RectF(), pinRect = new RectF();
     /** Pinned characters: an icon at the edge of the screen points to each one that's off screen. */
     final java.util.ArrayList<Entity> pinned = new java.util.ArrayList<Entity>();
-    private final RectF[] pinRects = {new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF()};
-    private final Entity[] pinIcons = new Entity[6];
-    private int pinCount;
-
-    /** Keeps pins on the right people: someone who turned is followed as the zombie they became. */
-    private void updatePins() {
-        pinWhere.clear();
-        for (int i = 0; i < pinned.size(); i++) {
-            Entity p = pinned.get(i);
-            if (p.dead && p.removed && world.controlled != p) {
-                Object at = whereIs(p);
-                if (at != null) pinWhere.put(p, at);
-            }
-        }
-        for (int i = pinned.size() - 1; i >= 0; i--) {
-            Entity p = pinned.get(i);
-            if (!p.dead || world.controlled == p) continue;
-            Entity now = null;
-            for (int k = 0, n = world.entities.size(); k < n && now == null; k++) {
-                Entity o = world.entities.get(k);
-                if (!o.dead && o.nameSeed == p.nameSeed && o != p) now = o;
-            }
-            if (now != null) {
-                pinned.set(i, now);
-                if (now.isZombie()) world.say(Names.person(p.nameSeed) + " has turned");
-            } else if (!p.removed || !stillAround(p)) {
-                // Dead for good (or gone into a building and not out yet: keep them a while). ((12.0) But not for good:
-                // one who died in there, or turned in there, stayed pinned, the icon pointing at nobody.)
-                pinned.remove(i);
-            }
-        }
-    }
-
-    /** ((12.0) Someone out of sight - in a building, a vehicle or out of town - who is still somewhere.) */
-    private boolean stillAround(Entity p) {
-        return whereIs(p) != null || world.away.contains(p);
-    }
-
-    /** ((12.0) The building or vehicle someone out of sight is in, or null. */
-    private Object whereIs(Entity p) {
-        for (int i = 0, n = world.city.buildings.size(); i < n; i++) {
-            City.Building b = world.city.buildings.get(i);
-            if (b.occupants.contains(p) || b.visitors.contains(p)) return b;
-        }
-        for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-            Fleet.Vehicle v = world.fleet.vehicles.get(i);
-            if (v.driver == p || v.crew.contains(p) || v.riders.contains(p)) return v;
-        }
-        return null;
-    }
+    final RectF[] pinRects = {new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF()};
+    final Entity[] pinIcons = new Entity[6];
+    int pinCount;
 
     /**
      * ((12.0) Where the pinned who are out of sight are - the building they went into, the car they got in - so
      * their pins still point there instead of vanishing until they come out.)
      */
-    private final java.util.IdentityHashMap<Entity, Object> pinWhere = new java.util.IdentityHashMap<Entity, Object>();
+    final java.util.IdentityHashMap<Entity, Object> pinWhere = new java.util.IdentityHashMap<Entity, Object>();
 
-    /** Where a pinned person is to be shown: {x, y}, or null if nowhere. */
-    private float[] pinAt(Entity p) {
-        if (!p.dead || world.controlled == p) return new float[]{p.x, p.y};
-        Object at = pinWhere.get(p);
-        if (at instanceof City.Building) return new float[]{((City.Building) at).doorX, ((City.Building) at).doorY};
-        if (at instanceof Fleet.Vehicle && !((Fleet.Vehicle) at).removedFromFleet) return new float[]{((Fleet.Vehicle) at).x, ((Fleet.Vehicle) at).y};
-        return null;
-    }
-
-    // ------------------------------------------------------------------ reinforcements (10.17)
-
-    private static int convoyColor(Dispatch.Convoy cv) {
-        return cv.type == Entity.SOLDIER ? 0xFFB4C85A : 0xFF5A9CFF;
-    }
-
-    /**
-     * Reinforcements coming in from outside: where they came onto the map (for a while), a dashed line from
-     * the head of the column to where they're going, a tag over the column, and an arrow at the edge of the
-     * screen pointing to them while they're off it.
-     */
-    private void drawConvoys(Canvas c) {
-        int w = getWidth();
-        float top = topRects[0].bottom + (portrait ? 150 : 115) * dp, bottom = barTop - 60 * dp;
-        // The radio calls for help, tagged where they were made (for their first few seconds).
-        for (int i = 0; i < world.dispatch.callouts.size(); i++) {
-            Dispatch.Callout co = world.dispatch.callouts.get(i);
-            if (co.age > 4) continue;
-            float sx = screenX(co.x), sy = screenY(co.y);
-            if (sx < 0 || sx > w || sy < top || sy > bottom) continue;
-            smallTag(c, co.label, sx, sy - 18 * dp, co.color);
-        }
-        float pulse = (float) Math.abs(Math.sin(world.time * 4));
-        for (int i = 0; i < world.dispatch.convoys.size(); i++) {
-            Dispatch.Convoy cv = world.dispatch.convoys.get(i);
-            int col = convoyColor(cv);
-            float hx = screenX(cv.x), hy = screenY(cv.y), tx = screenX(cv.toX), ty = screenY(cv.toY);
-            // The route: dashes from the column to the destination, marching along.
-            float dx = tx - hx, dy = ty - hy, len = (float) Math.sqrt(dx * dx + dy * dy);
-            if (len > 1) {
-                stroke.setColor((col & 0x00FFFFFF) | 0x70000000);
-                stroke.setStrokeWidth(1.4f * dp);
-                float dash = 6 * dp, off = (world.time * 24 * dp) % (dash * 2);
-                for (float d = off; d < len; d += dash * 2) {
-                    float e = Math.min(len, d + dash);
-                    c.drawLine(hx + dx * d / len, hy + dy * d / len, hx + dx * e / len, hy + dy * e / len, stroke);
-                }
-            }
-            // Where they're going.
-            stroke.setColor(col);
-            stroke.setStrokeWidth(1.3f * dp);
-            c.drawCircle(tx, ty, (5 + 2.5f * pulse) * dp, stroke);
-            // Where they came in (for the first quarter minute): just a dot.
-            if (cv.age < 15) {
-                float ex = screenX(cv.fromX), ey = screenY(cv.fromY);
-                fill.setColor((col & 0x00FFFFFF) | ((int) (0x70 + 0x50 * pulse) << 24));
-                c.drawCircle(ex, ey, (5 + 3 * pulse) * dp, fill);
-            }
-            boolean on = hx > 0 && hx < w && hy > top && hy < bottom;
-            if (on) {
-                smallTag(c, cv.label, hx, hy - 13 * dp, col);
-                continue;
-            }
-            // Off screen: an arrow at the edge pointing to them.
-            float cx = w / 2f, cy = (top + bottom) / 2, ddx = hx - cx, ddy = hy - cy;
-            float k = Math.min(Math.abs((w / 2f - 30 * dp) / (ddx == 0 ? 0.001f : ddx)), Math.abs(((bottom - top) / 2 - 30 * dp) / (ddy == 0 ? 0.001f : ddy)));
-            float ix = cx + ddx * k, iy = cy + ddy * k;
-            float a = (float) Math.atan2(ddy, ddx);
-            android.graphics.Path p = new android.graphics.Path();
-            float r = 8 * dp;
-            p.moveTo(ix + (float) Math.cos(a) * r, iy + (float) Math.sin(a) * r);
-            p.lineTo(ix + (float) Math.cos(a + 2.4f) * r, iy + (float) Math.sin(a + 2.4f) * r);
-            p.lineTo(ix + (float) Math.cos(a - 2.4f) * r, iy + (float) Math.sin(a - 2.4f) * r);
-            p.close();
-            fill.setColor(col);
-            c.drawPath(p, fill);
-            float lx = ix - (float) Math.cos(a) * 18 * dp, ly = iy - (float) Math.sin(a) * 18 * dp;
-            smallTag(c, cv.label, Math.max(40 * dp, Math.min(w - 40 * dp, lx)), ly, col);
-        }
-    }
-
-    /** A compact tag: small text on a dark pill, the colour as a thin edge. */
-    private void smallTag(Canvas c, String label, float x, float y, int col) {
-        text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(8.5f * dp);
-        float tw = text.measureText(label);
-        tmpRect.set(x - tw / 2 - 3.5f * dp, y - 8.5f * dp, x + tw / 2 + 3.5f * dp, y + 2.5f * dp);
-        fill.setColor(0xB0141619);
-        c.drawRoundRect(tmpRect, 3.5f * dp, 3.5f * dp, fill);
-        stroke.setColor(col);
-        stroke.setStrokeWidth(0.8f * dp);
-        c.drawRoundRect(tmpRect, 3.5f * dp, 3.5f * dp, stroke);
-        text.setColor(0xFFFFFFFF);
-        c.drawText(label, x, y, text);
-    }
-
-    /** Stars over pinned people on screen, and arrows at the edge pointing to those off it. */
-    private void drawPins(Canvas c) {
-        pinCount = 0;
-        int w = getWidth();
-        // (Below the radio feed, above the tool bar.)
-        float top = topRects[0].bottom + (portrait ? 150 : 115) * dp, bottom = barTop - 60 * dp;
-        // ((12.0) On a short screen held sideways that band was upside down - its top below its bottom - and the
-        // pins went down over the tool bar: never less than a pin's height, under the buttons along the top.)
-        if (bottom - top < 70 * dp) top = Math.max(topRects[0].bottom + 10 * dp, bottom - 70 * dp);
-        if (bottom - top < 44 * dp) bottom = top + 44 * dp;
-        for (int i = 0; i < pinned.size(); i++) {
-            Entity p = pinned.get(i);
-            float[] at = pinAt(p);
-            if (at == null) continue;
-            float sx = screenX(at[0]), sy = screenY(at[1]);
-            boolean on = sx > 0 && sx < w && sy > top && sy < bottom;
-            text.setTextAlign(Paint.Align.CENTER);
-            if (on) {
-                text.setTextSize(14 * dp);
-                text.setColor(0xFFE8C547);
-                c.drawText("\u2605", sx, sy - 14 * dp, text);
-                continue;
-            }
-            float cx = w / 2f, cy = (top + bottom) / 2, dx = sx - cx, dy = sy - cy;
-            float k = Math.min(Math.abs((w / 2f - 26 * dp) / (dx == 0 ? 0.001f : dx)), Math.abs(((bottom - top) / 2 - 26 * dp) / (dy == 0 ? 0.001f : dy)));
-            float ix = cx + dx * k, iy = cy + dy * k;
-            // ((12.0) Two pinned people off the same way: side by side along the edge, not one on top of the other.)
-            boolean side = Math.abs(ix - cx) > (w / 2f - 30 * dp);
-            for (int tries = 0; tries < 6; tries++) {
-                boolean hit = false;
-                for (int q = 0; q < pinCount && !hit; q++)
-                    if (Math.abs(pinRects[q].centerX() - ix) < 40 * dp && Math.abs(pinRects[q].centerY() - iy) < 40 * dp) hit = true;
-                if (!hit) break;
-                if (side) iy = iy + 42 * dp > bottom - 22 * dp ? iy - 42 * dp * (tries + 1) : iy + 42 * dp;
-                else ix = ix + 42 * dp > w - 22 * dp ? ix - 42 * dp * (tries + 1) : ix + 42 * dp;
-            }
-            iy = Math.max(top + 20 * dp, Math.min(Math.max(top + 20 * dp, barTop - 24 * dp), iy));
-            RectF r = pinRects[pinCount];
-            r.set(ix - 20 * dp, iy - 20 * dp, ix + 20 * dp, iy + 20 * dp);
-            pinIcons[pinCount++] = p;
-            fill.setColor(p.isZombie() ? 0xE04F7A2F : 0xE0202227);
-            c.drawCircle(ix, iy, 18 * dp, fill);
-            stroke.setColor(0xFFE8C547);
-            stroke.setStrokeWidth(2 * dp);
-            c.drawCircle(ix, iy, 18 * dp, stroke);
-            String name = Names.person(p.nameSeed);
-            String init = name.length() > 0 ? name.substring(0, 1) : "?";
-            int sp = name.indexOf(' ');
-            if (sp > 0 && sp + 1 < name.length()) init += name.charAt(sp + 1);
-            text.setTextSize(12 * dp);
-            text.setColor(0xFFFFFFFF);
-            c.drawText(init, ix, iy + 4 * dp, text);
-            // A little arrow towards them.
-            float a = (float) Math.atan2(dy, dx);
-            fill.setColor(0xFFE8C547);
-            c.drawCircle(ix + (float) Math.cos(a) * 21 * dp, iy + (float) Math.sin(a) * 21 * dp, 4 * dp, fill);
-            if (pinCount >= pinRects.length) break;
-        }
-    }
-    private final RectF[] ctxRects = {new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF()};
-    private final int[] ctxActions = new int[6];
-    private int ctxCount;
+    final Path lastPath = new Path();
+    final RectF[] ctxRects = {new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF()};
+    final int[] ctxActions = new int[6];
+    int ctxCount;
     /** The stick (a floating one, wherever the left thumb goes down) and the attack button. */
-    private int joyId = -1, attackId = -1;
-    private float joyCX, joyCY, joyKX, joyKY, attackX, attackY, attackR;
-
-    private void takeControl(Entity e) {
-        world.controlled = e;
-        world.joyX = world.joyY = 0;
-        world.ctrlAttack = false;
-        joyId = attackId = -1;
-        follow = e;
-        tool = TOOL_PAN;
-        picker = -1;
-        selection.clear();
-        scale = Math.max(scale, 2.6f * baseDp);
-        world.say("You are " + (e.isZombie() ? "a " + Entity.NAMES[e.type].toLowerCase() : e.type == Entity.DOG ? Names.dog(e.nameSeed)
-                : Names.person(e.nameSeed)));
-    }
-
-    private void releaseControl() {
-        world.controlled = null;
-        world.joyX = world.joyY = 0;
-        world.ctrlAttack = false;
-        joyId = attackId = -1;
-    }
-
-    /** While controlling someone: the left thumb steers, the right thumb attacks; taps on buttons still work. */
-    private boolean controlTouch(MotionEvent ev) {
-        int action = ev.getActionMasked();
-        int idx = ev.getActionIndex();
-        switch (action) {
-            case MotionEvent.ACTION_DOWN:
-            case MotionEvent.ACTION_POINTER_DOWN: {
-                float x = ev.getX(idx), y = ev.getY(idx);
-                int id = ev.getPointerId(idx);
-                for (int k = 0; k < ctxCount; k++)
-                    if (ctxRects[k].contains(x, y)) {
-                        click();
-                        world.ctrlAction(ctxActions[k]);
-                        return true;
-                    }
-                if (world.controlledIn == null && World.hypot(x - attackX, y - attackY) < attackR * 1.3f) {
-                    attackId = id;
-                    world.ctrlAttack = true;
-                } else if (action == MotionEvent.ACTION_DOWN && hitUi(x, y)) {
-                    mode = MODE_UI;
-                } else if (x < getWidth() * 0.55f && y < barTop && joyId < 0) {
-                    joyId = id;
-                    joyCX = joyKX = x;
-                    joyCY = joyKY = y;
-                } else if (y < barTop && attackId < 0) {
-                    attackId = id;
-                    world.ctrlAttack = true;
-                }
-                return true;
-            }
-            case MotionEvent.ACTION_MOVE:
-                for (int i = 0; i < ev.getPointerCount(); i++) {
-                    if (ev.getPointerId(i) != joyId) continue;
-                    float r = 55 * dp, dx = ev.getX(i) - joyCX, dy = ev.getY(i) - joyCY;
-                    float d = (float) Math.sqrt(dx * dx + dy * dy);
-                    if (d > r) {
-                        dx *= r / d;
-                        dy *= r / d;
-                    }
-                    joyKX = joyCX + dx;
-                    joyKY = joyCY + dy;
-                    world.joyX = dx / r;
-                    world.joyY = dy / r;
-                }
-                return true;
-            case MotionEvent.ACTION_POINTER_UP:
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL: {
-                int id = action == MotionEvent.ACTION_CANCEL ? -2 : ev.getPointerId(idx);
-                if (id == joyId || id == -2) {
-                    joyId = -1;
-                    world.joyX = world.joyY = 0;
-                }
-                if (id == attackId || id == -2) {
-                    attackId = -1;
-                    world.ctrlAttack = false;
-                }
-                if (action != MotionEvent.ACTION_POINTER_UP) mode = MODE_NONE;
-                return true;
-            }
-        }
-        return true;
-    }
-
-    /** The stick, the attack button, what you're carrying and the way out. */
-    private void drawControls(Canvas c, Entity e) {
-        int w = getWidth();
-        // Stick: where the thumb is, or a faint hint of where to put it.
-        // (The idle hint is smaller and low down, clear of the panels.)
-        float jr = joyId >= 0 ? 55 * dp : 38 * dp;
-        float jx = joyId >= 0 ? joyCX : w * 0.3f, jy = joyId >= 0 ? joyCY : barTop - 50 * dp;
-        fill.setColor(joyId >= 0 ? 0x40FFFFFF : 0x22FFFFFF);
-        c.drawCircle(jx, jy, jr, fill);
-        stroke.setColor(0x60FFFFFF);
-        stroke.setStrokeWidth(1.5f * dp);
-        c.drawCircle(jx, jy, jr, stroke);
-        fill.setColor(joyId >= 0 ? 0xC0FFFFFF : 0x50FFFFFF);
-        c.drawCircle(joyId >= 0 ? joyKX : jx, joyId >= 0 ? joyKY : jy, joyId >= 0 ? 22 * dp : 15 * dp, fill);
-        // Attack (there's nothing to attack from inside a building).
-        attackR = 38 * dp;
-        attackX = w - 70 * dp;
-        attackY = barTop - 80 * dp;
-        Fleet.Vehicle car = world.controlledCar;
-        String verb = car != null ? (car.type == Fleet.TANK ? "Fire" : car.type == Fleet.CRUISER ? "Siren" : "Horn")
-                : e.isZombie() ? "Bite" : e.canShoot() && e.ammo + e.reserve > 0 ? (e.reload > 0 ? "Reload" : "Shoot")
-                : e.melee > 0 ? "Swing" : "Shove";
-        text.setTextAlign(Paint.Align.CENTER);
-        if (world.controlledIn == null) {
-            fill.setColor(world.ctrlAttack ? 0xF0D9534F : 0xB0D9534F);
-            c.drawCircle(attackX, attackY, attackR, fill);
-            stroke.setColor(0xA0FFFFFF);
-            c.drawCircle(attackX, attackY, attackR, stroke);
-            text.setTextSize(14 * dp);
-            text.setColor(0xFFFFFFFF);
-            c.drawText(verb, attackX, attackY + 5 * dp, text);
-        }
-        // What else you can do here, stacked above the attack button.
-        ctxCount = world.ctrlOptions(ctxActions);
-        float cbw = 118 * dp, cbh = 38 * dp, cby = attackY - attackR - 12 * dp - cbh;
-        text.setTextSize(13 * dp);
-        // ((12.0) As many as fit under the buttons along the top, then another column to the left: on a short screen
-        // held sideways the stack went up off the top of it.)
-        float ceiling = topRects[0].isEmpty() ? 8 * dp : topRects[0].bottom + 8 * dp;
-        int perCol = Math.max(1, (int) ((cby - ceiling) / (cbh + 8 * dp)) + 1);
-        for (int k = 0; k < ctxCount; k++) {
-            RectF r = ctxRects[k];
-            int col = k / perCol, row = k % perCol;
-            float rx = attackX + attackR - col * (cbw + 8 * dp);
-            r.set(rx - cbw, cby - row * (cbh + 8 * dp), rx, cby - row * (cbh + 8 * dp) + cbh);
-            fill.setColor(0xE02F5E2B);
-            c.drawRoundRect(r, 9 * dp, 9 * dp, fill);
-            stroke.setColor(0x909BE08A);
-            c.drawRoundRect(r, 9 * dp, 9 * dp, stroke);
-            text.setColor(0xFFFFFFFF);
-            String label = World.CA_NAMES[ctxActions[k]] + (ctxActions[k] == World.CA_GRENADE ? " (" + e.grenades + ")" : "");
-            c.drawText(label, r.centerX(), r.centerY() + 4.5f * dp, text);
-        }
-        // Who you are, and the way out.
-        String who = e.isZombie() ? Entity.NAMES[e.type] : e.type == Entity.DOG ? Names.dog(e.nameSeed) : Names.person(e.nameSeed);
-        String gun = e.canShoot() ? "   " + e.gunName() + " " + e.ammo + " + " + e.reserve : "";
-        String place = car != null ? "   Driving (" + Math.max(0, (int) (100 * car.hp / car.maxHp)) + "%)"
-                : world.controlledIn != null ? "   Inside: barricade " + (int) world.controlledIn.barricade + "%, food " + world.controlledIn.food : "";
-        int group = world.followers(e);
-        String info = who + "   Health " + Math.max(0, (int) e.hp) + "/" + (int) e.maxHp + gun
-                + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "") + place + (group > 0 ? "   Group " + group : "")
-                + (e.infected ? "   BITTEN: " + Math.max(0, (int) e.infectTimer) + "s" : "")
-                + (!e.isZombie() && e.stamina < 0.3f ? "   Out of breath" : "");
-        text.setTextSize(13 * dp);
-        // ((12.0) Smaller when it won't fit across the screen, rather than running off both sides.)
-        float room = w - 24 * dp;
-        if (text.measureText(info) > room) text.setTextSize(Math.max(9 * dp, 13 * dp * room / text.measureText(info)));
-        info = fitText(info, room);
-        float tw = text.measureText(info) + 24 * dp, top = barTop - 46 * dp;
-        oval.set((w - tw) / 2, top, (w + tw) / 2, top + 26 * dp);
-        fill.setColor(0xD0101216);
-        c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
-        text.setColor(e.infected ? 0xFF9BE08A : 0xFFF2F2F2);
-        c.drawText(info, w / 2f, top + 18 * dp, text);
-        float bw = 150 * dp, bh = 34 * dp, by = top - bh - 10 * dp;
-        releaseRect.set((w - bw) / 2, by, (w + bw) / 2, by + bh);
-        // ((12.0) On a narrow screen, clear of the attack button: it was drawn half over it.)
-        if (releaseRect.right > attackX - attackR - 6 * dp) {
-            float right = attackX - attackR - 8 * dp;
-            releaseRect.set(Math.max(10 * dp, right - bw), by, right, by + bh);
-        }
-        fill.setColor(0xE0202227);
-        c.drawRoundRect(releaseRect, 9 * dp, 9 * dp, fill);
-        stroke.setColor(0x80FFFFFF);
-        c.drawRoundRect(releaseRect, 9 * dp, 9 * dp, stroke);
-        text.setColor(0xFFFFFFFF);
-        c.drawText("Stop controlling", releaseRect.centerX(), releaseRect.centerY() + 4.5f * dp, text);
-    }
-
-    /** What someone is up to, in plain words. */
-    private String doing(Entity e) {
-        if (e.isZombie()) {
-            // ((12.0) Knocked back, lunging, or lying low: it said "Wandering, hungry" for all three.)
-            if (e.stun > 0) return "Knocked back, dazed";
-            if (e.charge > 0) return "Lunging at someone";
-            if (e.hidden) return "Lying low in cover, waiting";
-            if (e.feedTimer > 0) return "Feeding";
-            if (e.doorAt != null && e.doorTime > 0) return "Clawing at the door of " + (e.doorAt.name != null ? e.doorAt.name : "a building");
-            if (e.memory > 0) return "Chasing someone it saw";
-            if (e.searchTimer > 0) return "Sniffing about where it lost them";
-            if (e.leadsHorde && e.hordeSize > 1) return "Leading a horde of " + e.hordeSize;
-            if (e.hordeLeader != null) return "Shambling along with a horde";
-            if (e.noiseTimer > 0) return "Heading for a noise";
-            return "Wandering, hungry";
-        }
-        String s = doingNow(e);
-        // ((11.3) And how they're holding up.) ((12.0) Both, when it's both.)
-        boolean hurt = e.hp < e.maxHp * 0.35f;
-        if (hurt && e.infected) s += " (badly hurt, bitten)";
-        else if (hurt) s += " (badly hurt)";
-        else if (e.infected) s += " (bitten)";
-        return s;
-    }
-
-    /** (11.3) The living: what they're doing right now, most pressing first. */
-    private String doingNow(Entity e) {
-        if (e.stun > 0) return "Dazed";
-        if (e.aiming) return e.ammo <= 0 && e.reload > 0 ? "Reloading under fire" : "Shooting";
-        if (e.isArmed() && e.reload > 0) return "Reloading";
-        if (e.fleeTimer > 0 && !e.isArmed()) return "Running for their life";
-        if (e.ride != null) return "Riding along";
-        // ((12.0) Survivors' groups, lookouts and pilots called up: it said "On patrol", "Taking a stroll" or "Going to sign up".)
-        if (e.type == Entity.CIVILIAN) {
-            String group = e.holdout != null && !e.holdout.gone && e.holdout.name != null ? e.holdout.name : null;
-            if (e.militia) return "Defending " + (group != null ? group : "their street") + " with the militia";
-            if (e.scavenge != null) return "Scavenging supplies" + (group != null ? " for " + group : "");
-            if (e.homeward) return "Bringing supplies back" + (group != null ? " to " + group : "");
-            if (e.job == Entity.J_LOOKOUT && e.aloft) return "Keeping lookout from the fire tower";
-            if (e.task == Dispatch.T_ENLIST && e.pilotFor != null) return "Called up: on the way to fly the helicopter";
-        }
-        // ((12.0) Run themselves out: slowed to a jog until they get their breath back.)
-        float sp = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
-        boolean sprinting = e.isArmed() && sp > e.runSpeed * 1.08f;
-        if (e.isArmed() && e.stamina < 0.2f && sp > 2 && e.task == Dispatch.T_RESPOND && !e.onScene) return "Out of breath, jogging on to " + (e.incident != null ? e.incident.place : "the call");
-        switch (e.task) {
-            case Dispatch.T_RESPOND: return (e.onScene ? "At the scene" : sprinting ? "Sprinting to a 911 call" : "Responding to a 911 call") + (e.incident != null ? " on " + e.incident.place : "");
-            case Dispatch.T_GUARD: return "Guarding the " + (e.zone != null ? e.zone.place + " " : "") + "safe zone";
-            case Dispatch.T_SEEK: return world.queueingAtGate(e) ? "Queueing at the safe zone gate" : "Heading for a safe zone";
-            case Dispatch.T_SHELTER: return "Sheltering in a safe zone";
-            case Dispatch.T_POST: {
-                // ((12.0) Where, and whether they've had to step back from it.)
-                float pd = (float) Math.hypot(e.postX - e.x, e.postY - e.y);
-                if (pd > 30 && e.aiming) return "Falling back from their post, shooting";
-                if (pd > 30) return "Heading back to their post";
-                String at = world.postName(e.postX, e.postY);
-                return at != null ? "On guard at " + at : "On guard duty";
-            }
-            case Dispatch.T_CORDON: return "Holding the perimeter";
-            case Dispatch.T_EVACUATE: return "Getting out of the danger zone";
-            case Dispatch.T_LEAVE: return "Fleeing the city";
-            case Dispatch.T_HOMECOMING: return "Coming home";
-            case Dispatch.T_BORROW: return "Borrowing ammo";
-            case Dispatch.T_MOVE: return "Following orders";
-            case Dispatch.T_HOLD: return "Holding position";
-            case Dispatch.T_HIDE: return "Running to hide indoors";
-            case Dispatch.T_PICKUP: return e.hasGun ? "Picking up rounds lying in the street" : "Grabbing a dropped gun";
-            case Dispatch.T_RESUPPLY: return "Going to restock ammo";
-            case Dispatch.T_HEAL: return "Going to get patched up";
-            case Dispatch.T_RIDE: return "Running for a car";
-            case Dispatch.T_ENLIST: return "Going to sign up";
-            case Dispatch.T_CLEANUP: return "Clearing away bodies";
-            case Dispatch.T_LOOT: return "On a supply run";
-            case Dispatch.T_PATROL: return "Leading an armed patrol";
-            // ((12.0) The rescue: it said "On patrol", or nothing at all for those being rescued.)
-            case Dispatch.T_RESCUE:
-                if (e.isArmed()) return e.roping > 0 ? "Coming down the winch line" : e.escort != null ? "Bringing " + Names.person(e.escort.nameSeed) + " to the helicopter" : "Searching for people to bring out";
-                return "Waiting to be winched up";
-            case Dispatch.T_BOARD:
-                // ((12.0) A ride on its way: waiting where they are for it.)
-                if (e.rig != null && e.rig.pickup && e.rig.state == Fleet.DRIVE) return "Waiting for their ride (" + world.fleet.describe(e.rig).split("  -  ")[0].toLowerCase() + " on its way)";
-                return e.rig != null ? "Getting into the " + world.fleet.describe(e.rig).split("  -  ")[0].toLowerCase() : "Mounting up";
-        }
-        if (e.isArmed()) {
-            if (e.ammo <= 0 && e.reserve <= 0) return "Out of ammo";
-            if (e.role == Entity.ROLE_PILOT) return "Standing by for the helicopter";
-            String duty = world.dutyText(e);
-            if (duty != null) return duty;
-            if (e.leader != null) return "Covering " + Names.person(e.leader.nameSeed);
-            return e.type == Entity.SOLDIER ? "Keeping watch" : "On patrol";
-        }
-        if (e.leader != null) return "Staying close to " + Names.person(e.leader.nameSeed);
-        return e.type == Entity.CIVILIAN ? world.lifeActivity(e) : "Going about their day";
-    }
-
-    /** Draws text on a dark pill above the tool bar, wrapping onto more lines on narrow screens. */
-    private void drawBanner(Canvas c, String s, float cx, float by) {
-        float maxW = getWidth() - 48 * dp;
-        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String line = "";
-        for (String word : s.split(" ")) {
-            String next = line.isEmpty() ? word : line + " " + word;
-            if (!line.isEmpty() && text.measureText(next) > maxW) {
-                lines.add(line.trim());
-                line = word;
-            } else {
-                line = next;
-            }
-        }
-        lines.add(line.trim());
-        float lineH = text.getTextSize() * 1.35f, widest = 0;
-        for (String l : lines) widest = Math.max(widest, text.measureText(l));
-        float top = by - lineH * (lines.size() - 1);
-        oval.set(cx - widest / 2 - 12 * dp, top - 18 * dp, cx + widest / 2 + 12 * dp, by + 7 * dp);
-        fill.setColor(0xB0000000);
-        c.drawRoundRect(oval, 8 * dp, 8 * dp, fill);
-        text.setColor(0xFFFFFFFF);
-        for (int i = 0; i < lines.size(); i++) c.drawText(lines.get(i), cx, top + i * lineH, text);
-    }
+    int joyId = -1, attackId = -1;
+    float joyCX, joyCY, joyKX, joyKY, attackX, attackY, attackR;
 
     /** Name tags already drawn this frame (so they don't pile up in a crowd). */
-    private final RectF[] tagRects = new RectF[120];
+    final RectF[] tagRects = new RectF[120];
 
     {
         for (int i = 0; i < tagRects.length; i++) tagRects[i] = new RectF();
     }
 
     /** The tool whose option picker is open, or -1. */
-    private int picker = -1;
-    private final RectF[] pickerRects = new RectF[12];
-    private final RectF pickerPanel = new RectF();
-    private int pickerCount;
-
-    private static boolean hasPicker(int t) {
-        // (People have just the one kind since 10.50: no picker.)
-        return t == TOOL_COP || t == TOOL_MIL || t == TOOL_ZOMBIE || t == TOOL_PLACE || t == TOOL_EVENT || t == TOOL_BUILD;
-    }
-
-    private String[] optionNames(int t) {
-        switch (t) {
-            case TOOL_CIV: {
-                String[] n = new String[CIV_VARIANTS.length];
-                for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[CIV_VARIANTS[k]];
-                return n;
-            }
-            case TOOL_COP: return copNames();
-            case TOOL_MIL: return MIL_NAMES;
-            case TOOL_ZOMBIE: {
-                String[] n = new String[ZOMBIE_VARIANTS.length];
-                for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[ZOMBIE_VARIANTS[k]];
-                return n;
-            }
-            case TOOL_PLACE: return PLACE_NAMES;
-            case TOOL_BUILD: return BUILD_NAMES;
-            default: return EVENT_NAMES;
-        }
-    }
-
-    private String[] optionInfo(int t) {
-        switch (t) {
-            case TOOL_CIV: return CIV_INFO;
-            case TOOL_COP: return COP_INFO;
-            case TOOL_MIL: return MIL_INFO;
-            case TOOL_ZOMBIE: return ZOMBIE_INFO;
-            case TOOL_PLACE: return PLACE_INFO;
-            case TOOL_BUILD: return BUILD_INFO;
-            default: return EVENT_INFO;
-        }
-    }
-
-    private int variant(int t) {
-        switch (t) {
-            case TOOL_CIV: return civVariant;
-            case TOOL_COP: return copVariant;
-            case TOOL_MIL: return milVariant;
-            case TOOL_ZOMBIE: return zombieVariant;
-            case TOOL_PLACE: return placeVariant;
-            case TOOL_BUILD: return buildVariant;
-            default: return eventVariant;
-        }
-    }
-
-    private void setVariant(int t, int v) {
-        switch (t) {
-            case TOOL_CIV: civVariant = v; break;
-            case TOOL_COP: copVariant = v; break;
-            case TOOL_MIL: milVariant = v; break;
-            case TOOL_ZOMBIE: zombieVariant = v; break;
-            case TOOL_PLACE: placeVariant = v; break;
-            case TOOL_BUILD: buildVariant = v; break;
-            default: eventVariant = v; break;
-        }
-    }
-
-    /**
-     * The option picker above the tool bar: every choice for the category as a big button with its picture and
-     * name, and a line about the one that's selected.
-     */
-    private void drawPicker(Canvas c) {
-        String[] names = optionNames(picker), info = optionInfo(picker);
-        int n = names.length, cur = variant(picker);
-        pickerCount = n;
-        int cols = portrait ? Math.min(4, n) : n > 8 ? (n + 1) / 2 : n;
-        int rowsN = (n + cols - 1) / cols;
-        float gap = 6 * dp, bh = 74 * dp;
-        float maxW = Math.min(getWidth() - 20 * dp, cols * 118 * dp + gap * (cols - 1) + 20 * dp);
-        float bw = (maxW - 20 * dp - gap * (cols - 1)) / cols;
-        float ph = 44 * dp + rowsN * bh + (rowsN - 1) * gap + 12 * dp;
-        float left = (getWidth() - maxW) / 2, top = barTop - ph - 6 * dp;
-        pickerPanel.set(left, top, left + maxW, top + ph);
-        fill.setColor(0xF0141619);
-        c.drawRoundRect(pickerPanel, 14 * dp, 14 * dp, fill);
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(14 * dp);
-        text.setColor(0xFFFFFFFF);
-        c.drawText(TOOL_NAMES[picker], left + 14 * dp, top + 22 * dp, text);
-        text.setTextSize(11.5f * dp);
-        text.setColor(0xFFB8BDC4);
-        String line = names[cur] + ": " + info[cur];
-        float titleW = 0;
-        text.setTextSize(14 * dp);
-        titleW = text.measureText(TOOL_NAMES[picker]);
-        text.setTextSize(11.5f * dp);
-        float room = maxW - titleW - 40 * dp;
-        while (text.measureText(line) > room && line.length() > 4) line = line.substring(0, line.length() - 4) + "...";
-        c.drawText(line, left + 24 * dp + titleW, top + 22 * dp, text);
-        int saveVariant = cur;
-        // ((12.0) One size for the names, as far as it can: each was shrunk on its own, so "Sheriff" stood out large
-        // beside a tiny "Highway Patrol".)
-        text.setTextSize(11.5f * dp);
-        float nameSize = 11.5f * dp;
-        for (int k = 0; k < n; k++) nameSize = Math.min(nameSize, 11.5f * dp * Math.min(1, (bw - 8 * dp) / text.measureText(names[k])));
-        nameSize = Math.max(nameSize, 9 * dp);
-        for (int k = 0; k < n; k++) {
-            if (pickerRects[k] == null) pickerRects[k] = new RectF();
-            int col = k % cols, row = k / cols;
-            float bx = left + 10 * dp + col * (bw + gap), by = top + 34 * dp + row * (bh + gap);
-            RectF r = pickerRects[k];
-            r.set(bx, by, bx + bw, by + bh);
-            boolean sel = k == cur;
-            fill.setColor(sel ? 0xFF3A6EA5 : 0xFF23262C);
-            c.drawRoundRect(r, 10 * dp, 10 * dp, fill);
-            if (sel) {
-                stroke.setColor(0xFFA8D0FF);
-                stroke.setStrokeWidth(2 * dp);
-                c.drawRoundRect(r, 10 * dp, 10 * dp, stroke);
-            }
-            setVariant(picker, k);
-            drawToolIcon(c, picker, r.centerX(), r.top + bh * 0.4f, bh * 0.26f);
-            text.setTextAlign(Paint.Align.CENTER);
-            text.setTextSize(nameSize);
-            text.setColor(sel ? 0xFFFFFFFF : 0xFFC8CCD2);
-            String name = names[k];
-            float fit = text.measureText(name);
-            if (fit > bw - 8 * dp) text.setTextSize(nameSize * (bw - 8 * dp) / fit);
-            c.drawText(name, r.centerX(), r.bottom - 8 * dp, text);
-        }
-        setVariant(picker, saveVariant);
-        text.setTextSize(11.5f * dp);
-    }
-
-    /**
-     * (10.50) A spawn button's picture: a head and shoulders seen from the front on a disc in the colour of the
-     * side, with what tells them apart - the cop's peaked cap and badge, the soldier's helmet (a beret for the
-     * commander, a scope for the sniper), the dead's green skin and red eyes, a runner's speed lines, a brute's bulk.
-     */
-    private void drawPersonBadge(Canvas c, int type, Entity e, float cx, float cy, float size) {
-        boolean zombie = type == Entity.ZOMBIE || type == Entity.RUNNER || type == Entity.BRUTE;
-        int disc = zombie ? 0xFF2E4A22 : type == Entity.COP ? 0xFF1E3366 : type == Entity.SOLDIER ? 0xFF3A4328 : 0xFF5A4022;
-        float r = size * 1.18f;
-        fill.setColor(disc);
-        c.drawCircle(cx, cy, r, fill);
-        stroke.setColor(zombie ? 0xFF7CC24E : type == Entity.COP ? 0xFF6F9BFF : type == Entity.SOLDIER ? 0xFFB8C47A : 0xFFF0AD4E);
-        stroke.setStrokeWidth(1.4f * dp);
-        c.drawCircle(cx, cy, r, stroke);
-        c.save();
-        c.clipRect(cx - r, cy - r, cx + r, cy + r * 0.95f);
-        float bulk = type == Entity.BRUTE ? 1.35f : 1f;
-        // Shoulders.
-        int shirt = type == Entity.COP ? e.body : type == Entity.SOLDIER ? e.body : zombie ? 0xFF4A5A3A : 0xFFE07A2A;
-        fill.setColor(shirt);
-        oval.set(cx - r * 0.78f * bulk, cy + r * 0.28f, cx + r * 0.78f * bulk, cy + r * 1.5f);
-        c.drawOval(oval, fill);
-        if (zombie) {
-            // Torn shirt.
-            fill.setColor(0xFF6E0A0A);
-            c.drawCircle(cx + r * 0.25f, cy + r * 0.62f, r * 0.12f, fill);
-        }
-        if (type == Entity.COP) {
-            fill.setColor(0xFFE8C547);
-            c.drawCircle(cx - r * 0.32f, cy + r * 0.6f, r * 0.1f, fill);
-        }
-        // Head.
-        int skin = zombie ? (type == Entity.BRUTE ? 0xFF6F8D55 : 0xFF8FA173) : 0xFFE0AC69;
-        fill.setColor(skin);
-        float hr = r * 0.36f * (type == Entity.BRUTE ? 1.15f : 1f), hy = cy - r * 0.12f;
-        c.drawCircle(cx, hy, hr, fill);
-        // Eyes.
-        fill.setColor(zombie ? 0xFFFF3B2F : 0xFF1A1A1A);
-        c.drawCircle(cx - hr * 0.38f, hy + hr * 0.05f, hr * 0.13f, fill);
-        c.drawCircle(cx + hr * 0.38f, hy + hr * 0.05f, hr * 0.13f, fill);
-        if (zombie) {
-            // A gaping mouth.
-            fill.setColor(0xFF3A0808);
-            oval.set(cx - hr * 0.3f, hy + hr * 0.4f, cx + hr * 0.3f, hy + hr * 0.75f);
-            c.drawOval(oval, fill);
-        }
-        if (type == Entity.COP) {
-            // Peaked cap.
-            fill.setColor(0xFF15203F);
-            oval.set(cx - hr * 1.05f, hy - hr * 1.15f, cx + hr * 1.05f, hy - hr * 0.25f);
-            c.drawOval(oval, fill);
-            c.drawRect(cx - hr * 1.2f, hy - hr * 0.5f, cx + hr * 1.2f, hy - hr * 0.3f, fill);
-            fill.setColor(0xFFE8C547);
-            c.drawCircle(cx, hy - hr * 0.72f, hr * 0.16f, fill);
-        } else if (type == Entity.SOLDIER) {
-            if (e.role == Entity.ROLE_COMMANDER) {
-                fill.setColor(0xFF8E1F1F);
-                oval.set(cx - hr * 1.1f, hy - hr * 1.1f, cx + hr * 0.9f, hy - hr * 0.3f);
-                c.drawOval(oval, fill);
-            } else {
-                fill.setColor(e.role == Entity.ROLE_GUARD ? 0xFF6A6248 : 0xFF4A5530);
-                oval.set(cx - hr * 1.2f, hy - hr * 1.25f, cx + hr * 1.2f, hy + hr * 0.1f);
-                c.drawArc(oval, 180, 180, true, fill);
-            }
-            if (e.role == Entity.ROLE_SNIPER) {
-                stroke.setColor(0xFF161616);
-                stroke.setStrokeWidth(r * 0.12f);
-                c.drawLine(cx + r * 0.45f, cy + r * 0.2f, cx + r * 0.95f, cy - r * 0.55f, stroke);
-            } else if (e.role == Entity.ROLE_GUNNER || e.role == Entity.ROLE_GRENADIER) {
-                stroke.setColor(0xFF161616);
-                stroke.setStrokeWidth(r * 0.16f);
-                c.drawLine(cx - r * 0.9f, cy + r * 0.75f, cx + r * 0.9f, cy + r * 0.45f, stroke);
-            }
-        } else if (!zombie) {
-            // Hair.
-            fill.setColor(0xFF4A3020);
-            oval.set(cx - hr * 1.02f, hy - hr * 1.1f, cx + hr * 1.02f, hy - hr * 0.1f);
-            c.drawArc(oval, 180, 180, true, fill);
-        }
-        c.restore();
-        if (type == Entity.RUNNER) {
-            // Speed lines.
-            stroke.setColor(0xCCFFFFFF);
-            stroke.setStrokeWidth(1.3f * dp);
-            for (int k = -1; k <= 1; k++) c.drawLine(cx - r * 1.35f, cy + k * r * 0.35f, cx - r * 0.95f, cy + k * r * 0.35f, stroke);
-        }
-    }
-
-    private void drawToolIcon(Canvas c, int t, float cx, float cy, float size) {
-        int type = t == TOOL_ZOMBIE ? ZOMBIE_VARIANTS[zombieVariant] : t == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[t];
-        if (type >= 0) {
-            Entity e = icons[type];
-            if (type == Entity.COP) {
-                int r = t == TOOL_COP ? COP_ROLES[copVariant] : 0;
-                if (iconCopBody == 0) iconCopBody = e.body;
-                Country land = world.city.country;
-                e.role = r < 0 ? 0 : r;
-                e.body = r == -1 ? land.hpShirt : r == -2 ? (land.ruralShirt != 0 ? land.ruralShirt : land.hpShirt) : r == -3 ? World.RANGER_SHIRT
-                        : r == Entity.ROLE_SAR ? 0xFFE06A20 : iconCopBody;
-            }
-            if (type == Entity.SOLDIER) {
-                // Show the chosen kind of soldier.
-                e.role = t == TOOL_MIL ? MIL_ROLES[milVariant] : 0;
-                e.head = e.role == Entity.ROLE_COMMANDER ? 0xFF8E1F1F : e.role == Entity.ROLE_GUARD ? 0xFF6A6248 : 0xFF3C4628;
-                e.body = e.role == Entity.ROLE_GUARD ? 0xFF8C8260 : 0xFF55623A;
-                e.radius = e.role == Entity.ROLE_GUNNER ? 4.3f : 4f;
-            }
-            drawPersonBadge(c, type, e, cx, cy, size);
-            return;
-        }
-        if (t == TOOL_ORDER) {
-            // A waypoint flag with a chevron.
-            stroke.setColor(0xFFFFD24A);
-            stroke.setStrokeWidth(2.2f * dp);
-            c.drawLine(cx - size * 0.7f, cy + size * 0.2f, cx - size * 0.1f, cy - size * 0.5f, stroke);
-            c.drawLine(cx - size * 0.1f, cy - size * 0.5f, cx + size * 0.5f, cy + size * 0.2f, stroke);
-            fill.setColor(0xFFFFD24A);
-            c.drawCircle(cx - size * 0.1f, cy + size * 0.65f, size * 0.22f, fill);
-            return;
-        }
-        if (t == TOOL_PAN) {
-            stroke.setColor(0xFFE6E6E6);
-            stroke.setStrokeWidth(2.2f * dp);
-            float a = size * 0.9f;
-            c.drawLine(cx - a, cy, cx + a, cy, stroke);
-            c.drawLine(cx, cy - a, cx, cy + a, stroke);
-            float hd = size * 0.3f;
-            c.drawLine(cx - a, cy, cx - a + hd, cy - hd, stroke);
-            c.drawLine(cx - a, cy, cx - a + hd, cy + hd, stroke);
-            c.drawLine(cx + a, cy, cx + a - hd, cy - hd, stroke);
-            c.drawLine(cx + a, cy, cx + a - hd, cy + hd, stroke);
-            c.drawLine(cx, cy - a, cx - hd, cy - a + hd, stroke);
-            c.drawLine(cx, cy - a, cx + hd, cy - a + hd, stroke);
-            c.drawLine(cx, cy + a, cx - hd, cy + a - hd, stroke);
-            c.drawLine(cx, cy + a, cx + hd, cy + a - hd, stroke);
-        } else if (t == TOOL_PLACE) {
-            drawPlaceIcon(c, cx, cy, size);
-        } else if (t == TOOL_BUILD) {
-            float a = size * 0.85f;
-            switch (buildVariant) {
-                case City.ED_ROAD:
-                    fill.setColor(0xFF3A3C40);
-                    c.drawRect(cx - a, cy - a, cx + a, cy + a, fill);
-                    fill.setColor(0xFFE8C547);
-                    for (int k = -1; k <= 1; k++) c.drawRect(cx - a * 0.08f, cy + k * a * 0.6f - a * 0.18f, cx + a * 0.08f, cy + k * a * 0.6f + a * 0.18f, fill);
-                    break;
-                case City.ED_PAVE:
-                    fill.setColor(0xFFB8B4AC);
-                    c.drawRect(cx - a, cy - a, cx + a, cy + a, fill);
-                    stroke.setColor(0xFF8A867E);
-                    stroke.setStrokeWidth(1 * dp);
-                    c.drawLine(cx, cy - a, cx, cy + a, stroke);
-                    c.drawLine(cx - a, cy, cx + a, cy, stroke);
-                    break;
-                case City.ED_GRASS:
-                    fill.setColor(0xFF5E9A3A);
-                    c.drawRect(cx - a, cy - a, cx + a, cy + a, fill);
-                    break;
-                case City.ED_TREES:
-                    fill.setColor(0xFF3E7A2A);
-                    c.drawCircle(cx - a * 0.35f, cy + a * 0.2f, a * 0.55f, fill);
-                    c.drawCircle(cx + a * 0.35f, cy - a * 0.2f, a * 0.6f, fill);
-                    break;
-                case City.ED_WALL:
-                    fill.setColor(0xFFC0643C);
-                    for (int row = 0; row < 3; row++)
-                        for (int k = 0; k < 3; k++) {
-                            float bx = cx - size * 0.9f + k * size * 0.62f + (row % 2) * size * 0.3f, by = cy - size * 0.6f + row * size * 0.45f;
-                            c.drawRect(bx, by, bx + size * 0.55f, by + size * 0.38f, fill);
-                        }
-                    break;
-                case City.ED_HOUSE:
-                case City.ED_SHOP: {
-                    boolean shop = buildVariant == City.ED_SHOP;
-                    fill.setColor(shop ? 0xFFE8E2D4 : 0xFFE0C8A0);
-                    c.drawRect(cx - a * 0.75f, cy - a * 0.1f, cx + a * 0.75f, cy + a * 0.85f, fill);
-                    fill.setColor(shop ? 0xFF4F7BE0 : 0xFFB0442A);
-                    android.graphics.Path roof = new android.graphics.Path();
-                    roof.moveTo(cx - a * 0.95f, cy - a * 0.05f);
-                    roof.lineTo(cx, cy - a * 0.85f);
-                    roof.lineTo(cx + a * 0.95f, cy - a * 0.05f);
-                    roof.close();
-                    if (shop) c.drawRect(cx - a * 0.9f, cy - a * 0.4f, cx + a * 0.9f, cy - a * 0.05f, fill);
-                    else c.drawPath(roof, fill);
-                    break;
-                }
-                default:
-                    stroke.setColor(0xFFE05A4A);
-                    stroke.setStrokeWidth(2.4f * dp);
-                    c.drawLine(cx - a * 0.7f, cy - a * 0.7f, cx + a * 0.7f, cy + a * 0.7f, stroke);
-                    c.drawLine(cx + a * 0.7f, cy - a * 0.7f, cx - a * 0.7f, cy + a * 0.7f, stroke);
-                    break;
-            }
-        } else if (t == TOOL_EVENT) {
-            // A warning triangle.
-            fill.setColor(0xFFFFC24A);
-            android.graphics.Path tri = new android.graphics.Path();
-            tri.moveTo(cx, cy - size * 0.85f);
-            tri.lineTo(cx + size * 0.9f, cy + size * 0.7f);
-            tri.lineTo(cx - size * 0.9f, cy + size * 0.7f);
-            tri.close();
-            c.drawPath(tri, fill);
-            fill.setColor(0xFF1A1A1A);
-            c.drawRect(cx - size * 0.09f, cy - size * 0.35f, cx + size * 0.09f, cy + size * 0.25f, fill);
-            c.drawCircle(cx, cy + size * 0.45f, size * 0.1f, fill);
-        } else if (t == TOOL_ZONE) {
-            stroke.setColor(0xFF9BD46A);
-            stroke.setStrokeWidth(2 * dp);
-            oval.set(cx - size * 0.85f, cy + size * 0.25f, cx + size * 0.85f, cy + size * 0.85f);
-            c.drawOval(oval, stroke);
-            stroke.setColor(0xFFDDDDDD);
-            c.drawLine(cx - size * 0.2f, cy + size * 0.55f, cx - size * 0.2f, cy - size * 0.8f, stroke);
-            fill.setColor(0xFF4F8FE0);
-            c.drawRect(cx - size * 0.2f, cy - size * 0.8f, cx + size * 0.55f, cy - size * 0.3f, fill);
-            fill.setColor(0xFFFFFFFF);
-            c.drawRect(cx + size * 0.05f, cy - size * 0.66f, cx + size * 0.3f, cy - size * 0.44f, fill);
-        } else if (t == TOOL_BOMB) {
-            fill.setColor(0xFF15171A);
-            c.drawCircle(cx - size * 0.1f, cy + size * 0.15f, size * 0.62f, fill);
-            fill.setColor(0x55FFFFFF);
-            c.drawCircle(cx - size * 0.3f, cy - size * 0.05f, size * 0.15f, fill);
-            stroke.setColor(0xFFB08A5A);
-            stroke.setStrokeWidth(2 * dp);
-            c.drawLine(cx + size * 0.25f, cy - size * 0.3f, cx + size * 0.55f, cy - size * 0.7f, stroke);
-            fill.setColor(0xFFFFB030);
-            c.drawCircle(cx + size * 0.6f, cy - size * 0.78f, size * 0.18f, fill);
-        } else if (t == TOOL_ERASE) {
-            stroke.setColor(0xFFFF6B6B);
-            stroke.setStrokeWidth(3 * dp);
-            float a = size * 0.55f;
-            c.drawLine(cx - a, cy - a, cx + a, cy + a, stroke);
-            c.drawLine(cx - a, cy + a, cx + a, cy - a, stroke);
-        }
-    }
-
-    private void drawPlaceIcon(Canvas c, float cx, float cy, float size) {
-        switch (placeVariant) {
-            case 3:
-                // Barricade: planks on trestles.
-                fill.setColor(0xFF8A6238);
-                c.drawRect(cx - size, cy - size * 0.35f, cx + size, cy - size * 0.05f, fill);
-                c.drawRect(cx - size, cy + size * 0.15f, cx + size, cy + size * 0.45f, fill);
-                fill.setColor(0xFFE8C547);
-                c.drawRect(cx - size * 0.8f, cy - size * 0.35f, cx - size * 0.5f, cy - size * 0.05f, fill);
-                c.drawRect(cx + size * 0.2f, cy + size * 0.15f, cx + size * 0.5f, cy + size * 0.45f, fill);
-                break;
-            case 4:
-                fill.setColor(0xFF4F5E36);
-                c.drawRect(cx - size * 0.8f, cy - size * 0.6f, cx + size * 0.8f, cy + size * 0.6f, fill);
-                fill.setColor(0xFFF2F2F2);
-                c.drawRect(cx - size * 0.1f, cy - size * 0.45f, cx + size * 0.1f, cy + size * 0.45f, fill);
-                c.drawRect(cx - size * 0.45f, cy - size * 0.1f, cx + size * 0.45f, cy + size * 0.1f, fill);
-                break;
-            case 5:
-                // Medkit: a white box with a red cross.
-                fill.setColor(0xFFF2F2F2);
-                c.drawRect(cx - size * 0.8f, cy - size * 0.6f, cx + size * 0.8f, cy + size * 0.6f, fill);
-                fill.setColor(0xFFD83A3A);
-                c.drawRect(cx - size * 0.12f, cy - size * 0.45f, cx + size * 0.12f, cy + size * 0.45f, fill);
-                c.drawRect(cx - size * 0.45f, cy - size * 0.12f, cx + size * 0.45f, cy + size * 0.12f, fill);
-                break;
-            default: {
-                int col = placeVariant == 0 ? 0xFF2E5FB0 : placeVariant == 1 || placeVariant == 6 ? 0xFF1C1D22 : placeVariant == 7 ? 0xFF9C8A5E : 0xFF55623A;
-                fill.setColor(col);
-                oval.set(cx - size, cy - size * 0.5f, cx + size, cy + size * 0.5f);
-                c.drawRoundRect(oval, size * 0.25f, size * 0.25f, fill);
-                fill.setColor(0xFF1E2A33);
-                c.drawRect(cx + size * 0.2f, cy - size * 0.4f, cx + size * 0.55f, cy + size * 0.4f, fill);
-                if (placeVariant == 2) {
-                    stroke.setColor(0xFF3A4228);
-                    stroke.setStrokeWidth(size * 0.2f);
-                    c.drawLine(cx, cy, cx + size * 1.3f, cy, stroke);
-                    fill.setColor(0xFF627042);
-                    c.drawCircle(cx, cy, size * 0.35f, fill);
-                }
-                break;
-            }
-        }
-    }
+    int picker = -1;
+    final RectF[] pickerRects = new RectF[20];
+    final RectF pickerPanel = new RectF();
+    int pickerCount;
 
     // ------------------------------------------------------------------ input
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        if (loading) return true;
-        if (hudHidden && !menu.isOpen()) {
-            // The first tap brings the buttons back.
-            if (ev.getActionMasked() == MotionEvent.ACTION_UP) hudHidden = false;
-            return true;
-        }
-        if (menu.isOpen()) {
+        // ((22.6) A touch that goes wrong is ignored rather than closing the game.)
+        try {
+            return touchInput.touch(ev);
+        } catch (RuntimeException ex) {
             mode = MODE_NONE;
-            return menu.onTouch(ev);
-        }
-        if (world.controlled != null) {
-            tactical = false;
-            return controlTouch(ev);
-        }
-        if (tactical) {
-            mode = MODE_NONE;
-            // (10.50) Only a tap that starts on the open map counts: lifting the finger that opened it used to
-            // close it again at once, so it had to be held open.
-            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) tacDown = true;
-            else if (ev.getActionMasked() == MotionEvent.ACTION_UP && tacDown) {
-                tacDown = false;
-                tacticalTap(ev.getX(), ev.getY());
-            }
+            noteError("Touch", ex);
             return true;
-        }
-        int action = ev.getActionMasked();
-        switch (action) {
-            case MotionEvent.ACTION_DOWN: {
-                float x = ev.getX(), y = ev.getY();
-                if (hitUi(x, y)) {
-                    mode = MODE_UI;
-                } else {
-                    mode = MODE_WORLD;
-                    downX = lastX = x;
-                    downY = lastY = y;
-                    dragged = false;
-                    panVX = panVY = 0;
-                    worldDown(x, y);
-                }
-                return true;
-            }
-            case MotionEvent.ACTION_POINTER_DOWN:
-                if (mode != MODE_UI && ev.getPointerCount() >= 2) {
-                    mode = MODE_GESTURE;
-                    follow = null;
-                    followV = null;
-                    startPinch(ev);
-                }
-                return true;
-            case MotionEvent.ACTION_MOVE:
-                if (mode == MODE_GESTURE && ev.getPointerCount() >= 2) {
-                    doPinch(ev);
-                } else if (mode == MODE_WORLD) {
-                    worldMove(ev.getX(), ev.getY());
-                }
-                return true;
-            case MotionEvent.ACTION_POINTER_UP:
-                if (mode == MODE_GESTURE && ev.getPointerCount() > 2) startPinchExcluding(ev, ev.getActionIndex());
-                return true;
-            case MotionEvent.ACTION_UP:
-                if (mode == MODE_WORLD) worldUp(ev.getX(), ev.getY());
-                mode = MODE_NONE;
-                if (buildDirty) {
-                    // Redraw the map once the stroke is done.
-                    buildDirty = false;
-                    world.city.editsDone();
-                    world.redrawCity();
-                }
-                return true;
-            case MotionEvent.ACTION_CANCEL:
-                mode = MODE_NONE;
-                return true;
-        }
-        return super.onTouchEvent(ev);
-    }
-
-    private boolean hitUi(float x, float y) {
-        if (world.controlled != null && releaseRect.contains(x, y)) {
-            click();
-            releaseControl();
-            return true;
-        }
-        if (world.controlled == null && follow != null && !follow.dead && picker < 0 && !clearMenu && pinRect.contains(x, y)) {
-            click();
-            if (!pinned.remove(follow)) {
-                if (pinned.size() >= 6) pinned.remove(0);
-                pinned.add(follow);
-            }
-            return true;
-        }
-        for (int k = 0; k < pinCount; k++)
-            if (pinRects[k].contains(x, y)) {
-                click();
-                Entity p = pinIcons[k];
-                Object at = p.dead && world.controlled != p ? pinWhere.get(p) : null;
-                inspectB = null;
-                inspectZ = null;
-                if (at instanceof Fleet.Vehicle) {
-                    // ((12.0) In a car: the car, followed; in a building: the building's card, there on screen.)
-                    follow = null;
-                    followV = (Fleet.Vehicle) at;
-                } else if (at instanceof City.Building) {
-                    City.Building b = (City.Building) at;
-                    follow = null;
-                    followV = null;
-                    if (tool == TOOL_PAN) inspectB = b;
-                    camX = b.doorX - getWidth() / scale / 2;
-                    camY = b.doorY - barTop / scale / 2;
-                    clampCamera();
-                } else follow = p;
-                return true;
-            }
-        if (world.controlled == null && follow != null && !follow.dead && picker < 0 && !clearMenu && takeRect.contains(x, y)) {
-            click();
-            takeControl(follow);
-            return true;
-        }
-        if (picker >= 0 && y < barTop) {
-            // Choosing from the open picker; a tap anywhere else just closes it.
-            for (int k = 0; k < pickerCount; k++)
-                if (pickerRects[k].contains(x, y)) {
-                    click();
-                    setVariant(picker, k);
-                    picker = -1;
-                    return true;
-                }
-            picker = -1;
-            return true;
-        }
-        if (toolsFolded && y >= barTop || !toolsFolded && foldTab.contains(x, y)) {
-            click();
-            toolsFolded = !toolsFolded;
-            picker = -1;
-            onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
-            return true;
-        }
-        if (y >= barTop) {
-            for (int i = 0; i < toolRects.length; i++) {
-                if (toolRects[i].contains(x, y)) {
-                    click();
-                    // Spawn buttons open their picker (tap again to close it).
-                    if (hasPicker(i)) picker = picker == i ? -1 : i;
-                    else picker = -1;
-                    if (world.controlled != null && i != TOOL_PAN) releaseControl();
-                    if (i != TOOL_ORDER) selection.clear();
-                    tool = i;
-                    hintTime = Math.min(hintTime, 3);
-                }
-            }
-            return true;
-        }
-        for (int i = 0; i < feedCount; i++) {
-            if (feedLines[i].contains(x, y)) {
-                Dispatch.Message m = feedMsgs[i];
-                follow = null;
-                followV = null;
-                camX = m.x - getWidth() / scale / 2;
-                camY = m.y - barTop / scale / 2;
-                clampCamera();
-                click();
-                return true;
-            }
-        }
-        if (clearMenu) {
-            for (int i = 0; i < clearRects.length; i++)
-                if (clearRects[i].contains(x, y)) {
-                    click();
-                    // ((12.0) Clearing everyone takes a second tap, to be sure.)
-                    if (i == 0 && System.nanoTime() - clearArmedAt > 3000000000L) {
-                        clearArmedAt = System.nanoTime();
-                        return true;
-                    }
-                    clearArmedAt = 0;
-                    clearMenu = false;
-                    switch (i) {
-                        case 0: world.clearAll(); follow = null; followV = null; break;
-                        case 1: world.clearZombies(); break;
-                        case 2: world.clearBodies(); break;
-                        case 3: world.clearWrecks(); break;
-                        default: world.clearBarricades(); break;
-                    }
-                    return true;
-                }
-        }
-        if (!tacBtn.isEmpty() && tacBtn.contains(x, y)) {
-            click();
-            tactical = true;
-            tacDown = false;
-            tacTimer = 0;
-            return true;
-        }
-        if (!miniX.isEmpty() && miniX.contains(x, y) || !mapChip.isEmpty() && mapChip.contains(x, y)) {
-            click();
-            miniClosed = !miniClosed;
-            return true;
-        }
-        if (!miniRect.isEmpty() && miniRect.contains(x, y)) {
-            // Jump there.
-            follow = null;
-            followV = null;
-            float wx = miniX0 + (x - miniRect.left) / miniRect.width() * miniW;
-            float wy = miniY0 + (y - miniRect.top) / miniRect.height() * miniH;
-            camX = wx - getWidth() / scale / 2;
-            camY = wy - barTop / scale / 2;
-            clampCamera();
-            click();
-            return true;
-        }
-        if (!lastAction.isEmpty() && undoRect.contains(x, y)) {
-            click();
-            undo();
-            return true;
-        }
-        for (int i = 0; i < topRects.length; i++) {
-            RectF r = topRects[i];
-            if (x >= r.left - 4 * dp && x <= r.right + 4 * dp && y >= r.top - 6 * dp && y <= r.bottom + 6 * dp) {
-                pressTop(i);
-                return true;
-            }
-        }
-        if (clearMenu) {
-            clearMenu = false;
-            return true;
-        }
-        if (statsCollapsed ? (x < statsRect.left + 300 * dp && y < statsRect.top + 30 * dp && x > statsRect.left
-                && y > statsRect.top) : statsRect.contains(x, y)) {
-            statsCollapsed = !statsCollapsed;
-            click();
-            return true;
-        }
-        return false;
-    }
-
-    private void pressTop(int i) {
-        click();
-        switch (i) {
-            case BTN_PAUSE:
-                simPaused = !simPaused;
-                break;
-            case BTN_SPEED:
-                speedIdx = (speedIdx + 1) % SPEEDS.length;
-                break;
-            case BTN_BRUSH:
-                brushIdx = (brushIdx + 1) % BRUSHES.length;
-                break;
-            case BTN_VIEW:
-                settings.setBuildings3d(!settings.buildings3d());
-                world.say(settings.buildings3d() ? "3D view" : "Bird's-eye view");
-                break;
-            case BTN_CLEAR:
-                clearMenu = !clearMenu;
-                break;
-            case BTN_TOP:
-                // ((13.3) Straight to the Top Fighters list.)
-                menu.open(Menu.TOP);
-                break;
-            case BTN_MENU:
-                menu.open(Menu.PAUSE);
-                break;
         }
     }
 
-    private float worldX(float sx) {
+    float worldX(float sx) {
         return sx / scale + camX;
     }
 
-    private float worldY(float sy) {
+    float worldY(float sy) {
         return sy / scale + camY;
     }
 
-    private void worldDown(float x, float y) {
-        float wx = worldX(x), wy = worldY(y);
-        if (tool == TOOL_PAN) return;
-        follow = null;
-        followV = null;
-        if (tool != TOOL_ORDER && tool != TOOL_BOMB && tool != TOOL_ERASE) lastAction.clear();
-        if (tool == TOOL_PLACE) {
-            place(wx, wy);
-        } else if (tool == TOOL_EVENT) {
-            event(wx, wy);
-        } else if (tool == TOOL_BUILD) {
-            lastBuildTile = -1;
-            buildAt(wx, wy);
-        } else if (tool == TOOL_ORDER) {
-            // Tap or drag a box: decided when the finger lifts.
-            boxX0 = wx;
-            boxY0 = wy;
-            boxX1 = wx;
-            boxY1 = wy;
-        } else if (tool == TOOL_BOMB) {
-            world.explode(wx, wy, 70, 400);
-        } else if (tool == TOOL_ZONE) {
-            world.dispatch.orderZone(wx, wy);
-        } else if (tool == TOOL_ERASE) {
-            if (!world.dispatch.removeZoneAt(wx, wy)) world.erase(wx, wy, 22);
-        } else {
-            spawnBrush(wx, wy);
-        }
-        lastSpawnX = wx;
-        lastSpawnY = wy;
-    }
-
-    /** One Build stroke: each tile once per drag. */
-    private void buildAt(float wx, float wy) {
-        int tile = world.city.tileIndex(wx, wy);
-        if (tile == lastBuildTile) return;
-        lastBuildTile = tile;
-        if (world.build(wx, wy, buildVariant)) buildDirty = true;
-    }
-
-    private void worldMove(float x, float y) {
-        if (Math.abs(x - downX) > 8 * dp || Math.abs(y - downY) > 8 * dp) dragged = true;
-        float wx = worldX(x), wy = worldY(y);
-        if (tool == TOOL_PAN) {
-            if (dragged) {
-                follow = null;
-                followV = null;
-                inspectB = null;
-                inspectZ = null;
-                camX -= (x - lastX) / scale;
-                camY -= (y - lastY) / scale;
-                clampCamera();
-                long now = System.nanoTime();
-                float sec = Math.max(0.004f, (now - panAt) / 1e9f);
-                if (sec < 0.1f) {
-                    panVX = panVX * 0.5f - (x - lastX) / scale / sec * 0.5f;
-                    panVY = panVY * 0.5f - (y - lastY) / scale / sec * 0.5f;
-                } else panVX = panVY = 0;
-                panAt = now;
-            }
-        } else if (tool == TOOL_ERASE) {
-            world.erase(wx, wy, 22);
-        } else if (tool == TOOL_BUILD) {
-            if (buildVariant != City.ED_HOUSE && buildVariant != City.ED_SHOP) buildAt(wx, wy);
-        } else if (tool == TOOL_ORDER) {
-            boxX1 = wx;
-            boxY1 = wy;
-            boxing = dragged;
-        } else if (tool == TOOL_PLACE) {
-            // Drag to build a line of barricades.
-            if (placeVariant == 3 && (Math.abs(wx - lastSpawnX) > City.T * 0.8f || Math.abs(wy - lastSpawnY) > City.T * 0.8f)) {
-                place(wx, wy);
-                lastSpawnX = wx;
-                lastSpawnY = wy;
-            }
-        } else if (tool != TOOL_BOMB && tool != TOOL_ZONE && tool != TOOL_ORDER && tool != TOOL_EVENT && tool != TOOL_BUILD) {
-            float ddx = wx - lastSpawnX, ddy = wy - lastSpawnY;
-            float spacing = BRUSHES[brushIdx] > 1 ? 22 : 12;
-            if (ddx * ddx + ddy * ddy > spacing * spacing) {
-                spawnBrush(wx, wy);
-                lastSpawnX = wx;
-                lastSpawnY = wy;
-            }
-        }
-        lastX = x;
-        lastY = y;
-    }
-
-    private float boxX0, boxY0, boxX1, boxY1;
-    private boolean boxing;
+    float boxX0, boxY0, boxX1, boxY1;
+    boolean boxing;
     /** ((12.0) The last tap on the map, for a double tap.) */
-    private long lastTapAt;
-    private float lastTapX, lastTapY;
+    long lastTapAt;
+    float lastTapX, lastTapY;
 
-    private void worldUp(float x, float y) {
-        if (tool == TOOL_ORDER) {
-            if (!boxing) orderTap(worldX(x), worldY(y));
-            else {
-                // Everyone in uniform inside the box.
-                selection.clear();
-                float x0 = Math.min(boxX0, boxX1), x1 = Math.max(boxX0, boxX1), y0 = Math.min(boxY0, boxY1), y1 = Math.max(boxY0, boxY1);
-                for (int i = 0, n = world.entities.size(); i < n; i++) {
-                    Entity e = world.entities.get(i);
-                    // ((12.0) Not the fallen, still lying where they fell.)
-                    if (e.isArmed() && !e.dead && e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) selection.add(e);
-                }
-                if (selection.isEmpty()) world.say("No police or soldiers in that box");
-            }
-            boxing = false;
-            return;
-        }
-        if (tool == TOOL_PAN && dragged) {
-            // Let go mid-swipe and the map glides on, gently; held still first and it stays put.
-            if ((System.nanoTime() - panAt) / 1e9f > 0.08f) panVX = panVY = 0;
-            else {
-                panVX *= 0.55f;
-                panVY *= 0.55f;
-            }
-        }
-        if (tool != TOOL_PAN || dragged) return;
-        // ((12.0) A double tap zooms in on the spot.)
-        long now = System.nanoTime();
-        if (now - lastTapAt < 320000000L && World.hypot(x - lastTapX, y - lastTapY) < 32 * dp) {
-            lastTapAt = 0;
-            zoomBy(1.8f, x, y);
-            return;
-        }
-        lastTapAt = now;
-        lastTapX = x;
-        lastTapY = y;
-        float wx = worldX(x), wy = worldY(y);
-        float best = Math.max(12, 28 * dp / scale);
-        best *= best;
-        Entity pick = null;
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
-            // ((12.0) Only someone you can see: not one of the dead shut in a building out of sight, or someone
-            // who's just died and is about to be taken off the map.)
-            if (e.dead || e.hidden) continue;
-            float ddx = e.x - wx, ddy = e.y - wy, d2 = ddx * ddx + ddy * ddy;
-            if (d2 < best) {
-                best = d2;
-                pick = e;
-            }
-        }
-        follow = pick;
-        followV = null;
-        if (pick == null) {
-            // A vehicle there: follow it.
-            float bv = Float.MAX_VALUE;
-            for (int i = 0, n = world.fleet.vehicles.size(); i < n; i++) {
-                Fleet.Vehicle v = world.fleet.vehicles.get(i);
-                float r = Math.max(v.length() + 3, 22 * dp / scale), ddx = v.x - wx, ddy = v.y - wy, d2 = ddx * ddx + ddy * ddy;
-                if (d2 < r * r && d2 < bv) {
-                    bv = d2;
-                    followV = v;
-                }
-            }
-        }
-        // Nobody there: tap a building to see what it is and how it's doing.
-        inspectB = pick == null && followV == null ? world.city.buildingAt(wx, wy) : null;
-        // ((12.0) Or a safe zone: its card.)
-        inspectZ = null;
-        if (pick == null && followV == null)
-            for (int i = 0; i < world.dispatch.zones.size(); i++) {
-                Dispatch.SafeZone z = world.dispatch.zones.get(i);
-                if (z.contains(wx, wy, 1)) {
-                    inspectZ = z;
-                    inspectB = null;
-                }
-            }
-    }
+    /** ((25.1) The survivor base whose card is showing.) */
+    SurvivorBases.Base inspectBase;
 
     /** ((12.0) The safe zone whose card is showing.) */
-    private Dispatch.SafeZone inspectZ;
-
-    /** (12.0) A safe zone's card: how it's holding, who's inside, its guards, food, ammunition and wall. */
-    private void drawZoneInspect(Canvas c, Dispatch.SafeZone z) {
-        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String title = (z.military ? "Military" : "Police") + " safe zone  -  " + z.place;
-        if (!z.open) lines.add("Walling it in: " + (int) (z.built * 100) + "% done" + (z.onSite == 0 ? " (the guards are on their way)" : ""));
-        else lines.add(z.fallingBack ? "The dead are inside the wall! Falling back on the tents"
-                : z.full ? "Full: the gates are shut to newcomers" : "Open: taking people in at the gates");
-        lines.add("Sheltering " + z.sheltered + " of " + z.capacity + "   Guards " + z.onSite + " here" + (z.guards > z.onSite ? ", " + (z.guards - z.onSite) + " on the way" : ""));
-        int open = 0;
-        for (boolean g : z.gateOpen) if (g) open++;
-        lines.add("Food " + (int) z.food + "/" + (int) z.foodMax + "   Ammunition " + z.ammo + "   Gates " + z.gateOpen.length + (open > 0 ? " (" + open + " open)" : ""));
-        lines.add(z.breaches > 0 ? z.breaches + (z.breaches == 1 ? " breach" : " breaches") + " in the wall" : "The wall is holding");
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(14 * dp);
-        float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
-        // ((12.0) A line too long for the card goes on to a second one rather than being cut short.)
-        text.setTextSize(12.5f * dp);
-        lines = wrapAll(lines, cw - 24 * dp);
-        text.setTextSize(14 * dp);
-        float ch = 30 * dp + lines.size() * lh + 8 * dp;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
-        oval.set(left, top, left + cw, top + ch);
-        fill.setColor(0xE8101216);
-        c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
-        fill.setColor(z.military ? 0xFF6FBF3F : 0xFF4F8FE0);
-        c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
-        text.setColor(0xFFFFFFFF);
-        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
-        text.setTextSize(12.5f * dp);
-        for (int i = 0; i < lines.size(); i++) {
-            String l = lines.get(i);
-            text.setColor(l.startsWith("The dead") || l.contains("breach") ? 0xFFFF8A6A : 0xFFB8BDC4);
-            c.drawText(fitText(l, cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
-        }
-    }
+    Dispatch.SafeZone inspectZ;
 
     /** The building whose card is showing. */
-    private City.Building inspectB;
-    private static final String[] KIND_NAMES = {"Offices", "House", "Warehouse", "Police station", "Barracks",
+    City.Building inspectB;
+    static final String[] KIND_NAMES = {"Offices", "House", "Warehouse", "Police station", "Barracks",
             "Watchtower", "Hospital", "Shop", "Church", "School", "Fire station", "Supermarket", "Gas station",
             "Steeple", "Crypt", "Apartment block", "Parking garage", "Pharmacy", "Train station", "Shopping mall",
             "Stadium", "Power station", "Barn", "Silo", "City hall", "Courthouse", "Jail", "Emergency call centre",
             "Public works depot", "National Guard armory"};
 
-    /** The building card: what it is, where, who is inside, what's left in it, and what it does for the city. */
-    private void drawBuildingInspect(Canvas c, City.Building b) {
-        java.util.ArrayList<String> lines = new java.util.ArrayList<String>();
-        String kind = b.typeName() != null ? b.typeName() : b.kind == City.SHOP ? (b.shopType == 1 ? "Gun store" : b.shopType == 2 ? "Diner" : "Shop")
-                : KIND_NAMES[Math.min(KIND_NAMES.length - 1, b.kind)];
-        City.District d = world.city.districtOf((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-        // ((12.0) Not "City Hall - City hall": the kind only when the name doesn't already say it.)
-        String title = (b.name != null ? (b.name.equalsIgnoreCase(kind) ? b.name : b.name + "  -  " + kind) : kind) + (d != null ? "  -  " + d.name : "");
-        // ((12.0) Too long for the card: the district goes on a line of its own under it, instead of off the end.)
-        text.setTextSize(14 * dp);
-        if (d != null && text.measureText(title) > Math.min(getWidth() - 20 * dp, 460 * dp) - 24 * dp) {
-            title = b.name != null ? (b.name.equalsIgnoreCase(kind) ? b.name : b.name + "  -  " + kind) : kind;
-            lines.add("In " + d.name);
-        }
-        if (b.collapsed) lines.add("Collapsed: just a pile of rubble now");
-        // ((12.0) With people still in there fighting them, that's what it says - not "Keep out!" as if they'd gone.)
-        else if (b.lurkers > 0 && !b.occupants.isEmpty())
-            lines.add("FIGHTING: " + World.count(b.occupants.size(), "person", "people") + " inside against " + (b.lurkers == 1 ? "one of the dead" : "about " + b.lurkers + " of the dead"));
-        else if (b.infestKnown && b.lurkers > 0) lines.add("INFESTED: " + (b.lurkers == 1 ? "one of them" : "about " + b.lurkers + " of them") + " inside. Keep out!");
-        else if (!b.occupants.isEmpty())
-            lines.add(b.occupants.size() + " hiding inside, door barricaded (" + Math.max(0, (int) b.barricade) + "%)");
-        if (!b.visitors.isEmpty()) {
-            int[] in = world.insideCounts(b);
-            String s = "Inside: ";
-            if (in[0] > 0) s += in[0] + " at home";
-            if (in[1] > 0) s += (in[0] > 0 ? ", " : "") + in[1] + (b.kind == City.SCHOOL ? " at school" : " at work");
-            if (in[2] > 0) s += (in[0] + in[1] > 0 ? ", " : "") + in[2] + " visiting";
-            lines.add(s);
-        }
-        // ((12.0) "Empty" only when it is: with people hiding inside it said both at once.)
-        else if (!b.occupants.isEmpty() || b.collapsed) {
-            if (!b.collapsed && b.capacity > b.occupants.size()) lines.add("Room for " + (b.capacity - b.occupants.size()) + " more");
-        }
-        else if (b.infestKnown) lines.add("Zombies were inside. Nobody has gone back in.");
-        else lines.add(b.capacity > 0 ? "Empty (room for " + b.capacity + " to hide)" : "Nobody can shelter here");
-        if (!b.collapsed) {
-            String supplies = "Food: " + b.food + (b.food == 0 && !b.occupants.isEmpty() ? " (they're starving)" : "");
-            if (b.kind == City.MARKET || (b.kind == City.SHOP && b.shopType == 1) || World.useOf(b) == Variants.U_ROUNDS)
-                supplies += "   Ammo: " + b.stock + (b.shopType == 1 ? " rounds (arms anyone who comes in)" : " rounds");
-            if (b.kind == City.PHARMACY) supplies += "   Medicine: " + b.stock;
-            lines.add(supplies);
-            if (b.smashed || b.looted) lines.add((b.smashed ? "Windows smashed" : "") + (b.smashed && b.looted ? ", " : "")
-                    + (b.looted ? "shelves stripped bare" : ""));
-        }
-        String role = null;
-        switch (b.kind) {
-            case City.POWER: role = world.blackout ? "BLACKOUT: overrun. Clear the zombies out to get the power back." : "Keeps the lights, sirens and broadcasts on"; break;
-            case City.HOSPITAL: role = "A big place to work, and to hide"; break;
-            case City.STATION: role = "Police armoury: officers restock here"; break;
-            case City.BARRACKS: role = "Army barracks: soldiers restock at the base"; break;
-            case City.MARKET: role = "Food and hunting ammo; can become a safe zone"; break;
-            case City.MALL: role = "Plenty of food and room; can become a safe zone"; break;
-            case City.SCHOOL: case City.CHURCH: case City.STADIUM: role = "Can become a safe zone"; break;
-            case City.PHARMACY: role = "Patches up the hurt (nothing stops a bite)"; break;
-            case City.FIRE_STATION: role = "The fire station (no crews any more): the paramedics are based here"; break;
-            case City.HOUSE: case City.APARTMENT: role = "Home: the people who live here run back to it"; break;
-            case City.CITY_HALL: role = "The Mayor's office"; break;
-            case City.COURTHOUSE: role = "The county courthouse; can become a safe zone"; break;
-            case City.JAIL: role = "The county jail"; break;
-            case City.CALL_CENTRE: role = "The 911 call centre"; break;
-            case City.ARMORY: {
-                String[] g = Country.guard();
-                role = world.armoryLost ? "FALLEN: the " + g[1] + " can't muster here; they'll have to come from out of town"
-                        : world.guardCalled ? "The " + g[1] + " has mustered here and gone into the city"
-                        : "The " + g[1] + ": reservists muster here and drive out when the " + g[2] + " calls them up";
-                break;
-            }
-            case City.WORKS: role = "The city works depot"; break;
-        }
-        if (role == null) {
-            // ((11.5) What the kinds of building are good for.)
-            switch (World.useOf(b)) {
-                case Variants.U_FOOD: role = "Well stocked with food: somewhere to hold out"; break;
-                case Variants.U_MEDICAL: role = "Medical supplies: the hurt sheltering here are patched up"; break;
-                case Variants.U_TOOLS: role = "Tools and timber: barricades go up fast and hold better"; break;
-                case Variants.U_VAULT: role = "A heavy door: the dead take more than twice as long to get in"; break;
-                case Variants.U_GLASS: role = "All glass at the front: the dead are through it quickly"; break;
-                case Variants.U_RADIO: role = "A radio: survivors here can call for help and be heard"; break;
-                case Variants.U_ROUNDS: role = "Some guns and rounds on the shelves"; break;
-            }
-        }
-        if (role != null) lines.add(role);
-        // ((12.0) Who lives there.)
-        if ((b.kind == City.HOUSE || b.kind == City.APARTMENT) && b.residents > 0 && !b.collapsed)
-            lines.add("Home to " + (b.residents == 1 ? "one person" : b.residents + " people"));
-        text.setTextAlign(Paint.Align.LEFT);
-        float lh = 18 * dp, cw = Math.min(getWidth() - 20 * dp, 460 * dp);
-        // ((12.0) A line too long for the card goes on to a second one, in the same colour, rather than being cut short.)
-        text.setTextSize(12.5f * dp);
-        java.util.ArrayList<String> wrapped = new java.util.ArrayList<String>();
-        java.util.ArrayList<Boolean> warn = new java.util.ArrayList<Boolean>();
-        for (String l : lines) {
-            boolean red = l.startsWith("INFESTED") || l.startsWith("FIGHTING") || l.startsWith("BLACKOUT") || l.startsWith("FALLEN") || l.startsWith("EMPTY");
-            for (String part : wrap2(l, cw - 24 * dp)) {
-                wrapped.add(part);
-                warn.add(red);
-            }
-        }
-        lines = wrapped;
-        text.setTextSize(14 * dp);
-        float ch = 30 * dp + lines.size() * lh + 8 * dp;
-        float left = (getWidth() - cw) / 2, top = barTop - ch - 20 * dp - (lastAction.isEmpty() ? 0 : 44 * dp);
-        oval.set(left, top, left + cw, top + ch);
-        fill.setColor(0xE8101216);
-        c.drawRoundRect(oval, 12 * dp, 12 * dp, fill);
-        fill.setColor(b.infestKnown && b.lurkers > 0 ? 0xFF7CC24E : !b.occupants.isEmpty() ? 0xFFB08A5A : 0xFF8A9099);
-        c.drawRect(left, top + 10 * dp, left + 4 * dp, top + ch - 10 * dp, fill);
-        text.setColor(0xFFFFFFFF);
-        c.drawText(fitText(title, cw - 24 * dp), left + 14 * dp, top + 22 * dp, text);
-        text.setTextSize(12.5f * dp);
-        for (int i = 0; i < lines.size(); i++) {
-            String l = lines.get(i);
-            text.setColor(warn.get(i) ? 0xFFFF8A6A : 0xFFB8BDC4);
-            c.drawText(fitText(l, cw - 24 * dp), left + 14 * dp, top + 22 * dp + (i + 1) * lh, text);
-        }
-        // Outline the building on the map so it's clear which one this is.
-        stroke.setColor(0xCCFFD24A);
-        stroke.setStrokeWidth(2 * dp);
-        c.drawRect(screenX(b.x0), screenY(b.y0), screenX(b.x1), screenY(b.y1), stroke);
-    }
+    /** ((25.0) The last giant put down that the radio's been told about (once a tap, not once a giant). */
+    Entity giantSaid;
 
-    /**
-     * Orders tool: tap a cop or soldier to select them (a soldier brings their whole squad), then tap where
-     * to send them. Tapping the selection again sends them back to normal duty.
-     */
-    private void orderTap(float wx, float wy) {
-        float reach = Math.max(12, 26 * dp / scale);
-        Entity pick = null;
-        float best = reach * reach;
-        for (int i = 0, n = world.entities.size(); i < n; i++) {
-            Entity e = world.entities.get(i);
-            if (!e.isArmed()) continue;
-            float d = (e.x - wx) * (e.x - wx) + (e.y - wy) * (e.y - wy);
-            if (d < best) {
-                best = d;
-                pick = e;
-            }
-        }
-        if (pick != null) {
-            if (selection.contains(pick)) {
-                world.dispatch.dismiss(selection);
-                selection.clear();
-                return;
-            }
-            selection.clear();
-            selection.add(pick);
-            if (pick.type == Entity.SOLDIER)
-                for (int i = 0, n = world.entities.size(); i < n; i++) {
-                    Entity e = world.entities.get(i);
-                    if (e != pick && e.type == Entity.SOLDIER && e.squad == pick.squad) selection.add(e);
-                }
-            return;
-        }
-        if (selection.isEmpty()) return;
-        world.dispatch.order(selection, wx, wy);
-        orderX = wx;
-        orderY = wy;
-        orderMarker = 1.5f;
-        selection.clear();
-    }
-
-    private void spawnBrush(float wx, float wy) {
-        int type = tool == TOOL_ZOMBIE ? ZOMBIE_VARIANTS[zombieVariant] : tool == TOOL_CIV ? CIV_VARIANTS[civVariant] : TOOL_TYPE[tool];
-        int n = BRUSHES[brushIdx];
-        // Only one commander at a time.
-        if (tool == TOOL_MIL && MIL_ROLES[milVariant] == Entity.ROLE_COMMANDER) n = 1;
-        int failed = 0;
-        for (int i = 0; i < n; i++) {
-            float ox = 0, oy = 0;
-            if (n > 1) {
-                double a = rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(rnd.nextDouble()) * (n > 10 ? 36 : 20);
-                ox = (float) (Math.cos(a) * r);
-                oy = (float) (Math.sin(a) * r);
-            }
-            Entity e = tool == TOOL_MIL ? world.spawnSoldier(MIL_ROLES[milVariant], wx + ox, wy + oy)
-                    : tool == TOOL_COP ? world.spawnCop(COP_ROLES[copVariant], wx + ox, wy + oy) : world.spawn(type, wx + ox, wy + oy);
-            if (e != null) lastAction.add(e);
-            else failed++;
-        }
-        // ((12.0) Nobody placed: say why, rather than nothing happening at all.)
-        if (failed == n && n > 0 && world.messageTime <= 0)
-            world.say(world.entities.size() >= world.maxEntities ? "The city is full: no room for anyone else (Max population, in Settings)"
-                    : "Nowhere to put them there");
-    }
-
-    /** The Place tool: vehicles, barricades, supply crates and medkits. */
-    private void place(float wx, float wy) {
-        Object made = null;
-        switch (placeVariant) {
-            case 0: made = world.fleet.placeCar(wx, wy); break;
-            case 1: made = world.fleet.placePolice(wx, wy); break;
-            case 2: made = world.fleet.placeTank(wx, wy); break;
-            case 3: made = world.placeBarricade(wx, wy); break;
-            case 4: made = world.placeCrate(wx, wy, 0); break;
-            case 6: made = world.fleet.placeBearCat(wx, wy); break;
-            case 7: made = world.fleet.startReconAt(wx, wy); break;
-            default: made = world.placeMedkit(wx, wy); break;
-        }
-        if (made != null) lastAction.add(made);
-    }
-
-    /** The Events tool: things that happen to the city at the spot you tap. */
-    private void event(float wx, float wy) {
-        switch (eventVariant) {
-            case 0: lastAction.addAll(world.hordeEvent(wx, wy)); break;
-            case 1: world.panic(wx, wy); break;
-            case 2:
-                if (!world.indoorOutbreakAt(wx, wy)) world.say("Tap closer to a building");
-                break;
-            case 3: world.supplyDrop(wx, wy); break;
-            case 4: world.airstrike(wx, wy); break;
-            case 5: world.cityAlarm(); break;
-            default: {
-                Entity bitten = world.infectAt(wx, wy);
-                world.say(bitten == null ? "Tap closer to someone" : "Bitten: " + Names.person(bitten.nameSeed));
-                break;
-            }
-        }
-    }
-
-    /** Takes back whatever the last tap or drag created. */
-    private void undo() {
-        for (Object o : lastAction) {
-            if (o instanceof Entity) {
-                Entity e = (Entity) o;
-                e.dead = true;
-                e.removed = true;
-            } else if (o instanceof float[]) {
-                if (((float[]) o).length == 3) world.medkits.remove(o);
-                else world.removeBarricade((float[]) o);
-            } else if (o instanceof World.Pickup) {
-                world.pickups.remove(o);
-            } else if (o instanceof Fleet.Vehicle) {
-                // ((12.0) Properly gone: its officers no longer think it's theirs.)
-                Fleet.Vehicle v = (Fleet.Vehicle) o;
-                v.crew.clear();
-                v.driver = null;
-                v.removedFromFleet = true;
-                world.fleet.vehicles.remove(v);
-                if (followV == v) followV = null;
-            }
-        }
-        lastAction.clear();
-    }
-
-    private void startPinch(MotionEvent ev) {
-        startPinchExcluding(ev, -1);
-    }
-
-    private void startPinchExcluding(MotionEvent ev, int skip) {
-        int a = -1, b = -1;
-        for (int i = 0; i < ev.getPointerCount(); i++) {
-            if (i == skip) continue;
-            if (a < 0) a = i;
-            else if (b < 0) b = i;
-        }
-        if (a < 0 || b < 0) return;
-        float x0 = ev.getX(a), y0 = ev.getY(a), x1 = ev.getX(b), y1 = ev.getY(b);
-        pinchDist = (float) World.hypot(x1 - x0, y1 - y0);
-        pinchMidX = (x0 + x1) / 2;
-        pinchMidY = (y0 + y1) / 2;
-    }
-
-    private void doPinch(MotionEvent ev) {
-        float x0 = ev.getX(0), y0 = ev.getY(0), x1 = ev.getX(1), y1 = ev.getY(1);
-        float d = (float) World.hypot(x1 - x0, y1 - y0);
-        float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-        float wx = worldX(pinchMidX), wy = worldY(pinchMidY);
-        if (pinchDist > 10 && d > 10) {
-            float minScale = Math.min(getWidth() / world.city.worldW(), getHeight() / world.city.worldH()) * 0.8f;
-            scale = Math.max(minScale, Math.min(10f, scale * d / pinchDist));
-        }
-        camX = wx - mx / scale;
-        camY = wy - my / scale;
-        clampCamera();
-        pinchDist = d;
-        pinchMidX = mx;
-        pinchMidY = my;
-    }
-
-    private void clampCamera() {
+    void clampCamera() {
         float vw = getWidth() / scale, vh = getHeight() / scale;
         camX = Math.max(-vw / 2, Math.min(world.city.worldW() - vw / 2, camX));
         camY = Math.max(-vh / 2, Math.min(world.city.worldH() - vh / 2, camY));
+    }
+
+    /** ((27.3) For TouchInput, which can't reach the View's own handling of a touch it doesn't want.) */
+    boolean superTouch(MotionEvent ev) {
+        return super.onTouchEvent(ev);
+    }
+
+    /** ((27.3) A command at (wx, wy) with the tool in hand - see TouchInput; kept here, where the tests reach it.) */
+    void commandAt(float wx, float wy) {
+        touchInput.commandAt(wx, wy);
     }
 }

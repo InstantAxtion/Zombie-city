@@ -12,6 +12,9 @@ final class Interiors {
     private Interiors() {
     }
 
+    /** ((17.1) How wide the doorways between rooms are: room for anyone to walk through. */
+    static final float DOORWAY = 13;
+
     // Kinds of room.
     static final int LIVING = 0, KITCHEN = 1, BEDROOM = 2, BATH = 3, SHOPFLOOR = 4, STORE = 5, DINING = 6, COOKING = 7,
             BARROOM = 8, OPENPLAN = 9, MEETING = 10, CLASS = 11, WARD = 12, PEWS = 13, RACKS = 14, MACHINES = 15,
@@ -30,6 +33,9 @@ final class Interiors {
         final ArrayList<float[]> items = new ArrayList<float[]>();
         /** Where people sit or stand: {x, y, room index, facing angle}. */
         final ArrayList<float[]> spots = new ArrayList<float[]>();
+        /** ((17.1) For finding the way through: each room's doorway, and the building's entrance.) */
+        float[][] doorOf;
+        float[] entrance;
     }
 
     /** What kind of inside a building has. */
@@ -64,13 +70,50 @@ final class Interiors {
             case Variants.I_GYM: case Variants.I_BATH: case Variants.I_FIRE: min = 70; break;
             default: min = 34; break;
         }
-        if (isHall(inside)) hall(p, inside, x0, y0, x1, y1, dx, dy, r);
+        if (open(inside)) {
+            // ((17.2) One open floor, furnished for what it is: no rooms to squeeze between.)
+            p.rooms.add(new float[]{x0, y0, x1, y1, mainKind(inside), dx, dy});
+        } else if (isHall(inside)) hall(p, inside, x0, y0, x1, y1, dx, dy, r);
         else {
             split(p, x0, y0, x1, y1, min, r, 0, dx, dy);
             assign(p, inside, b, r);
         }
         for (int i = 0; i < p.rooms.size(); i++) furnish(p, i, r);
         return p;
+    }
+
+    /**
+     * ((17.2) Open inside: one floor with no walls or doorways inside it - everything but homes, flats, hotels and dorms,
+     * which keep their rooms.)
+     */
+    static boolean open(int inside) {
+        return inside != Variants.I_HOME && inside != Variants.I_HOTEL && inside != Variants.I_DORM;
+    }
+
+    /** What an open floor is: the main room of the place. */
+    private static int mainKind(int inside) {
+        switch (inside) {
+            case Variants.I_CAFE: case Variants.I_RESTAURANT: return DINING;
+            case Variants.I_BAR: return BARROOM;
+            case Variants.I_PEWS: return PEWS;
+            case Variants.I_RACKS: return RACKS;
+            case Variants.I_FACTORY: return MACHINES;
+            case Variants.I_GYM: return GYMFLOOR;
+            case Variants.I_LIBRARY: return BOOKS;
+            case Variants.I_BATH: return POOLS;
+            case Variants.I_SEATS: return SEATS;
+            case Variants.I_SALON: return SALON;
+            case Variants.I_LAUNDRY: return LAUNDRY;
+            case Variants.I_SHOWROOM: return SHOWROOM;
+            case Variants.I_FIRE: return APPARATUS;
+            case Variants.I_ARCADE: return ARCADE;
+            case Variants.I_KITCHEN: return BAKERY;
+            case Variants.I_CLASSROOM: return CLASS;
+            case Variants.I_WARD: return WARD;
+            case Variants.I_OFFICE: return OPENPLAN;
+            case Variants.I_LAB: return LAB;
+            default: return SHOPFLOOR;
+        }
     }
 
     /** Places that are one big room with a few back rooms: shops, cafés, warehouses, halls. */
@@ -142,12 +185,12 @@ final class Interiors {
             p.rooms.add(new float[]{rx0, ry0, rx1, ry1, kind, wide ? doorA : wallPos, wide ? wallPos : doorA});
             // Wall with a doorway into each back room, and walls between them.
             if (wide) {
-                p.walls.add(new float[]{a0, wallPos, doorA - 4, wallPos});
-                p.walls.add(new float[]{doorA + 4, wallPos, a1, wallPos});
+                p.walls.add(new float[]{a0, wallPos, doorA - DOORWAY / 2, wallPos});
+                p.walls.add(new float[]{doorA + DOORWAY / 2, wallPos, a1, wallPos});
                 if (k > 0) p.walls.add(new float[]{a0, s0y, a0, s1y});
             } else {
-                p.walls.add(new float[]{wallPos, a0, wallPos, doorA - 4});
-                p.walls.add(new float[]{wallPos, doorA + 4, wallPos, a1});
+                p.walls.add(new float[]{wallPos, a0, wallPos, doorA - DOORWAY / 2});
+                p.walls.add(new float[]{wallPos, doorA + DOORWAY / 2, wallPos, a1});
                 if (k > 0) p.walls.add(new float[]{s0x, a0, s1x, a0});
             }
         }
@@ -167,15 +210,17 @@ final class Interiors {
         float cut = (vert ? x0 : y0) + min + r.nextFloat() * (len - 2 * min);
         // A doorway in the new wall, somewhere along it.
         float a0 = vert ? y0 : x0, a1 = vert ? y1 : x1;
+        // ((17.1) Wide enough to walk through: 13, from 8.)
         float gap = a0 + 4 + r.nextFloat() * Math.max(1, a1 - a0 - 16);
+        gap = Math.min(gap, a1 - 4 - DOORWAY);
         if (vert) {
             p.walls.add(new float[]{cut, y0, cut, gap});
-            p.walls.add(new float[]{cut, gap + 8, cut, y1});
+            p.walls.add(new float[]{cut, gap + DOORWAY, cut, y1});
         } else {
             p.walls.add(new float[]{x0, cut, gap, cut});
-            p.walls.add(new float[]{gap + 8, cut, x1, cut});
+            p.walls.add(new float[]{gap + DOORWAY, cut, x1, cut});
         }
-        float gx = vert ? cut : gap + 4, gy = vert ? gap + 4 : cut;
+        float gx = vert ? cut : gap + DOORWAY / 2, gy = vert ? gap + DOORWAY / 2 : cut;
         // The side with the building's door keeps that door; the other side's door is the new doorway.
         boolean doorFirst = vert ? doorX < cut : doorY < cut;
         if (vert) {

@@ -1,0 +1,23 @@
+# tools/health.sh numbers, recorded 2026-11-18 on b6ea4b5 + carried-over route budget (fixB). Re-record with tools/health.sh --baseline.
+metropolis.vehicles_stuck_30s 9
+metropolis.overlap_pair_seconds 0.0
+metropolis.spins 40
+metropolis.idle_police_far_max 48
+metropolis.idle_police_far_mean 22.9
+metropolis.police_0s 938
+metropolis.police_60s 936
+metropolis.police_120s 942
+metropolis.response_trips 25
+metropolis.response_trip_mean_s 9.4
+metropolis.sim_ms_per_step 2.27
+archipelago.vehicles_stuck_30s 11
+archipelago.overlap_pair_seconds 0.3
+archipelago.spins 25
+archipelago.idle_police_far_max 62
+archipelago.idle_police_far_mean 29.9
+archipelago.police_0s 926
+archipelago.police_60s 928
+archipelago.police_120s 935
+archipelago.response_trips 48
+archipelago.response_trip_mean_s 11.9
+archipelago.sim_ms_per_step 2.01

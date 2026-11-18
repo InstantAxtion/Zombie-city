@@ -8,38 +8,57 @@ import java.util.Random;
  */
 final class CityConfig implements OptionSet {
     static final String[] PRESETS = {"Classic", "Downtown", "Suburbs", "Industrial", "Parkland", "Old Town",
-            "Small Town", "Campus", "Metropolis", "Village", "", "", "Lakeside", "Harbour", "Islands",
+            "Small Town", "Campus", "Metropolis", "Village", "Downtown Towers", "Military Town", "Lakeside", "Harbour", "Islands",
             // ((12.7) The places of maps taken out of the game, the real cities among them, are kept so the others keep
-            // their numbers: see removed.)
-            "", "", "", "", "", "", "",
-            "",
+            // their numbers: see removed.) ((15.6) The first of them is the Prison Island now.)
+            "Prison Island", "River City",
+            // ((22.9) Desert City, in the old Seattle's place.)
+            "Desert City",
+            // ((25.0) Theme Park Island, in the old New York's place.)
+            "Theme Park Island",
+            // ((26.0) Space Center, in the old Sydney's place.)
+            "Space Center",
+            // ((28.0) Highway Crossroads, in the old Tokyo's place.)
+            "Highway Crossroads", "Border Town",
+            "Military Airbase",
             // (10.60)
-            "Archipelago", "",
-            "", "", "", ""};
+            "Archipelago",
+            // ((28.0) Canyon Town, in the old Mountain Valley's place.)
+            "Canyon Town",
+            "Bridge City", "Swamp Bayou", "Lighthouse Coast", "Stadium City",
+            // ((28.0) Frozen North.)
+            "Frozen North"};
     /** One line about each map, shown on the New Game screen. */
     static final String[] PRESET_INFO = {
-            "A bit of everything: downtown towers, suburbs, parks, a precinct and an army base.",
-            "Tall office towers, shopping streets, parking garages and two precincts. No base.",
-            "Winding streets of houses with yards, schools, playgrounds and a few apartment blocks.",
-            "Warehouses, truck yards, gas stations and a military base.",
-            "Green city: big parks, gardens, sports fields and low buildings.",
-            "Narrow streets packed with shops, churches, a cemetery and old houses.",
-            "A quiet little town with a main street, a church, a school and plenty of gardens.",
-            "Schools, sports fields, courts and student apartments.",
-            "A huge, dense skyline: towers, apartments, garages, three precincts and a base.",
-            "A few lanes of cottages among fields and gardens. Help is far away.",
-            "",
-            "",
-            "Homes and parks round a lake in the middle of town, with a jetty, rowing boats and an island.",
-            "A working port: quays, docks, cranes, container stacks and ships, with warehouses along the water.",
-            "Three island towns in the sea, joined by bridges, with a causeway to the mainland. Always one size: between Large and Massive.",
-            "", "", "", "", "", "", "",
-            "",
-            "One big island city in the middle of the sea, with two to five smaller island towns round it, every one lived in and joined to it by a bridge, and a causeway to the mainland. Always one size.",
-            "",
-            "",
-            "", "",
-            "",
+            "A bit of everything: towers, suburbs and parks.",
+            "Office towers and shopping streets.",
+            "Streets of houses with yards and schools.",
+            "Warehouses and truck yards.",
+            "Big parks, sports fields and low buildings.",
+            "Narrow streets of shops, churches and old houses.",
+            "A quiet little town with a main street.",
+            "Colleges, sports fields and student flats.",
+            "A huge, dense city of towers, with an airport.",
+            "Cottages among fields. Help is far away.",
+            "Skyscrapers packed onto narrow streets, with an airport.",
+            "A huge army base in the middle, the town round its gates. Far more soldiers.",
+            "Homes and parks round a lake.",
+            "A port of docks, cranes and container stacks.",
+            "Two to four islands joined by bridges, each its own kind of town: city, suburbs, port, old town.",
+            "A coastal town with a prison on an island in the bay. The outbreak starts inside its walls.",
+            "A river through the middle of town, crossed by a few bridges.",
+            "A desert town with a casino strip, oases and an army test range.",
+            "A resort island with a theme park, beach hotels and a ferry, and the staff town across the strait.",
+            "A rocket on its pad, the assembly building, mission control and a landing strip, beside a small town.",
+            "Two highways cross out in open country, with truck stops, motels and a small town nearby.",
+            "A town split by a fenced border, crossed at a few checkpoints.",
+            "A huge air base of runways and hangars, its town at the gate. Far more soldiers.",
+            "A tropical island city ringed by five palm-fringed village islands, all joined by bridges.",
+            "A red-rock town on a mesa and the canyon floor, split by a deep gorge with few bridges.",
+            "A city on many small islands in a bay, joined by long bridges.",
+            "A bayou town of stilt houses and boardwalks, cut off by the swamp.", "Fishing villages along a winding cliff road, a harbour town and a lighthouse.",
+            "A city round a huge stadium, its arena, fan zones and training pitches, with a light rail to downtown.",
+            "An icebound harbour town with an airstrip and long snowy roads out to cabins and a radar station.",
     };
 
     static final int STYLE_MIXED = 0, STYLE_OFFICES = 1, STYLE_HOUSES = 2, STYLE_WAREHOUSES = 3;
@@ -52,12 +71,17 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
+    /** ((20.0) How hard a campaign mission is (Campaign.Mission.difficulty). ((21.1) Not a choice in the sandbox.) */
+    int difficulty = Director.NORMAL;
+    /** ((18.0) The campaign mission this game is (Campaign.MISSIONS), or -1 for a sandbox game. */
+    int mission = -1;
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
             "Reinforcements", "Country"};
     private static final String[][] VALUES = {
             PRESETS,
-            // (Since 10.18 the three sizes offered are called Default, Large and Massive.)
-            {"Tiny", "Small", "Medium", "Default", "Large", "Massive", "Gigantic", "Colossal"},
+            // (Since 10.18 the three sizes offered are called Default, Large and Massive.) ((16.1) Now Default, Big and
+            // Large: the Gigantic, the Colossal and the new Vast; the old Default and Large kept for old city codes.)
+            {"Tiny", "Small", "Medium", "Standard", "Old large", "Massive", "Default", "Big", "Large"},
             {"None", "Few", "Some", "Most", "All"},
             {"0", "5", "10", "20", "40", "60"},
             {"0", "5", "10", "20", "40"},
@@ -67,12 +91,18 @@ final class CityConfig implements OptionSet {
             Country.NAMES,
     };
     /** Tiles across for each size; cities built before 10.10 (no Tiny or Huge then) were a quarter smaller. */
-    private static final int[] SIZES = {160, 240, 320, 400, 560, 704, 1024, 1280};
-    private static final int[] OLD_SIZES = {192, 192, 256, 320, 448, 448, 448, 448};
+    private static final int[] SIZES = {160, 240, 320, 400, 560, 704, 1024, 1280, 1810};
+    private static final int[] OLD_SIZES = {192, 192, 256, 320, 448, 448, 448, 448, 448};
     /** The size settings, by name. */
     static final int TINY = 0, SMALL = 1, MEDIUM = 2, LARGE = 3, MASSIVE = 4, HUGE = 5, GIGANTIC = 6;
     /** (13.0) The biggest map yet: 1280 tiles across, a quarter wider again than Gigantic. */
     static final int COLOSSAL = 7;
+    /**
+     * ((16.1) Bigger again: twice the ground of the Colossal (1810 tiles across), with the same number of people, so a
+     * city spread out with room between. On the New Game screen the three offered are now called Default (the
+     * Gigantic), Big (the Colossal) and Large (this).)
+     */
+    static final int VAST = 8;
     /** Share of the city's residents out and about when the game starts. */
     private static final float[] RESIDENT_SHARE = {0, 0.2f, 0.45f, 0.7f, 1f};
     private static final int[] ZOMBIES = {0, 1, 5, 20, 50, 100, 200};
@@ -89,25 +119,26 @@ final class CityConfig implements OptionSet {
             {STYLE_MIXED, 1, 1, 3, 1, 2, 1, 0},       // Campus
             {STYLE_OFFICES, 2, 3, 1, 2, 1, 3, 1},     // Metropolis
             {STYLE_HOUSES, 0, 0, 3, 1, 2, 1, 0},      // Village
-            {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 0},       // Seaside
-            {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // River City
+            {STYLE_OFFICES, 2, 3, 0, 2, 0, 3, 1},     // ((15.2) Downtown Towers, in the old Seaside's place)
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 1},       // ((15.5) Military Town, in the old River City's place)
             {STYLE_HOUSES, 1, 0, 3, 1, 2, 1, 0},      // Lakeside
             {STYLE_MIXED, 1, 1, 1, 2, 0, 1, 1},       // Harbour
             {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // Islands
-            {STYLE_MIXED, 2, 3, 1, 2, 0, 3, 1},       // Los Angeles
-            {STYLE_MIXED, 1, 2, 2, 2, 0, 3, 1},       // Portland
-            {STYLE_MIXED, 2, 3, 1, 2, 0, 3, 1},       // Seattle
-            {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // New York
-            {STYLE_MIXED, 2, 2, 2, 2, 0, 3, 1},       // Sydney
-            {STYLE_OFFICES, 2, 3, 1, 2, 0, 3, 1},     // Tokyo
-            {STYLE_MIXED, 2, 1, 2, 2, 0, 3, 1},       // Paris
-            {STYLE_MIXED, 1, 2, 1, 2, 1, 2, 1},       // Garrison State
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((15.6) Prison Island, in the old Los Angeles' place; (15.8) with a base)
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((22.0) River City, in the old Portland's place)
+            {STYLE_HOUSES, 1, 0, 1, 1, 1, 2, 1},      // ((22.9) Desert City, in the old Seattle's place)
+            {STYLE_MIXED, 1, 2, 3, 1, 1, 1, 0},       // ((25.0) Theme Park Island, in the old New York's place)
+            {STYLE_HOUSES, 1, 1, 2, 1, 1, 1, 0},      // ((26.0) Space Center, in the old Sydney's place)
+            {STYLE_HOUSES, 1, 0, 1, 1, 1, 1, 1},      // ((28.0) Highway Crossroads, in the old Tokyo's place)
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 2, 1},       // ((28.0) Border Town)
+            {STYLE_MIXED, 1, 1, 2, 1, 1, 1, 1},       // ((28.0) Military Airbase)
             {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // Archipelago
-            {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Mountain Valley
-            {STYLE_MIXED, 1, 2, 2, 2, 0, 2, 1},       // Bay City
-            {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Delta Marsh
-            {STYLE_HOUSES, 1, 1, 2, 1, 1, 2, 1},      // Fjord Town
-            {STYLE_MIXED, 2, 1, 1, 2, 0, 2, 1},       // Canal City
+            {STYLE_MIXED, 1, 1, 1, 1, 1, 2, 1},       // ((28.0) Canyon Town, in the old Mountain Valley's place)
+            {STYLE_MIXED, 2, 2, 1, 2, 0, 2, 1},       // ((28.0) Bridge City)
+            {STYLE_HOUSES, 1, 0, 1, 1, 2, 1, 1},      // ((28.0) Swamp Bayou)
+            {STYLE_HOUSES, 1, 0, 2, 1, 2, 1, 1},      // ((28.0) Lighthouse Coast)
+            {STYLE_MIXED, 1, 2, 2, 1, 1, 2, 1},       // ((28.0) Stadium City)
+            {STYLE_HOUSES, 1, 1, 1, 1, 1, 1, 1},      // ((28.0) Frozen North)
     };
 
     // Landmarks per medium map:  churches, schools, fire stations, supermarkets, gas stations, cemeteries,
@@ -123,29 +154,35 @@ final class CityConfig implements OptionSet {
             {1, 3, 1, 1, 1, 0, 20},   // Campus
             {2, 2, 2, 2, 1, 0, 50},   // Metropolis
             {1, 1, 1, 1, 1, 1, 20},   // Village
-            {1, 1, 1, 1, 1, 0, 40},   // Seaside
-            {1, 1, 1, 1, 1, 1, 30},   // River City
+            {1, 1, 2, 2, 1, 0, 12},   // Downtown Towers (few shopping rows: the blocks are towers)
+            {1, 1, 1, 1, 2, 1, 30},   // Military Town
             {1, 1, 1, 1, 1, 1, 15},   // Lakeside
             {1, 1, 1, 1, 2, 0, 20},   // Harbour
             {2, 2, 2, 2, 2, 1, 30},   // Islands
-            {2, 2, 2, 2, 2, 1, 40}, {2, 2, 2, 2, 1, 1, 40}, {2, 2, 2, 2, 1, 1, 40}, {2, 2, 2, 2, 1, 1, 55},
-            {2, 2, 2, 2, 1, 1, 40}, {2, 2, 2, 2, 1, 1, 50}, {3, 2, 2, 2, 1, 1, 55},
-            {1, 1, 1, 1, 2, 1, 25},   // Garrison State
+            {2, 2, 2, 2, 2, 1, 40}, {2, 2, 2, 2, 1, 1, 40},
+            {1, 1, 1, 1, 3, 1, 30},   // Desert City
+            {1, 0, 1, 1, 1, 0, 35},   // Theme Park Island
+            {1, 1, 1, 1, 1, 0, 30},   // Space Center
+            {1, 0, 1, 0, 3, 0, 20},   // Highway Crossroads
+            {1, 1, 1, 1, 2, 1, 35},
+            {1, 1, 1, 1, 1, 1, 25},   // ((28.0) Military Airbase)
             {2, 2, 2, 2, 2, 1, 35},   // Archipelago
-            {2, 1, 1, 1, 2, 1, 30},   // Mountain Valley
-            {2, 2, 2, 2, 2, 1, 40},   // Bay City
-            {2, 2, 2, 2, 2, 1, 25},   // Delta Marsh
-            {2, 2, 1, 1, 2, 1, 30},   // Fjord Town
-            {3, 2, 2, 2, 1, 1, 50},   // Canal City
+            {1, 1, 1, 1, 1, 1, 30},   // Canyon Town
+            {2, 2, 2, 2, 2, 1, 40},   // ((28.0) Bridge City)
+            {2, 1, 1, 1, 2, 1, 30},   // ((28.0) Swamp Bayou)
+            {2, 1, 1, 1, 1, 1, 35},   // ((28.0) Lighthouse Coast)
+            {1, 2, 1, 1, 1, 0, 40},   // ((28.0) Stadium City)
+            {1, 1, 1, 1, 1, 1, 25},   // Frozen North
     };
     // Share of office lots that become apartment blocks, parking garages and pharmacies (percent).
     private static final int[][] BUILDING_MIX = {
             {15, 6, 5}, {15, 15, 5}, {20, 0, 6}, {5, 8, 2}, {15, 3, 6}, {10, 0, 8}, {10, 2, 8}, {20, 5, 6},
-            {25, 15, 4}, {0, 0, 10}, {25, 3, 6}, {20, 8, 5}, {15, 2, 6}, {10, 6, 3}, {20, 8, 5},
-            {20, 12, 5}, {20, 6, 5}, {25, 10, 5}, {35, 12, 4}, {25, 8, 5}, {35, 12, 5}, {35, 4, 6},
+            {25, 15, 4}, {0, 0, 10}, {30, 18, 4}, {20, 8, 5}, {15, 2, 6}, {10, 6, 3}, {20, 8, 5},
+            {20, 12, 5}, {20, 6, 5}, {8, 4, 6}, {35, 0, 5}, {20, 0, 5}, {35, 12, 5}, {35, 4, 6},
             {30, 8, 4},
             {20, 8, 5}, {12, 3, 6},
-            {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 6, 6},
+            {25, 10, 5}, {12, 3, 6}, {12, 3, 6}, {30, 0, 6},
+            {15, 0, 5},
     };
     // Which kinds of park each map likes: park, playground, sports field, courts, garden, skatepark.
     private static final int[][] PARK_MIX = {
@@ -164,11 +201,12 @@ final class CityConfig implements OptionSet {
             {4, 2, 1, 1, 3, 0},
             {2, 1, 1, 1, 0, 2},
             {3, 2, 1, 2, 2, 1},
-            {3, 2, 1, 2, 1, 2}, {4, 2, 1, 1, 2, 1}, {3, 2, 1, 2, 2, 1}, {3, 2, 1, 3, 1, 1}, {3, 2, 2, 1, 2, 1},
-            {2, 1, 1, 1, 3, 0}, {3, 2, 0, 1, 4, 0},
+            {3, 2, 1, 2, 1, 2}, {4, 2, 1, 1, 2, 1}, {4, 1, 1, 2, 1, 2}, {3, 3, 0, 2, 3, 0}, {3, 2, 2, 1, 2, 1},
+            {2, 1, 1, 1, 3, 0}, {3, 2, 1, 2, 1, 1},
             {2, 1, 3, 2, 0, 0},
             {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0},
-            {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 1, 0, 1, 3, 0},
+            {3, 2, 1, 2, 2, 1}, {4, 2, 1, 1, 3, 0}, {4, 2, 1, 1, 3, 0}, {3, 2, 3, 3, 0, 1},
+            {3, 2, 1, 1, 0, 0},
     };
 
     /** Current index into VALUES for each option. */
@@ -181,20 +219,39 @@ final class CityConfig implements OptionSet {
      * Town, Small Town and Harbour), the three smallest map sizes and seven of the countries. Cities from older
      * saves and shared codes that use them still build as they were.
      */
+    /**
+     * ((26.1) What to call this city's map where the player sees it: the map's name if it's one on offer, the mission's
+     * title in the campaign (some missions are on maps no longer offered), else nothing.)
+     */
+    String mapLabel() {
+        Campaign.Mission m = Campaign.get(mission);
+        if (m != null) return m.title;
+        int p = v[OPT_PRESET];
+        return retired(OPT_PRESET, p) ? null : PRESETS[p];
+    }
+
     static boolean retired(int option, int value) {
         // (The real cities went in 10.28.)
         // (Downtown, Village and Lakeside went in 10.50.)
         if (option == OPT_PRESET) return value == 0 || value == 1 || value == 3 || value == 4 || value == 5 || value == 6 || value == 7
-                || value == 9 || value == 12 || value == 13 || removed(value);
+                || value == 9 || value == 12 || value == 13
+                // ((27.5) And three more maps went in 27.5: 10, 11 and 16. Their cities still build for old saves and codes.)
+                || value == 10 || value == 11 || value == 16 || removed(value);
         // (The number of zombies at the start isn't a choice any more: the game starts quiet.)
         if (option == OPT_ZOMBIES) return value != 0;
         // ((13.0) Large and Massive are gone too: Default, Gigantic and the new Colossal.)
-        if (option == OPT_SIZE) return value < LARGE || value == MASSIVE || value == HUGE;
+        // ((16.1) And the old Default too: Default, Big and Large are the Gigantic, Colossal and Vast.)
+        if (option == OPT_SIZE) return value < GIGANTIC;
         if (option == OPT_COUNTRY) return value != Country.USA;
         if (option == OPT_RESERVES) return value == 1 || value == 2;
         return false;
     }
-    long seed = new Random().nextInt(1000000);
+    /**
+     * The city's seed: a new one each launch (the time-seeded Random) and on every visit to the New Game screen (Menu calls
+     * newSeed). ((27.5) From a billion, not a million: codes and saves already carry any long.)
+     */
+    long seed = new Random().nextInt(SEEDS);
+    static final int SEEDS = 1000000000;
     /** Start the next game on the city from {@link #code()} instead of a new random one. */
     boolean keepCity;
     /**
@@ -213,15 +270,33 @@ final class CityConfig implements OptionSet {
 
     boolean exodus() { return exodus != EXODUS_OFF; }
 
-    boolean littleNature() { return outskirts == 1 && civic >= 7; }
+    boolean littleNature() { return (outskirts == 1 || crossroads()) && civic >= 7; }
     /**
      * Which public buildings the city was laid out with: 0 as before 10.4, 1 the government quarter (10.4),
      * 2 and the National Guard armory (10.5), 3 the bigger maps of 10.10 with hills, mountains, lakes, streams
      * and nature parks out in the country, 4 the wilds of 10.14 (streams you can wade, trails that cross the
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
-     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5). Saved games rebuild with what they had.
+     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods). Saved games rebuild with what they had.
      */
-    int civic = 28;
+    int civic = 41;
+
+    /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
+    boolean fireStations() { return civic < 31; }
+
+    /** ((16.9) An FBI field office in town (cities built since 16.9). */
+    boolean fbiOffice() { return civic >= 31; }
+
+    /** ((21.4) Map version 32: three or four small islands round the Archipelago's big one.) */
+    boolean moreIslands() { return civic >= 32; }
+
+    /** ((22.0) Map version 33: a second mall and a walled prison on the bigger maps, malls that shelter more. */
+    boolean v22() { return civic >= 33; }
+
+    /** ((22.4) Map version 35: one-of-a-kind landmarks, fewer car parks, roads that stop short of the river. */
+    boolean landmarks() { return civic >= 35; }
+
+    /** ((16.5) A hospital in town: only in cities built before 16.5. It had nothing left to do. */
+    boolean hospital() { return civic < 30; }
 
     /** Hills, mountains, streams, lakes, parks and campsites (cities built since 10.10). */
     boolean nature() { return civic >= 3; }
@@ -244,7 +319,11 @@ final class CityConfig implements OptionSet {
 
 
     /** Water on the map: none, the sea along one side (a beach or a port), a river, or a lake. */
-    static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5;
+    static final int W_NONE = 0, W_LAKE = 3, W_HARBOUR = 4, W_ISLANDS = 5, W_RIVER = 6;
+    /** ((28.0) Water laid out by the map's own class: the swamp's bayous, the coast's sea. */
+    static final int W_SHORE = 7;
+    /** ((22.0) River City. */
+    static final int RIVER_CITY = 16;
     /** The Islands map, and its one size (tiles across: a bit bigger than Massive). */
     static final int ISLANDS = 14, ISLANDS_TILES = 1280;
     /** (10.60) The Archipelago (always one size, like Islands). */
@@ -258,13 +337,110 @@ final class CityConfig implements OptionSet {
      */
     static boolean removed(int preset) {
         // ((11.5) Suburbs (2) too.)
-        return preset == 2 || preset == 10 || preset == 11 || (preset >= 15 && preset <= 18) || preset == 25 || preset == 19 || preset == 20 || preset == 21 || preset == 22 || preset == 24 || preset == 26 || preset == 27 || preset == 28;
+        // ((15.2) Not 10 any more: it's Downtown Towers now.)
+        // ((15.5) Nor 11: it's the Military Town.)
+        // ((15.6) Nor 15: the Prison Island.)
+        // ((22.0) Nor 16: River City.)
+        // ((22.9) Nor 17: Desert City.)
+        // ((25.0) Nor 18: Theme Park Island.)
+        // ((26.0) Nor 19: the Space Center.)
+        // ((28.0) Nor 20 and 24: Highway Crossroads and Canyon Town.)
+        // ((28.0) Nor 21, 22 and 28: Border Town, the Military Airbase and Stadium City; nor 25, 26 and 27: Bridge City,
+        // Swamp Bayou and Lighthouse Coast.)
+        return preset == 2;
     }
 
     boolean archipelago() { return v[OPT_PRESET] == ARCHIPELAGO; }
 
+    /**
+     * ((22.9) Desert City: sand for grass, cacti, palms and scrub for trees, low adobe sprawl on wide roads, a casino
+     * strip down the main boulevard, oases, and the army base out in the desert with its test range. Everything it
+     * changes in the building of a city is for this map alone, so every other map builds exactly as before.)
+     */
+    static final int DESERT = 17;
+
+    boolean desert() { return v[OPT_PRESET] == DESERT; }
+
+    /**
+     * ((25.0) Theme Park Island: a resort island out in the sea, the theme park of rides in the middle of it, beach
+     * hotels round its shore, one bridge across the strait to the mainland (and the staff town there), and a ferry.
+     * Everything it changes in the building of a city is for this map alone, so every other map builds as before.)
+     */
+    static final int THEME_PARK = 18;
+
+    boolean themePark() { return v[OPT_PRESET] == THEME_PARK; }
+
+    /**
+     * ((26.0) The Space Center: the space center itself along one side of the map (launch pads with a rocket standing
+     * by its service tower, the Vehicle Assembly Building, the crawlerway out to the pads, mission control, labs, offices,
+     * fuel tanks and a landing strip, in open scrub and marsh), and the small staff town on the rest. Everything it
+     * changes in the building of a city is for this map alone, so every other map builds as before.)
+     */
+    static final int SPACE_CENTER = 19;
+
+    boolean spaceCenter() { return v[OPT_PRESET] == SPACE_CENTER; }
+
+    /**
+     * ((28.0) Highway Crossroads, Canyon Town and Frozen North: each laid out and painted by a class of its own
+     * (RegionMap). Everything they change in the building of a city is for them alone.)
+     */
+    static final int CROSSROADS = 20, CANYON = 24, FROZEN_NORTH = 29;
+
+    boolean crossroads() { return v[OPT_PRESET] == CROSSROADS; }
+
+    boolean canyon() { return v[OPT_PRESET] == CANYON; }
+
+    boolean frozenNorth() { return v[OPT_PRESET] == FROZEN_NORTH; }
+
+    /**
+     * ((28.0) Three maps of their own, each built by its own class (BorderMap, AirbaseMap, StadiumMap): a town split by
+     * a fenced border with its crossings; a great air base with its town at the gate; a city round a stadium complex.
+     */
+    static final int BORDER_TOWN = 21, AIRBASE = 22, STADIUM_CITY = 28;
+
+    boolean borderTown() { return v[OPT_PRESET] == BORDER_TOWN; }
+
+    boolean airbase() { return v[OPT_PRESET] == AIRBASE; }
+
+    boolean stadiumCity() { return v[OPT_PRESET] == STADIUM_CITY; }
+
+    /** ((28.0) A map whose army far outnumbers the usual: the Military Town and the Military Airbase. */
+    boolean bigGarrison() { return militaryTown() || airbase(); }
+
+    /**
+     * ((28.0) Bridge City (many small islands in a bay joined by long bridges), Swamp Bayou (a town on the edge of a
+     * swamp: stilt houses, boardwalks, causeways) and Lighthouse Coast (fishing villages along a cliff road, a harbour
+     * town, a lighthouse). Each is built by its own class (see WaterMap); every other map builds as before.)
+     */
+    static final int BRIDGE_CITY = 25, SWAMP = 26, LIGHTHOUSE = 27;
+
+    boolean bridgeCity() { return v[OPT_PRESET] == BRIDGE_CITY; }
+
+    boolean swamp() { return v[OPT_PRESET] == SWAMP; }
+
+    boolean lighthouse() { return v[OPT_PRESET] == LIGHTHOUSE; }
+
+    /** ((15.2) The Downtown Towers map: skyscrapers on narrow streets.) */
+    static final int TOWERS = 10;
+
+    boolean towers() { return v[OPT_PRESET] == TOWERS; }
+
+    /** ((15.5) The Military Town map: a huge base in the middle, the town round its gates.) */
+    static final int MILITARY_TOWN = 11;
+
+    boolean militaryTown() { return v[OPT_PRESET] == MILITARY_TOWN; }
+
+    /** ((15.6) The Prison Island map: a coastal town, and a walled prison on an island in the bay.) */
+    static final int PRISON_ISLAND = 15;
+
+    boolean prisonIsland() { return v[OPT_PRESET] == PRISON_ISLAND; }
+
+    /** ((15.10) An airport on the edge of town: on the big city maps, from the Default size up.) */
+    boolean airport() { return (v[OPT_PRESET] == METROPOLIS || v[OPT_PRESET] == TOWERS) && v[OPT_SIZE] >= MEDIUM && civic >= 29; }
+
     /** Islands only comes in one size: it counts as Massive for everything that depends on size. */
     void normalize() {
+        // ((18.2) A prison break is on the Prison Island: it's the map with the prison.)
         // ((13.0) The island maps come at the biggest size: Colossal, 1280 tiles across (640 and 720 before).)
         if (v[OPT_PRESET] == ISLANDS || v[OPT_PRESET] == ARCHIPELAGO) v[OPT_SIZE] = COLOSSAL;
         if (removed(v[OPT_PRESET])) v[OPT_PRESET] = METROPOLIS;
@@ -274,8 +450,10 @@ final class CityConfig implements OptionSet {
     int water() {
         switch (v[OPT_PRESET]) {
             case 12: return W_LAKE;
-            case 13: return W_HARBOUR;
-            case ISLANDS: case ARCHIPELAGO: return W_ISLANDS;
+            case 13: case PRISON_ISLAND: return W_HARBOUR;
+            case ISLANDS: case ARCHIPELAGO: case THEME_PARK: case BRIDGE_CITY: return W_ISLANDS;
+            case SWAMP: case LIGHTHOUSE: return W_SHORE;
+            case RIVER_CITY: return W_RIVER;
             default: return W_NONE;
         }
     }
@@ -318,7 +496,7 @@ final class CityConfig implements OptionSet {
     }
 
     /** The character for each map in a city code. */
-    private static final String CODE_MAPS = "123456789ABCDEFGHIJKLMNOPQRST";
+    private static final String CODE_MAPS = "123456789ABCDEFGHIJKLMNOPQRSTU";
 
     /** (12.0) The same city with the same options, to play again from the start. */
     CityConfig copy() {
@@ -327,6 +505,9 @@ final class CityConfig implements OptionSet {
         c.seed = seed;
         c.outskirts = outskirts;
         c.exodus = exodus;
+        c.force = force;
+        c.difficulty = difficulty;
+        c.mission = mission;
         c.civic = civic;
         for (int[] e : edits) c.edits.add(e.clone());
         c.normalize();
@@ -387,19 +568,32 @@ final class CityConfig implements OptionSet {
     /** Picks a new random city (keeping the options). */
     void newSeed(Random r) {
         edits.clear();
-        seed = r.nextInt(1000000);
+        seed = r.nextInt(SEEDS);
         // (A real city stays the same.)
         normalize();
     }
 
     int tiles() {
-        if (v[OPT_PRESET] == ISLANDS) return nature() ? ISLANDS_TILES : 512;
-        if (v[OPT_PRESET] == ARCHIPELAGO) return ARCHIPELAGO_TILES;
-        return (nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
+        // ((22.3) Map version 34: every city a fifth smaller across (nine tenths, twice), the same number of people in it -
+        // an outbreak quicker to work out, a new city quicker to make and a third less memory for the map.)
+        boolean small = civic >= 34;
+        if (v[OPT_PRESET] == ISLANDS) return nature() ? (small ? 1040 : ISLANDS_TILES) : 512;
+        if (v[OPT_PRESET] == ARCHIPELAGO) return small ? 1040 : ARCHIPELAGO_TILES;
+        // ((28.0) The water maps are never smaller than the Small size: their towns, islands and bridges need the room.)
+        if ((bridgeCity() || swamp() || lighthouse()) && v[OPT_SIZE] < SMALL) return SIZES_V34[SMALL];
+        return (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
     }
+
+    /** ((22.3) The sizes from map version 34: 81% across of those before (in multiples of eight tiles). */
+    private static final int[] SIZES_V34 = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
 
     /** A massive (or huge) map: the city sits in the middle of open countryside. */
     boolean massive() { return v[OPT_SIZE] >= MASSIVE; }
+
+    /** (16.1) A size's name as offered. */
+    static String sizeName(int size) {
+        return size >= 0 && size < VALUES[OPT_SIZE].length ? VALUES[OPT_SIZE][size] : "";
+    }
     /** (10.30) A big army base out in the country: every Massive and Huge map with country round the town. */
     boolean outskirtsBase() { return civic >= 14 && civic < 26 && (massive() || (civic >= 23 && v[OPT_SIZE] >= LARGE)) && water() == W_NONE && coreFraction() < 0.99f; }
 
@@ -414,6 +608,11 @@ final class CityConfig implements OptionSet {
         int p = v[OPT_PRESET];
         // (Towns on the water fill the whole map.)
         if (water() != W_NONE) return 1f;
+        // ((28.0) Canyon Town and Frozen North lay out the whole map themselves; Highway Crossroads is mostly country.)
+        if (p == CANYON || p == FROZEN_NORTH) return 1f;
+        if (p == CROSSROADS) return 0.38f;
+        // ((28.0) Border Town: the town fills the map, the border right across it.)
+        if (p == BORDER_TOWN) return 1f;
         float f = p == 9 ? 0.55f : p == 6 ? 0.72f : 1f;
         // A massive map is nearly all town: a thin band of country round the edge for the highway and farms.
         if (massive()) f = p == 9 ? 0.6f : p == 6 ? 0.88f : 0.92f;
@@ -423,6 +622,8 @@ final class CityConfig implements OptionSet {
         // ((11.0) Less nature: a thin band of country round a town that fills nine tenths of the map, whatever the map.)
         // (Just wide enough for the highway and its interchanges: 28 tiles each side, or a little more on the big maps.
         // The Garrison State keeps its open country for its bases and the prison.)
+        // ((22.9) Desert City: open desert round a town that sprawls over seven tenths of the map.)
+        if (p == DESERT) return 0.7f;
         if (civic >= 26) {
             int t = tiles();
             float band = Math.max(28, t * 0.04f) * 2f / t;
@@ -430,7 +631,7 @@ final class CityConfig implements OptionSet {
         }
         if (p == 9) return v[OPT_SIZE] <= SMALL ? 0.6f : 0.5f;
         if (p == 9) return v[OPT_SIZE] <= SMALL ? 0.6f : 0.5f;
-        float town = new float[]{1f, 0.86f, 0.8f, 0.76f, 0.74f, 0.66f, 0.66f, 0.66f}[v[OPT_SIZE]];
+        float town = new float[]{1f, 0.86f, 0.8f, 0.76f, 0.74f, 0.66f, 0.66f, 0.66f, 0.66f}[v[OPT_SIZE]];
         // (Since 10.30 the Massive and Huge maps have more country round the town, for its towns and the base.)
         if (civic >= 14 && massive()) town = v[OPT_SIZE] >= GIGANTIC ? 0.7f : v[OPT_SIZE] >= HUGE ? 0.6f : 0.66f;
         // (10.33) Less empty country: the town reaches further out (the country beyond fills with towns too).
@@ -440,7 +641,41 @@ final class CityConfig implements OptionSet {
     }
     /** How many of a city's residents (everyone its homes can house) are in the game. */
     int civilians(int residents) {
-        return Math.round(residents * RESIDENT_SHARE[v[OPT_CIVILIANS]]);
+        return Math.round(residents * RESIDENT_SHARE[v[OPT_CIVILIANS]] * POP_MORE);
+    }
+
+    /** ((26.0) A tenth more people in every city. */
+    static final float POP_MORE = 1.1f;
+
+    /** ((22.4) Map version 36: how many live in a sandbox city of each size, at "Most", on a city of middling density. */
+    private static final int[] POP_TILES = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
+    private static final int[] POP_TARGET = {2500, 5000, 8000, 12000, 16000, 20000, 25000, 28000, 30000};
+
+    boolean popLadder() { return civic >= 36 && mission < 0; }
+
+    /** ((22.6) Map version 37: more colours for homes, shops, flats, cars and people, more names for streets and places. */
+    boolean variety() { return civic >= 37; }
+
+    /** ((22.8) Map version 38: themed neighbourhoods, more colours, another hundred landmarks. */
+    boolean neighbourhoods() { return civic >= 38; }
+
+    /**
+     * The people at the start: from the size of the map on version 36 (a smooth step up from size to size, thinner
+     * in the country presets, the People option a share of it), from the homes there are before that and in missions.
+     */
+    int civilians(int residents, int tiles) {
+        if (!popLadder()) return civilians(residents);
+        int target = POP_TARGET[POP_TARGET.length - 1];
+        if (tiles <= POP_TILES[0]) target = POP_TARGET[0];
+        else
+            for (int k = 1; k < POP_TILES.length; k++)
+                if (tiles <= POP_TILES[k]) {
+                    float f = (tiles - POP_TILES[k - 1]) / (float) (POP_TILES[k] - POP_TILES[k - 1]);
+                    target = Math.round(POP_TARGET[k - 1] + f * (POP_TARGET[k] - POP_TARGET[k - 1]));
+                    break;
+                }
+        float dens = density() == 0 ? 0.5f : 1f;
+        return Math.round(target * dens * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT] * POP_MORE);
     }
     /**
      * Police on duty when the game starts: about one officer for every sixteen residents (far more than a real city
@@ -450,8 +685,14 @@ final class CityConfig implements OptionSet {
         // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
         // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
         // ((13.0) Up to 800 now, for the bigger cities: 480 before.)
-        return Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8));
+        return Math.round(Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8)) * FORCE_SCALE[force]);
     }
+
+    /** ((26.0) Police/army strength (a New Game choice, not one of the eight in v): Weak, Normal, Strong. */
+    static final int OPT_FORCE = 10;
+    private static final String[] FORCES = {"Weak", "Normal", "Strong"};
+    static final float[] FORCE_SCALE = {0.55f, 1f, 1.6f};
+    int force = 1;
 
     /** Soldiers at the base (if the map has one): a garrison that grows with the city. */
     int soldiers(int residents) {
@@ -459,7 +700,11 @@ final class CityConfig implements OptionSet {
         // (10.33: bigger garrisons.)
         // ((12.2) Bigger again: one in 40 and twelve more, up to 160 (one in 50 up to 120 to 12.0, one in 70 in 12.1).)
         // ((13.0) Up to 300 with the more bases: 160 before.)
-        return Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
+        int n = Math.max(20, Math.min(300, Math.round(residents / 40f) + 12));
+        // ((15.5) The Military Town's great base: three times the garrison, and never fewer than 450.)
+        // ((28.0) The Military Airbase: two and a half times the garrison, never fewer than 380.)
+        int big = militaryTown() ? Math.min(700, Math.max(450, n * 3)) : airbase() ? Math.min(600, Math.max(380, n * 5 / 2)) : n;
+        return Math.round(big * FORCE_SCALE[force]);
     }
 
 
@@ -483,7 +728,11 @@ final class CityConfig implements OptionSet {
                     + "(their police, highway patrol, SWAT teams, sheriff's deputies and federal agents), sooner and bigger "
                     + "the worse the city is losing. Then three quarters as many soldiers again as the city has, in three waves: a quick reaction force in Humvees, "
                     + "the main convoy with armour, and air assaults by helicopter wherever it's worst."};
-    int zombies() { return ZOMBIES[v[OPT_ZOMBIES]]; }
+    int zombies() {
+        // ((18.0) A mission's own number.)
+        Campaign.Mission m = Campaign.get(mission);
+        return m != null ? m.foes : ZOMBIES[v[OPT_ZOMBIES]];
+    }
     /** Which country the city is in (see {@link Country}). */
     int country() { return v[OPT_COUNTRY]; }
     /** 0 off, 1 low, 2 medium, 3 high: how many reserve squads and backup waves can be called in. */
@@ -511,11 +760,18 @@ final class CityConfig implements OptionSet {
     int medics(int residents) {
         return Math.max(4, Math.min(36, Math.round(residents / 110f)));
     }
-    boolean militaryBase() { return map(7) == 1; }
+    /** ((26.1) Every map has an army base since map version 39.) */
+    boolean militaryBase() { return map(7) == 1 || civic >= 39; }
+
+    /**
+     * ((26.1) Map version 39: Islands and Archipelago told apart - each of the Islands its own kind of town (the city,
+     * the suburbs, the port, the old town), the Archipelago a tropical chain (palms and beaches, its outer islands villages).
+     */
+    boolean distinctIslands() { return civic >= 39; }
 
     /** (13.0) Army bases in town besides the main one: one on the Default and Large maps, up to four on the Colossal. */
     int extraBases() {
-        if (!militaryBase()) return 0;
+        if (!militaryBase() || bigGarrison()) return 0;
         int s = v[OPT_SIZE];
         return s < LARGE ? 0 : s <= MASSIVE ? 1 : s == HUGE ? 2 : s == GIGANTIC ? 3 : 4;
     }
@@ -526,6 +782,7 @@ final class CityConfig implements OptionSet {
         // Fire stations: one more on a Large map, two more on a Massive one.
         // (Every town has at least one.)
         int s = v[OPT_SIZE];
+        if (kind == 2 && !fireStations()) return 0;
         if (kind == 2) {
             n = Math.max(1, n);
             if (s >= LARGE) return n + s - MEDIUM;
@@ -542,7 +799,7 @@ final class CityConfig implements OptionSet {
 
     // Which maps have a railway line (with a station and passing trains).
     // Which maps have a railway line: 0 never, 1 about half the time (it depends on the city), 2 always.
-    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
+    private static final int[] RAIL = {1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     boolean hasRail() {
         int r = RAIL[v[OPT_PRESET]];
@@ -562,20 +819,25 @@ final class CityConfig implements OptionSet {
             {0, 2, 1, 3, 0, 6, 2, 5},   // Campus
             {6, 5, 1, 1, 3, 0, 1, 0},   // Metropolis
             {0, 0, 3, 6, 0, 0, 3, 2},   // Village
-            {2, 4, 2, 4, 0, 0, 3, 1},   // Seaside
-            {4, 4, 2, 3, 2, 1, 1, 0},   // River City
+            {9, 4, 1, 0, 1, 0, 0, 0},   // Downtown Towers
+            {1, 3, 1, 6, 2, 0, 2, 3},   // Military Town
             {1, 2, 1, 6, 0, 1, 4, 6},   // Lakeside
             {2, 3, 1, 2, 5, 0, 0, 1},   // Harbour
             {3, 4, 2, 4, 1, 1, 2, 0},   // Islands
-            {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
-            {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
-            {3, 4, 1, 3, 3, 0, 1, 1},   // Garrison State
+            {3, 3, 2, 3, 1, 1, 1, 0}, {3, 3, 2, 3, 1, 1, 1, 0},
+            {1, 3, 1, 8, 2, 0, 1, 0},   // Desert City
+            {4, 3, 0, 3, 0, 0, 2, 6},   // Theme Park Island
+            {0, 3, 0, 6, 1, 1, 2, 1},   // Space Center
+            {0, 2, 2, 7, 2, 0, 2, 1},   // Highway Crossroads
+            {2, 4, 3, 4, 1, 0, 2, 1},
+            {1, 3, 0, 6, 1, 0, 2, 1},   // ((28.0) Military Airbase)
             {3, 4, 2, 4, 1, 1, 2, 0},   // Archipelago
-            {1, 2, 3, 5, 1, 0, 3, 2},   // Mountain Valley
-            {3, 4, 2, 3, 1, 1, 2, 0},   // Bay City
-            {1, 2, 2, 6, 1, 0, 3, 3},   // Delta Marsh
-            {1, 2, 3, 5, 1, 0, 3, 2},   // Fjord Town
-            {2, 3, 6, 2, 1, 0, 1, 2},   // Canal City
+            {1, 3, 3, 5, 1, 0, 1, 1},   // Canyon Town
+            {4, 4, 2, 4, 2, 1, 1, 0},   // ((28.0) Bridge City)
+            {0, 2, 3, 6, 1, 0, 2, 2},   // ((28.0) Swamp Bayou)
+            {0, 2, 4, 5, 1, 0, 2, 2},   // ((28.0) Lighthouse Coast)
+            {4, 4, 1, 3, 1, 1, 3, 0},   // ((28.0) Stadium City)
+            {0, 3, 2, 6, 3, 0, 1, 1},   // Frozen North
     };
 
     /** How likely each kind of district is on this map. */
@@ -597,6 +859,8 @@ final class CityConfig implements OptionSet {
     void dropRetired() {
         if (retired(OPT_PRESET, v[OPT_PRESET])) v[OPT_PRESET] = METROPOLIS;
         if (retired(OPT_COUNTRY, v[OPT_COUNTRY])) v[OPT_COUNTRY] = Country.USA;
+        // ((16.1) A size no longer offered: the Default.)
+        if (retired(OPT_SIZE, v[OPT_SIZE])) v[OPT_SIZE] = GIGANTIC;
         v[OPT_CIVILIANS] = PEOPLE_ABOUT;
         outskirts = 0;
         normalize();
@@ -611,7 +875,7 @@ final class CityConfig implements OptionSet {
             do v[i] = r.nextInt(VALUES[i].length);
             while (retired(i, v[i]));
         }
-        v[OPT_SIZE] = LARGE;
+        v[OPT_SIZE] = GIGANTIC;
         normalize();
         v[OPT_CIVILIANS] = PEOPLE_ABOUT;
         outskirts = 0;
@@ -622,8 +886,12 @@ final class CityConfig implements OptionSet {
 
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
-    @Override public String[] values(int i) { return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : VALUES[i]; }
-    @Override public int get(int i) { return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : v[i]; }
+    @Override public String[] values(int i) {
+        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_FORCE ? FORCES : VALUES[i];
+    }
+    @Override public int get(int i) {
+        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_FORCE ? force : v[i];
+    }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
             outskirts = value;
@@ -631,6 +899,10 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_EXODUS) {
             exodus = value;
+            return;
+        }
+        if (i == OPT_FORCE) {
+            force = Math.max(0, Math.min(2, value));
             return;
         }
         v[i] = value;

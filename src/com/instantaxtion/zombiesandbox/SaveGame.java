@@ -17,7 +17,12 @@ import java.util.ArrayList;
  * damaged or collapsed buildings.
  */
 final class SaveGame {
-    private static final int VERSION = 51;
+    // ((27.1) Still 78: 27.0 wrote saves at 78 (for a map since taken out again; a save on it is refused as a removed map).)
+    // ((27.4) 79: the vehicles themselves (VehicleSave), at the very end.)
+    // ((27.5) 80: the calls going on (CallSave), after the vehicles.)
+    // ((27.5) 81: each base's raiding (raider base, ground cleared, raids, hold-ups, bases robbed), after the calls.)
+    // ((28.0) 82: how many have volunteered so far, police and army, after the raiding (the cap is for the whole game).)
+    private static final int VERSION = 82;
 
     private SaveGame() {
     }
@@ -38,6 +43,10 @@ final class SaveGame {
             out.writeInt(cfg.exodus);
             // Version 47: the map version the city was built to, itself.
             out.writeInt(cfg.civic);
+            // ((17.0) Version 57: the game mode.)
+            // (The game mode until 19.6. From version 65 (20.0): the difficulty, in bits 8 to 11.)
+            // ((26.0) And the police/army strength in bits 12 and 13.)
+            out.writeInt(cfg.difficulty << 8 | cfg.force << 12);
 
             out.writeFloat(w.time);
             out.writeInt(w.turned);
@@ -78,7 +87,15 @@ final class SaveGame {
                 out.writeInt(z.wantGuards);
             }
 
-            // People in vehicles are saved as if they had just got out.
+            // People in vehicles are saved as if they had just got out. ((27.4) Except those in a vehicle that's kept
+            // (VehicleSave): they're saved as they are, and put back aboard when it's loaded.)
+            ArrayList<Fleet.Vehicle> kept = new ArrayList<Fleet.Vehicle>();
+            java.util.IdentityHashMap<Fleet.Vehicle, Integer> keptIndex = new java.util.IdentityHashMap<Fleet.Vehicle, Integer>();
+            for (Fleet.Vehicle v : w.fleet.vehicles)
+                if (VehicleSave.keep(v)) {
+                    keptIndex.put(v, kept.size());
+                    kept.add(v);
+                }
             ArrayList<Entity> all = new ArrayList<Entity>();
             // ((12.0) Saved where they'd come out, without moving anyone in the game that carries on after the save;
             // and the stand-ins for those still aboard don't use up callsigns and squad places in it.)
@@ -94,13 +111,22 @@ final class SaveGame {
                     moved.put(e, new float[]{b.doorX, b.doorY});
                     all.add(e);
                 }
+            java.util.IdentityHashMap<Entity, Boolean> listed = new java.util.IdentityHashMap<Entity, Boolean>();
             for (Fleet.Vehicle v : w.fleet.vehicles) {
+                if (keptIndex.containsKey(v)) {
+                    for (Entity e : v.crew) if (listed.put(e, Boolean.TRUE) == null) all.add(e);
+                    for (Entity e : v.riders) if (listed.put(e, Boolean.TRUE) == null) all.add(e);
+                    if (v.realDriver && v.driver != null && v.driver.dead && listed.put(v.driver, Boolean.TRUE) == null) all.add(v.driver);
+                    continue;
+                }
+                // ((26.0) Those aboard a police boat out on the water come ashore at its mooring.)
+                float[] at = v.kind == Fleet.K_POLICE_BOAT ? Ops.ashoreAt(v) : new float[]{v.x, v.y};
                 for (Entity e : v.riders) {
-                    moved.put(e, new float[]{v.x, v.y});
+                    moved.put(e, at);
                     all.add(e);
                 }
                 for (Entity e : v.crew) {
-                    moved.put(e, new float[]{v.x, v.y});
+                    moved.put(e, at);
                     all.add(e);
                 }
                 if (Fleet.airborne(v) || v.type == Fleet.TRAIN || v.passengers <= 0 || v.state > 1 || v.broken) continue;
@@ -154,6 +180,8 @@ final class SaveGame {
                 out.writeFloat(b[0]);
                 out.writeFloat(b[1]);
                 out.writeFloat(b[2]);
+                // (Version 67, 22.0: what it's made of.)
+                out.writeByte((int) b[5]);
             }
 
             out.writeInt(w.corpses.size());
@@ -341,6 +369,171 @@ final class SaveGame {
             // ((12.4) Version 51: the strain's traits added in 12.4.)
             out.writeInt(World.TR_COUNT - World.TR_OLD);
             for (int t = World.TR_OLD; t < World.TR_COUNT; t++) out.writeByte((w.trait[t] ? 1 : 0) | (w.traitKnown[t] ? 2 : 0));
+            // (Version 52, 14.2: the city's quarantine and the air strikes.)
+            out.writeBoolean(w.quarantined);
+            out.writeInt(w.strikes);
+            out.writeFloat(w.strikeCd);
+            // (Version 53, 14.4: where each moment on the timeline happened.)
+            out.writeInt(w.timeline.size());
+            for (World.Moment m : w.timeline) {
+                out.writeFloat(m.x);
+                out.writeFloat(m.y);
+            }
+            // (Version 54, 14.5: the field hospital.)
+            out.writeFloat(w.hospitalX);
+            out.writeFloat(w.hospitalY);
+            // (Version 55, 15.1: which game this is, for the hall of fame.)
+            out.writeLong(w.gameId);
+            // (Version 56, 15.6: the island prison.)
+            out.writeBoolean(w.prisonFallen);
+            out.writeBoolean(w.prisonSeeded);
+            // (Version 57, 17.0: the gangs' or the enemy's fighters still to come, and how many they started with.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            // (Version 58, 17.2: the gangs that have had a boss and have fallen apart, and the arrests.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            // (Version 59, 17.5: the record for the after-action report: losses, the wounded, where the fighting was.)
+            out.writeInt(w.copsLost);
+            out.writeInt(w.soldiersLost);
+            out.writeInt(0); // (The wounded saved and bled out, until 20.0.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            // (Version 60, 18.0: the campaign mission.)
+            out.writeInt(cfg.mission);
+            out.writeFloat(w.missionStart);
+            out.writeInt(w.spent);
+            out.writeInt(w.missionResult);
+            out.writeInt(w.missionStars);
+            // (Version 61, 18.1: heists. The jobs under way aren't kept: their crews make off once it's loaded.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            // (Version 62, 18.2: the prison break.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            // (Version 63, 18.3: the cartel, terror, disasters and the aliens. Bombs and disasters under way aren't kept.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeBoolean(false);
+            for (int k = 0; k < 4; k++) out.writeFloat(0);
+            // (Version 64, 18.5: what was under way - heists, bombs, disasters and the police's drones.)
+            // ((19.6) No heists, bombs or disasters any more: none of them written.)
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(w.policeDrones.size());
+            for (float[] pd : w.policeDrones) for (int k = 0; k < 6; k++) out.writeFloat(pd[k]);
+            out.writeInt(0);
+            out.writeInt(w.battleMap == null ? 0 : w.battleMap.length);
+            if (w.battleMap != null) for (float f : w.battleMap) out.writeFloat(f);
+            // (Version 65, 20.0: the director, flares and mines. The first eight were the clock and the weather, taken
+            // out again before 20.0 was done: the next horde and siege are kept in two of their places.)
+            out.writeFloat(w.director.nextHorde);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeInt(0);
+            out.writeFloat(w.director.nextSiege);
+            out.writeFloat(0);
+            out.writeFloat(0);
+            out.writeInt(0);
+            out.writeInt(w.flaresFired);
+            out.writeInt(w.minesBlown);
+            out.writeInt(w.director.phase);
+            out.writeFloat(w.director.stress);
+            out.writeFloat(w.director.nextWave);
+            out.writeInt(w.director.hordes);
+            out.writeInt(w.director.stragglers);
+            out.writeInt(0);
+            out.writeInt(w.director.sieges);
+            out.writeInt(w.flares.size());
+            for (float[] f : w.flares) for (int k = 0; k < 3; k++) out.writeFloat(f[k]);
+            out.writeInt(w.mines.size());
+            for (float[] m : w.mines) for (int k = 0; k < 3; k++) out.writeFloat(m[k]);
+            // (Version 66, 21.0: razor wire, alphas, the commander's perks, and a defended site's count.)
+            out.writeInt(w.defences.wires.size());
+            for (float[] c : w.defences.wires) for (int k = 0; k < 3; k++) out.writeFloat(c[k]);
+            out.writeInt(w.defences.wireKills);
+            out.writeInt(w.defences.nests);
+            out.writeInt(w.alphas);
+            out.writeInt(w.alphasKilled);
+            out.writeInt(w.barrages);
+            out.writeInt(w.perkStars);
+            out.writeFloat(w.siteT);
+            // (Version 70, 25.0: the airstrike's cooldown, and the wreckage of planes that came down.)
+            out.writeFloat(Math.max(0, w.airstrikeReady - w.time));
+            out.writeInt(w.crashes.size());
+            for (float[] c : w.crashes) for (int k = 0; k < 4; k++) out.writeFloat(c[k]);
+            // Version 71: the survivor bases.
+            out.writeInt(w.bases.size());
+            for (SurvivorBases.Base b : w.bases) {
+                out.writeInt(w.city.buildings.indexOf(b.b));
+                out.writeUTF(b.name);
+                out.writeByte(b.tier);
+                out.writeFloat(b.work);
+                out.writeBoolean(b.walled);
+                out.writeByte(b.towersUp);
+                out.writeFloat(b.stash);
+                out.writeFloat(b.workshop);
+                out.writeFloat(b.age);
+                out.writeByte(b.said);
+            }
+            out.writeInt(w.basesFounded);
+            out.writeInt(w.basesLost);
+            // ((26.0) Version 75 (at the very end): settlements, laid out over their own ground.)
+            int st = 0;
+            for (SurvivorBases.Base b : w.bases) if (b.settlement) st++;
+            out.writeInt(st);
+            for (SurvivorBases.Base b : w.bases) {
+                if (!b.settlement) continue;
+                out.writeInt(w.city.buildings.indexOf(b.b));
+                out.writeInt(b.tx0);
+                out.writeInt(b.ty0);
+                out.writeInt(b.tx1);
+                out.writeInt(b.ty1);
+                out.writeInt(b.room);
+            }
+            // ((26.0) Version 73: the police's mobile command post (where it's set up, its tent, how damaged), and the
+            // tallies of the boats, the command post and the special forces. The boats themselves are back at their moorings.)
+            // ((26.1) Version 76: the army's command post after them, the same way. A truck parked at home, or out on the
+            // road, isn't kept: a new one is parked at home.)
+            Ops ops = w.ops;
+            writePost(out, ops.police);
+            out.writeInt(ops.rescued);
+            out.writeInt(ops.ferried);
+            out.writeInt(ops.sfCalls);
+            writePost(out, ops.army);
+            // ((27.4) Version 79 (at the very end): the vehicles, with those aboard, and the convoys.)
+            VehicleSave.write(out, w, kept, keptIndex, index);
+            // ((27.5) Version 80: the calls going on, and who and what was on its way to each.)
+            CallSave.write(out, w, kept, index);
+            // ((27.5) Version 81: the bases' raiding, each by its building.)
+            out.writeInt(w.bases.size());
+            for (SurvivorBases.Base s : w.bases) {
+                out.writeInt(w.city.buildings.indexOf(s.b));
+                out.writeBoolean(s.raiders);
+                out.writeInt(s.territory);
+                out.writeInt(s.raids);
+                out.writeInt(s.robbed);
+                out.writeInt(s.struck);
+            }
+            // ((28.0) Version 82: the volunteers so far.)
+            out.writeInt(w.volunteersPolice);
+            out.writeInt(w.volunteersArmy);
         } finally {
             moved = null;
             homeIndex = null;
@@ -356,6 +549,13 @@ final class SaveGame {
     /** Version 1 saves came before dogs, which took entity type 4. */
     private static int type(int t, int version) {
         t = version < 2 && t >= Entity.DOG ? t + 1 : t;
+        // ((22.6) Type 12 was the spitter, long gone (they came back as zombies); it's the bruiser from version 68.)
+        if (version < 68 && t == Entity.BRUISER) t = Entity.ZOMBIE;
+        // ((25.0) Type 9 was the crawler (back as a zombie); it's the giant from version 70.)
+        if (version < 70 && t == Entity.GIANT) t = Entity.ZOMBIE;
+        // ((27.0) Type 13 was the bloater (back as a zombie); it's the armoured dead from version 77. (Type 10, the
+        // screamer, is an ordinary zombie whatever the version: see Entity.current.)
+        if (version < 77 && t == Entity.ARMOURED) t = Entity.ZOMBIE;
         // (Kinds no longer in the game load as what they'd be now: see Entity.current.)
         return Entity.current(t);
     }
@@ -417,6 +617,26 @@ final class SaveGame {
         out.writeBoolean(e.outsider);
         // Version 36: the dead in body armour.
         out.writeBoolean(e.armored);
+        // Version 52 (14.2): a looter in a raider gang.
+        out.writeBoolean(e.raider);
+        // Version 54 (14.5): when one of the dead rose, for how rotten it is.
+        out.writeFloat(e.risen);
+        // Version 55 (15.1): lives saved, for the hall of fame.
+        out.writeInt(e.saved);
+        // Version 56 (15.6): locked up in the island prison.
+        out.writeBoolean(e.inmate);
+        // Version 57 (17.0): a gang member's or enemy soldier's kit.
+        out.writeByte(e.alpha ? 1 : 0); // (The other modes' kit until 19.6; from version 66 (21.0), whether it's an alpha.)
+        // Version 58 (17.2): under arrest. ((25.0) Gone in 19.6; from version 70, an escaped inmate on the run.)
+        out.writeByte(e.escapee ? 1 : 0);
+        // Version 59 (17.5): down and bleeding.
+        out.writeFloat(0);
+        // ((18.5) A hostage's captors; gone in 19.6.)
+        out.writeInt(-1);
+        // Version 69 (23.0): experience, level and perks.
+        out.writeFloat(e.xp);
+        out.writeByte(e.level);
+        out.writeByte(e.perks);
     }
 
     /** Each building's place in the city's list, while saving. */
@@ -437,7 +657,13 @@ final class SaveGame {
                 // (Before 10.10 there was no Tiny size, so Small was 0.)
                 if (version < 22 && i == CityConfig.OPT_SIZE) v++;
                 // ((11.3) A map or a country no longer in the game: it can't be rebuilt.)
-                if ((i == CityConfig.OPT_PRESET && CityConfig.removed(v)) || (i == CityConfig.OPT_COUNTRY && v != Country.USA))
+                // ((25.0) Desert City and Theme Park Island have the numbers of maps long gone (Seattle, New York): a save
+                // from before they came in is one of those, not them.)
+                if ((i == CityConfig.OPT_PRESET && (CityConfig.removed(v) || (v == CityConfig.DESERT && version < 69) || (v == CityConfig.THEME_PARK && version < 72) || (v == CityConfig.SPACE_CENTER && version < 75)))
+                        || (i == CityConfig.OPT_COUNTRY && v != Country.USA))
+                    throw new IOException("This save's map is no longer in the game");
+                // ((28.0) Highway Crossroads and Canyon Town have the numbers of maps long gone: an older save is one of those.)
+                if (i == CityConfig.OPT_PRESET && (v == CityConfig.CROSSROADS || v == CityConfig.CANYON) && version < 81)
                     throw new IOException("This save's map is no longer in the game");
                 if (i < cfg.v.length) cfg.v[i] = Math.max(0, Math.min(cfg.values(i).length - 1, v));
             }
@@ -447,6 +673,13 @@ final class SaveGame {
             if (version >= 26) cfg.outskirts = in.readInt();
             if (version >= 41) cfg.exodus = in.readInt();
             int civic = version >= 47 ? in.readInt() : -1;
+            // (A game mode from before 19.6, when there were others: only the dead now.)
+            if (version >= 57) {
+                int packed = in.readInt();
+                // ((20.0) From version 65 the old game mode's place holds the difficulty.)
+                if (version >= 65) cfg.difficulty = Math.min(3, packed >> 8 & 15);
+                cfg.force = version >= 75 ? Math.min(2, packed >> 12 & 3) : 1;
+            }
             // (Cities saved before 10.4 were built without their government quarter.)
             cfg.civic = version >= 48 ? 27 : version >= 47 ? 26 : version >= 46 ? 25 : version >= 45 ? 24 : version >= 44 ? 23 : version >= 43 ? 22 : version >= 42 ? 21 : version >= 40 ? 20 : version >= 39 ? 19 : version >= 38 ? 18 : version >= 37 ? 17 : version >= 36 ? 16 : version >= 35 ? 15 : version >= 34 ? 14 : version >= 33 ? 13 : version >= 32 ? 12 : version >= 31 ? 11 : version >= 30 ? 11 : version >= 29 ? 10 : version >= 28 ? 9 : version >= 27 ? 8 : version >= 26 ? 7 : version >= 25 ? 6 : version >= 24 ? 5 : version >= 23 ? 4 : version >= 22 ? 3 : version >= 20 ? 2 : version >= 19 ? 1 : 0;
             if (civic >= 0) cfg.civic = civic;
@@ -492,6 +725,8 @@ final class SaveGame {
 
             int count = in.readInt();
             for (int i = 0; i < count; i++) w.entities.add(readEntity(in, w, d, version));
+            // ((27.4) Everyone as written, in order: the vehicles (at the end) say who of them is aboard.)
+            ArrayList<Entity> written = new ArrayList<Entity>(w.entities);
             if (version >= 2)
                 for (int i = 0; i < count; i++) {
                     int lead = in.readInt();
@@ -528,7 +763,11 @@ final class SaveGame {
             for (int i = 0; i < barriers; i++) {
                 float[] b = w.placeBarricade(in.readFloat(), in.readFloat());
                 float hp = in.readFloat();
-                if (b != null) b[2] = hp;
+                int tier = version >= 67 ? in.readByte() : 0;
+                if (b != null) {
+                    b[5] = tier;
+                    b[2] = hp;
+                }
             }
 
             int corpses = in.readInt();
@@ -765,12 +1004,247 @@ final class SaveGame {
                 // (A game saved before 12.4: none of the newer traits, not whatever this run happened to roll.)
                 for (int t = World.TR_OLD; t < World.TR_COUNT; t++) w.trait[t] = w.traitKnown[t] = false;
             }
+            if (version >= 52) {
+                w.quarantined = in.readBoolean();
+                w.strikes = in.readInt();
+                w.strikeCd = in.readFloat();
+            } else if (w.escalation >= 2) {
+                // (Saved before 14.2, after the one air strike there used to be.)
+                w.strikes = 1;
+                w.strikeCd = 120;
+            }
+            if (version >= 53) {
+                int nm = in.readInt();
+                for (int i = 0; i < nm; i++) {
+                    float mx = in.readFloat(), my = in.readFloat();
+                    if (i < w.timeline.size()) {
+                        w.timeline.get(i).x = mx;
+                        w.timeline.get(i).y = my;
+                    }
+                }
+            }
+            if (version >= 54) {
+                w.hospitalX = in.readFloat();
+                w.hospitalY = in.readFloat();
+            }
+            if (version >= 55) w.gameId = in.readLong();
+            if (version >= 56) {
+                w.prisonFallen = in.readBoolean();
+                w.prisonSeeded = in.readBoolean();
+            }
+            if (version >= 57) {
+                in.readInt();
+                in.readInt();
+                in.readInt();
+            }
+            if (version >= 58) {
+                in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
+            }
+            if (version >= 59) {
+                w.copsLost = in.readInt();
+                w.soldiersLost = in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
+                in.readInt();
+                if (version >= 60) {
+                    int ms = in.readInt();
+                    w.city.cfg.mission = Campaign.get(ms) != null ? ms : -1;
+                    w.applyRules();
+                    w.missionStart = in.readFloat();
+                    w.spent = in.readInt();
+                    w.missionResult = in.readInt();
+                    w.missionStars = in.readInt();
+                }
+                if (version >= 61) {
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                }
+                if (version >= 62) {
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                }
+                if (version >= 63) {
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    in.readBoolean();
+                    for (int k = 0; k < 4; k++) in.readFloat();
+                }
+                if (version >= 64) {
+                    // (Heists, bombs and disasters from before 19.6: read past.)
+                    int hn = in.readInt();
+                    for (int k = 0; k < hn; k++) {
+                        for (int j = 0; j < 3; j++) in.readInt();
+                        in.readFloat();
+                        in.readInt();
+                        in.readInt();
+                        in.readFloat();
+                        in.readFloat();
+                        in.readInt();
+                    }
+                    int bn = in.readInt();
+                    for (int k = 0; k < bn * 4; k++) in.readFloat();
+                    int zn = in.readInt();
+                    for (int k = 0; k < zn; k++) {
+                        in.readInt();
+                        for (int j = 0; j < 8; j++) in.readFloat();
+                    }
+                    int dn = in.readInt();
+                    for (int k = 0; k < dn; k++) {
+                        float[] pd = new float[6];
+                        for (int j = 0; j < 6; j++) pd[j] = in.readFloat();
+                        w.policeDrones.add(pd);
+                    }
+                    in.readInt();
+                }
+                int bm = in.readInt();
+                if (bm > 0) {
+                    w.battleMap = new float[bm];
+                    for (int i = 0; i < bm; i++) w.battleMap[i] = in.readFloat();
+                }
+                if (version >= 65) {
+                    float nh = in.readFloat();
+                    in.readInt();
+                    in.readInt();
+                    in.readInt();
+                    float ns = in.readFloat();
+                    in.readFloat();
+                    in.readFloat();
+                    in.readInt();
+                    // (A save from the first 20.0 had the time of day and the weather's timer here: under a minute
+                    // means that, not a horde nearly due.)
+                    if (nh >= 1) w.director.nextHorde = nh;
+                    if (ns >= 60) w.director.nextSiege = ns;
+                    w.flaresFired = in.readInt();
+                    w.minesBlown = in.readInt();
+                    w.director.phase = in.readInt();
+                    w.director.stress = in.readFloat();
+                    w.director.nextWave = in.readFloat();
+                    w.director.hordes = in.readInt();
+                    w.director.stragglers = in.readInt();
+                    in.readInt();
+                    w.director.sieges = in.readInt();
+                    int fn = in.readInt();
+                    for (int k = 0; k < fn; k++) w.flares.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat()});
+                    int mn = in.readInt();
+                    for (int k = 0; k < mn; k++) w.mines.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat()});
+                }
+                if (version >= 66) {
+                    int wn = in.readInt();
+                    for (int k = 0; k < wn; k++) w.defences.restore(w, in.readFloat(), in.readFloat(), in.readFloat());
+                    w.defences.wireKills = in.readInt();
+                    w.defences.nests = in.readInt();
+                    w.alphas = in.readInt();
+                    w.alphasKilled = in.readInt();
+                    w.barrages = in.readInt();
+                    w.perkStars = in.readInt();
+                    // ((22.0) Stars then; the perks themselves now.)
+                    if (version < 67) w.perkStars = Perks.legacy(w.perkStars);
+                    w.siteT = in.readFloat();
+                }
+                if (version >= 70) {
+                    w.airstrikeReady = w.time + in.readFloat();
+                    int cn = in.readInt();
+                    for (int k = 0; k < cn; k++) w.crashes.add(new float[]{in.readFloat(), in.readFloat(), in.readFloat(), in.readFloat()});
+                }
+                if (version >= 71) {
+                    int bn = in.readInt();
+                    for (int k = 0; k < bn; k++) {
+                        int bi = in.readInt();
+                        String name = in.readUTF();
+                        int tier = in.readByte();
+                        float work = in.readFloat();
+                        boolean walled = in.readBoolean();
+                        int towers = in.readByte();
+                        float stash = in.readFloat(), workshop = in.readFloat(), age = in.readFloat();
+                        int said = in.readByte();
+                        SurvivorBases.Base b = bi >= 0 && bi < w.city.buildings.size() ? w.restoreBase(w.city.buildings.get(bi)) : null;
+                        if (b == null) continue;
+                        b.name = name;
+                        b.tier = tier;
+                        b.work = work;
+                        b.walled = walled;
+                        b.towersUp = towers;
+                        b.stash = stash;
+                        b.workshop = workshop;
+                        b.age = age;
+                        b.said = said;
+                    }
+                    w.basesFounded = in.readInt();
+                    w.basesLost = in.readInt();
+                    if (version >= 75) {
+                        int sn = in.readInt();
+                        for (int k = 0; k < sn; k++) {
+                            int bi = in.readInt(), x0 = in.readInt(), y0 = in.readInt(), x1 = in.readInt(), y1 = in.readInt(), room = in.readInt();
+                            w.restoreSettlement(bi, x0, y0, x1, y1, room);
+                        }
+                    }
+                }
+                if (version >= 73) {
+                    Ops ops = w.ops;
+                    readPost(in, ops, ops.police, version);
+                    ops.rescued = in.readInt();
+                    ops.ferried = in.readInt();
+                    ops.sfCalls = in.readInt();
+                    if (version >= 76) readPost(in, ops, ops.army, version);
+                }
+            }
+            if (version >= 79) {
+                int before = w.fleet.vehicles.size();
+                VehicleSave.read(in, w, written);
+                // ((27.5) The calls, after the vehicles that were on their way to them.)
+                if (version >= 80) CallSave.read(in, w, new ArrayList<Fleet.Vehicle>(w.fleet.vehicles.subList(before, w.fleet.vehicles.size())), written);
+                if (version >= 81) {
+                    int nRaid = in.readInt();
+                    for (int i = 0; i < nRaid; i++) {
+                        int bi = in.readInt();
+                        boolean raiders = in.readBoolean();
+                        int territory = in.readInt(), raids = in.readInt(), robbed = in.readInt(), struck = in.readInt();
+                        SurvivorBases.Base s = null;
+                        for (int k = 0; k < w.bases.size() && s == null; k++)
+                            if (bi >= 0 && bi < w.city.buildings.size() && w.bases.get(k).b == w.city.buildings.get(bi)) s = w.bases.get(k);
+                        if (s == null) continue;
+                        s.raiders = raiders;
+                        s.territory = territory;
+                        s.raids = raids;
+                        s.robbed = robbed;
+                        s.struck = struck;
+                    }
+                }
+                if (version >= 82) {
+                    w.volunteersPolice = in.readInt();
+                    w.volunteersArmy = in.readInt();
+                }
+            }
+            // ((28.0) An older save: at least those still about have volunteered.)
+            if (version < 82)
+                for (Entity e : w.entities)
+                    if (!e.dead && e.role == Entity.ROLE_VOLUNTEER) {
+                        if (e.type == Entity.COP) w.volunteersPolice++;
+                        else if (e.type == Entity.SOLDIER) w.volunteersArmy++;
+                    }
             // ((12.0) The fallen buildings counted from the buildings themselves: the count started again at 0.)
             w.collapsedCount = 0;
             for (City.Building b : w.city.buildings) if (b.collapsed) w.collapsedCount++;
             d.copCount = copCount;
             d.soldierCount = soldierCount;
             w.afterLoad();
+            // ((16.14) Nobody indoors now: anyone a game saved before had inside a building comes out at its door.)
+            w.emptyAllBuildings();
             return w;
         } finally {
             in.close();
@@ -791,6 +1265,8 @@ final class SaveGame {
         e.body = in.readInt();
         e.head = in.readInt();
         e.skin = in.readInt();
+        // ((27.0) An armoured zombie's helmet isn't kept as such: it has it while its head is still the helmet's colour.)
+        e.helmet = e.type == Entity.ARMOURED && e.head != e.skin;
         e.origin = in.readInt();
         if (e.origin >= 0) e.origin = type(e.origin, version);
         e.infected = in.readBoolean();
@@ -838,7 +1314,62 @@ final class SaveGame {
         }
         if (version >= 31) e.outsider = in.readBoolean();
         if (version >= 36) e.armored = in.readBoolean();
+        if (version >= 52) e.raider = in.readBoolean();
+        if (version >= 54) e.risen = in.readFloat();
+        else if (e.isZombie()) e.risen = w.time;
+        if (version >= 55) e.saved = in.readInt();
+        if (version >= 56) e.inmate = in.readBoolean();
+        if (version >= 57) {
+            int k = in.readByte();
+            if (version >= 66) e.alpha = k == 1;
+        }
+        if (version >= 58) {
+            int k = in.readByte();
+            if (version >= 70) e.escapee = k == 1;
+        }
+        if (version >= 59) in.readFloat();
+        if (version >= 64) in.readInt();
+        if (version >= 69) {
+            e.xp = in.readFloat();
+            e.level = in.readByte();
+            e.perks = in.readByte();
+        }
         if (zone >= 0 && zone < d.zones.size()) e.zone = d.zones.get(zone);
         return e;
+    }
+
+    /** ((26.1) A command post: set up where (its truck, tent and damage), and its tallies. */
+    private static void writePost(DataOutputStream out, Ops.Post p) throws IOException {
+        Fleet.Vehicle cp = p.truck;
+        boolean up = cp != null && p.up && !cp.broken && !cp.removedFromFleet;
+        out.writeBoolean(up);
+        if (up) {
+            out.writeFloat(cp.x);
+            out.writeFloat(cp.y);
+            out.writeFloat(cp.angle);
+            out.writeFloat(p.x);
+            out.writeFloat(p.y);
+            out.writeFloat(cp.hp);
+        }
+        out.writeFloat(p.cd);
+        out.writeInt(p.setUp);
+        out.writeInt(p.lost);
+        out.writeInt(p.resupplied);
+    }
+
+    private static void readPost(DataInputStream in, Ops ops, Ops.Post p, int version) throws IOException {
+        if (in.readBoolean()) {
+            float x = in.readFloat(), y = in.readFloat(), a = in.readFloat(), px = in.readFloat(), py = in.readFloat(), hp = in.readFloat();
+            // ((27.4) From version 79 the truck itself is kept with the other vehicles (VehicleSave links it): just the tent.)
+            if (version >= 79) {
+                p.up = true;
+                p.x = px;
+                p.y = py;
+            } else ops.restorePost(p, x, y, a, px, py, hp);
+        }
+        p.cd = in.readFloat();
+        p.setUp = in.readInt();
+        p.lost = in.readInt();
+        p.resupplied = in.readInt();
     }
 }

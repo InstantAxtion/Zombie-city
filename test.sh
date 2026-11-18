@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
-# Runs the game's tests on a desktop JVM (no Android device needed), split across the CPU's cores.
-#   ./test.sh            all tests, in parallel
-#   ./test.sh 10.23      only the tests whose names start with "10.23"
+# Runs the game's 25 tests on a desktop JVM (no Android device needed), split across shards.
+#   ./test.sh                 all 25 tests, in parallel (SHARDS=N to choose how many JVMs; at most 6)
+#   FAST=1 ./test.sh          only the fast tier (run after every merge)
+#   ./test.sh "maps"          only the tests whose names start with "maps" (in one JVM)
+#   ./test.sh --list          the tests, the fast ones marked
+#   ZC_SEED_SALT=101 ./test.sh   the same tests played out with other dice
 set -euo pipefail
 cd "$(dirname "$0")"
 rm -rf build/test
 mkdir -p build/test
 javac -nowarn -encoding UTF-8 -d build/test $(find tests/stubs tests/src -name '*.java') \
-    $(find src -name '*.java' ! -name MainActivity.java ! -name Sound.java) 2>&1 | grep -v '^Note:' || true
+    $(find src -name '*.java' ! -name MainActivity.java ! -name Sound.java) 2>&1 | grep -v -e '^Note:' -e '^Picked up JAVA_TOOL_OPTIONS' || true
 [ -f build/test/com/instantaxtion/zombiesandbox/GameTests.class ] || { echo "compile failed"; exit 1; }
-run() { java -Djava.awt.headless=true -Xmx2g -cp build/test com.instantaxtion.zombiesandbox.GameTests 2>&1 | grep -v '^Picked up JAVA_TOOL_OPTIONS'; }
+run() { java -Djava.awt.headless=true -Xmx2g -cp build/test com.instantaxtion.zombiesandbox.GameTests "$@" 2>&1 | grep --line-buffered -v '^Picked up JAVA_TOOL_OPTIONS'; }
+if [ "${1:-}" = "--list" ]; then
+    run --list
+    exit 0
+fi
 if [ $# -gt 0 ]; then
     ONLY="$1" run
     exit "${PIPESTATUS[0]}"

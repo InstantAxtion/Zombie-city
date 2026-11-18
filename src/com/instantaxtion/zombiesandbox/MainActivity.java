@@ -26,6 +26,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        recordCrashes();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         game = new GameView(this);
         game.codePrompt = new GameView.CodePrompt() {
@@ -41,6 +42,82 @@ public class MainActivity extends Activity {
             }
         };
         setContentView(game);
+        showLastCrash();
+    }
+
+    // ------------------------------------------------------------------ (14.1) when the game closes unexpectedly
+
+    private java.io.File crashFile() {
+        return new java.io.File(getFilesDir(), "last_crash.txt");
+    }
+
+    /**
+     * (14.1) If the game ever closes unexpectedly, what went wrong is written down first (the version, the phone, and
+     * where in the code), so it can be shown the next time and passed on to get it fixed.
+     */
+    private void recordCrashes() {
+        final Thread.UncaughtExceptionHandler before = Thread.getDefaultUncaughtExceptionHandler();
+        final java.io.File file = crashFile();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                try {
+                    java.io.StringWriter sw = new java.io.StringWriter();
+                    java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+                    pw.println("Zombie City Sandbox " + PatchNotes.VERSION + " (" + PatchNotes.VERSION_CODE + ")");
+                    pw.println("Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + "), " + Build.MANUFACTURER + " " + Build.MODEL);
+                    Runtime r = Runtime.getRuntime();
+                    pw.println("Memory: " + ((r.totalMemory() - r.freeMemory()) >> 20) + " of " + (r.maxMemory() >> 20) + " MB");
+                    pw.println("Thread: " + t.getName());
+                    e.printStackTrace(pw);
+                    pw.flush();
+                    java.io.FileWriter out = new java.io.FileWriter(file);
+                    out.write(sw.toString());
+                    out.close();
+                } catch (Throwable ignored) {
+                    // (Nothing more can be done: let it close as it would have.)
+                }
+                if (before != null) before.uncaughtException(t, e);
+            }
+        });
+    }
+
+    /** What went wrong last time, if the game closed unexpectedly: shown once, with a button to copy it. */
+    private void showLastCrash() {
+        java.io.File file = crashFile();
+        if (!file.exists()) return;
+        final StringBuilder sb = new StringBuilder();
+        try {
+            java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(file));
+            String line;
+            for (int n = 0; (line = in.readLine()) != null && n < 60; n++) sb.append(line).append('\n');
+            in.close();
+        } catch (java.io.IOException ignored) {
+        }
+        file.delete();
+        if (sb.length() == 0) return;
+        TextView text = new TextView(this);
+        text.setText(sb.toString());
+        text.setTextIsSelectable(true);
+        text.setTextSize(11);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        text.setPadding(pad, pad / 2, pad, pad / 2);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(text);
+        new AlertDialog.Builder(this)
+                .setTitle("The game closed unexpectedly last time")
+                .setMessage("This is what went wrong. Copy it and pass it on so it can be fixed.")
+                .setView(scroll)
+                .setPositiveButton("Copy", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        android.content.ClipboardManager cb = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                        if (cb != null) cb.setPrimaryClip(android.content.ClipData.newPlainText("Zombie City crash", sb.toString()));
+                        Toast.makeText(MainActivity.this, "Copied", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     private Bitmap pendingShot;
