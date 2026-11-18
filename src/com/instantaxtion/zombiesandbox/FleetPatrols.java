@@ -276,13 +276,16 @@ final class FleetPatrols {
             Vehicle v = fleet.vehicles.get(i);
             if (v.type != CRUISER || !v.patrol || v.state != PATROL || v.crew.size() != 1 || v.kind == K_BIKE || v.incident != null
                     || v.player != null || v.pickupFor != null || v.broken) continue;
+            // (The rangers' trucks go out with the one ranger at the wheel: the others are on foot by design, one of
+            // them minding the station, and that one was being picked up and driven off, leaving it empty.)
+            if (v.agency == 3) continue;
             Entity best = null;
             float bd = 320;
             for (int k = 0, n = w.gatherArmed(v.x, v.y, bd); k < n; k++) {
                 Entity e = w.gathered[k];
                 if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null || e == w.controlled || World.footPatrol(e)
                         || e.role == Entity.ROLE_K9 || e.role == Entity.ROLE_MARKSMAN || e.role == Entity.ROLE_SAR || e.role == Entity.ROLE_PILOT
-                        || e.ammo + e.reserve <= 0) continue;
+                        || e.agency == 3 || e.ammo + e.reserve <= 0) continue;
                 float d = (float) World.hypot(e.x - v.x, e.y - v.y);
                 if (d < bd) {
                     bd = d;
@@ -329,6 +332,8 @@ final class FleetPatrols {
                 Entity e = w.entities.get(i);
                 if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null) continue;
                 if (e.role == Entity.ROLE_MARKSMAN || e.role == Entity.ROLE_K9) continue;
+                // (Nor the park rangers on foot, who keep to the wilds.)
+                if (e.agency == 3) continue;
                 // ((11.4) The foot patrols keep walking their beat.)
                 if (World.footPatrol(e) && w.alert < 1) continue;
                 if (fleet.patrolCount >= fleet.patrolTarget && (e.role != Entity.ROLE_RIFLE || e.agency != 0)) continue;

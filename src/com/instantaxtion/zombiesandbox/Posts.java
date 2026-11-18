@@ -341,9 +341,10 @@ final class Posts {
             }
             face = (float) Math.atan2(dy, dx);
         } else {
-            float[] breach = z.breaches > 0 && e.slot % 2 == 0 ? w.dispatch.nearestBreach(z, e.x, e.y) : null;
+            // ((Every other guard on the wall) to the nearest breach within a walk, not one with a horde at it.)
+            float[] breach = z.breaches > 0 && e.slot % 2 == 0 ? w.dispatch.nearestBreach(z, e.x, e.y, 480, 5) : null;
             if (breach != null) {
-                // Covering a breach (and mending it once it's clear).
+                // Covering a breach (and mending it once it's clear), then back to their post.
                 px = breach[0];
                 py = breach[1];
                 face = (float) Math.atan2(breach[1] - z.y, breach[0] - z.x);

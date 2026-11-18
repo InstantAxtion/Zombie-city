@@ -2940,13 +2940,25 @@ final class Dispatch {
 
     /** The nearest breach in a zone's wall (the spot just inside it), or null. */
     float[] nearestBreach(SafeZone z, float x, float y) {
+        return nearestBreach(z, x, y, Float.MAX_VALUE, Integer.MAX_VALUE);
+    }
+
+    /**
+     * The nearest breach within {@code range} of (x, y) with fewer than {@code horde} of the dead at it, or null: the
+     * one a guard walks over to mend (and back to their post after), not one out past a horde.
+     */
+    float[] nearestBreach(SafeZone z, float x, float y, float range, int horde) {
         float[] best = null;
-        float bd = Float.MAX_VALUE;
+        float bd = range < Float.MAX_VALUE ? range * range : Float.MAX_VALUE;
         for (int k = 0; k < z.wall.length; k++) {
             if (z.up[k] || (z.built < 1 && z.hp[k] > 0)) continue;
+            // (Mended, waiting only for the gap to clear to go back up: not a breach to stand in. Guards covering one
+            // stood in the gap and kept it from going up, and the rest of them came to it for good, leaving a real
+            // breach further off unmended.)
+            if (z.hp[k] >= 80) continue;
             float[] p = z.innerOf(z.wall[k], city.w);
             float d = (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y);
-            if (d < bd) {
+            if (d < bd && (horde == Integer.MAX_VALUE || w.countZombiesNear(p[0], p[1], 80) < horde)) {
                 bd = d;
                 best = p;
             }
@@ -2954,7 +2966,7 @@ final class Dispatch {
         for (int g = 0; g < z.gateTiles.length; g++) {
             if (z.gateHp[g] > 0) continue;
             float d = (z.gateIn[g][0] - x) * (z.gateIn[g][0] - x) + (z.gateIn[g][1] - y) * (z.gateIn[g][1] - y);
-            if (d < bd) {
+            if (d < bd && (horde == Integer.MAX_VALUE || w.countZombiesNear(z.gateIn[g][0], z.gateIn[g][1], 80) < horde)) {
                 bd = d;
                 best = z.gateIn[g];
             }

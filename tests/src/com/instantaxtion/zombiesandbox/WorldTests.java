@@ -1378,23 +1378,9 @@ final class WorldTests extends TestKit {
         for (Entity e : w.entities) if (!e.dead && e.task == Dispatch.T_SHELTER && e.zone == z && z.inside(e.x, e.y)) inside++;
         check(inside >= 3, "the sheltered are inside the wall (" + inside + ")");
         // The dead claw through a section; it's mended once they're gone.
-        // (A section a guard can get to the inside of: open ground there, a walk of a few steps from the nearest guard,
-        // not one boxed in behind the tents.)
+        // (The one a third of the way round, however far that is from the nearest guard: one of them walks over,
+        // mends it and goes back to their post.)
         int k = z.wall.length / 3;
-        float kd = Float.MAX_VALUE;
-        for (int s = 0; s < z.wall.length; s++) {
-            if (!z.up[s]) continue;
-            float[] ip = z.innerOf(z.wall[s], w.city.w);
-            if (w.city.circleBlocked(ip[0], ip[1], 6)) continue;
-            for (Entity e : w.entities) {
-                if (e.dead || e.task != Dispatch.T_GUARD || e.zone != z) continue;
-                float d = (float) Math.hypot(e.x - ip[0], e.y - ip[1]);
-                if (d > 60 && d < kd) {
-                    kd = d;
-                    k = s;
-                }
-            }
-        }
         w.dispatch.damageWall(z, k, 1000);
         check(!z.up[k] && !w.city.solid[z.wall[k]], "a section broken down is a gap in the wall");
         boolean mended = false;

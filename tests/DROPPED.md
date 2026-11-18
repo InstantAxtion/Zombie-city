@@ -31,10 +31,6 @@ check can be brought back if it's missed; the old suite is `tests/src/.../GameTe
   to five minutes for wall, guards and tower instead of a fixed two-to-four.
 - 21.2 "working round a victim": moved some way in any direction (not only sideways) or shot; "on the move under
   orders": shots taken while still under the order (they may drop it later to fight).
-- 10.16 rangers: "a ranger is at the ranger station" is checked once the day has started (ten seconds in), not at
-  forty seconds. With some dice (ZC_SEED_SALT=202) the ranger minding the station boards the rangers' truck at about
-  twelve seconds and it drives off with all three, leaving the station empty: probably a game bug (28.0, rangers
-  start in their trucks) - bring the forty-second check back once it's fixed.
 - 27.5 junctions: on a Small city, not a Tiny one. On map version 40 and later a Tiny Metropolis (a size the game
   doesn't offer) with seed 23 jams with 39 of 156 vehicles stuck, nearly all patrol cars on their beats (it passes
   with other dice, and on map version 39). `tools/health.sh` watches stuck vehicles at the Default size.
@@ -47,9 +43,6 @@ check can be brought back if it's missed; the old suite is `tests/src/.../GameTe
 - Fixed offsets that land in water or a wall on another map (`truck.x + 600`, `x + 700`) -> `TestKit.driveSpot()`.
 - The wilds tests (fire tower, rangers, rescue helicopter) on Small Town at map version 25 -> `TestKit.wildWorld()`,
   the first Metropolis seed whose country has a ranger station and fire towers.
-- 10.15 safe zone: the section broken down is one a guard can get to the inside of (open ground, a short walk), not
-  always the one a third of the way round. With ZC_SEED_SALT=202 the guards stood 92 off the old one for two minutes
-  and never mended it (worth a look in Posts/Dispatch.repairWall: the guard's breach spot and the 40 it must be within).
 - Scenarios clear bystanders round them (`quiet()`/`empty()` and `step()`): the raider gangs, civilians fighting back,
   the runner, the officer who hears a fight, the helicopter, a victim being bitten (and a grenade still in the air
   from the fight before is cleared).

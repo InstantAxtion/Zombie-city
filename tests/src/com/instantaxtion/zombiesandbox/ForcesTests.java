@@ -1229,9 +1229,8 @@ final class ForcesTests extends TestKit {
             if (best < 60) minded++;
             if (samples == 1) first = best < 60;
         }
-        // (Minded once the day has started. Not checked for the rest of the time: on some dice the one minding it
-        // boards the rangers' truck and it drives off with all three, leaving it empty - see tests/DROPPED.md.)
-        check(first, "a ranger minds the ranger station (" + minded + " of " + samples + " looks, the nearest " + (int) nearest + " off)");
+        // (Minded once the day has started, and still at forty seconds: the one minding it never goes off as crew.)
+        check(first && nearest < 60, "a ranger minds the ranger station (" + minded + " of " + samples + " looks, the nearest " + (int) nearest + " off at 40 s)");
         float[] tower = tw.city.fireTowers.get(0);
         tw.spawn(Entity.ZOMBIE, tower[0] - 70, tower[1] - 50);
         tw.spawn(Entity.ZOMBIE, tower[0] - 62, tower[1] - 50);
