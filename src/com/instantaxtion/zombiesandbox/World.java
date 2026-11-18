@@ -1276,6 +1276,28 @@ final class World {
             movement.steer(e, (float) Math.cos(e.unstickAngle), (float) Math.sin(e.unstickAngle), e.speed);
             return true;
         }
+        // ((28.3) Going to and fro without getting anywhere - between the trees in a wood, a field or a route saying one
+        // way on one tile and back on the next - moves them every step, so it never counted as stuck: they could go
+        // back and forth on the spot for good. Turned right round three times in three seconds, wanting to go
+        // somewhere, and still within a tile of where they started: that's stuck too.)
+        if (e.want > 5) {
+            if (e.wobMx * e.mx + e.wobMy * e.my < -0.3f) e.wobFlips++;
+            if (e.mx != 0 || e.my != 0) {
+                e.wobMx = e.mx;
+                e.wobMy = e.my;
+            }
+        }
+        if (Float.isNaN(e.wobX) || (e.wobT += dt) >= 3) {
+            boolean dither = !Float.isNaN(e.wobX) && e.wobFlips >= 3 && e.want > 5 && hypot(e.x - e.wobX, e.y - e.wobY) < City.T;
+            e.wobX = e.x;
+            e.wobY = e.y;
+            e.wobT = 0;
+            e.wobFlips = 0;
+            if (dither) {
+                e.stuckTime = 2;
+                e.dithered = true;
+            }
+        }
         if (e.stuckTime > 1.2f) {
             e.stuckTime = 0;
             float heading = fastAtan2(e.my, e.mx);
@@ -1299,6 +1321,9 @@ final class World {
                 e.unstickAngle = bestA;
             }
             e.unstick = 0.6f + rnd.nextFloat() * 0.6f;
+            // (Out of a to and fro, a little longer: long enough to get clear of whatever turned them round.)
+            if (e.dithered) e.unstick += 0.6f;
+            e.dithered = false;
             e.blocked = false;
         }
         return false;

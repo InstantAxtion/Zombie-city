@@ -499,6 +499,12 @@ final class Movement {
     }
 
     /** Runs away: prefers tiles far from zombies that also point away from the threat. */
+    /** ((28.3) Solid and not a tree: what can't be slipped past. */
+    private boolean wallish(int x, int y) {
+        City c = w.city;
+        return c.solidTile(x, y) && (x < 0 || y < 0 || x >= c.w || y >= c.h || c.tiles[y * c.w + x] != City.TREE);
+    }
+
     void flee(Entity e, float ax, float ay, float speed) {
         int w = this.w.city.w;
         int tx = (int) (e.x / City.T), ty = (int) (e.y / City.T);
@@ -509,19 +515,35 @@ final class Movement {
                 if (ox == 0 && oy == 0) continue;
                 int nx = tx + ox, ny = ty + oy;
                 // ((10.51) A fence or the highway barrier with open ground past it is a way out too: over it.)
+                // ((28.3) And a tree with open ground past it: a tree is only its trunk, and they slip past it. In a
+                // wood, taking every tree for a wall left people in the gaps between them with nowhere to run, going
+                // to and fro from one gap to the next.)
                 boolean over = false;
+                int past = 0;
                 if (this.w.city.solidTile(nx, ny)) {
-                    if ((ox != 0 && oy != 0) || nx < 1 || ny < 1 || nx >= w - 1 || ny >= this.w.city.h - 1
-                            || this.w.city.tiles[ny * w + nx] != City.FENCE || this.w.city.solidTile(nx + ox, ny + oy)) continue;
-                    over = true;
-                    nx += ox;
-                    ny += oy;
+                    if (nx < 1 || ny < 1 || nx >= w - 1 || ny >= this.w.city.h - 1) continue;
+                    byte k = this.w.city.tiles[ny * w + nx];
+                    if (k == City.FENCE && (ox == 0 || oy == 0) && !this.w.city.solidTile(nx + ox, ny + oy)) {
+                        over = true;
+                        nx += ox;
+                        ny += oy;
+                    } else if (k == City.TREE) {
+                        // (Up to six trees deep, to the open ground past them.)
+                        while (past < 6 && this.w.city.tiles[ny * w + nx] == City.TREE) {
+                            past++;
+                            nx += ox;
+                            ny += oy;
+                            if (nx < 0 || ny < 0 || nx >= w || ny >= this.w.city.h) break;
+                        }
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= this.w.city.h || this.w.city.solidTile(nx, ny)) continue;
+                    } else continue;
                 }
-                if (ox != 0 && oy != 0 && (this.w.city.solidTile(tx + ox, ty) || this.w.city.solidTile(tx, ty + oy))) continue;
+                // (Not cutting a corner past a wall or a fence; past a tree, yes.)
+                if (ox != 0 && oy != 0 && (wallish(tx + ox, ty) || wallish(tx, ty + oy))) continue;
                 float len = (ox != 0 && oy != 0) ? 1.414f : 1f;
                 float dot = (ox * ax + oy * ay) / len;
                 int v = Math.min(12, this.w.city.zombieDist[ny * w + nx]);
-                float score = v * 1.2f + dot * 2.5f - (over ? 1.5f : 0);
+                float score = v * 1.2f + dot * 2.5f - (over ? 1.5f : past * 0.4f);
                 if (score > bestScore) {
                     bestScore = score;
                     bx = ox / len;

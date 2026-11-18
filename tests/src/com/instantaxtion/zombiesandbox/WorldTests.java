@@ -8,8 +8,8 @@ final class WorldTests extends TestKit {
     static void register() {
         test("saves: a busy outbreak runs two minutes and loads back the same; vehicles, calls, drones and Build edits kept", FAST, 40, WorldTests.class,
                 "busyOutbreakSaves", "vehiclesKept", "callsKept", "dronesKept", "buildToolEdits");
-        test("civilians: run, hide or fight back; bands, hidden bites, armed hunters; off screen they wait; nobody goes down wounded", FULL, 25, WorldTests.class,
-                "civilianBrain", "fightBackTogether", "hiddenBites", "bands", "huntersArmed", "keepRunning", "offScreenWait", "deadAtOnce");
+        test("civilians: run, hide or fight back; bands, hidden bites, armed hunters; out of the trees; off screen they wait; nobody goes down wounded", FULL, 25, WorldTests.class,
+                "civilianBrain", "fightBackTogether", "hiddenBites", "bands", "huntersArmed", "keepRunning", "outOfTheTrees", "offScreenWait", "deadAtOnce");
         test("zombies: rot, marching hordes, alphas, mega hordes, runners, the armoured dead; they claw cars, climb heaps, follow noise and climb towers", FULL, 30, WorldTests.class,
                 "rotAndMarch", "alphas", "runnersRun", "engineAndMegaHorde", "armouredDead", "clawClimbHear", "turnRatesAndPickups", "fireTower");
         test("events: the war's end, quarantine and air strikes, the giant, a riot, a prison break, a plane crash, raider gangs and looters, leaders decide", FULL, 35, WorldTests.class,
@@ -466,6 +466,64 @@ final class WorldTests extends TestKit {
                             || runner.stayIn != null || w.city.insideOf(runner.x, runner.y) != null,
                     "still getting away six seconds after it's out of sight (" + (int) Math.hypot(runner.x - sx, runner.y - sy) + " away)");
         }
+    }
+
+    /**
+     * (28.3) Running from the dead in a wood: out between the trees, not to and fro in a gap. A tree is only its trunk,
+     * but fleeing took every tree tile for a wall, so in a gap among them there was nowhere to go but the next gap
+     * over and back - and going to and fro moved them every step, so they never counted as stuck.
+     */
+    static void outOfTheTrees() throws Exception {
+        CityConfig c = cfg(CityConfig.MEDIUM, 77);
+        World w = new World(c);
+        w.populate(c);
+        // A clump of trees eleven tiles across with a gap of two in the middle, on open ground away from the buildings.
+        float[] at = null;
+        for (int k = 0; k < 400 && at == null; k++) {
+            float[] q = w.city.randomWalkableInTown(new java.util.Random(k));
+            if (q == null) continue;
+            int tx = City.fl(q[0] / City.T), ty = City.fl(q[1] / City.T), bad = 0;
+            for (int dy = -6; dy <= 6 && bad == 0; dy++)
+                for (int dx = -6; dx <= 6; dx++) {
+                    int x = tx + dx, y = ty + dy;
+                    if (x < 1 || y < 1 || x >= w.city.w - 1 || y >= w.city.h - 1) { bad++; break; }
+                    byte t = w.city.tiles[y * w.city.w + x];
+                    if (w.city.solid[y * w.city.w + x] || t == City.ROAD || t == City.RAIL || w.city.buildingAt.get(y * w.city.w + x) >= 0) { bad++; break; }
+                }
+            if (bad == 0) at = new float[]{(tx + 0.5f) * City.T, (ty + 0.5f) * City.T};
+        }
+        check(at != null, "open ground for a wood");
+        // A wood eleven tiles across, with a gap of two in the middle and a lane from it out to the east; one of the
+        // dead out on the open ground at the end of the lane. The gap's a dead end but for the trees.
+        int planted = 0;
+        for (int dy = -5; dy <= 5; dy++)
+            for (int dx = -5; dx <= 5; dx++)
+                if (!(dy == 0 && dx >= 0) && w.build(at[0] + dx * City.T, at[1] + dy * City.T, City.ED_TREES)) planted++;
+        w.city.editsDone();
+        check(planted >= 110, "a wood planted (" + planted + ")");
+        w.viewX0 = at[0] - 300;
+        w.viewY0 = at[1] - 200;
+        w.viewX1 = at[0] + 300;
+        w.viewY1 = at[1] + 200;
+        float zx = at[0] + 7 * City.T, zy = at[1];
+        Entity h = w.spawn(Entity.CIVILIAN, at[0], at[1]);
+        Entity z = w.spawn(Entity.ZOMBIE, zx, zy);
+        h.hasGun = false;
+        Quiet calm = quiet(w, at[0], at[1], 260, h, z);
+        float most = 0, west = 0;
+        boolean fled = false;
+        for (int f = 0; f < 30 * 14 && !h.dead; f++) {
+            // (The dead one stays out at the end of the lane: something to run from that doesn't come in after them.)
+            z.stun = Math.max(z.stun, 0.2f);
+            z.x = zx;
+            z.y = zy;
+            step(w, calm);
+            fled |= h.goal == World.G_FLEE || h.fleeTimer > 0;
+            most = Math.max(most, (float) Math.hypot(h.x - at[0], h.y - at[1]));
+            west = Math.max(west, at[0] - h.x);
+        }
+        check(fled, "they run from it");
+        check(!h.dead && west > 3 * City.T, "out of the gap and away through the trees, from it (" + (int) west + " further from it, " + (int) most + " from where they started)");
     }
 
     static void offScreenWait() throws Exception {

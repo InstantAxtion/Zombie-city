@@ -340,6 +340,13 @@ final class Entity {
     float fear;
     /** Getting unstuck: how long they've been making no progress, and a sidestep in progress. */
     float stuckTime, unstick, unstickAngle;
+    /**
+     * ((28.3) Going to and fro: where they were three seconds ago, how long since, how often they've turned right
+     * round since, and the way they were last going (World.unstickStep).
+     */
+    transient float wobX = Float.NaN, wobY, wobT, wobMx, wobMy;
+    transient int wobFlips;
+    transient boolean dithered;
     /** Civilians: a cop or soldier nearby to run towards. */
     Entity protector;
     /** A car this civilian has flagged down and is running to. */

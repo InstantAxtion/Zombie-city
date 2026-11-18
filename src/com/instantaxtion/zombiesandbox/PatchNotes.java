@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.2";
-    static final int VERSION_CODE = 282;
+    static final String VERSION = "28.3";
+    static final int VERSION_CODE = 283;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.3  -  Out of the woods",
+                    "People running from the dead in a wood no longer get stuck going back and forth between the trees: they slip out between the trunks, away from the danger.",
+                    "Anyone going to and fro on the same spot (between trees, or where their way keeps turning them round) now notices and steps out of it.",
+                    "Fixed a crash when using the Build tool during a game.",
+            },
             {
                     "28.2  -  The sandbox only",
                     "The Campaign is gone: no missions, budgets, stars, perks or veterans. New Game is the game. A mission saved before plays on as an ordinary game on the same city.",

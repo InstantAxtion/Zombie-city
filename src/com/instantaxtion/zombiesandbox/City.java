@@ -3731,10 +3731,10 @@ final class City {
     void warmPaths(int n) {
         // ((13.3) From the start, not once someone first needs a route: on a Colossal map the first few moments of a
         // panic worked out hundreds of clusters at once and held the game up for most of a second.)
-        if (nav == null) {
-            if (walkCost == null) computeWalkCost();
-            nav = new Nav(this);
-        }
+        // ((28.3) The walking costs again first whatever: the Build tool throws them out, and with the router already
+        // made they were never worked out again - the next step's look at a cluster crashed the game.)
+        if (walkCost == null) computeWalkCost();
+        if (nav == null) nav = new Nav(this);
         nav.warm(n);
     }
 
