@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.0";
-    static final int VERSION_CODE = 280;
+    static final String VERSION = "28.1";
+    static final int VERSION_CODE = 281;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.1  -  Traffic flows",
+                    "Patrol cars no longer get stuck circling the end of their beat waiting for a new route.",
+                    "One ranger always stays to mind the ranger station.",
+                    "Safe zone guards walk along the wall to mend any breach, then go back to their post.",
+            },
             {
                     "28.0  -  Nine new maps",
                     "Canyon Town: a red-rock town split by a deep gorge, with few bridges and switchbacks down the cliff.",
