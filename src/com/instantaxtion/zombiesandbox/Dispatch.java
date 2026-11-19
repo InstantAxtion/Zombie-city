@@ -883,7 +883,7 @@ final class Dispatch {
         for (int i = 0; i < incidents.size(); i++) {
             Incident inc = incidents.get(i);
             if (inc.resolved || inc.zombiesNear < 2) continue;
-            int have = inc.soldiers + w.fleet.inboundSoldiers(inc);
+            int have = inc.soldiers + w.fleet.inboundSoldiers(inc) + rapidLoading(inc);
             if (have >= (inc.zombiesNear >= 12 ? 2 : 1) * Fleet.RAPID_SEATS) continue;
             float d = (inc.x - base.x) * (inc.x - base.x) + (inc.y - base.y) * (inc.y - base.y);
             if (d < pd) {
@@ -923,6 +923,16 @@ final class Dispatch {
             ready.add(e);
         }
         return ready;
+    }
+
+    /** ((28.7) Soldiers in vans still loading at the gate for inc: not on their way yet, but as good as. A second van was sent after the first. */
+    private int rapidLoading(Incident inc) {
+        int n = 0;
+        for (int i = 0, m = w.fleet.vehicles.size(); i < m; i++) {
+            Fleet.Vehicle v = w.fleet.vehicles.get(i);
+            if (v.kind == Fleet.K_RAPID_VAN && v.incident == inc && v.state == Fleet.MUSTER) n += Math.max(v.crewWanted, v.crew.size());
+        }
+        return n;
     }
 
     /** ((28.7) A soldier at a quick reaction force's base: its to send, not another base's or the general call-out's. */

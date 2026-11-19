@@ -283,8 +283,7 @@ final class FleetService {
         }
         // ((10.51) Quicker on a call, the army above all: the trucks used to trundle to a fight.)
         boolean call = fleet.routing.emergency(v) && v.state != RETURN;
-        float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_RAPID_VAN ? (call ? 140 : 112) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100) : v.kind == K_MRAP ? (call ? 95 : 78)
-                : v.kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
+        float top = topSpeed(v.type, v.kind, call);
         // ((24.2) Not on a call (going home, off to restock, empty): the lights and the junctions' rules, like
         // everyone else - they went straight through red lights and across traffic. Waiting at one isn't being stuck.)
         if (!call && v.player == null && v.type != TANK && v.kind != K_DOZER && w.alert < 2) {
@@ -676,6 +675,12 @@ final class FleetService {
         best.removedFromFleet = true;
         fleet.vehicles.remove(best);
         return new float[]{best.x, best.y, 1, best.kind, best.angle};
+    }
+
+    /** A police car's or army vehicle's top speed on the road (before the open-road scaling), on a call or not. */
+    static float topSpeed(int type, int kind, boolean call) {
+        return type == CRUISER ? (call ? 120 : 105) : kind == K_RAPID_VAN ? (call ? 140 : 112) : kind == K_APC ? (call ? 85 : 68) : kind == K_HUMVEE ? (call ? 115 : 100)
+                : kind == K_MRAP ? (call ? 95 : 78) : kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
     }
 
     /** ((28.5) Left parked where it stands, standing by, rather than taken off the map. */

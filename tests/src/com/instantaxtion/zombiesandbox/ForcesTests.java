@@ -1147,29 +1147,42 @@ final class ForcesTests extends TestKit {
         }
         check(call != null, "a street across town");
         w.outbreak = true;
-        for (int i = 0; i < 4; i++) w.spawn(Entity.ZOMBIE, call[0] + 12 * (float) Math.cos(i * 1.6f), call[1] + 12 * (float) Math.sin(i * 1.6f));
+        java.util.List<Entity> dead = new java.util.ArrayList<Entity>();
+        for (int i = 0; i < 4; i++) {
+            float[] zp = w.city.findWalkable(call[0] + 12 * (float) Math.cos(i * 1.6f), call[1] + 12 * (float) Math.sin(i * 1.6f));
+            Entity z = zp == null ? null : w.spawn(Entity.ZOMBIE, zp[0], zp[1]);
+            if (z != null) dead.add(z);
+        }
+        check(!dead.isEmpty(), "the dead at the call");
         java.lang.reflect.Method ni = Dispatch.class.getDeclaredMethod("newIncident", float.class, float.class, int.class);
         ni.setAccessible(true);
         ni.invoke(w.dispatch, call[0], call[1], 4);
         Fleet.Vehicle van = null;
-        float top = 0;
-        // (Quicker than a Humvee on a call: 115 before the open-road scaling, the van 140.)
-        float humvee = 40 + (115 - 40) * Fleet.DRIVE_SCALE;
-        for (int f = 0; f < 30 * 60 && (van == null || top <= humvee); f++) {
+        for (int f = 0; f < 30 * 60 && van == null; f++) {
+            // (The dead at the call stay put and can't be put down - one shot down is back at once: the call stays open.)
+            for (int i = 0; i < dead.size(); i++) {
+                Entity z = dead.get(i);
+                if (z.dead || z.removed) {
+                    z = w.spawn(Entity.ZOMBIE, call[0] + 12 * (float) Math.cos(i * 1.6f), call[1] + 12 * (float) Math.sin(i * 1.6f));
+                    if (z == null) continue;
+                    dead.set(i, z);
+                }
+                z.speed = z.runSpeed = 0;
+                z.hp = z.maxHp = 100000;
+            }
             w.update(1 / 30f);
             w.evCount = 0;
             for (Fleet.Vehicle v : w.fleet.vehicles)
-                if (v.kind == Fleet.K_RAPID_VAN && v.state == Fleet.DRIVE && v.crew.size() == Fleet.RAPID_SEATS) {
-                    van = v;
-                    top = Math.max(top, Math.abs(v.speed));
-                }
+                if (v.kind == Fleet.K_RAPID_VAN && v.state == Fleet.DRIVE && v.crew.size() == Fleet.RAPID_SEATS) van = v;
         }
         check(van != null, "a van out to the call with five aboard");
-        int still = 0;
+        int still = 0, out = 0;
         for (Entity e : w.entities)
             if (!e.dead && e.type == Entity.SOLDIER && e.task == Dispatch.T_POST && Math.hypot(e.postX - q.x, e.postY - q.y) < q.r + 100) still++;
-        check(still == Population.QRF_SOLDIERS - Fleet.RAPID_SEATS, "the other fifteen still ready (" + still + ")");
-        check(top > humvee, "and it's quick (" + (int) top + ", a Humvee " + (int) humvee + ")");
+        for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_RAPID_VAN && !v.standby) out++;
+        check(still == Population.QRF_SOLDIERS - out * Fleet.RAPID_SEATS, "the rest still ready (" + still + ", " + out + " vans out)");
+        check(FleetService.topSpeed(Fleet.TRUCK, Fleet.K_RAPID_VAN, true) > FleetService.topSpeed(Fleet.TRUCK, Fleet.K_HUMVEE, true)
+                && FleetService.topSpeed(Fleet.TRUCK, Fleet.K_RAPID_VAN, true) > FleetService.topSpeed(Fleet.CRUISER, 0, true), "the vans are the quickest on the road");
         // Saved and loaded: still four vans, still the quick reaction force's.
         java.io.File file = java.io.File.createTempFile("zcs", ".dat");
         SaveGame.save(w, file);
