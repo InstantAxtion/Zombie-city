@@ -337,6 +337,16 @@ final class FleetService {
                     v.pathField = null;
                 } else arrived = true;
             }
+        } else if (v.reinforcement && v.state == DRIVE && !arrived && v.passengers > 0 && !nearItsCall(v) && v.stuckTimer > 12 && v.detours < 3) {
+            // ((28.3) Help held up a long way short of its call - in a queue behind something waiting at a junction
+            // knot that won't clear - looks for another way past it, up to three times, before its officers get out
+            // and walk. They used to give up after twelve seconds wherever they were: with a column of ten cars behind
+            // one stuck at a junction, half the help got out the best part of a kilometre from the fight.)
+            if (v.rerouteCd <= 0) {
+                v.detours++;
+                if (fleet.driving.routePastAhead(v)) v.stuckTimer = 0;
+                else v.detours = 3;
+            }
         } else if (v.stuckTimer > (v.reinforcement && !nearItsCall(v) ? 12 : 4)) arrived = true;
         if (arrived) return arrivedStep(v, dt);
         fleet.driving.hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
@@ -479,6 +489,7 @@ final class FleetService {
 
     /** It has got where it was going (or as near as it can): what happens there, by what it was doing - home and parked, its squad or officers out at the call, a delivery made, off the map. */
     boolean arrivedStep(Vehicle v, float dt) {
+        v.detours = 0;
         if (v.kind == K_DOZER) return fleet.armyUnits.dozerArrived(v);
         if (v.state == DRIVE && v.block != null) {
             // A roadblock car: only set up if the zone still needs it and it got close to its spot.

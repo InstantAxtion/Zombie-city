@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.3";
-    static final int VERSION_CODE = 283;
+    static final String VERSION = "28.4";
+    static final int VERSION_CODE = 284;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.4  -  Everyone out",
+                    "Police cars at a call no longer have someone left sitting at the wheel: when the officers get out, nobody stays behind in the car. A real driver gets out and joins the fight like the rest, and gets back in when the car leaves.",
+                    "Backup from outside held up in traffic a long way from the call finds another way round, rather than letting its officers out to walk from the best part of a kilometre away.",
+            },
             {
                     "28.3  -  Out of the woods",
                     "People running from the dead in a wood no longer get stuck going back and forth between the trees: they slip out between the trunks, away from the danger.",

@@ -249,6 +249,16 @@ final class FleetCrews {
             // ((26.0) Nor the command post set up at the scene: nobody needs to sit at its wheel.)
             // ((26.1) Nor one parked in the yard at home.)
             if (v.state == MUSTER || (isPost(v) && (v.state == SCENE || v.state == WAIT))) continue;
+            // ((28.3) Stopped at its call with its own people out on foot round it - a patrol car's crew, the squad it
+            // brought: nobody sits in it. A driver was made up for every patrol car at a call the moment its crew got
+            // out, and sat there out of the fight till they came back; a real one at the wheel gets out and joins them.)
+            if ((v.state == SCENE || v.state == RECALL) && v.crew.isEmpty() && (crewOnFoot(v) > 0 || squadAbout(v))) {
+                if (v.driver != null) {
+                    if (v.realDriver) joinCrewOnFoot(v);
+                    else v.driver = null;
+                }
+                continue;
+            }
             // ((12.0) Its own crew aboard: one of them is driving, not an extra person nobody sent.)
             if (v.driver != null && !v.realDriver && !v.crew.isEmpty()) v.driver = null;
             if (v.driver == null && v.crew.isEmpty() && v.riders.isEmpty() && v.passengers == 0) {
@@ -264,6 +274,29 @@ final class FleetCrews {
                 d.rig = v; note(d);
                 v.driver = d;
             }
+        }
+    }
+
+    /** ((28.3) Someone it brought still on their feet near it. */
+    private boolean squadAbout(Vehicle v) {
+        for (int i = 0; i < v.squad.size(); i++) {
+            Entity e = v.squad.get(i);
+            if (!e.dead && !e.removed && World.hypot(e.x - v.x, e.y - v.y) < 500) return true;
+        }
+        return false;
+    }
+
+    /** ((28.3) The driver gets out and is one of its crew on foot, on its call like the rest; back in when it goes. */
+    private void joinCrewOnFoot(Vehicle v) {
+        Entity d = v.driver;
+        driverOut(v, false);
+        if (d == null || d.dead || d.removed) return;
+        d.rig = v;
+        note(d);
+        w.history(d, "got out of the " + vehicleWord(v));
+        if (v.incident != null && !v.incident.resolved) {
+            d.task = Dispatch.T_RESPOND;
+            d.incident = v.incident;
         }
     }
 

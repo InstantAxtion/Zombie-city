@@ -10,8 +10,8 @@ final class ForcesTests extends TestKit {
                 "loadsAndGuns", "grenadeKills", "holdOwnAndGrenades", "cover", "loudGunsHelpShove");
         test("combat tactics: falling back, standing together, breaking out, covering a reload, fighting indoors", FULL, 20, ForcesTests.class,
                 "fallBackAndStand", "smarterFighting", "focusFire", "indoors");
-        test("police: at their stations at the start; mounted, traffic, K9 and motorcycle officers; backup calls; nobody idle near a fight; jobs; training", FAST, 25, ForcesTests.class,
-                "policeStart", "mountedAndTraffic", "backupCalls", "idleNearFight", "jobs", "doctrine", "k9AndBikes");
+        test("police: at their stations at the start; mounted, traffic, K9 and motorcycle officers; backup calls; nobody idle near a fight or left at the wheel; jobs; training", FAST, 25, ForcesTests.class,
+                "policeStart", "mountedAndTraffic", "backupCalls", "idleNearFight", "nobodyLeftAtTheWheel", "jobs", "doctrine", "k9AndBikes");
         test("police backup: outside backup arrives without piling up; every kind spawned; SWAT to a horde; cordons; rounds shared", FAST, 40, ForcesTests.class,
                 "outsideBackup", "spawningAndCordons", "rangersAndRescue", "swatToHorde", "magsShared");
         test("army: guards, trucks, IFVs and gun trucks, ammo trucks, mortars, the bulldozer and the armoury", FAST, 35, ForcesTests.class,
@@ -1027,6 +1027,43 @@ final class ForcesTests extends TestKit {
         check(rider != null && rider.rig != null && rider.rig.kind == Fleet.K_BIKE, "the Motorcycle cop rides a police motorcycle");
     }
 
+    /**
+     * (28.3) At a call, everyone gets out: a patrol car whose officers are out on foot round it has nobody sitting in
+     * it. A driver used to be made up for each one the moment its crew got out, and sat there out of the fight.
+     */
+    static void nobodyLeftAtTheWheel() throws Exception {
+        CityConfig c = cfg(CityConfig.SMALL, 91);
+        World w = new World(c);
+        w.populate(c);
+        java.util.Random r = new java.util.Random(3);
+        for (int pack = 0; pack < 5; pack++) {
+            float[] p = w.city.randomWalkableInTown(r);
+            for (int k = 0; k < 6; k++) {
+                float[] q = w.city.findWalkable(p[0] + (k % 3) * 8, p[1] + (k / 3) * 8);
+                if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
+            }
+        }
+        w.recount();
+        int seen = 0, sitting = 0;
+        String eg = "";
+        for (int f = 0; f < 30 * 90; f++) {
+            w.update(1 / 30f);
+            w.evCount = 0;
+            if (f % 15 != 0) continue;
+            for (Fleet.Vehicle v : w.fleet.vehicles) {
+                // (Not the bulldozer: its driver is at work, pushing the wreck.)
+                if (v.removedFromFleet || v.kind == Fleet.K_DOZER || (v.state != Fleet.SCENE && v.state != Fleet.RECALL) || !v.crew.isEmpty() || w.fleet.crewOnFoot(v) == 0) continue;
+                seen++;
+                if (v.driver != null) {
+                    sitting++;
+                    eg = w.fleet.describe(v);
+                }
+            }
+        }
+        check(seen > 0, "police cars at a call with their officers out (" + seen + ")");
+        check(sitting == 0, "nobody left sitting in one (" + sitting + " of " + seen + (eg.isEmpty() ? "" : ", e.g. " + eg) + ")");
+    }
+
     static void outsideBackup() throws Exception {
         CityConfig c = cfg(CityConfig.SMALL, 280);
         World w = new World(c);
@@ -1138,7 +1175,7 @@ final class ForcesTests extends TestKit {
         for (Fleet.Vehicle v : cars)
             if (!v.removedFromFleet && Math.abs(v.speed) < 1 && w.city.junctionIdAt(v.x, v.y) >= 0) stopped++;
         // (Most of them: a car held up in traffic a long way off can let its officers out to go on on foot.)
-        check(outNear >= sent * 3 / 5, "the officers got out near the call (" + outNear + " of " + sent + " within 300, " + outFar + " further off)");
+        check(outNear >= sent * 3 / 4, "the officers got out near the call (" + outNear + " of " + sent + " within 300, " + outFar + " further off)");
         check(stopped == 0, "no empty car left in a junction (" + stopped + ")");
     }
 

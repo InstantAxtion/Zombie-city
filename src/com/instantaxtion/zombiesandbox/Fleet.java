@@ -377,6 +377,8 @@ final class Fleet {
         boolean ammoTruck;
         /** ((16.7) Times an ammo truck held up on its way has planned its way again, rather than stopping there. */
         int jamTries;
+        /** ((28.3) Times help on its way to a call, held up far short of it, has looked for another way past (FleetService). */
+        int detours;
         /** ((14.0) A bulldozer: the wreck it's on its way to push off the road, its base, and the seconds left pushing.) */
         Vehicle clearing;
         City.Facility dozerBase;

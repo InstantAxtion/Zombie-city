@@ -24,9 +24,6 @@ check can be brought back if it's missed; the old suite is `tests/src/.../GameTe
 - 26.0: at least two police boats on the Harbour -> at least one (map version 41 moors one on that map and seed).
 - 18.0: police cut to the mission's number "or four fewer" -> no more than the mission's and at least half. (The old
   check counted the crews of the parked cars twice: `w.counts` already has them.)
-- 28.0 outside backup: three quarters of the officers out within 300 of the call -> three fifths (a car held up in
-  traffic far off can let its officers out to go on on foot; the drop-offs, pile-up and junction checks are as they
-  were).
 - 25.0 survivor base: "a watchtower" only where the base's corners leave room for one (`towers.length > 0`), and up
   to five minutes for wall, guards and tower instead of a fixed two-to-four.
 - 21.2 "working round a victim": moved some way in any direction (not only sideways) or shot; "on the move under
@@ -58,3 +55,10 @@ check can be brought back if it's missed; the old suite is `tests/src/.../GameTe
   Hard" and "more score on Hard" (only missions were ever Hard).
 - "Every tool priced" and "a commander pays for wire, nests, barrages, flares and mines" (the mission prices are gone);
   "every tool named and described" is kept.
+
+## Brought back
+
+- (28.3) 28.0 outside backup: three quarters of the officers out within 300 of the call again (it had been loosened to
+  three fifths, and still failed on a quarter of seeds: a column of backup cars stuck behind a car waiting at a
+  junction knot gave up and let its officers out up to 860 away). Backup held up far from its call now looks for
+  another way past up to three times; 36 to 40 of the 40 get out near the call on eight seeds.

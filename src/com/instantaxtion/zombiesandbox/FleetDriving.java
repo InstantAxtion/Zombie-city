@@ -1230,6 +1230,23 @@ final class FleetDriving {
         return true;
     }
 
+    /**
+     * ((28.3) Plans v's way again past whatever's in front of it (the same wall as unjam's: where the thing ahead is,
+     * and just past it), backing out first if the new way starts behind. True if it has a new way.
+     */
+    boolean routePastAhead(Vehicle v) {
+        float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
+        Vehicle block = blockerOf(v);
+        float bd = block == null ? 0 : (block.x - v.x) * fx + (block.y - v.y) * fy;
+        float at = Math.max(block != null ? bd + 6 : 24, 36);
+        jamTiles[0] = city.tileIndex(v.x + fx * at, v.y + fy * at);
+        jamTiles[1] = city.tileIndex(v.x + fx * (at + City.T), v.y + fy * (at + City.T));
+        v.rerouteCd = 5;
+        if (!fleet.routing.routeAround(v, jamTiles, 2)) return false;
+        backOutIfBehind(v);
+        return true;
+    }
+
     /** ((27.5) Knots undone, and how many times one backed off to do it. */
     int gaveWay;
 
