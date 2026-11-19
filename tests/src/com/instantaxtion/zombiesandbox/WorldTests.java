@@ -186,6 +186,8 @@ final class WorldTests extends TestKit {
         w.city.editsDone();
         w.redrawCity();
         CityConfig c2 = new CityConfig();
+        // (On the same map version: a code carries the city, not the version of the game that built it.)
+        c2.civic = c.civic;
         check(c2.applyCode(c.code()) && c2.edits.size() == c.edits.size(), "the city code carries the edits");
         City again = new City(c2, 0.1f);
         int diff = 0;

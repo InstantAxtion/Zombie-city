@@ -77,6 +77,11 @@ final class Fleet {
      * big packs (see FleetFireSupport). Numbers well clear of the others' kinds.)
      */
     static final int K_MRAP = 30, K_FIRE_SUPPORT = 31;
+    /**
+     * ((28.7) The quick reaction force's van (type TRUCK): light and quick, five soldiers aboard, kept at its base
+     * near the middle of town (see Dispatch.quickReaction).
+     */
+    static final int K_RAPID_VAN = 32, RAPID_SEATS = 5;
     /** ((27.5) The army's armoured ambulance (type AMBULANCE), parked at its base for the wounded: see FleetMedevac.) */
     static final int K_ARMD_AMB = 17;
 
@@ -416,6 +421,7 @@ final class Fleet {
         float length() {
             if (kind == K_APC) return 11f;
             if (kind == K_HUMVEE) return 8.5f;
+            if (kind == K_RAPID_VAN) return 8.8f;
             if (kind == K_MRAP || kind == K_FIRE_SUPPORT) return 10.5f;
             if (kind == K_BIKE) return 4.5f;
             return type == TANK ? 11f : type == TRUCK || type == AMBULANCE ? 9.5f
@@ -448,6 +454,7 @@ final class Fleet {
                 if (v.kind == K_HUMVEE) return (v.guardUnit ? Country.guard()[1] + " " : "") + "Humvee" + (v.loop ? "  -  base patrol" : "");
                 if (v.shelter) return "Armoured police van  -  shelter, " + v.riders.size() + " of " + SHELTER_SEATS + " inside";
                 if (v.kind == K_RIOT_VAN) return "Riot police van";
+                if (v.kind == K_RAPID_VAN) return "Quick reaction force van";
                 if (v.kind == K_BEARCAT) return "Police BearCat";
                 if (v.kind == K_DOZER) return "Army engineers' bulldozer";
                 if (v.kind == K_COMMAND) return "Police mobile command post";
@@ -537,7 +544,7 @@ final class Fleet {
             case CRUISER:
             case TRUCK: {
                 if (v.kind == K_FIRE_SUPPORT) return fireSupport.status(v, where);
-                String who = v.kind == K_MRAP ? "MRAP" : v.kind == K_APC ? "APC" : v.kind == K_HUMVEE ? "Humvee" : v.kind == K_RIOT_VAN ? "Riot van"
+                String who = v.kind == K_MRAP ? "MRAP" : v.kind == K_APC ? "APC" : v.kind == K_HUMVEE ? "Humvee" : v.kind == K_RAPID_VAN ? "QRF van" : v.kind == K_RIOT_VAN ? "Riot van"
                         : v.kind == K_BIKE ? "Police motorcycle" : v.kind == K_BEARCAT ? "BearCat" : v.type == CRUISER ? "Police car" : v.swat ? "SWAT van" : "Army truck";
                 if (v.restock) return v.state == RETURN ? "Supply truck: Heading out of town"
                         : "Supply truck: Delivering" + (where != null ? " to " + where : "");
@@ -690,7 +697,7 @@ final class Fleet {
     /** Makes a truck, police car or helicopter into one of its other kinds (K_APC...). */
     void setKind(Vehicle v, int kind) {
         v.kind = kind;
-        float hp = kind == K_APC ? 520 : kind == K_HUMVEE ? 220 : kind == K_RIOT_VAN ? 380 : kind == K_BIKE ? 70 : kind == K_BEARCAT ? 600
+        float hp = kind == K_APC ? 520 : kind == K_HUMVEE ? 220 : kind == K_RAPID_VAN ? 240 : kind == K_RIOT_VAN ? 380 : kind == K_BIKE ? 70 : kind == K_BEARCAT ? 600
                 : kind == K_IFV ? 800 : kind == K_GUNTRUCK ? 260 : kind == K_MRAP ? 700 : kind == K_FIRE_SUPPORT ? 320 : kind == K_COMMAND || kind == K_ARMY_POST ? 900 : kind == K_POLICE_BOAT ? 300 : v.maxHp;
         v.hp = v.maxHp = hp;
     }

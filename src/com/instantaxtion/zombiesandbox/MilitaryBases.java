@@ -70,12 +70,12 @@ final class MilitaryBases extends CityPart {
         // The open lower half depends on what kind of base it is (trucks are parked along the bottom right).
         Random bt = new Random(city.cfg.seed * 977L + salt);
         // ((10.52) Never the same kind twice on one map.)
-        int type = great ? BT_AIR : forceBaseType >= 0 ? forceBaseType : bt.nextInt(BASE_TYPES.length);
-        for (int k = 0; k < 8 && city.cfg.civic >= 23 && !great; k++) {
+        int type = great ? BT_AIR : forceBaseType >= 0 ? forceBaseType : bt.nextInt(RANDOM_BASE_TYPES);
+        for (int k = 0; k < 8 && city.cfg.civic >= 23 && !great && type != BT_RAPID; k++) {
             boolean dup = false;
             for (Facility f : city.facilities) if (f.kind == FACILITY_BASE && f.baseType == type) dup = true;
             if (!dup) break;
-            type = (type + 1) % BASE_TYPES.length;
+            type = (type + 1) % RANDOM_BASE_TYPES;
         }
         // ((15.5) The great base: the airfield on the one side, an armoured vehicle park on the other.)
         if (great) {
@@ -83,7 +83,8 @@ final class MilitaryBases extends CityPart {
             baseLayout(BT_AIR, ax, ay, split, ah, bt);
             baseLayout(BT_ARMOUR, ax + split, ay, aw - split, ah, bt);
         } else baseLayout(type, ax, ay, aw, ah, bt);
-        for (int i = ax + aw / 2 + 2; i < ax + aw - 1; i++) {
+        // ((28.7) Not at the quick reaction force's base: its vans stand in the yard instead.)
+        for (int i = ax + aw / 2 + 2; i < ax + aw - 1 && type != BT_RAPID; i++) {
             int ty = ay + ah - 2;
             if (city.rnd.nextFloat() < 0.75f && city.tiles[ty * city.w + i] == BASE && !city.hasNeighbor(i, ty, CAR)) {
                 city.tiles[ty * city.w + i] = CAR;
@@ -94,13 +95,16 @@ final class MilitaryBases extends CityPart {
         float[] c = city.findWalkable(cx, cy);
         if (c == null) c = new float[]{cx, cy};
         float r = Math.min(great ? 320 : 110, Math.min(aw, ah) * T * 0.42f);
-        String bn = city.country.bases[city.rnd.nextInt(city.country.bases.length)];
+        // ((28.7) The quick reaction force's base names itself from its own dice, not the city's: the rest of the city
+        // builds just as it would without it.)
+        Random nr = type == BT_RAPID ? bt : city.rnd;
+        String bn = city.country.bases[nr.nextInt(city.country.bases.length)];
         // (Two bases on a map since 10.30: never the same name.)
         for (int k = 0; k < 12 && city.cfg.civic >= 14; k++) {
             boolean taken = false;
             for (Facility f : city.facilities) if (f.kind == FACILITY_BASE && f.name.startsWith(bn)) taken = true;
             if (!taken) break;
-            bn = city.country.bases[city.rnd.nextInt(city.country.bases.length)];
+            bn = city.country.bases[nr.nextInt(city.country.bases.length)];
         }
         Facility base = new Facility(FACILITY_BASE, c[0], c[1], r, (gx + 1.5f) * T, (y + bh - 2.5f) * T, bn);
         base.baseType = type;
@@ -108,13 +112,15 @@ final class MilitaryBases extends CityPart {
         // Two guards inside each gate.
         float[][] gates = {{(gx + 1.5f) * T, (y + bh - 2.5f) * T}, {(gx + 1.5f) * T, (y + 1.5f) * T},
                 {(x + bw - 2.5f) * T, (gy + 1.5f) * T}};
-        for (int i = 0; i < gates.length; i++) {
+        // ((28.7) None at the quick reaction force's base: all twenty are kept to go out.)
+        for (int i = 0; i < gates.length && type != BT_RAPID; i++) {
             boolean across = i < 2;
             for (int k = -1; k <= 1; k += 2) {
                 float[] p = city.findWalkable(gates[i][0] + (across ? k * 14 : 0), gates[i][1] + (across ? 0 : k * 14));
                 if (p != null) base.posts.add(p);
             }
         }
+        base.qrf = type == BT_RAPID;
         city.facilities.add(base);
         return base;
     }
@@ -344,6 +350,12 @@ final class MilitaryBases extends CityPart {
                 city.helipads.add(new float[]{x1 - 24, y1 - 24});
                 break;
             }
+            case BT_RAPID:
+                // ((28.7) The quick reaction force: no helipad - a hardstand for its vans by the gate, and a few tents.)
+                city.baseDecor.add(new float[]{BD_HARDSTAND, x0, y0 + bh * 0.45f, x0 + bw * 0.6f, y1});
+                for (int i = 0; i < 2; i++)
+                    city.tents.add(new float[]{(ax + aw * 0.68f + (i % 2) * 2.2f) * T, (ay + ah * 0.6f) * T});
+                break;
             default:
                 // A garrison: the helipad and a block of tents.
                 city.helipads.add(new float[]{(ax + aw * 0.3f) * T, (ay + ah * 0.72f) * T});

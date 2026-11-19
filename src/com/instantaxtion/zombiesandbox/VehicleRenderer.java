@@ -108,7 +108,7 @@ final class VehicleRenderer {
         }
         boolean civ = v.type == Fleet.CAR;
         Country land0 = gv.world.city.country;
-        int body = civ ? v.color : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.kind == Fleet.K_ARMY_POST ? 0xFF4F5A33 : v.recon ? 0xFF9C8A5E
+        int body = civ ? v.color : v.kind == Fleet.K_RAPID_VAN ? 0xFF59653C : v.kind == Fleet.K_BEARCAT ? 0xFF1A1C20 : v.kind == Fleet.K_COMMAND ? 0xFFE4E6EA : v.kind == Fleet.K_ARMY_POST ? 0xFF4F5A33 : v.recon ? 0xFF9C8A5E
                 : v.kind == Fleet.K_RIOT_VAN ? land0.cruiserBody
                 : truck ? (v.restock ? 0xFFE6E3DA : v.swat ? 0xFF1C2026 : v.guardUnit ? 0xFF8C8260 : v.kind == Fleet.K_APC ? 0xFF46512E : 0xFF4F5A33) : amb ? (v.kind == Fleet.K_ARMD_AMB ? 0xFF5F6B40 : 0xFFF2F2F2)
                 : v.agency == 1 ? land0.hpBody : v.agency == 2 ? land0.ruralBody : v.agency == 3 ? 0xFF3E5634 : v.agency == 4 ? 0xFF15171A : land0.cruiserBody;
@@ -309,6 +309,22 @@ final class VehicleRenderer {
             gv.fill.setColor(City.lighten(body, 0.1f));
             c.drawRect(hl * 0.5f, -hw + 1, hl - 0.6f, hw - 1, gv.fill);
             drawRoofGun(c, v, -hl * 0.2f, 2.4f, 6f, body);
+        } else if (v.kind == Fleet.K_RAPID_VAN) {
+            // ((28.7) The quick reaction force's van: a long olive box, the windscreen up front, windows down the sides,
+            // a white stripe along the roof so it's told from the trucks at a glance, and a blue lamp while on a call.)
+            gv.fill.setColor(0xFF1E2A33);
+            c.drawRect(hl * 0.55f, -hw + 0.9f, hl * 0.78f, hw - 0.9f, gv.fill);
+            for (float wx = -hl * 0.7f; wx < hl * 0.4f; wx += hl * 0.32f) {
+                c.drawRect(wx, -hw + 0.2f, wx + hl * 0.2f, -hw + 0.9f, gv.fill);
+                c.drawRect(wx, hw - 0.9f, wx + hl * 0.2f, hw - 0.2f, gv.fill);
+            }
+            gv.fill.setColor(v.broken ? 0xFF8A8A8A : 0xFFE8E6DE);
+            c.drawRect(-hl + 1, -0.55f, hl * 0.5f, 0.55f, gv.fill);
+            if (!v.broken && v.state == Fleet.DRIVE) {
+                boolean blink = ((int) (v.anim * 8)) % 2 == 0;
+                gv.fill.setColor(blink ? 0xFF3A7BFF : 0xFF1A2A5A);
+                c.drawRect(hl * 0.42f, -hw + 1.2f, hl * 0.52f, hw - 1.2f, gv.fill);
+            }
         } else if (v.kind == Fleet.K_RIOT_VAN) {
             // The riot van: a high box with grilles over the windows and a light bar.
             gv.fill.setColor(v.broken ? 0xFF9A9A9A : land0.cruiserDoor);

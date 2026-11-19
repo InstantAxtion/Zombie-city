@@ -1077,6 +1077,37 @@ final class CityGenerator extends CityPart {
                 baseGen.militaryBase(b[0] + 1, b[1] + 1, b[2] - b[0] - 2, b[3] - b[1] - 2, 41 + extra).satellite = true;
             }
         }
+        // ((28.7) The quick reaction force: a small base on a block near the middle of town, at most fourteen tiles a side.)
+        if (city.cfg.qrfBase()) {
+            float tcx = city.townX1 > city.townX0 ? (city.townX0 + city.townX1) / 2f : city.w / 2f;
+            float tcy = city.townY1 > city.townY0 ? (city.townY0 + city.townY1) / 2f : city.h / 2f;
+            int pick = -1;
+            float pd = Float.MAX_VALUE;
+            for (int pass = 0; pass < 2 && pick < 0; pass++)
+                for (int k = 0; k < city.blocks.size(); k++) {
+                    int[] b = city.blocks.get(k);
+                    int bw = b[2] - b[0] - 2, bh = b[3] - b[1] - 2;
+                    if (used[k] || bw < 9 || bh < 9 || (pass == 0 && (bw > 16 || bh > 16))) continue;
+                    float d = (float) World.hypot((b[0] + b[2]) / 2f - tcx, (b[1] + b[3]) / 2f - tcy);
+                    if (d < pd) {
+                        pd = d;
+                        pick = k;
+                    }
+                }
+            if (pick >= 0) {
+                used[pick] = true;
+                int[] b = city.blocks.get(pick);
+                // (A big block: the base on a corner of it, the rest a yard round it.)
+                int bw = Math.min(14, b[2] - b[0] - 2), bh = Math.min(14, b[3] - b[1] - 2);
+                city.fill(b[0], b[1], b[2] - b[0], b[3] - b[1], SIDEWALK);
+                baseGen.forceBaseType = BT_RAPID;
+                try {
+                    baseGen.militaryBase(b[0] + 1, b[1] + 1, bw, bh, 61).satellite = true;
+                } finally {
+                    baseGen.forceBaseType = -1;
+                }
+            }
+        }
     }
 
     /**

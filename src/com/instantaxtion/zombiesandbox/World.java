@@ -504,7 +504,7 @@ final class World {
         // (10.35) The police always outnumber the army: every soldier on the map (both bases and the checkpoints)
         // comes to no more than two in five of the police force, the town's base taking most of it.
         int satBases = 0;
-        for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_BASE && f.satellite && f != base) satBases++;
+        for (City.Facility f : city.facilities) if (f.kind == City.FACILITY_BASE && f.satellite && f != base && !f.qrf) satBases++;
         int military = Math.max(6, Math.round(cops * 0.4f) - city.checkpointPosts.size());
         int townShare = satBases > 0 && base != null ? military * 3 / 5 : military;
         int satEach = satBases > 0 ? Math.max(6, (military - (base != null ? townShare : 0)) / satBases) : 0;
@@ -524,11 +524,13 @@ final class World {
         int cap = maxPopulation > 0 ? maxPopulation : autoCap(city);
         int people = Math.min(civiliansFor(cfg, city, f), Math.max(cap / 2, cap * 4 / 5 - f[0] - f[1]));
         if (cfg.wilds()) people += city.fireTowers.size();
-        int stations = 0, satBases = 0;
+        int stations = 0, satBases = 0, qrfMen = 0;
         City.Facility base = city.mainBase();
         for (City.Facility x : city.facilities) {
             if (x.kind == City.FACILITY_POLICE && !x.fed) stations++;
-            if (x.kind == City.FACILITY_BASE && x.satellite && x != base) satBases++;
+            if (x.kind == City.FACILITY_BASE && x.satellite && x != base && !x.qrf) satBases++;
+            // ((28.7) The quick reaction force's twenty.)
+            if (x.kind == City.FACILITY_BASE && x.qrf) qrfMen += Population.QRF_SOLDIERS;
         }
         int cops = f[0];
         if (cfg.nature()) cops += stations;
@@ -541,7 +543,7 @@ final class World {
         }
         int soldiers = 0;
         if (f[1] > 0) {
-            soldiers = f[1] + city.checkpointPosts.size() + satBases * f[2] + (f[1] >= 5 ? 1 : 0);
+            soldiers = f[1] + city.checkpointPosts.size() + satBases * f[2] + (f[1] >= 5 ? 1 : 0) + qrfMen;
         }
         // (The helicopters' crews on their pads: a rescue helicopter's four, a pilot for each of the others.)
         for (float[] p : city.helipads()) {

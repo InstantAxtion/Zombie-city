@@ -283,7 +283,7 @@ final class FleetService {
         }
         // ((10.51) Quicker on a call, the army above all: the trucks used to trundle to a fight.)
         boolean call = fleet.routing.emergency(v) && v.state != RETURN;
-        float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100) : v.kind == K_MRAP ? (call ? 95 : 78)
+        float top = v.type == CRUISER ? (call ? 120 : 105) : v.kind == K_RAPID_VAN ? (call ? 140 : 112) : v.kind == K_APC ? (call ? 85 : 68) : v.kind == K_HUMVEE ? (call ? 115 : 100) : v.kind == K_MRAP ? (call ? 95 : 78)
                 : v.kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
         // ((24.2) Not on a call (going home, off to restock, empty): the lights and the junctions' rules, like
         // everyone else - they went straight through red lights and across traffic. Waiting at one isn't being stuck.)
@@ -391,6 +391,16 @@ final class FleetService {
         v.quiet = w.countZombiesNear(v.x, v.y, 200) > 0 ? 0 : v.quiet + dt;
         // ((13.9) An ammo truck goes once it's handed everything out.)
         if (v.timer <= 0 || v.quiet > 20 || (v.ammoTruck && v.cargo <= 0)) {
+            // ((28.7) A quick reaction force's van picks its five up again and takes them back to base, ready for the
+            // next call: left at the scene, they stayed out there, and the base soon had nobody to send.)
+            if (v.kind == K_RAPID_VAN && !v.squad.isEmpty()) {
+                v.state = PICKUP;
+                v.pickup = true;
+                v.timer = 0;
+                v.speed = 0;
+                v.standby = false;
+                return false;
+            }
             v.state = RETURN;
             v.speed = 0;
             v.standby = false;
@@ -587,6 +597,12 @@ final class FleetService {
             return false;
         }
         v.jamTries = 0;
+        // ((28.7) A quick reaction force's van parks in its yard, a van still - not painted into a bay as a truck.)
+        if (v.state == RETURN && v.kind == K_RAPID_VAN) {
+            if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
+            parkUp(v);
+            return false;
+        }
         // An army truck back at base parks in its bay again.
         if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !w.peopleNear(v.homeX, v.homeY, 14)
                 && w.countZombiesNear(v.homeX, v.homeY, 14) == 0)
@@ -637,6 +653,29 @@ final class FleetService {
         if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
         stayParked(v);
         return false;
+    }
+
+    /**
+     * ((28.7) One of the quick reaction force's vans standing by at base f, taken for a call: its spot, that a vehicle
+     * stood there, and its kind (as takeStandby gives). Null if they're all out.
+     */
+    float[] takeRapidVan(City.Facility f) {
+        Vehicle best = null;
+        float bd = Float.MAX_VALUE, rad = Math.max(260, f.r * 2.5f);
+        for (int i = 0; i < fleet.vehicles.size(); i++) {
+            Vehicle v = fleet.vehicles.get(i);
+            if (v.kind != K_RAPID_VAN || !v.standby || !v.parked || v.broken || FleetMedevac.needsRepair(v)) continue;
+            float d = (float) World.hypot(v.x - f.x, v.y - f.y);
+            if (d < rad && d < bd) {
+                bd = d;
+                best = v;
+            }
+        }
+        if (best == null) return null;
+        if (!best.crew.isEmpty()) fleet.crews.crewOut(best, true);
+        best.removedFromFleet = true;
+        fleet.vehicles.remove(best);
+        return new float[]{best.x, best.y, 1, best.kind, best.angle};
     }
 
     /** ((28.5) Left parked where it stands, standing by, rather than taken off the map. */
@@ -745,6 +784,8 @@ final class FleetService {
         if (v.squad.isEmpty() && !v.pickup) return false;
         if (!v.squad.isEmpty()) v.passengerType = v.squad.get(0).type;
         City.Facility f = city.nearestFacility(v.passengerType == Entity.SOLDIER ? City.FACILITY_BASE : City.FACILITY_POLICE, v.x, v.y);
+        // ((28.7) A quick reaction force's van goes back to its own base, whatever's nearer.)
+        if (v.kind == K_RAPID_VAN && v.depot != null && !v.depot.fallen) f = v.depot;
         if (f == null) return false;
         int there = 0;
         for (int i = 0; i < fleet.vehicles.size(); i++) if (fleet.vehicles.get(i).depot == f && fleet.vehicles.get(i) != v) there++;
@@ -963,7 +1004,8 @@ final class FleetService {
         float bd = radius * radius;
         for (int i = 0; i < fleet.vehicles.size(); i++) {
             Vehicle v = fleet.vehicles.get(i);
-            if (!v.standby || v.type != type || v.broken || FleetMedevac.needsRepair(v)) continue;
+            // ((28.7) Not the quick reaction force's vans: they're its own, and go out only on its calls.)
+            if (!v.standby || v.type != type || v.broken || FleetMedevac.needsRepair(v) || v.kind == K_RAPID_VAN) continue;
             float d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
             if (d < bd) {
                 bd = d;

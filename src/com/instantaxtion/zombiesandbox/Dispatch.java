@@ -801,6 +801,8 @@ final class Dispatch {
                 if (e.role == Entity.ROLE_GUARD || e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_SNIPER) continue;
                 if (e.ammo <= 0 && e.reserve <= 0) continue;
                 if ((e.x - base.x) * (e.x - base.x) + (e.y - base.y) * (e.y - base.y) > reach * reach) continue;
+                // ((28.7) The quick reaction force's own are its own, and nobody else's.)
+                if (!base.qrf && atRapidBase(e)) continue;
                 free.add(e);
             }
             int near = w.countZombiesNear(base.x, base.y, base.r * 1.8f + 60);
@@ -815,6 +817,11 @@ final class Dispatch {
                     base.alarm = false;
                     say(WHO_MILITARY, null, base.name + ": Perimeter secure. Stand down the alarm.", base.x, base.y);
                 }
+            }
+            if (base.qrf) {
+                ArrayList<Entity> ready = rapidStandby(base);
+                if (!base.alarm && !base.fallen) quickReaction(base, ready);
+                continue;
             }
             if (base.alarm || free.size() < 6) continue;
             // A call close by with no soldiers at it: the quick reaction force goes now.
@@ -856,6 +863,77 @@ final class Dispatch {
                 if (to != null) w.fleet.basePatrol(nearestOf(free, base.x, base.y, 3), base, to[0], to[1]);
             }
         }
+    }
+
+    /** ((28.7) How far the quick reaction force goes from its base: right across town, however big the map. */
+    float qrfReach() {
+        return Math.max(2600, city.worldW() * 0.5f);
+    }
+
+    /**
+     * ((28.7) The quick reaction force, from its small base near the middle of town: a van with five aboard to the
+     * nearest call that has fewer than five soldiers on it or coming, one van each time round (every four seconds) while
+     * there are vans and soldiers to send; a big call (a dozen of the dead or more) gets a second. They're quick: on the
+     * spot before anyone else, holding it till the rest arrive.
+     */
+    private void quickReaction(City.Facility base, ArrayList<Entity> free) {
+        if (free.size() < Fleet.RAPID_SEATS || !w.outbreak) return;
+        Incident pick = null;
+        float pd = qrfReach() * qrfReach();
+        for (int i = 0; i < incidents.size(); i++) {
+            Incident inc = incidents.get(i);
+            if (inc.resolved || inc.zombiesNear < 2) continue;
+            int have = inc.soldiers + w.fleet.inboundSoldiers(inc);
+            if (have >= (inc.zombiesNear >= 12 ? 2 : 1) * Fleet.RAPID_SEATS) continue;
+            float d = (inc.x - base.x) * (inc.x - base.x) + (inc.y - base.y) * (inc.y - base.y);
+            if (d < pd) {
+                pd = d;
+                pick = inc;
+            }
+        }
+        if (pick == null) return;
+        float[] p = w.fleet.service.takeRapidVan(base);
+        if (p == null) return;
+        ArrayList<Entity> five = nearestOf(free, base.x, base.y, Fleet.RAPID_SEATS);
+        Fleet.Vehicle v = w.fleet.armyUnits.musterTruck(five, p, pick, Fleet.K_RAPID_VAN, true);
+        v.depot = base;
+        pick.militaryRequested = true;
+        say(WHO_MILITARY, five.get(0), base.name + ": Quick reaction force rolling, five aboard, to " + pick.place + ".", pick.x, pick.y);
+    }
+
+    /**
+     * ((28.7) The quick reaction force's soldiers standing by in its yard (on a post there), ready to go - and any back
+     * from a call, or otherwise free about the base, put on standby again, up to its twenty: on a post, nobody else's
+     * job takes them (they used to be sent off on foot and in other bases' trucks before their own vans went anywhere).
+     */
+    private ArrayList<Entity> rapidStandby(City.Facility base) {
+        ArrayList<Entity> ready = new ArrayList<Entity>(), loose = new ArrayList<Entity>();
+        float reach = Math.max(220, base.r * 2.5f), postR = base.r + 100;
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
+            Entity e = w.entities.get(i);
+            if (e.dead || e.type != Entity.SOLDIER || e.rig != null || e == w.controlled) continue;
+            if (e.role == Entity.ROLE_COMMANDER || e.role == Entity.ROLE_PILOT || e.role == Entity.ROLE_RECON) continue;
+            if (e.task == T_POST && World.hypot(e.postX - base.x, e.postY - base.y) < postR) {
+                if (e.ammo + e.reserve > 0) ready.add(e);
+            } else if (e.task == T_NONE && World.hypot(e.x - base.x, e.y - base.y) < reach && e.ammo + e.reserve > 0) loose.add(e);
+        }
+        for (int i = 0; i < loose.size() && ready.size() < Population.QRF_SOLDIERS; i++) {
+            Entity e = loose.get(i);
+            w.population.standBy(e, base, ready.size(), false);
+            ready.add(e);
+        }
+        return ready;
+    }
+
+    /** ((28.7) A soldier at a quick reaction force's base: its to send, not another base's or the general call-out's. */
+    boolean atRapidBase(Entity e) {
+        for (int i = 0, n = city.facilities.size(); i < n; i++) {
+            City.Facility f = city.facilities.get(i);
+            if (!f.qrf || f.fallen) continue;
+            float reach = Math.max(220, f.r * 2.5f);
+            if ((e.x - f.x) * (e.x - f.x) + (e.y - f.y) * (e.y - f.y) < reach * reach) return true;
+        }
+        return false;
     }
 
     /** The n of these nearest to (x, y). */
@@ -974,6 +1052,7 @@ final class Dispatch {
             if (e.dead || e.type != Entity.SOLDIER || e.task != T_NONE || e.role == Entity.ROLE_GUARD || e.rig != null) continue;
             if (e.ammo <= 0 && e.reserve <= 0) continue;
             if (w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
+            if (atRapidBase(e)) continue;
             ArrayList<Entity> sq = squads.get(e.squad);
             if (sq == null) squads.put(e.squad, sq = new ArrayList<Entity>());
             sq.add(e);

@@ -98,6 +98,7 @@ final class Population {
         garrisons(base, soldiers, satEach);
         squadRoles(cfg, base, soldiers, firstSoldier);
         engineersAndMortars(firstSoldier);
+        quickReactionForce();
         if (soldiers >= 5) {
             float[] p = base != null ? new float[]{base.x, base.y} : w.city.randomWalkable(w.rnd);
             spawnSoldier(Entity.ROLE_COMMANDER, p[0], p[1]);
@@ -241,9 +242,28 @@ final class Population {
         }
         // (10.30) The big base out in the country has a garrison of its own, and soldiers on its checkpoints.
         for (City.Facility f : w.city.facilities) {
-            if (f.kind != City.FACILITY_BASE || !f.satellite || f == base || soldiers <= 0) continue;
+            if (f.kind != City.FACILITY_BASE || !f.satellite || f == base || soldiers <= 0 || f.qrf) continue;
             int n = satEach;
             for (int i = 0; i < n; i++) spawn(Entity.SOLDIER, f.x + w.rnd.nextFloat() * f.r - f.r / 2, f.y + w.rnd.nextFloat() * f.r - f.r / 2);
+        }
+    }
+
+    /** ((28.7) The quick reaction force: its twenty soldiers. */
+    static final int QRF_SOLDIERS = 20;
+
+    /**
+     * ((28.7) The quick reaction force's base gets its twenty, on top of the city's army: five to each of its four vans,
+     * standing by in the yard. Riflemen, kitted out like any squad.
+     */
+    private void quickReactionForce() {
+        for (City.Facility f : w.city.facilities) {
+            if (f.kind != City.FACILITY_BASE || !f.qrf) continue;
+            for (int i = 0; i < QRF_SOLDIERS; i++) {
+                Entity e = spawn(Entity.SOLDIER, f.x + w.rnd.nextFloat() * f.r - f.r / 2, f.y + w.rnd.nextFloat() * f.r - f.r / 2);
+                if (e != null && w.city.cfg.nature()) w.kitOut(e);
+                // (Standing by in the yard, ready: on a post of their own, so nobody else's job takes them.)
+                standBy(e, f, i);
+            }
         }
     }
 
@@ -271,9 +291,9 @@ final class Population {
 
     /** Each base's combat engineers and its mortar teams in their pits. */
     private void engineersAndMortars(final int firstSoldier) {
-        // ((14.0) Two riflemen at each base are its combat engineers.)
+        // ((14.0) Two riflemen at each base are its combat engineers.) ((28.7) Not the quick reaction force's.)
         for (City.Facility f : w.city.facilities) {
-            if (f.kind != City.FACILITY_BASE) continue;
+            if (f.kind != City.FACILITY_BASE || f.qrf) continue;
             int engineers = 0;
             for (int i = firstSoldier, n = w.entities.size(); i < n && engineers < 2; i++) {
                 Entity e = w.entities.get(i);
@@ -789,7 +809,7 @@ final class Population {
         for (City.Facility f : w.city.facilities) {
             if (f.fallen) continue;
             if (f.kind == City.FACILITY_POLICE) pol.add(f);
-            else if (f.kind == City.FACILITY_BASE) bases.add(f);
+            else if (f.kind == City.FACILITY_BASE && !f.qrf) bases.add(f);
         }
         // ((28.0) The city's precincts first: the country towns' stations came first in the list, and the SWAT teams and
         // riot squads all stood by out at the hamlets.)
@@ -823,12 +843,19 @@ final class Population {
 
     /** (12.9) On a post of their own in the station's or base's yard, waiting to be sent. */
     void standBy(Entity e, City.Facility f, int k) {
+        standBy(e, f, k, true);
+    }
+
+    /** ((28.7) As above; put there (at the start), or, not, walking to it (back from a job). */
+    void standBy(Entity e, City.Facility f, int k, boolean put) {
         if (e == null) return;
         float a = k * 2.39996f, r = Math.min(f.r * 0.6f, 14 + (k % 6) * 4);
         float[] p = w.city.findWalkable(f.x + (float) Math.cos(a) * r, f.y + (float) Math.sin(a) * r);
         if (p == null || World.hypot(p[0] - f.x, p[1] - f.y) > f.r + 100) p = new float[]{e.x, e.y};
-        e.x = p[0];
-        e.y = p[1];
+        if (put) {
+            e.x = p[0];
+            e.y = p[1];
+        }
         e.task = Dispatch.T_POST;
         e.postX = p[0];
         e.postY = p[1];

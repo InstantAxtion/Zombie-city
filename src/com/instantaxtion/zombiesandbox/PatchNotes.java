@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.6";
-    static final int VERSION_CODE = 286;
+    static final String VERSION = "28.7";
+    static final int VERSION_CODE = 287;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.7  -  Quick reaction force",
+                    "New cities have a quick reaction force: a small army base near the middle of town with twenty soldiers standing by and four fast vans.",
+                    "When the dead turn up, a van goes with five aboard to the nearest call anywhere in town that has fewer than five soldiers on it - one after another while there are vans to send, two to a big call. The vans are the quickest thing the army drives.",
+                    "Once the call's dealt with, each van picks its five up and brings them back, ready for the next one. Nobody else's job takes the soldiers while they're standing by.",
+                    "Saved games and older cities stay as they were.",
+            },
             {
                     "28.6  -  Out of the yard",
                     "Cars no longer sit in a station's lot waiting for officers who aren't coming: once nobody walking to them has got any nearer for ten seconds, they set off with whoever is aboard (the longest wait in a test game went from a minute and a half to twelve seconds).",

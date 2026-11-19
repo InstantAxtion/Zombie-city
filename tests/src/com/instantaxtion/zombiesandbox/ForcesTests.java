@@ -15,7 +15,7 @@ final class ForcesTests extends TestKit {
         test("police backup: outside backup arrives without piling up; every kind spawned; SWAT to a horde; cordons; rounds shared", FAST, 40, ForcesTests.class,
                 "outsideBackup", "spawningAndCordons", "rangersAndRescue", "swatToHorde", "magsShared");
         test("army: guards, trucks, IFVs and gun trucks, ammo trucks, mortars, the bulldozer and the armoury", FAST, 35, ForcesTests.class,
-                "armoryGuardsTrucks", "gateGuardsReplaced", "ifvAndGunTruck", "ammoTruck", "mortarShells", "mortarRounds", "bulldozer", "armouryNotEmptied", "truckBay", "trucksDontVanish");
+                "armoryGuardsTrucks", "gateGuardsReplaced", "ifvAndGunTruck", "ammoTruck", "mortarShells", "mortarRounds", "bulldozer", "armouryNotEmptied", "truckBay", "trucksDontVanish", "quickReactionForce");
         test("commanders, the MRAP and fire support; command posts, fire missions, overwatch, boats and special forces", FULL, 25, ForcesTests.class,
                 "commanders", "fireMissions", "boatsPostsSpecialForces");
         test("medics and repair: combat medics, the field hospital, ambulances to care and back, repairs", FULL, 20, ForcesTests.class,
@@ -1110,6 +1110,76 @@ final class ForcesTests extends TestKit {
         truck.passengerType = Entity.SOLDIER;
         check(WorldRenderer.unitSide(cop) == 1 && WorldRenderer.unitSide(van) == 1 && WorldRenderer.unitSide(truck) == 2 && WorldRenderer.unitSide(tank) == 2
                 && WorldRenderer.unitSide(car) < 0, "police cars carry the police's dot, the army's vehicles the army's");
+    }
+
+    /**
+     * (28.7) The quick reaction force: a small base near the middle of town (map version 42), twenty soldiers standing
+     * by in its yard and four fast vans; a call and a van goes, five aboard, the rest staying ready.
+     */
+    static void quickReactionForce() throws Exception {
+        CityConfig old = cfg(CityConfig.METROPOLIS, CityConfig.SMALL, 280);
+        City oc = new City(old, 0.05f);
+        boolean had = false;
+        for (City.Facility f : oc.facilities) had |= f.qrf;
+        check(!had, "no quick reaction force on a city built before map version 42");
+        CityConfig c = cfg(CityConfig.METROPOLIS, CityConfig.SMALL, 280);
+        c.civic = 42;
+        World w = new World(c);
+        w.populate(c);
+        City.Facility q = null;
+        for (City.Facility f : w.city.facilities) if (f.qrf) q = f;
+        check(q != null && q.kind == City.FACILITY_BASE && q.baseType == City.BT_RAPID && q.name.endsWith("(Rapid Response)"), "a quick reaction force base");
+        float mx = (w.city.townX0 + w.city.townX1) / 2f * City.T, my = (w.city.townY0 + w.city.townY1) / 2f * City.T;
+        check(Math.hypot(q.x - mx, q.y - my) < w.city.worldW() * 0.25f, "near the middle of town (" + (int) Math.hypot(q.x - mx, q.y - my) + ")");
+        check(q.r < 110, "a small one (" + (int) q.r + ")");
+        int ready = 0, vans = 0;
+        for (Entity e : w.entities)
+            if (!e.dead && e.type == Entity.SOLDIER && e.task == Dispatch.T_POST && Math.hypot(e.postX - q.x, e.postY - q.y) < q.r + 100) ready++;
+        for (Fleet.Vehicle v : w.fleet.vehicles) if (v.kind == Fleet.K_RAPID_VAN && v.parked && v.standby) vans++;
+        check(ready == Population.QRF_SOLDIERS, "twenty standing by (" + ready + ")");
+        check(vans == FleetArmy.RAPID_VANS, "four vans in the yard (" + vans + ")");
+        // A call across town: a van goes, five aboard.
+        java.util.Random r = new java.util.Random(3);
+        float[] call = null;
+        for (int k = 0; k < 400 && call == null; k++) {
+            float[] s2 = w.city.randomStreetSpot(r);
+            if (s2 != null && Math.hypot(s2[0] - q.x, s2[1] - q.y) > 600 && Math.hypot(s2[0] - q.x, s2[1] - q.y) < 1600) call = s2;
+        }
+        check(call != null, "a street across town");
+        w.outbreak = true;
+        for (int i = 0; i < 4; i++) w.spawn(Entity.ZOMBIE, call[0] + 12 * (float) Math.cos(i * 1.6f), call[1] + 12 * (float) Math.sin(i * 1.6f));
+        java.lang.reflect.Method ni = Dispatch.class.getDeclaredMethod("newIncident", float.class, float.class, int.class);
+        ni.setAccessible(true);
+        ni.invoke(w.dispatch, call[0], call[1], 4);
+        Fleet.Vehicle van = null;
+        float top = 0;
+        // (Quicker than a Humvee on a call: 115 before the open-road scaling, the van 140.)
+        float humvee = 40 + (115 - 40) * Fleet.DRIVE_SCALE;
+        for (int f = 0; f < 30 * 60 && (van == null || top <= humvee); f++) {
+            w.update(1 / 30f);
+            w.evCount = 0;
+            for (Fleet.Vehicle v : w.fleet.vehicles)
+                if (v.kind == Fleet.K_RAPID_VAN && v.state == Fleet.DRIVE && v.crew.size() == Fleet.RAPID_SEATS) {
+                    van = v;
+                    top = Math.max(top, Math.abs(v.speed));
+                }
+        }
+        check(van != null, "a van out to the call with five aboard");
+        int still = 0;
+        for (Entity e : w.entities)
+            if (!e.dead && e.type == Entity.SOLDIER && e.task == Dispatch.T_POST && Math.hypot(e.postX - q.x, e.postY - q.y) < q.r + 100) still++;
+        check(still == Population.QRF_SOLDIERS - Fleet.RAPID_SEATS, "the other fifteen still ready (" + still + ")");
+        check(top > humvee, "and it's quick (" + (int) top + ", a Humvee " + (int) humvee + ")");
+        // Saved and loaded: still four vans, still the quick reaction force's.
+        java.io.File file = java.io.File.createTempFile("zcs", ".dat");
+        SaveGame.save(w, file);
+        World l = SaveGame.load(file);
+        file.delete();
+        int lv = 0;
+        City.Facility lq = null;
+        for (City.Facility f : l.city.facilities) if (f.qrf) lq = f;
+        for (Fleet.Vehicle v : l.fleet.vehicles) if (v.kind == Fleet.K_RAPID_VAN) lv++;
+        check(lq != null && lv == FleetArmy.RAPID_VANS, "a save keeps the base and its four vans (" + lv + ")");
     }
 
     static void outsideBackup() throws Exception {

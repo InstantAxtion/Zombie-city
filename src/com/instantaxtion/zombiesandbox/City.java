@@ -72,6 +72,8 @@ final class City {
         boolean fallen;
         /** (12.3) An army base's trucks in its garages, besides those parked out in the yard (Fleet.stockBases). */
         int spareTrucks;
+        /** ((28.7) The quick reaction force's base (BT_RAPID): twenty soldiers and four fast vans, sent to any call. */
+        boolean qrf;
         float fallingFor;
 
         Facility(int kind, float x, float y, float r, float gateX, float gateY, String name) {
@@ -357,9 +359,13 @@ final class City {
      * assault course, and so on. (Chosen with numbers of their own, so the rest of the city doesn't move.)
      */
     static final String[] BASE_TYPES = {"Garrison", "Air Base", "Armoured Base", "Training Camp", "Special Forces Base",
-            "Supply Depot", "Radar Station", "Guard Headquarters"};
+            "Supply Depot", "Radar Station", "Guard Headquarters", "Rapid Response"};
     static final int BT_GARRISON = 0, BT_AIR = 1, BT_ARMOUR = 2, BT_TRAINING = 3, BT_SPECIAL = 4, BT_SUPPLY = 5,
-            BT_RADAR = 6, BT_GUARD = 7;
+            BT_RADAR = 6, BT_GUARD = 7,
+            // ((28.7) The quick reaction force's small base near the middle of town: never one of the kinds a base is
+            // picked from at random - those stay the first RANDOM_BASE_TYPES, so every city builds as it did.)
+            BT_RAPID = 8;
+    static final int RANDOM_BASE_TYPES = 8;
     static final int BD_RUNWAY = 0, BD_HANGAR = 1, BD_TANK = 2, BD_RANGE = 3, BD_OBSTACLE = 4, BD_RADAR = 5,
             BD_DISH = 6, BD_FUEL = 7, BD_CONTAINER = 8, BD_MAST = 9, BD_SANDBAGS = 10, BD_KILLHOUSE = 11, BD_JET = 12,
             BD_SHED = 13, BD_FLAG = 14, BD_HARDSTAND = 15,

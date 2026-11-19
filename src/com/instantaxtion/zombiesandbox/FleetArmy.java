@@ -619,6 +619,11 @@ final class FleetArmy {
     boolean backInPool(Vehicle v) {
         v.incident = null;
         v.speed = 0;
+        // ((28.7) A quick reaction force's van nobody got into: back on standby in the yard, a van.)
+        if (v.kind == K_RAPID_VAN) {
+            fleet.service.parkUp(v);
+            return false;
+        }
         if (city.tiles[city.tileIndex(v.homeX, v.homeY)] == City.BASE && !w.peopleNear(v.homeX, v.homeY, 10)) {
             city.parkTruck(v.homeX, v.homeY);
             return true;
@@ -674,10 +679,15 @@ final class FleetArmy {
                 if (!e.dead && e.type == Entity.SOLDIER && World.hypot(e.x - f.x, e.y - f.y) < rad) soldiers++;
             }
             if (soldiers == 0) continue;
+            // ((28.7) The quick reaction force's base: its four vans in the yard, and nothing else.)
+            if (f.qrf) {
+                stockRapidVans(f);
+                continue;
+            }
             int have = city.parkedTrucks(f.x, f.y, rad);
             for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
                 Vehicle v = fleet.vehicles.get(i);
-                if (v.type == TRUCK && v.standby && World.hypot(v.x - f.x, v.y - f.y) < rad) have++;
+                if (v.type == TRUCK && v.standby && v.kind != K_RAPID_VAN && World.hypot(v.x - f.x, v.y - f.y) < rad) have++;
             }
             int want = Math.max(4, Math.min(40, (soldiers + 3) / 4));
             f.spareTrucks = Math.max(0, want - have);
@@ -703,6 +713,37 @@ final class FleetArmy {
                 fleet.vehicles.add(v);
                 f.spareTrucks--;
             }
+        }
+    }
+
+    /** ((28.7) The quick reaction force's four vans, made up in its yard (counting those already there or out). */
+    static final int RAPID_VANS = 4;
+
+    void stockRapidVans(City.Facility f) {
+        f.spareTrucks = 0;
+        int have = 0;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle v = fleet.vehicles.get(i);
+            if (v.kind == K_RAPID_VAN && v.depot == f && !v.broken) have++;
+        }
+        float[] g = f.gateX > 0 ? new float[]{f.gateX, f.gateY} : city.nearestDrivable(f.x, f.y);
+        for (int k = have; k < RAPID_VANS && g != null; k++) {
+            float[] p = bay(g, f);
+            if (p == null) break;
+            Vehicle v = fleet.make(TRUCK);
+            fleet.setKind(v, K_RAPID_VAN);
+            v.x = p[0];
+            v.y = p[1];
+            v.homeX = p[0];
+            v.homeY = p[1];
+            v.angle = (float) Math.atan2(f.y - p[1], f.x - p[0]);
+            v.depot = f;
+            v.passengerType = Entity.SOLDIER;
+            v.state = IDLE;
+            v.speed = 0;
+            v.parked = true;
+            v.standby = true;
+            fleet.vehicles.add(v);
         }
     }
 
