@@ -15,47 +15,10 @@ final class Aftermath {
         this.w = w;
     }
 
-    /** Once a second: in an outbreak with people sheltering, every few minutes a plane drops supplies over the busiest zone. */
-    void cargoFlights() {
-        if (w.cargoPlane != null || !w.outbreak || w.zombies == 0 || w.dispatch.zones.isEmpty()) return;
-        if ((w.cargoCd -= 1) > 0) return;
-        Dispatch.SafeZone best = null;
-        for (Dispatch.SafeZone z : w.dispatch.zones) if (best == null || z.sheltered > best.sheltered) best = z;
-        if (best == null || best.sheltered < 5) {
-            w.cargoCd = 30;
-            return;
-        }
-        w.cargoCd = 200 + w.rnd.nextFloat() * 90;
-        double a = w.rnd.nextDouble() * Math.PI * 2;
-        float dx = (float) Math.cos(a), dy = (float) Math.sin(a), far = w.city.worldW() + w.city.worldH();
-        w.cargoPlane = new float[]{best.x - dx * far * 0.5f, best.y - dy * far * 0.5f, dx, dy, 3, 0};
-        w.cargoTarget = new float[]{best.x, best.y};
-        w.dispatch.say(Dispatch.WHO_MILITARY, null, "Air Force: Cargo plane inbound, dropping supplies over " + w.city.placeName(best.x, best.y) + ".", best.x, best.y);
-    }
-
-    /** The plane flies on; over its zone, it drops its crates under their parachutes. */
-    void moveCargoPlane(float dt) {
-        float[] p = w.cargoPlane;
-        p[0] += p[2] * 260 * dt;
-        p[1] += p[3] * 260 * dt;
-        p[5] -= dt;
-        float along = (p[0] - w.cargoTarget[0]) * p[2] + (p[1] - w.cargoTarget[1]) * p[3];
-        if (p[4] > 0 && along > -90 && p[5] <= 0) {
-            float ox = (w.rnd.nextFloat() - 0.5f) * 50, oy = (w.rnd.nextFloat() - 0.5f) * 50;
-            if (p[4] == 3) w.sandbox.supplyDrop(p[0] + ox, p[1] + oy);
-            else w.sandbox.placeCrate(p[0] + ox, p[1] + oy, 3.5f);
-            p[4]--;
-            p[5] = 0.6f;
-        }
-        float m = 600;
-        if (along > 0 && (p[0] < -m || p[1] < -m || p[0] > w.city.worldW() + m || p[1] > w.city.worldH() + m)) w.cargoPlane = null;
-    }
-
     void cityLife() {
         w.war.keyBuildings();
         w.experience.veterans();
         w.experience.bands();
-        cargoFlights();
         w.civilianAI.countHeading();
         w.baseLife.updateBases();
         if (w.city.prison != null) {

@@ -669,6 +669,12 @@ final class World {
      * the armouries hold twice as much to fill them up from. The magazines are the same size, so they reload as often.)
      */
     static final int AMMO_MORE = 2;
+    /**
+     * ((28.9) Every vehicle a tenth faster: cars, police, the army's, ambulances, fire trucks and buses on the road (their
+     * cruising speed, before slowing for corners, junctions and whoever's ahead), the one you drive, trains, boats,
+     * planes and helicopters.)
+     */
+    static final float VEHICLE_SPEED = 1.1f;
     /** ((28.8) A full police armoury and a full base's, in rounds: twice what they were, for the bigger loads. */
     static final int ARMOURY_POLICE = 3000 * AMMO_MORE, ARMOURY_BASE = 9000 * AMMO_MORE;
 
@@ -842,7 +848,6 @@ final class World {
         effects.updateEffects(dt);
         if (!boats.isEmpty()) exodus.moveBoats(dt);
         if (city.ferry != null) prison.moveFerry(dt);
-        if (cargoPlane != null) aftermathLife.moveCargoPlane(dt);
         slowClocks(dt);
         countHeads(dt);
     }
@@ -2237,12 +2242,6 @@ final class World {
     boolean powerChecked;
 
     /** Once a second: the infection evolves, and after it's over the city slowly recovers. */
-    // ------------------------------------------------------------------ ((23.0) the cargo plane
-
-    /** The cargo plane overhead: {x, y, heading x, heading y, crates left, seconds to the next}, or null. */
-    float[] cargoPlane;
-    float[] cargoTarget;
-    float cargoCd = 150;
 
     // ------------------------------------------------------------------ resupply after the outbreak (10.19)
 

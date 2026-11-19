@@ -42,7 +42,7 @@ final class FleetTrains {
         v.y = (city.railY0 + city.railRows / 2f) * City.T;
         v.x = east ? -20 : city.worldW() + 20;
         v.angle = east ? 0 : (float) Math.PI;
-        v.speed = 110;
+        v.speed = 110 * World.VEHICLE_SPEED;
         fleet.vehicles.add(v);
     }
 
@@ -92,7 +92,7 @@ final class FleetTrains {
             }
             return false;
         }
-        float cruise = 110;
+        float cruise = 110 * World.VEHICLE_SPEED;
         // ((28.0) Stadium City's light rail stops twice: at Central Station and at Stadium Station, in the order it
         // comes to them. busPhase counts the stops behind it; everywhere else pad marks the one station passed.)
         float sx = city.stationX;

@@ -320,7 +320,7 @@ final class Inspector {
         // ((12.0) Run themselves out: slowed to a jog until they get their breath back.)
         float sp = (float) Math.sqrt(e.vx * e.vx + e.vy * e.vy);
         boolean sprinting = e.isArmed() && sp > e.runSpeed * 1.08f;
-        if (e.isArmed() && e.stamina < 0.2f && sp > 2 && e.task == Dispatch.T_RESPOND && !e.onScene) return "Out of breath, jogging on to " + (e.incident != null ? e.incident.place : "the call");
+        if (e.isArmed() && e.winded && sp > 2 && e.task == Dispatch.T_RESPOND && !e.onScene) return "Out of breath, jogging on to " + (e.incident != null ? e.incident.place : "the call");
         switch (e.task) {
             case Dispatch.T_RESPOND: return (e.onScene ? "At the scene" : sprinting ? "Sprinting to a 911 call" : "Responding to a 911 call") + (e.incident != null ? " on " + e.incident.place : "");
             case Dispatch.T_GUARD: return "Guarding the " + (e.zone != null ? e.zone.place + " " : "") + "safe zone";

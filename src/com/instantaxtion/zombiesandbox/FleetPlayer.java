@@ -138,7 +138,7 @@ final class FleetPlayer {
             return false;
         }
         float jx = w.joyX, jy = w.joyY, mag = Math.min(1, (float) Math.sqrt(jx * jx + jy * jy));
-        float max = v.type == TANK ? 45 : v.type == CAR || v.type == CRUISER ? 125 : 95;
+        float max = (v.type == TANK ? 45 : v.type == CAR || v.type == CRUISER ? 125 : 95) * World.VEHICLE_SPEED;
         float target = 0;
         if (mag > 0.15f) {
             float want = (float) Math.atan2(jy, jx);

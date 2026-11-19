@@ -522,6 +522,8 @@ final class Entity {
     float slideSide = 1;
     /** Breath for sprinting (0 to 1): the living tire, the dead don't. */
     float stamina = 1;
+    /** ((28.9) Run out of breath: jogging, not sprinting, till they've half of it back. */
+    boolean winded;
     /** Police and soldiers: when they last radioed a sighting to the others, and a retreat already called. */
     float shareCd;
     /** (10.50) Until a civilian running from the dead next shouts a warning to those about. */

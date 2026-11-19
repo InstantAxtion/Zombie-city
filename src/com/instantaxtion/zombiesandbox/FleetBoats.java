@@ -220,7 +220,7 @@ final class FleetBoats {
         int t = path[v.boatAt];
         float gx = (t % city.w + 0.5f) * City.T, gy = (t / city.w + 0.5f) * City.T;
         float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-        v.speed = Math.min(v.speed + dt * 50, 110);
+        v.speed = Math.min(v.speed + dt * 50, 110 * World.VEHICLE_SPEED);
         if (d < 4) v.boatAt += in ? 1 : -1;
         else {
             float step = Math.min(d, v.speed * dt);
@@ -255,7 +255,7 @@ final class FleetBoats {
             int t = v.boatPath[v.boatAt];
             float gx = (t % w0 + 0.5f) * City.T, gy = (t / w0 + 0.5f) * City.T;
             float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
-            v.speed = Math.min(v.speed + dt * 60, 160);
+            v.speed = Math.min(v.speed + dt * 60, 160 * World.VEHICLE_SPEED);
             if (d < 4) v.boatAt++;
             else {
                 float step = Math.min(d, v.speed * dt);

@@ -858,36 +858,12 @@ final class WorldRenderer {
         }
     }
 
-    /** ((27.3) Step 9, after the buildings.) Helicopters and planes, the cargo plane and the birds in the air. */
+    /** ((27.3) Step 9, after the buildings.) Helicopters and planes, and the birds in the air. */
     void drawAircraft(Canvas c, float vx0, float vy0, float vx1, float vy1) {
         for (int i = 0, n = gv.world.fleet.vehicles.size(); i < n; i++) {
             Fleet.Vehicle v = gv.world.fleet.vehicles.get(i);
             if (v.type == Fleet.HELI) gv.vehicleRenderer.drawHeli(c, v);
             else if (v.type == Fleet.JET) gv.vehicleRenderer.drawJet(c, v);
-        }
-        // ((23.0) The cargo plane, high over everything: a grey transport, its shadow far below.)
-        if (gv.world.cargoPlane != null) {
-            float[] cp = gv.world.cargoPlane;
-            float u = 14f, off = 70, ang = (float) Math.toDegrees(Math.atan2(cp[3], cp[2]));
-            c.save();
-            c.translate(cp[0] + off, cp[1] + off * 1.3f);
-            c.rotate(ang);
-            gv.fill.setColor(0x26000000);
-            c.drawRect(-4.5f * u, -0.6f * u, 4.5f * u, 0.6f * u, gv.fill);
-            c.drawRect(-1.6f * u, -4.6f * u, -0.6f * u, 4.6f * u, gv.fill);
-            c.restore();
-            c.save();
-            c.translate(cp[0], cp[1]);
-            c.rotate(ang);
-            gv.fill.setColor(0xFF6A7060);
-            c.drawRect(-1.4f * u, -5 * u, -0.4f * u, 5 * u, gv.fill);
-            c.drawRect(-4.6f * u, -1.8f * u, -3.8f * u, 1.8f * u, gv.fill);
-            gv.fill.setColor(0xFF7A806E);
-            c.drawRect(-4.6f * u, -0.8f * u, 4 * u, 0.8f * u, gv.fill);
-            c.drawCircle(4 * u, 0, 0.8f * u, gv.fill);
-            gv.fill.setColor(0xFF4A5040);
-            for (float ey : SIDE_MARKS) c.drawRect(-0.6f * u, ey * u - 0.35f * u, 0.4f * u, ey * u + 0.35f * u, gv.fill);
-            c.restore();
         }
         for (int i = 0, n = gv.world.birds.size(); i < n; i++) {
             World.Bird b = gv.world.birds.get(i);

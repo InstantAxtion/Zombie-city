@@ -872,6 +872,10 @@ final class FleetDriving {
                         for (int i = fleet.gridStart[cy * fleet.gridW + cx], ie = fleet.gridStart[cy * fleet.gridW + cx + 1]; i < ie; i++) {
                             Vehicle o = fleet.gridV[i];
                             if (o == v || o.removedFromFleet || (o.parked && !o.broken) || offRoad(o) || Math.abs(o.speed) > 4) continue;
+                            // ((28.9) Facing into the junction, the opposite way to this one's way out: it's waiting to come in
+                            // (at its red), not in the way. A motorcycle near the middle of the road was taken for one in the
+                            // lane out by where it stood alone, and the car with the green sat through it.)
+                            if (!o.broken && (odx != 0 || ody != 0) && (float) Math.cos(o.angle) * odx + (float) Math.sin(o.angle) * ody < -0.5f) continue;
                             if (Math.abs(o.x - ex) < City.T * 0.9f && Math.abs(o.y - ey) < City.T * 0.9f
                                     && city.junctionIdAt(o.x, o.y) < 0
                                     && (odx == 0 && ody == 0 || (o.x - ex) * -ody + (o.y - ey) * odx > -3)) return true;
@@ -1727,6 +1731,7 @@ final class FleetDriving {
         // (10.20) Open-road speeds are nearly twice what they were, next to people on foot (who walk briskly in
         // this world): a car in town now covers ground like a car. Crawls, turns and queues are as before.
         if (max > 40) max = 40 + (max - 40) * DRIVE_SCALE;
+        max *= World.VEHICLE_SPEED;
         // (Off the road, across the grass: slower going.)
         if (city.rough(v.x, v.y)) max *= 0.65f;
         // Keep a safe distance behind whatever is ahead in the lane.

@@ -577,13 +577,18 @@ final class Movement {
         // The dead never tire.
         // ((10.51) A real sprint: running for their life with breath to spare they go flat out, for ten seconds or
         // so, then jog until they've got it back - quicker standing still than on the move.)
+        // ((28.9) Winded, they jog - under a sprint - and get their breath back as they go, and don't sprint again till
+        // they've half of it back. They used to jog at a pace that still counted as a sprint: their breath never came
+        // back while they kept moving, and anyone running to a call was out of breath the whole way.)
         if (!e.isUndead() && e.type != Entity.DOG) {
+            if (e.winded) e.want = Math.min(e.want, e.speed * 1.3f);
             if (e.want > e.speed * 1.35f) {
                 if (e.fleeTimer > 0 && e.stamina > 0.3f && e != w.controlled) e.want *= 1.12f;
                 e.stamina -= dt * World.STAMINA_DRAIN;
-                if (e.stamina < 0.15f) e.want = Math.min(e.want, e.speed * 1.45f);
+                if (e.stamina < 0.15f) e.winded = true;
             } else {
                 e.stamina = Math.min(1, e.stamina + dt * (e.want < 1 ? 0.12f : 0.07f));
+                if (e.stamina >= 0.5f) e.winded = false;
             }
             if (e.stamina < 0) e.stamina = 0;
         }

@@ -1595,7 +1595,7 @@ final class Hud {
         String info = who + "   Health " + Math.max(0, (int) e.hp) + "/" + (int) e.maxHp + gun
                 + (e.melee > 0 ? "   " + Entity.MELEE_NAMES[e.melee] : "") + place + (group > 0 ? "   Group " + group : "")
                 + (e.infected ? "   BITTEN: " + Math.max(0, (int) e.infectTimer) + "s" : "")
-                + (!e.isUndead() && e.stamina < 0.3f ? "   Out of breath" : "");
+                + (!e.isUndead() && e.winded ? "   Out of breath" : "");
         gv.text.setTextSize(13 * gv.dp);
         // ((12.0) Smaller when it won't fit across the screen, rather than running off both sides.)
         float room = w - 24 * gv.dp;

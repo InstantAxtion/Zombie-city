@@ -717,6 +717,7 @@ final class FleetHelis {
      * where it's told to while it hovers), and it banks into each change of course.
      */
     void flyTo(Vehicle v, float gx, float gy, float speed, float face, float dt) {
+        speed *= World.VEHICLE_SPEED;
         float dx = gx - v.x, dy = gy - v.y, d = (float) Math.sqrt(dx * dx + dy * dy);
         float acc = 32;
         float want = d < 0.5f ? 0 : Math.min(speed, (float) Math.sqrt(2 * acc * 0.8f * d));

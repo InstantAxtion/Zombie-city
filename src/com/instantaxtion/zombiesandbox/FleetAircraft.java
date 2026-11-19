@@ -27,7 +27,7 @@ final class FleetAircraft {
         v.y = ty - (float) Math.sin(a) * 900;
         v.tx = tx;
         v.ty = ty;
-        v.speed = 380;
+        v.speed = 380 * World.VEHICLE_SPEED;
         v.alt = 1;
         v.state = DRIVE;
         fleet.vehicles.add(v);
@@ -73,7 +73,7 @@ final class FleetAircraft {
         v.y = ry;
         v.angle = 0;
         v.alt = 1;
-        v.speed = 200;
+        v.speed = 200 * World.VEHICLE_SPEED;
         v.busPhase = 0;
         v.timer = 0;
     }
@@ -92,7 +92,7 @@ final class FleetAircraft {
             case 0: // The approach, coming down to the threshold.
                 gx = rw[0] + 30;
                 gy = ry;
-                speed = 200;
+                speed = 200 * World.VEHICLE_SPEED;
                 v.alt = Math.min(1, Math.max(0, (gx - v.x) / 900));
                 if (w.airportClosed) {
                     // (The airport has fallen: it goes round and away again.)
@@ -149,13 +149,13 @@ final class FleetAircraft {
             case 5: // The take-off run.
                 gx = rw[2] + 60;
                 gy = ry;
-                speed = Math.min(220, v.speed + dt * 70);
+                speed = Math.min(220 * World.VEHICLE_SPEED, v.speed + dt * 70);
                 v.alt = Math.min(1, Math.max(0, (v.x - (rw[0] + len * 0.55f)) / (len * 0.45f)));
                 break;
             default: // Away to the east.
                 gx = city.worldW() + 600;
                 gy = ry - 300;
-                speed = 220;
+                speed = 220 * World.VEHICLE_SPEED;
                 v.alt = 1;
                 break;
         }
@@ -191,7 +191,7 @@ final class FleetAircraft {
         v.y = ty - (float) Math.sin(a) * CRASH_RUN;
         v.tx = tx;
         v.ty = ty;
-        v.speed = 210;
+        v.speed = 210 * World.VEHICLE_SPEED;
         v.alt = 0.6f;
         v.state = DRIVE;
         fleet.vehicles.add(v);

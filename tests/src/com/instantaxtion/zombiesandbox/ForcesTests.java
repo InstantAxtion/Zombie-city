@@ -2287,12 +2287,14 @@ final class ForcesTests extends TestKit {
         }
         check(aux + sol >= 1 && (aux > 0 || !police) && (sol > 0 || !army), "they come out as auxiliaries and volunteers (" + aux + ", " + sol + ")");
         check(w.volunteersPolice + w.volunteersArmy == aux + sol, "counted (" + w.volunteersPolice + " + " + w.volunteersArmy + ")");
-        // A fallen station or base takes nobody more.
+        // A fallen station or base takes nobody more. ((28.9) Anyone already on their way before they fell isn't new.)
+        java.util.HashSet<Entity> onTheirWay = new java.util.HashSet<Entity>();
+        for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST) onTheirWay.add(e);
         for (City.Facility f : w.city.facilities) if (f.kind == City.FACILITY_POLICE || f.kind == City.FACILITY_BASE) f.fallen = true;
         for (Entity e : w.entities) if (!e.dead && e.type == Entity.CIVILIAN) e.asked = false;
         for (int k = 0; k < 10; k++) w.recruiting.volunteers();
         int more = 0;
-        for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST && !vols.contains(e)) more++;
+        for (Entity e : w.entities) if (!e.dead && e.volunteering && e.task == Dispatch.T_ENLIST && !vols.contains(e) && !onTheirWay.contains(e)) more++;
         check(more == 0, "none once the stations and bases have fallen");
     }
 

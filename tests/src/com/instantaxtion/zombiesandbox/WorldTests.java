@@ -13,7 +13,7 @@ final class WorldTests extends TestKit {
         test("zombies: rot, marching hordes, alphas, mega hordes, runners, the armoured dead; they claw cars, climb heaps, follow noise and climb towers", FULL, 30, WorldTests.class,
                 "rotAndMarch", "alphas", "runnersRun", "engineAndMegaHorde", "armouredDead", "clawClimbHear", "turnRatesAndPickups", "fireTower");
         test("events: the war's end, quarantine and air strikes, the giant, a riot, a prison break, a plane crash, raider gangs and looters, leaders decide", FULL, 35, WorldTests.class,
-                "warEnds", "quarantine", "giantAndEvents", "raiderGangs", "looters", "heavyDestruction", "leadersDecide", "cargoPlane");
+                "warEnds", "quarantine", "giantAndEvents", "raiderGangs", "looters", "heavyDestruction", "leadersDecide");
         test("safe zones and defences: walls and gates, barricades, razor wire, gun nests, barrages, roadblocks, flares and mines", FULL, 30, WorldTests.class,
                 "safeZoneWalls", "engineersHelpZone", "wireNestsBarrage", "flaresAndMines", "roadblockBarriers", "barricadeKinds");
     }
@@ -1379,21 +1379,6 @@ final class WorldTests extends TestKit {
         w.update(1 / 30f);
         for (int i = 0; i < 80 && w.decisions == 0; i++) w.leadersDecide(100);
         check(w.decisions != 0, "the city's leaders make an emergency decision (" + w.command + ")");
-    }
-
-    static void cargoPlane() throws Exception {
-        CityConfig c = cfg(CityConfig.SMALL, 2301);
-        World w = new World(c);
-        w.populate(c);
-        float[] p = w.city.findWalkable(w.city.worldW() / 2, w.city.worldH() / 2);
-        // The cargo plane over a zone drops its three crates.
-        java.lang.reflect.Field tf = World.class.getDeclaredField("cargoTarget");
-        tf.setAccessible(true);
-        tf.set(w, new float[]{p[0], p[1]});
-        w.cargoPlane = new float[]{p[0] - 800, p[1], 1, 0, 3, 0};
-        int before = w.pickups.size();
-        for (int f = 0; f < 30 * 6 && w.cargoPlane != null; f++) w.update(1 / 30f);
-        check(w.pickups.size() >= before + 3, "the cargo plane drops its crates (" + (w.pickups.size() - before) + ")");
     }
 
     static void safeZoneWalls() throws Exception {

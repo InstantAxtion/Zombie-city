@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.8";
-    static final int VERSION_CODE = 288;
+    static final String VERSION = "28.9";
+    static final int VERSION_CODE = 289;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.9  -  Quicker wheels, more breath",
+                    "Every vehicle is a tenth faster: traffic, police cars, the army's trucks, Humvees and armour, ambulances, fire trucks and buses, and the car you drive yourself.",
+                    "Trains, boats, planes and helicopters too.",
+                    "They still slow down for corners, junctions, checkpoints and whoever's in front as before.",
+                    "Out of breath far less: someone who has run themselves out now jogs and gets their breath back as they go, instead of staying winded until they stop. Officers and soldiers on their way to a call are winded well under half as often (8% of the time, from 21%), and \"Out of breath\" shows only while they really are.",
+                    "The cargo plane is gone.",
+                    "A car with a green light no longer waits for one stopped at the red on the far side of the junction, taking it for one in its way out.",
+            },
             {
                     "28.8  -  More rounds",
                     "Every officer and soldier carries twice the spare ammunition: a patrol officer goes out with 120 rounds besides the one in the gun, a rifleman with 360, SWAT and special forces with 300 and 540.",
