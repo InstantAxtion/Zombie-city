@@ -34,11 +34,11 @@ final class ForcesTests extends TestKit {
         // (An unprepared city has only half the spare rounds.)
         boolean half = w.readiness == 1;
         for (Entity e : w.entities) {
-            // ((27.5) A 15-round magazine and four spares, from three.)
+            // ((27.5) A 15-round magazine and four spares, from three.) ((28.8) And twice the spares since: 135 rounds.)
             if (e.type == Entity.COP && e.role == 0 && e.agency == 0 && e.weapon == Entity.W_STD)
-                check(e.ammo + e.reserve == (half ? 15 + 30 : 75), "an officer carries 75 rounds (" + (e.ammo + e.reserve) + ")");
+                check(e.ammo + e.reserve == (half ? 15 + 30 * World.AMMO_MORE : 15 + 60 * World.AMMO_MORE), "an officer carries 135 rounds (" + (e.ammo + e.reserve) + ")");
             if (e.type == Entity.SOLDIER && e.role == Entity.ROLE_RIFLE)
-                check(e.ammo + e.reserve == (half ? 30 + 90 : 210), "a soldier carries 210 rounds (" + (e.ammo + e.reserve) + ")");
+                check(e.ammo + e.reserve == (half ? 30 + 90 * World.AMMO_MORE : 30 + 180 * World.AMMO_MORE), "a soldier carries 390 rounds (" + (e.ammo + e.reserve) + ")");
         }
         // ((11.4) Different units carry different guns: patrol officers with shotguns and carbines among them,
         // SWAT with submachine guns or carbines, each named on the card.)
@@ -1448,7 +1448,8 @@ final class ForcesTests extends TestKit {
         b.reserve = 2;
         int before = b.reserve;
         a.magCd = 0;
-        a.reserve = a.magSize * 5;
+        // ((28.8) A full load: "plenty" is over half of it, and the loads doubled.)
+        a.reserve = World.fullReserve(a);
         w.recount();
         for (int f = 0; f < 30 * 3 && b.reserve <= before; f++) { w.update(1 / 30f); w.evCount = 0; }
         check(b.reserve > before, "a soldier with plenty passes a mag to one running low");
@@ -2217,7 +2218,8 @@ final class ForcesTests extends TestKit {
         check(w.fleet.patrolFor(car.x, car.y) != car, "a badly damaged car takes no calls");
         boolean waited = false, inCare = false, mending = false;
         // (Till this officer is back - another wounded one coming back on duty doesn't count - and the car mended.)
-        for (int f = 0; f < 30 * 240 && !(inCare && cop.hp >= cop.maxHp && cop.task != Dispatch.T_HEAL && !cop.inCare && w.returnedToDuty > 0 && car.hp >= car.maxHp); f++) {
+        // ((28.8) Six minutes, not four: with 28.8's other dice the officer was still being patched up at four, 31 of 36.)
+        for (int f = 0; f < 30 * 360 && !(inCare && cop.hp >= cop.maxHp && cop.task != Dispatch.T_HEAL && !cop.inCare && w.returnedToDuty > 0 && car.hp >= car.maxHp); f++) {
             w.update(1 / 30f);
             waited |= cop.waitPickup;
             inCare |= cop.inCare;

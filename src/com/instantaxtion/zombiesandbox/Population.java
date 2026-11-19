@@ -60,7 +60,7 @@ final class Population {
         // Every city with a police station has a SWAT team (two on the big maps).
         w.dispatch.swatTeams = w.city.nearestFacility(City.FACILITY_POLICE, 0, 0) == null ? 0 : w.city.w >= 300 ? 2 : 1;
         w.exodus.launchBoats();
-        if (w.courtArmoury != null) w.courtArmoury.ammo = 1200;
+        if (w.courtArmoury != null) w.courtArmoury.ammo = 1200 * World.AMMO_MORE;
         w.inmates = 0;
         // ((12.3) Room left for the police and soldiers, and for the dead: with the bigger forces of 12.2 a city
         // could start at its limit, and then no zombie could be put down or get up.)
@@ -611,7 +611,7 @@ final class Population {
                 // A 15-round pistol and ((27.5) four) spare magazines: a duty belt's worth (three ran dry halfway through a fight
                 // with a dozen of the dead).
                 e.magSize = 15;
-                e.reserve = 60;
+                e.reserve = 60 * World.AMMO_MORE;
                 e.body = 0xFF23408E;
                 e.head = 0xFF141C38;
                 break;
@@ -622,7 +622,7 @@ final class Population {
                 e.runSpeed = 40;
                 // A standard load: seven 30-round magazines.
                 e.magSize = 30;
-                e.reserve = 180;
+                e.reserve = 180 * World.AMMO_MORE;
                 e.grenades = 2;
                 e.body = 0xFF55623A;
                 e.head = 0xFF3C4628;
@@ -916,12 +916,12 @@ final class Population {
                 e.grenades = 0;
                 if (e.type == Entity.COP) {
                     e.hp = e.maxHp = 50;
-                    e.reserve = 30;
+                    e.reserve = 30 * World.AMMO_MORE;
                     e.body = 0xFFD9E021;
                     e.head = 0xFF2A2C30;
                 } else {
                     e.hp = e.maxHp = 80;
-                    e.reserve = 90;
+                    e.reserve = 90 * World.AMMO_MORE;
                     e.body = 0xFF8C8A5E;
                     e.head = 0xFF5A4A3A;
                 }
@@ -930,14 +930,14 @@ final class Population {
                 // ((14.0) A carbine for close in, and the tube and its rounds on their back.)
                 e.hp = e.maxHp = 100;
                 e.magSize = 30;
-                e.reserve = 90;
+                e.reserve = 90 * World.AMMO_MORE;
                 e.grenades = World.MORTAR_ROUNDS;
                 break;
             case Entity.ROLE_CORPSMAN:
                 // ((13.9) A rifle, fewer spare rounds, no grenades: the bag is full of dressings.)
                 e.hp = e.maxHp = 100;
                 e.magSize = 30;
-                e.reserve = 120;
+                e.reserve = 120 * World.AMMO_MORE;
                 e.grenades = 0;
                 break;
             case Entity.ROLE_RIOT:
@@ -951,14 +951,14 @@ final class Population {
                 // A rifle with a grenade launcher slung under it, and a bandolier of rounds for it.
                 e.hp = e.maxHp = 100;
                 e.magSize = 30;
-                e.reserve = 150;
+                e.reserve = 150 * World.AMMO_MORE;
                 e.grenades = 4;
                 break;
             case Entity.ROLE_MARKSMAN:
                 // A scoped bolt-action rifle and a handful of rounds.
                 e.hp = e.maxHp = 70;
                 e.magSize = 5;
-                e.reserve = 40;
+                e.reserve = 40 * World.AMMO_MORE;
                 e.body = 0xFF2A3446;
                 e.head = 0xFF1A2230;
                 break;
@@ -966,7 +966,7 @@ final class Population {
                 // ((11.0) Marines, landed from the sea: well armed, in blue-grey camouflage.)
                 e.hp = e.maxHp = 110;
                 e.magSize = 30;
-                e.reserve = 210;
+                e.reserve = 210 * World.AMMO_MORE;
                 e.grenades = 1;
                 e.body = 0xFF3E4E62;
                 e.head = 0xFF2E3A4A;
@@ -975,7 +975,7 @@ final class Population {
                 // ((11.0) Recon scouts: light kit, quick on their feet, in tan.)
                 e.hp = e.maxHp = 90;
                 e.magSize = 30;
-                e.reserve = 150;
+                e.reserve = 150 * World.AMMO_MORE;
                 e.runSpeed *= 1.1f;
                 e.body = 0xFF8A7C56;
                 e.head = 0xFF6E6244;
@@ -984,7 +984,7 @@ final class Population {
                 // Body armour, a helmet and a carbine.
                 e.hp = e.maxHp = 130;
                 e.magSize = 30;
-                e.reserve = 150;
+                e.reserve = 150 * World.AMMO_MORE;
                 e.grenades = 0;
                 e.mass = 1.3f;
                 e.body = 0xFF1E2228;
@@ -994,7 +994,7 @@ final class Population {
                 // Guardsmen: rifles and a little less training, in tan uniforms.
                 e.hp = e.maxHp = 75;
                 e.magSize = 30;
-                e.reserve = 120;
+                e.reserve = 120 * World.AMMO_MORE;
                 e.grenades = 1;
                 e.body = 0xFF8C8260;
                 e.head = 0xFF6A6248;
@@ -1002,7 +1002,7 @@ final class Population {
             case Entity.ROLE_COMMANDER:
                 e.hp = e.maxHp = 130;
                 e.magSize = 15;
-                e.reserve = 60;
+                e.reserve = 60 * World.AMMO_MORE;
                 e.grenades = 0;
                 e.body = 0xFF4A5634;
                 e.head = 0xFF8E1F1F;
@@ -1010,7 +1010,7 @@ final class Population {
             case Entity.ROLE_SNIPER:
                 e.hp = e.maxHp = 80;
                 e.magSize = 5;
-                e.reserve = 45;
+                e.reserve = 45 * World.AMMO_MORE;
                 e.grenades = 0;
                 e.body = 0xFF434B2C;
                 e.head = 0xFF363D22;
@@ -1019,7 +1019,7 @@ final class Population {
                 // ((26.0) Special forces: plate carriers and helmets in black, suppressed rifles, a couple of grenades.)
                 e.hp = e.maxHp = 170;
                 e.magSize = 30;
-                e.reserve = 270;
+                e.reserve = 270 * World.AMMO_MORE;
                 e.grenades = 2;
                 e.mass = 1.3f;
                 e.runSpeed *= 1.08f;
@@ -1029,7 +1029,7 @@ final class Population {
             case Entity.ROLE_GUNNER:
                 e.hp = e.maxHp = 130;
                 e.magSize = 100;
-                e.reserve = 200;
+                e.reserve = 200 * World.AMMO_MORE;
                 e.grenades = 0;
                 e.speed = 19;
                 e.runSpeed = 31;
@@ -1213,8 +1213,8 @@ final class Population {
 
     void stockArmouries() {
         for (City.Facility f : w.city.facilities) {
-            if (f.kind == City.FACILITY_POLICE) f.ammo = 3000;
-            else if (f.kind == City.FACILITY_BASE) f.ammo = 9000;
+            if (f.kind == City.FACILITY_POLICE) f.ammo = World.ARMOURY_POLICE;
+            else if (f.kind == City.FACILITY_BASE) f.ammo = World.ARMOURY_BASE;
         }
     }
 

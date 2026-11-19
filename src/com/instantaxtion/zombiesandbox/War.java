@@ -118,7 +118,7 @@ final class War {
             case World.DEC_CONVOY:
                 // An ammunition run to every police station.
                 for (City.Facility f : w.city.facilities)
-                    if (f.kind == City.FACILITY_POLICE && !f.fallen) f.ammo = Math.max(f.ammo, 3000);
+                    if (f.kind == City.FACILITY_POLICE && !f.fallen) f.ammo = Math.max(f.ammo, World.ARMOURY_POLICE);
                 w.dispatch.say(Dispatch.WHO_POLICE, null, "Police Command: Ammunition trucks have reached every station. Officers, restock and get back out there.", mx, my);
                 break;
         }

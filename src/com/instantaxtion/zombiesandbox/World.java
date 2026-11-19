@@ -664,9 +664,21 @@ final class World {
     }
 
     /** Full spare ammo for a unit's weapon. */
+    /**
+     * ((28.8) Every unit carries twice the spare rounds it did: the police, soldiers and everyone else with a kit, and
+     * the armouries hold twice as much to fill them up from. The magazines are the same size, so they reload as often.)
+     */
+    static final int AMMO_MORE = 2;
+    /** ((28.8) A full police armoury and a full base's, in rounds: twice what they were, for the bigger loads. */
+    static final int ARMOURY_POLICE = 3000 * AMMO_MORE, ARMOURY_BASE = 9000 * AMMO_MORE;
+
     static int fullReserve(Entity e) {
+        return baseReserve(e) * AMMO_MORE;
+    }
+
+    private static int baseReserve(Entity e) {
         // ((11.4) Their own gun's rounds, where it isn't the usual.)
-        int spare = spareFor(e.weapon);
+        int spare = World.baseSpare(e.weapon);
         if (spare >= 0 && (e.type == Entity.COP || e.type == Entity.SOLDIER)) return spare;
         if (e.type != Entity.SOLDIER)
             return e.role == Entity.ROLE_SWAT ? 150 : e.role == Entity.ROLE_MARKSMAN ? 40 : e.type == Entity.COP ? 45 : 48;
@@ -1782,6 +1794,11 @@ final class World {
 
     /** (11.4) The rounds carried for a gun beyond the one in it. */
     static int spareFor(int kind) {
+        int s = baseSpare(kind);
+        return s < 0 ? s : s * AMMO_MORE;
+    }
+
+    private static int baseSpare(int kind) {
         switch (kind) {
             case Entity.W_SHOTGUN: return 30;
             case Entity.W_SMG: case Entity.W_CARBINE: return 120;

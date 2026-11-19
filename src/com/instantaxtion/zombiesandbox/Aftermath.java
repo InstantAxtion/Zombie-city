@@ -172,7 +172,7 @@ final class Aftermath {
         Object best = null;
         float worst = 0.75f;
         for (City.Facility f : w.city.facilities) {
-            int full = f.kind == City.FACILITY_POLICE ? 3000 : f.kind == City.FACILITY_BASE ? 9000 : 0;
+            int full = f.kind == City.FACILITY_POLICE ? World.ARMOURY_POLICE : f.kind == City.FACILITY_BASE ? World.ARMOURY_BASE : 0;
             if (full == 0 || restockBound(f)) continue;
             float left = f.ammo / (float) full;
             if (left < worst) {
@@ -223,7 +223,7 @@ final class Aftermath {
         City.Facility f = v.restockFac;
         String what;
         if (f != null) {
-            f.ammo = Math.max(f.ammo, f.kind == City.FACILITY_POLICE ? 3000 : 9000);
+            f.ammo = Math.max(f.ammo, f.kind == City.FACILITY_POLICE ? World.ARMOURY_POLICE : World.ARMOURY_BASE);
             what = "ammunition";
         } else if (b != null && !b.collapsed) {
             if (b.kind == City.MARKET) {
