@@ -71,8 +71,10 @@ final class FleetDriving {
     void kerbAtScene(Vehicle v, float dt) {
         // ((28.0) Still in a junction box (nowhere free off it last time, or shoved into it since): another look every
         // couple of seconds.)
+        // ((28.6) Further afield once it's been there a while: with a call's worth of cars round it, every spot within
+        // four tiles could be taken, and it stood in the junction for good.)
         if (v.kerbed && !v.pulling && v.player == null && (int) (v.anim * 0.5f) != (int) ((v.anim - dt) * 0.5f)
-                && city.junctionIdAt(v.x, v.y) >= 0) offLane(v);
+                && city.junctionIdAt(v.x, v.y) >= 0) offLane(v, v.stillT > 8 ? 6 : 4);
         if (!v.kerbed) {
             v.kerbed = true;
             v.pullOff = false;
@@ -118,10 +120,15 @@ final class FleetDriving {
      * stays where it is.
      */
     void offLane(Vehicle v) {
+        offLane(v, 4);
+    }
+
+    /** ((28.6) As above, looking up to reach tiles away. */
+    void offLane(Vehicle v, int reach) {
         int tx0 = (int) (v.x / City.T), ty0 = (int) (v.y / City.T), W = city.w;
         float best = Float.MAX_VALUE, bx = 0, by = 0;
-        for (int y = ty0 - 4; y <= ty0 + 4; y++)
-            for (int x = tx0 - 4; x <= tx0 + 4; x++) {
+        for (int y = ty0 - reach; y <= ty0 + reach; y++)
+            for (int x = tx0 - reach; x <= tx0 + reach; x++) {
                 if (x < 1 || y < 1 || x >= W - 1 || y >= city.h - 1) continue;
                 int i = y * W + x;
                 if (city.solid[i]) continue;
@@ -152,7 +159,7 @@ final class FleetDriving {
                     }
                 } else continue;
                 float d = (float) World.hypot(px - v.x, py - v.y);
-                if (d >= best || d > City.T * 4.5f) continue;
+                if (d >= best || d > City.T * (reach + 0.5f)) continue;
                 if (vehicleWithin(px, py, 11, v)) continue;
                 best = d;
                 bx = px;
@@ -1198,6 +1205,17 @@ final class FleetDriving {
      */
     boolean unjam(Vehicle v) {
         if (v.stillT < 5 || v.parked || v.convoy != null || isPost(v) || v.type == TRAIN || airborne(v)) return false;
+        // ((28.6) Boxed in by a car or truck parked in a station's lot or a base's yard, with nobody in it: that one rolls
+        // over to the next free space, out of the way. A patrol car sat facing the wall behind one for good.)
+        Vehicle parkedIn = blockerOf(v);
+        if (parkedIn != null && parkedIn.parked && parkedIn.standby && !parkedIn.broken && !parkedIn.pulling && parkedIn.player == null
+                && parkedIn.crew.isEmpty() && parkedIn.riders.isEmpty() && v.player == null) {
+            fleet.service.parkUp(parkedIn);
+            if (parkedIn.pulling) {
+                shuffled++;
+                return true;
+            }
+        }
         if (!((v.queued && !v.queuedHeld && !v.held) || v.stillT > 25)) return false;
         float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
         Vehicle block = null;
@@ -1247,6 +1265,9 @@ final class FleetDriving {
         return true;
     }
 
+    /** ((28.6) Parked cars that rolled out of another's way. */
+    int shuffled;
+
     /** ((27.5) Knots undone, and how many times one backed off to do it. */
     int gaveWay;
 
@@ -1258,11 +1279,13 @@ final class FleetDriving {
      * through another.
      */
     void giveWay(Vehicle v) {
-        if (v.stillT < 6 || v.held || v.queuedHeld || v.giveWayT > 0 || v.backT > 0 || v.player != null || v.parked) return;
+        // ((28.6) Waiting at a junction isn't part of a knot - but not for fifteen seconds and more, longer than any light
+        // or stop holds a car: then it's yielding to one that can't move for it, and the ring never came undone.)
+        if (v.stillT < 6 || ((v.held || v.queuedHeld) && v.stillT < 15) || v.giveWayT > 0 || v.backT > 0 || v.player != null || v.parked) return;
         Vehicle cur = blockerOf(v);
         int n = 0;
         for (int k = 0; k < 6 && cur != null && cur != v; k++) {
-            if (cur.held || cur.queuedHeld || cur.parked || cur.broken || cur.player != null || cur.stillT < 3) return;
+            if (((cur.held || cur.queuedHeld) && cur.stillT < 15) || cur.parked || cur.broken || cur.player != null || cur.stillT < 3) return;
             ring[n++] = cur;
             cur = blockerOf(cur);
         }

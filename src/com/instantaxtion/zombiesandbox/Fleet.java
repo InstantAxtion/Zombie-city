@@ -379,6 +379,8 @@ final class Fleet {
         int jamTries;
         /** ((28.3) Times help on its way to a call, held up far short of it, has looked for another way past (FleetService). */
         int detours;
+        /** ((28.6) Waiting to pick its people up: the nearest of them coming, and how long since anyone got nearer. */
+        float pickNear, pickStall;
         /** ((14.0) A bulldozer: the wreck it's on its way to push off the road, its base, and the seconds left pushing.) */
         Vehicle clearing;
         City.Facility dozerBase;
@@ -1064,6 +1066,11 @@ final class Fleet {
                     && Math.abs(v.speed) < 1 && !v.broken && v.player == null)
                 driving.kerbAtScene(v, vdt);
             else if (Math.abs(v.speed) > 10) v.kerbed = false;
+            // ((28.6) Sat in a junction at a scene (a call right on the corner, every spot off it taken when it pulled
+            // in): once a second it looks again, a little further afield, until it's out of the box and off the lane.)
+            if ((v.state == SCENE || v.state == RECALL) && v.type == CRUISER && !v.pulling && !v.broken && v.player == null && v.stillT > 5
+                    && (int) w.time != (int) (w.time - vdt) && city.junctionIdAt(v.x, v.y) >= 0)
+                driving.offLane(v, 6);
             if (!airborne(v) && v.type != TRAIN && v.hp < v.maxHp * 0.5f) smoke(v, vdt);
         }
         routeBudgetLeft = Math.max(0, routeBudget);
@@ -1105,7 +1112,10 @@ final class Fleet {
             Vehicle o = vehicles.get(i);
             // ((10.51) Army trucks and tanks on their way to the fighting too: everyone pulls over for them.)
             boolean army = (o.type == TRUCK || o.type == TANK) && o.state == DRIVE && routing.emergency(o);
-            if (o.player == null && !airborne(o) && (o.lightsOn() || army) && Math.abs(o.speed) > 18) sirens.add(o);
+            // ((28.6) And an escorted convoy on the move: traffic cutting in between its vehicles at a junction locked the
+            // column and the cars into a ring that never came undone.)
+            boolean column = o.convoy != null && !o.broken;
+            if (o.player == null && !airborne(o) && (o.lightsOn() || army || column) && Math.abs(o.speed) > 18) sirens.add(o);
         }
     }
 

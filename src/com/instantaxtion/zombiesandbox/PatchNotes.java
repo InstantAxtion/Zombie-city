@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.5";
-    static final int VERSION_CODE = 285;
+    static final String VERSION = "28.6";
+    static final int VERSION_CODE = 286;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.6  -  Out of the yard",
+                    "Cars no longer sit in a station's lot waiting for officers who aren't coming: once nobody walking to them has got any nearer for ten seconds, they set off with whoever is aboard (the longest wait in a test game went from a minute and a half to twelve seconds).",
+                    "A car or truck boxed in by one parked in the lot or yard gets out: the parked one rolls over to the next free space.",
+                    "Fewer traffic knots: cars yielding at a junction to one that can't move for them now sort it out after fifteen seconds, and traffic gives way to a convoy instead of cutting into it.",
+                    "A police car parked at a call in the middle of a junction moves off it to the kerb once there's room.",
+            },
             {
                     "28.5  -  No vanishing acts",
                     "Five maps are gone from New Game: Canyon Town, the Military Airbase, Stadium City, Border Town and Highway Crossroads. Saved games and city codes on them still load.",

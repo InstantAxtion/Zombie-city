@@ -863,6 +863,16 @@ final class FleetService {
                 e.task = Dispatch.T_BOARD;
             }
         }
+        // ((28.6) Is anyone walking to it getting any nearer? Ten seconds with nobody closer - stuck, or no way to it - and
+        // it stops waiting: off with whoever's aboard. It used to sit in the station's lot the full minute and a half.)
+        float near = Float.MAX_VALUE;
+        for (Entity e : v.squad)
+            if (!e.dead && !e.removed && e.task == Dispatch.T_BOARD && e.rig == v) near = Math.min(near, (float) World.hypot(e.x - v.x, e.y - v.y));
+        if (v.timer < 0.1f || near < v.pickNear - 8) {
+            v.pickNear = near;
+            v.pickStall = 0;
+        } else v.pickStall += dt;
+        if (walking > 0 && v.pickStall > 10) walking = 0;
         // ((13.3) A minute and a half for them to get there, not 45 seconds.)
         if ((walking > 0 && v.timer < 90) || v.timer < 2) return false;
         v.pickup = false;
