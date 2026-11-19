@@ -2,11 +2,20 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.4";
-    static final int VERSION_CODE = 284;
+    static final String VERSION = "28.5";
+    static final int VERSION_CODE = 285;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "28.5  -  No vanishing acts",
+                    "Five maps are gone from New Game: Canyon Town, the Military Airbase, Stadium City, Border Town and Highway Crossroads. Saved games and city codes on them still load.",
+                    "Vehicles no longer vanish and turn up back at base: army trucks and patrol Humvees held up on the way home find another way, or park where they are; nothing is taken off the road at a scene when it can't find its way home; outside help with no way out is left parked rather than disappearing.",
+                    "A parked car or truck taken for a new job is the one that drives off, from where it stood - not a different vehicle turning up by the gate.",
+                    "Supply convoys no longer sit at the gate for good when the place they're going has no road to it: they go to the nearest road by it.",
+                    "Zoomed out, police cars carry the police's blue dot and army vehicles the army's, the same as the officers and soldiers on foot.",
+                    "Smoother: less memory churned through each second (fewer pauses), and the stuck convoys no longer search for a way every second and a half.",
+            },
             {
                     "28.4  -  Everyone out",
                     "Police cars at a call no longer have someone left sitting at the wheel: when the officers get out, nobody stays behind in the car. A real driver gets out and joins the fight like the rest, and gets back in when the car leaves.",

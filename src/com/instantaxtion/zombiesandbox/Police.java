@@ -9,6 +9,8 @@ import java.util.Random;
  * ((27.3) Out of World.java, which holds the state these work on.)
  */
 final class Police {
+    /** ((28.5) Reseeded for each step of a beat (policeBeat). */
+    private final Random beatRnd = new Random();
     private final World w;
 
     Police(World w) {
@@ -178,7 +180,9 @@ final class Police {
             // towards the precinct at the end of the beat - not from one random spot to another. Partners keep
             // together: the next spot comes from their pair, the step and the spot they're both at.)
             e.dutyStep++;
-            Random r = new Random((long) e.callsign / 2 * 7919 + e.dutyStep * 104729L + (long) st.x);
+            // ((28.5) One Random, seeded afresh each time - the same numbers as a new one, without making one.)
+            Random r = beatRnd;
+            r.setSeed((long) e.callsign / 2 * 7919 + e.dutyStep * 104729L + (long) st.x);
             boolean fresh = e.dutyFor < -30 || (e.dutyHx == 0 && e.dutyHy == 0);
             // (A fresh beat sets off from the precinct's door - or from wherever they are, if that's nowhere near it.)
             float gx = st.gateX > 0 ? st.gateX : st.x, gy = st.gateY > 0 ? st.gateY : st.y;

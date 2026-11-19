@@ -15,7 +15,7 @@ final class ForcesTests extends TestKit {
         test("police backup: outside backup arrives without piling up; every kind spawned; SWAT to a horde; cordons; rounds shared", FAST, 40, ForcesTests.class,
                 "outsideBackup", "spawningAndCordons", "rangersAndRescue", "swatToHorde", "magsShared");
         test("army: guards, trucks, IFVs and gun trucks, ammo trucks, mortars, the bulldozer and the armoury", FAST, 35, ForcesTests.class,
-                "armoryGuardsTrucks", "gateGuardsReplaced", "ifvAndGunTruck", "ammoTruck", "mortarShells", "mortarRounds", "bulldozer", "armouryNotEmptied", "truckBay");
+                "armoryGuardsTrucks", "gateGuardsReplaced", "ifvAndGunTruck", "ammoTruck", "mortarShells", "mortarRounds", "bulldozer", "armouryNotEmptied", "truckBay", "trucksDontVanish");
         test("commanders, the MRAP and fire support; command posts, fire missions, overwatch, boats and special forces", FULL, 25, ForcesTests.class,
                 "commanders", "fireMissions", "boatsPostsSpecialForces");
         test("medics and repair: combat medics, the field hospital, ambulances to care and back, repairs", FULL, 20, ForcesTests.class,
@@ -1062,6 +1062,54 @@ final class ForcesTests extends TestKit {
         }
         check(seen > 0, "police cars at a call with their officers out (" + seen + ")");
         check(sitting == 0, "nobody left sitting in one (" + sitting + " of " + seen + (eg.isEmpty() ? "" : ", e.g. " + eg) + ")");
+    }
+
+    /**
+     * (28.5) An army truck on its way back to base, held up a long way short of it, isn't taken off the map and put in
+     * its bay: it plans its way home again, and in the end parks where it is. Patrol trucks too. They used to vanish
+     * from the road and turn up at the base.
+     */
+    static void trucksDontVanish() throws Exception {
+        CityConfig c = cfg(CityConfig.SMALL, 280);
+        World w = new World(c);
+        w.populate(c);
+        City.Facility base = w.city.mainBase();
+        check(base != null, "a base");
+        float[] far = null;
+        java.util.Random r = new java.util.Random(9);
+        for (int k = 0; k < 400 && far == null; k++) {
+            float[] s = w.city.randomStreetSpot(r);
+            if (s != null && Math.hypot(s[0] - base.x, s[1] - base.y) > 600) far = s;
+        }
+        check(far != null, "a street a long way from the base");
+        for (boolean loop : new boolean[]{false, true}) {
+            Fleet.Vehicle v = w.fleet.make(Fleet.TRUCK);
+            v.x = far[0];
+            v.y = far[1];
+            v.homeX = base.gateX > 0 ? base.gateX : base.x;
+            v.homeY = base.gateY > 0 ? base.gateY : base.y;
+            v.passengerType = Entity.SOLDIER;
+            v.state = Fleet.RETURN;
+            v.loop = loop;
+            if (loop) w.fleet.setKind(v, Fleet.K_HUMVEE);
+            w.fleet.vehicles.add(v);
+            boolean gone = false;
+            // Held up over and over, past all its tries at another way home (as the game does, until it's parked).
+            for (int k = 0; k < 12 && !gone && !v.parked; k++) {
+                v.rerouteCd = 0;
+                gone = w.fleet.service.arrivedStep(v, 1 / 30f);
+            }
+            String what = loop ? "a patrol Humvee" : "a truck";
+            check(!gone && !v.removedFromFleet, what + " held up far from base stays on the map");
+            check(Math.hypot(v.x - far[0], v.y - far[1]) < 1, what + " hasn't jumped anywhere");
+            check(v.parked || v.state == Fleet.RETURN, what + " parks where it is, or keeps going (state " + v.state + ")");
+        }
+        // The dot each carries zoomed out: the police's, the army's, none for anyone else's.
+        Fleet.Vehicle cop = w.fleet.make(Fleet.CRUISER), van = w.fleet.make(Fleet.TRUCK), truck = w.fleet.make(Fleet.TRUCK), tank = w.fleet.make(Fleet.TANK), car = w.fleet.make(Fleet.CAR);
+        w.fleet.setKind(van, Fleet.K_RIOT_VAN);
+        truck.passengerType = Entity.SOLDIER;
+        check(WorldRenderer.unitSide(cop) == 1 && WorldRenderer.unitSide(van) == 1 && WorldRenderer.unitSide(truck) == 2 && WorldRenderer.unitSide(tank) == 2
+                && WorldRenderer.unitSide(car) < 0, "police cars carry the police's dot, the army's vehicles the army's");
     }
 
     static void outsideBackup() throws Exception {

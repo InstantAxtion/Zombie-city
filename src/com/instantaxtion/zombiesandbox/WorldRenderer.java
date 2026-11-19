@@ -730,6 +730,20 @@ final class WorldRenderer {
         }
         drawRailBridge(c, vx0, vx1, vy0, vy1);
         drawOverpasses(c, vx0, vx1, vy0, vy1);
+        // ((28.5) Zoomed out, the police's cars and the army's vehicles carry the dot of their side too, the same as
+        // the officers and soldiers on foot: they were specks, easy to lose, while everyone out of them was a dot.)
+        if (!detailed) {
+            float r = Math.max(4 * 1.35f, 2.6f * gv.dp / gv.scale);
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = 0, n = gv.world.fleet.vehicles.size(); i < n; i++) {
+                    Fleet.Vehicle v = gv.world.fleet.vehicles.get(i);
+                    if (v.broken || Fleet.airborne(v) || v.x < vx0 - 20 || v.x > vx1 + 20 || v.y < vy0 - 20 || v.y > vy1 + 20) continue;
+                    int side = unitSide(v);
+                    if (side < 0) continue;
+                    gv.fill.setColor(pass == 0 ? 0xD0101010 : ROW_COLORS[side]);
+                    c.drawCircle(v.x, v.y, pass == 0 ? r + 1.1f * gv.dp / gv.scale : r, gv.fill);
+                }
+        }
 
         if (detailed) {
             for (int i = 0, n = gv.onScreen.size(); i < n; i++) {
@@ -739,6 +753,14 @@ final class WorldRenderer {
                 gv.entityRenderer.drawSpeechIcon(c, e);
             }
         }
+    }
+
+    /** ((28.5) Which side's dot a vehicle carries zoomed out: 1 the police's, 2 the army's, -1 none. */
+    static int unitSide(Fleet.Vehicle v) {
+        if (v.type == Fleet.CRUISER || Fleet.policeTruck(v) || (v.type == Fleet.BOAT && v.kind == Fleet.K_POLICE_BOAT)) return 1;
+        if (v.type == Fleet.TANK || (v.type == Fleet.AMBULANCE && v.kind == Fleet.K_ARMD_AMB)) return 2;
+        if (v.type == Fleet.TRUCK) return v.passengerType == Entity.COP ? 1 : 2;
+        return -1;
     }
 
     /** ((27.3) Step 7.) Grenades in the air, particles and tracers. */

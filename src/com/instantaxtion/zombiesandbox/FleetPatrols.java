@@ -351,6 +351,7 @@ final class FleetPatrols {
             float[] p = fleet.service.takeStandby(CRUISER, f.x, f.y, f.r + 300);
             if (p == null) continue;
             Vehicle v = fleet.make(CRUISER);
+            if (p.length > 3 && p[3] != 0) fleet.setKind(v, (int) p[3]);
             v.x = p[0];
             v.y = p[1];
             v.angle = (float) Math.atan2(p[1] - f.y, p[0] - f.x);
@@ -359,7 +360,8 @@ final class FleetPatrols {
             v.state = MUSTER;
             v.crewWanted = want;
             v.number = ++fleet.unitCount;
-            if (bike) fleet.setKind(v, K_BIKE);
+            // ((28.5) A motorcycle only if that's what was parked there: the car taken is the one that goes.)
+            if (bike && p.length < 4) fleet.setKind(v, K_BIKE);
             for (Entity e : two) {
                 e.rig = v; fleet.crews.note(e);
                 e.task = Dispatch.T_BOARD;
@@ -385,6 +387,7 @@ final class FleetPatrols {
         p = fleet.service.takeStandby(CRUISER, f.x, f.y, f.r + 300);
         if (p == null) return false;
         Vehicle v = fleet.make(CRUISER);
+        if (p.length > 3 && p[3] != 0) fleet.setKind(v, (int) p[3]);
         v.x = p[0];
         v.y = p[1];
         v.angle = (float) Math.atan2(inc.y - p[1], inc.x - p[0]);

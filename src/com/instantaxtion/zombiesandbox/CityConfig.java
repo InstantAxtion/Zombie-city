@@ -231,7 +231,11 @@ final class CityConfig implements OptionSet {
         if (option == OPT_PRESET) return value == 0 || value == 1 || value == 3 || value == 4 || value == 5 || value == 6 || value == 7
                 || value == 9 || value == 12 || value == 13
                 // ((27.5) And three more maps went in 27.5: 10, 11 and 16. Their cities still build for old saves and codes.)
-                || value == 10 || value == 11 || value == 16 || removed(value);
+                || value == 10 || value == 11 || value == 16
+                // ((28.5) And five of 28.0's: Highway Crossroads, Border Town, the Military Airbase, Canyon Town and Stadium
+                // City. Their cities still build for old saves and codes.)
+                || value == CROSSROADS || value == BORDER_TOWN || value == AIRBASE || value == CANYON || value == STADIUM_CITY
+                || removed(value);
         // (The number of zombies at the start isn't a choice any more: the game starts quiet.)
         if (option == OPT_ZOMBIES) return value != 0;
         // ((13.0) Large and Massive are gone too: Default, Gigantic and the new Colossal.)

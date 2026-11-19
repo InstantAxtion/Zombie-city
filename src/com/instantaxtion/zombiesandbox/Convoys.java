@@ -49,6 +49,9 @@ final class Convoys {
         City.Facility base = w.city.mainBase();
         if (c.purpose == SUPPLY && base != null && !base.fallen) {
             float[] p = w.city.nearestDrivable(base.gateX > 0 ? base.gateX : base.x, base.gateY > 0 ? base.gateY : base.y);
+            // ((28.5) Only if there's a way by road from the base to it: a base with no road out (a radar station up a
+            // track) had its convoy's lead vehicle sit at the gate for good, and the trucks behind it never came on.)
+            if (p != null && !drivable(p[0], p[1], c.tx, c.ty)) p = null;
             if (p != null) {
                 c.sx = p[0];
                 c.sy = p[1];
@@ -57,22 +60,49 @@ final class Convoys {
                 return true;
             }
         }
-        java.util.List<float[]> e = w.dispatch.entries(c.tx, c.ty);
+        java.util.List<float[]> e = new java.util.ArrayList<float[]>(w.dispatch.entries(c.tx, c.ty));
         if (e.isEmpty()) return false;
-        float[] best = e.get(0);
-        float bd = Float.MAX_VALUE;
-        for (float[] p : e) {
-            float d = (float) World.hypot(p[0] - c.tx, p[1] - c.ty);
-            if (d < bd) {
-                bd = d;
-                best = p;
+        // ((28.5) The nearest way in that has a road on to it; none, and there's no convoy.)
+        final float tx = c.tx, ty = c.ty;
+        java.util.Collections.sort(e, new java.util.Comparator<float[]>() {
+            @Override public int compare(float[] a, float[] b) {
+                return Double.compare(World.hypot(a[0] - tx, a[1] - ty), World.hypot(b[0] - tx, b[1] - ty));
             }
-        }
+        });
+        float[] best = null;
+        for (int i = 0; i < e.size() && i < 4 && best == null; i++) if (drivable(e.get(i)[0], e.get(i)[1], c.tx, c.ty)) best = e.get(i);
+        if (best == null) return false;
         c.sx = best[0];
         c.sy = best[1];
         c.sa = (float) Math.atan2(c.ty - best[1], c.tx - best[0]);
         c.from = "outside the city";
         return true;
+    }
+
+    /**
+     * ((28.5) Where a convoy pulls up for (x, y): the nearest road (it unloads within a hundred of it), else the nearest
+     * anything that can be driven on. The nearest drivable could be a yard inside a survivor base's walls, with no way
+     * in, and the convoy never set off.
+     */
+    private float[] roadNear(float x, float y) {
+        City ci = w.city;
+        int tx = (int) (x / City.T), ty = (int) (y / City.T);
+        for (int r = 0; r <= 8; r++)
+            for (int j = ty - r; j <= ty + r; j++)
+                for (int i = tx - r; i <= tx + r; i++) {
+                    if (Math.max(Math.abs(i - tx), Math.abs(j - ty)) != r || i < 0 || j < 0 || i >= ci.w || j >= ci.h) continue;
+                    if (ci.tiles[j * ci.w + i] == City.ROAD) return new float[]{(i + 0.5f) * City.T, (j + 0.5f) * City.T};
+                }
+        return ci.nearestDrivable(x, y);
+    }
+
+    /** ((28.5) Whether a convoy's vehicle could find its way by road from (x, y) to (tx, ty). */
+    private boolean drivable(float x, float y, float tx, float ty) {
+        Fleet.Vehicle probe = w.fleet.make(Fleet.TRUCK);
+        probe.x = x;
+        probe.y = y;
+        probe.angle = (float) Math.atan2(ty - y, tx - x);
+        return w.fleet.routeTo(probe, tx, ty);
     }
 
     private boolean busy(Object target) {
@@ -95,7 +125,7 @@ final class Convoys {
         c.station = st;
         float[] t = z != null ? new float[]{z.x, z.y} : b != null ? new float[]{b.b.doorX, b.b.doorY}
                 : new float[]{st.gateX > 0 ? st.gateX : st.x, st.gateY > 0 ? st.gateY : st.y};
-        float[] road = w.city.nearestDrivable(t[0], t[1]);
+        float[] road = roadNear(t[0], t[1]);
         if (road == null) return null;
         c.tx = road[0];
         c.ty = road[1];

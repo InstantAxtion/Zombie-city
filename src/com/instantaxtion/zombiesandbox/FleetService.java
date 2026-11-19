@@ -394,7 +394,7 @@ final class FleetService {
             v.state = RETURN;
             v.speed = 0;
             v.standby = false;
-            return !fleet.routing.route(v, v.homeX, v.homeY);
+            return routeHomeOrPark(v);
         }
         return false;
     }
@@ -528,18 +528,25 @@ final class FleetService {
             if (World.hypot(v.x - v.tx, v.y - v.ty) < 120) w.restocked(v);
             v.state = RETURN;
             v.speed = 0;
-            return !fleet.routing.route(v, v.homeX, v.homeY);
+            return routeHomeOrPark(v);
         }
         if (v.state == DRIVE && v.loop) {
             // The end of the patrol's sweep: back to base.
             v.state = RETURN;
             v.idleTimer = 0;
             v.speed = 0;
-            return !fleet.routing.route(v, v.homeX, v.homeY);
+            return routeHomeOrPark(v);
         }
+        if (v.state == RETURN && v.loop && !homeYet(v)) return false;
         if (v.state == RETURN && v.loop) {
             // Back at base: the patrol gets out.
             fleet.crews.crewOut(v, true);
+            // ((28.5) Into its bay only if it's got home: held up on the way back it used to vanish from the road, crew
+            // and all, and turn up parked at the base.)
+            if (World.hypot(v.x - v.homeX, v.y - v.homeY) > 160) {
+                stayParked(v);
+                return false;
+            }
             city.parkTruck(v.homeX, v.homeY);
             return true;
         }
@@ -568,18 +575,16 @@ final class FleetService {
             v.cargo = 0;
         }
         // ((24.2) Held up in a jam on the way back isn't back: it vanished from the road into its bay across town,
-        // in plain sight. Plan the way again; only where nobody's watching does it give up and go straight home.)
+        // in plain sight. Plan the way again.) ((28.5) Watched or not - off the screen it still vanished and turned up
+        // in its bay, and on the minimap or panning back it was plain to see. Still not home after all that: it parks
+        // where it is, standing by, and is driven on from there when it's needed.)
+        if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !v.leaving && !homeYet(v)) return false;
         if (v.state == RETURN && v.type == TRUCK && !v.swat && !v.restock && !v.broken && !v.leaving
-                && World.hypot(v.x - v.homeX, v.y - v.homeY) > 160 && fleet.routing.inView(v.x, v.y)) {
-            if (v.rerouteCd <= 0 && v.jamTries < 8) {
-                v.jamTries++;
-                v.rerouteCd = 4;
-                fleet.routing.route(v, v.homeX, v.homeY);
-            }
-            if (v.jamTries < 8) {
-                v.stuckTimer = 0;
-                return false;
-            }
+                && World.hypot(v.x - v.homeX, v.y - v.homeY) > 160) {
+            if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
+            v.jamTries = 0;
+            stayParked(v);
+            return false;
         }
         v.jamTries = 0;
         // An army truck back at base parks in its bay again.
@@ -605,6 +610,44 @@ final class FleetService {
         return true;
     }
 
+    /**
+     * ((28.5) A truck on its way back to base, not there yet: plans its way home again (up to eight times, a few
+     * seconds apart) rather than taking it as home. True once it's home or has run out of tries.
+     */
+    private boolean homeYet(Vehicle v) {
+        if (World.hypot(v.x - v.homeX, v.y - v.homeY) <= 160) return true;
+        if (v.rerouteCd <= 0 && v.jamTries < 8) {
+            v.jamTries++;
+            v.rerouteCd = 4;
+            fleet.routing.route(v, v.homeX, v.homeY);
+        }
+        if (v.jamTries < 8) {
+            v.stuckTimer = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * ((28.5) Off home: its way planned. With no way home from where it is, it's left parked there, standing by - it
+     * used to be taken off the map on the spot, in plain sight at the scene. Always false: it's still on the map.
+     */
+    boolean routeHomeOrPark(Vehicle v) {
+        if (fleet.routing.route(v, v.homeX, v.homeY)) return false;
+        if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
+        stayParked(v);
+        return false;
+    }
+
+    /** ((28.5) Left parked where it stands, standing by, rather than taken off the map. */
+    void stayParked(Vehicle v) {
+        v.state = IDLE;
+        v.speed = 0;
+        v.incident = null;
+        v.parked = true;
+        v.standby = true;
+    }
+
     /** Outside help going home, at the edge of the map: gone, with whoever's aboard. */
     boolean leaveTheMap(Vehicle v) {
         // Off the map: they're home, and back in the pool if they're needed again.
@@ -616,8 +659,13 @@ final class FleetService {
                 return false;
             }
             if (v.rerouteCd > 0) return false;
+            // ((28.5) No way out from here: they get out and it's left where it stands (towed away later, out of sight),
+            // rather than vanishing from the middle of the town.)
             if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
-            return true;
+            v.state = ABANDONED;
+            v.parked = true;
+            v.speed = 0;
+            return false;
         }
         w.dispatch.wentHome(v.passengerType, v.crew.size());
         v.crew.clear();
@@ -684,7 +732,7 @@ final class FleetService {
         if (headHome(v)) return false;
         v.state = RETURN;
         v.speed = 0;
-        return !fleet.routing.route(v, v.homeX, v.homeY);
+        return routeHomeOrPark(v);
     }
 
     /**
@@ -858,7 +906,7 @@ final class FleetService {
         if (headHome(v)) return false;
         if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
         v.state = RETURN;
-        return !fleet.routing.route(v, v.homeX, v.homeY);
+        return routeHomeOrPark(v);
     }
 
     /**
@@ -879,6 +927,7 @@ final class FleetService {
         if (p == null) p = city.nearestDrivable(sx, sy);
         if (p == null) return false;
         Vehicle v = fleet.make(cops ? CRUISER : TRUCK);
+        if (p.length > 3 && p[3] != 0) fleet.setKind(v, (int) p[3]);
         v.x = p[0];
         v.y = p[1];
         v.state = MUSTER;
@@ -916,7 +965,9 @@ final class FleetService {
         if (!best.crew.isEmpty()) fleet.crews.crewOut(best, true);
         best.removedFromFleet = true;
         fleet.vehicles.remove(best);
-        return new float[]{best.x, best.y};
+        // ((28.5) Where it stood, that a vehicle really stood there (so the new one starts right there, not round at
+        // the gate), and what it was: the one taken is the one that drives off, not a different kind in its place.)
+        return new float[]{best.x, best.y, 1, best.kind, best.angle};
     }
 
     /**
@@ -1058,8 +1109,11 @@ final class FleetService {
                     // ((12.3) One of the trucks in the base's motor pool.)
                     float[] p = fleet.armyUnits.baseTruck(f);
                     if (p != null) {
-                        p = fleet.armyUnits.bay(p, f);
+                        // ((28.5) Where one really stood, from there, as what it was; one out of the garages, round in a bay.)
+                        boolean stood = p.length > 2;
+                        if (!stood) p = fleet.armyUnits.bay(p, f);
                         v = fleet.make(TRUCK);
+                        if (p.length > 3 && p[3] != 0) fleet.setKind(v, (int) p[3]);
                         v.x = p[0];
                         v.y = p[1];
                         v.homeX = p[0];

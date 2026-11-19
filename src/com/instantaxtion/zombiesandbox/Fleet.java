@@ -1392,7 +1392,7 @@ final class Fleet {
                     : far > 900 && squad.size() <= HUMVEE_SEATS ? K_HUMVEE : 0;
             if (forceKind >= 0) kind = forceKind;
         }
-        armyUnits.musterTruck(squad, p, inc, kind);
+        armyUnits.musterTruck(squad, p, inc, kind, forceKind < 0);
         return true;
     }
 

@@ -89,7 +89,9 @@ final class MapTests extends TestKit {
         for (int preset : new int[]{CityConfig.CROSSROADS, CityConfig.CANYON, CityConfig.FROZEN_NORTH})
             for (long seed : new long[]{3, 11}) {
                 CityConfig c = cfg(preset, CityConfig.SMALL, seed);
-                check(c.preset() == preset && !CityConfig.retired(CityConfig.OPT_PRESET, preset), CityConfig.PRESETS[preset] + " is offered");
+                // ((28.5) Crossroads and Canyon Town aren't offered any more, but still build for old saves and codes.)
+                check(c.preset() == preset && CityConfig.retired(CityConfig.OPT_PRESET, preset) == (preset != CityConfig.FROZEN_NORTH),
+                        CityConfig.PRESETS[preset] + (preset == CityConfig.FROZEN_NORTH ? " is offered" : " is retired"));
                 City city = new City(c, 0.05f);
                 String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
                 int w = city.w, h = city.h, n = w * h;
@@ -235,7 +237,8 @@ final class MapTests extends TestKit {
         for (int preset : new int[]{CityConfig.AIRBASE, CityConfig.BORDER_TOWN, CityConfig.STADIUM_CITY})
             for (long seed : new long[]{2801, 2802}) {
                 CityConfig c = cfg(preset, CityConfig.SMALL, seed);
-                check(!CityConfig.retired(CityConfig.OPT_PRESET, preset) && !CityConfig.removed(preset), CityConfig.PRESETS[preset] + " is offered");
+                // ((28.5) Retired: not offered, but they still build for old saves and codes.)
+                check(CityConfig.retired(CityConfig.OPT_PRESET, preset) && !CityConfig.removed(preset), CityConfig.PRESETS[preset] + " is retired");
                 City city = new City(c, 0.05f);
                 String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
                 java.util.HashMap<String, Integer> lm = new java.util.HashMap<String, Integer>();

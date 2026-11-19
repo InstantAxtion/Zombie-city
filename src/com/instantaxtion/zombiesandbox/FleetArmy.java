@@ -455,7 +455,18 @@ final class FleetArmy {
 
     /** A truck at p waiting for this squad to climb in, then off to the call. */
     Vehicle musterTruck(java.util.List<Entity> squad, float[] p, Dispatch.Incident inc, int kind) {
-        p = bay(p, yardOf(p[0], p[1]));
+        return musterTruck(squad, p, inc, kind, true);
+    }
+
+    /**
+     * ((28.5) As above. Where p is where a vehicle really stood (taken from where it was parked - see takeStandby and
+     * City.takeParkedTruck), the new one starts right there, and, keepKind, as what was parked there: it used to vanish
+     * and a truck of whatever kind the call wanted turn up in a bay by the gate.)
+     */
+    Vehicle musterTruck(java.util.List<Entity> squad, float[] p, Dispatch.Incident inc, int kind, boolean keepKind) {
+        boolean stood = p.length > 2;
+        if (keepKind && p.length > 3) kind = (int) p[3];
+        if (!stood) p = bay(p, yardOf(p[0], p[1]));
         Vehicle v = fleet.make(TRUCK);
         v.x = p[0];
         v.y = p[1];
@@ -744,7 +755,7 @@ final class FleetArmy {
             if (v.timer <= 0 || v.idleTimer > 15) {
                 v.state = RETURN;
                 w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Armor pulling back to base.", v.x, v.y);
-                return !fleet.routing.route(v, v.homeX, v.homeY);
+                return fleet.service.routeHomeOrPark(v);
             }
             return false;
         }

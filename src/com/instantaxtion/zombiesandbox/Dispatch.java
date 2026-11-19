@@ -878,6 +878,9 @@ final class Dispatch {
      * seconds the worst clusters of the dead that nobody is dealing with become calls of their own (sightings
      * from patrols, cameras and the public), so units clearing one scene are sent straight on to the next.
      */
+    private int[] sweepCount;
+    private float[] sweepX, sweepY;
+
     private void sweep(float step) {
         sweepCd -= step;
         if (sweepCd > 0 || w.alert < 1) return;
@@ -890,8 +893,19 @@ final class Dispatch {
         int max = Math.min(maxCalls(), 8 + city.w / 25 + (centre ? 6 : 0));
         if (incidents.size() >= max) return;
         int cell = 192, gw = (int) (city.worldW() / cell) + 1, gh = (int) (city.worldH() / cell) + 1;
-        int[] count = new int[gw * gh];
-        float[] sx = new float[gw * gh], sy = new float[gw * gh];
+        // ((28.5) The same three grids each time, cleared, not new ones every couple of seconds: on a phone each new lot
+        // is more for the collector, and its pauses are stutters.)
+        if (sweepCount == null || sweepCount.length != gw * gh) {
+            sweepCount = new int[gw * gh];
+            sweepX = new float[gw * gh];
+            sweepY = new float[gw * gh];
+        } else {
+            java.util.Arrays.fill(sweepCount, 0);
+            java.util.Arrays.fill(sweepX, 0);
+            java.util.Arrays.fill(sweepY, 0);
+        }
+        int[] count = sweepCount;
+        float[] sx = sweepX, sy = sweepY;
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity z = w.entities.get(i);
             if (z.dead || !z.isZombie()) continue;

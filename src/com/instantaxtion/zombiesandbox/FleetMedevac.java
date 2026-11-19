@@ -344,7 +344,7 @@ final class FleetMedevac {
             v.medPhase = MP_HOME;
             v.state = RETURN;
             v.timer = 0;
-            return !fleet.routing.route(v, v.homeX, v.homeY);
+            return fleet.service.routeHomeOrPark(v);
         }
         v.medPhase = MP_HOME;
         v.state = RETURN;

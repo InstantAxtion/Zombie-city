@@ -1378,6 +1378,11 @@ final class City {
                 }
             }
         if (best < 0) return null;
+        return takeParkedTruckAt(best);
+    }
+
+    /** ((28.5) The parked truck on tile best taken off the map picture: where it stood (and that something did). */
+    private float[] takeParkedTruckAt(int best) {
         tiles[best] = BASE;
         carKind.set(best, (byte) (0));
         solid[best] = false;
@@ -1394,7 +1399,7 @@ final class City {
             }
         });
         changed(ex0, ey0, ex1, ey1);
-        return new float[]{(bx + 0.5f) * T, (by + 0.5f) * T};
+        return new float[]{(bx + 0.5f) * T, (by + 0.5f) * T, 1};
     }
 
     /**

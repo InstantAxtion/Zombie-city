@@ -60,7 +60,7 @@ final class FleetAmbulances {
             if (v.timer <= 0 || w.countZombiesNear(v.x, v.y, 50) >= 3) {
                 v.state = RETURN;
                 v.stuckTimer = 0;
-                return !fleet.routing.route(v, v.homeX, v.homeY);
+                return fleet.service.routeHomeOrPark(v);
             }
             return false;
         }

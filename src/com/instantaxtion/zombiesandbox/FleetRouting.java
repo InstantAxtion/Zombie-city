@@ -185,7 +185,8 @@ final class FleetRouting {
      */
     boolean gridlocked(Vehicle v) {
         if (v.player != null || v.stillT < 40) return false;
-        if (v.stillT > 90 && !inView(v.x, v.y)) {
+        // ((28.5) Well away from the screen, not just off it: lifted from just past the edge, a car was seen to jump.)
+        if (v.stillT > 90 && farOff(v)) {
             for (int tries = 0; tries < 6; tries++) {
                 float a = w.rnd.nextFloat() * 6.2832f, r = 120 + tries * 60;
                 float[] d = city.nearestDrivable(v.x + (float) Math.cos(a) * r, v.y + (float) Math.sin(a) * r);
