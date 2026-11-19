@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "28.9";
-    static final int VERSION_CODE = 289;
+    static final String VERSION = "29.0";
+    static final int VERSION_CODE = 290;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.0  -  More town, more levels, full strength",
+                    "Eight more levels to earn: officers, soldiers and survivors now go up to level 15 (4,500 experience, some 450 of the dead). Past level 7, with every perk had, each level makes them tougher (+6% health) and a better shot.",
+                    "More town on the maps that were mostly country: Lighthouse Coast's harbour town and villages are much bigger, with one more village; Swamp Bayou's town is bigger, with more and bigger hamlets out in the swamp; Frozen North's town spreads wider and deeper; Desert City covers more of the desert. Over twice as much of Lighthouse Coast and Swamp Bayou is built up.",
+                    "The police and army are always at full strength now, with reinforcements always on: the Strength and Reinforcements choices are gone from New Game.",
+                    "Saved games stay as they were.",
+            },
             {
                     "28.9  -  Quicker wheels, more breath",
                     "Every vehicle is a tenth faster: traffic, police cars, the army's trucks, Humvees and armour, ambulances, fire trucks and buses, and the car you drive yourself.",

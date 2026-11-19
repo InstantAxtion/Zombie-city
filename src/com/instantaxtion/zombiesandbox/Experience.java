@@ -55,6 +55,14 @@ final class Experience {
         boolean heroWas = e.hero();
         while (e.level + 1 < World.LEVEL_XP.length && e.xp >= World.LEVEL_XP[e.level + 1]) {
             e.level++;
+            if (e.level >= World.VETERAN_LEVEL) {
+                // ((29.0) Past the perks: a little tougher (and patched up a little) and a little better shot each level.)
+                e.maxHp *= 1.06f;
+                e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.06f);
+                if (e.type == Entity.COP || e.type == Entity.SOLDIER || e.canShoot())
+                    w.stats.highlight(Names.person(e.nameSeed) + " reached level " + (e.level + 1) + ": tougher and a better shot", e.x, e.y);
+                continue;
+            }
             int[] order = e.role == Entity.ROLE_CORPSMAN ? World.PERKS_MEDIC : e.type == Entity.SOLDIER ? World.PERKS_SOLDIER
                     : e.type == Entity.COP ? World.PERKS_COP : World.PERKS_CIVILIAN;
             // (Not all alike: each starts a little way along their kind's list.)

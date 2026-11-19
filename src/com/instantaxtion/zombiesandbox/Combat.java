@@ -544,7 +544,7 @@ final class Combat {
         // ((26.0) And police (or, (26.1), soldiers) near their side's mobile command post.)
         else if (w.ops.boosts(e)) accuracy += 0.1f;
         // (10.20) Some shoot better than others: each one anywhere from as before to 15% better, for good.
-        accuracy = Math.min(0.99f, accuracy * (1 + World.aimBonus(e) + 0.05f * World.rank(e) + (World.perk(e, World.P_STEADY) ? 0.08f : 0)));
+        accuracy = Math.min(0.99f, accuracy * (1 + World.aimBonus(e) + 0.05f * World.rank(e) + (World.perk(e, World.P_STEADY) ? 0.08f : 0) + World.levelAim(e)));
         return accuracy;
     }
 

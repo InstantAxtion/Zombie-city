@@ -2357,6 +2357,13 @@ final class ForcesTests extends TestKit {
         boolean kept = false;
         for (Entity e : l.entities) if (e.nameSeed == s.nameSeed && e.type == Entity.SOLDIER) kept = e.level == s.level && e.perks == s.perks && Math.abs(e.xp - s.xp) < 0.01f;
         check(kept, "level, perks and experience kept in a save");
+        // ((29.0) The levels past the perks: up to 15, each tougher and a better shot.)
+        Entity v = w.spawnSoldier(Entity.ROLE_RIFLE, p[0] + 10, p[1]);
+        w.gainXp(v, 700);
+        float hp7 = v.maxHp, aim7 = World.levelAim(v);
+        w.gainXp(v, 4500);
+        check(v.level == 14 && World.LEVEL_XP.length == 15, "4,500 experience and more: level 15, the top (" + (v.level + 1) + ")");
+        check(v.maxHp > hp7 * 1.5f && World.levelAim(v) > aim7 + 0.1f, "each level past 7 tougher and a better shot (" + (int) hp7 + " -> " + (int) v.maxHp + ")");
     }
 
     static void survivorBase() throws Exception {

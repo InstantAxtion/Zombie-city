@@ -1635,8 +1635,19 @@ final class World {
 
     // ------------------------------------------------------------------ ((23.0) experience, levels and perks
 
-    /** The experience each level starts at: level 1 at nothing, level 7 at 700. */
-    static final int[] LEVEL_XP = {0, 30, 80, 160, 280, 450, 700};
+    /**
+     * The experience each level starts at: level 1 at nothing, level 7 at 700. ((29.0) And eight more, to level 15 at
+     * 4,500 - some 450 of the dead put down. Past level 7, with every perk had, each level makes them a little tougher
+     * and a little better shot: see {@link #VETERAN_LEVEL}.)
+     */
+    static final int[] LEVEL_XP = {0, 30, 80, 160, 280, 450, 700, 1000, 1350, 1750, 2200, 2700, 3250, 3850, 4500};
+    /** ((29.0) The first level (counted from 0) past the perks: level 8 and on, each +6% health and +2% aim. */
+    static final int VETERAN_LEVEL = 7;
+
+    /** ((29.0) Their aim from the levels past the perks. */
+    static float levelAim(Entity e) {
+        return 0.02f * Math.max(0, e.level - VETERAN_LEVEL + 1);
+    }
     static final int P_STEADY = 1, P_QUICK = 2, P_TOUGH = 4, P_FLEET = 8, P_MEDIC = 16, P_NERVE = 32;
     static final String[] PERK_NAMES = {"Steady aim", "Quick hands", "Tough", "Fleet-footed", "Field medic", "Nerves of steel"};
     /** The order each kind of unit takes its perks in, from level 2. */

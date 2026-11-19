@@ -242,7 +242,8 @@ final class CityConfig implements OptionSet {
         // ((16.1) And the old Default too: Default, Big and Large are the Gigantic, Colossal and Vast.)
         if (option == OPT_SIZE) return value < GIGANTIC;
         if (option == OPT_COUNTRY) return value != Country.USA;
-        if (option == OPT_RESERVES) return value == 1 || value == 2;
+        // ((29.0) Reinforcements are always on now.)
+        if (option == OPT_RESERVES) return value != RESERVES_ON;
         return false;
     }
     /**
@@ -275,14 +276,21 @@ final class CityConfig implements OptionSet {
      * 2 and the National Guard armory (10.5), 3 the bigger maps of 10.10 with hills, mountains, lakes, streams
      * and nature parks out in the country, 4 the wilds of 10.14 (streams you can wade, trails that cross the
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
-     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7). Saved games rebuild with what they had.
+     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0). Saved games rebuild with what they had.
      */
-    int civic = 42;
+    int civic = 43;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
 
     /** ((28.7) The quick reaction force's small base near the middle of town (map version 42, wherever there's an army). */
+    /**
+     * ((29.0) Map version 43: more town on the maps that were mostly country - Lighthouse Coast's harbour town and
+     * villages bigger and one more village, Swamp Bayou's town bigger with more and bigger hamlets, Frozen North's town
+     * wider and deeper, Desert City's spreading over more of the desert.)
+     */
+    boolean moreTown() { return civic >= 43; }
+
     boolean qrfBase() { return civic >= 42 && militaryBase() && !bigGarrison(); }
 
     /** ((16.9) An FBI field office in town (cities built since 16.9). */
@@ -624,7 +632,7 @@ final class CityConfig implements OptionSet {
         // (Just wide enough for the highway and its interchanges: 28 tiles each side, or a little more on the big maps.
         // The Garrison State keeps its open country for its bases and the prison.)
         // ((22.9) Desert City: open desert round a town that sprawls over seven tenths of the map.)
-        if (p == DESERT) return 0.7f;
+        if (p == DESERT) return moreTown() ? 0.85f : 0.7f;
         if (civic >= 26) {
             int t = tiles();
             float band = Math.max(28, t * 0.04f) * 2f / t;
@@ -692,6 +700,8 @@ final class CityConfig implements OptionSet {
     /** ((26.0) Police/army strength (a New Game choice, not one of the eight in v): Weak, Normal, Strong. */
     static final int OPT_FORCE = 10;
     private static final String[] FORCES = {"Weak", "Normal", "Strong"};
+    /** ((29.0) What every new game has: Strong, and reinforcements On. */
+    static final int FORCE_STRONG = 2, RESERVES_ON = 3;
     static final float[] FORCE_SCALE = {0.55f, 1f, 1.6f};
     int force = 1;
 
@@ -862,6 +872,9 @@ final class CityConfig implements OptionSet {
         if (retired(OPT_SIZE, v[OPT_SIZE])) v[OPT_SIZE] = GIGANTIC;
         v[OPT_CIVILIANS] = PEOPLE_ABOUT;
         outskirts = 0;
+        // ((29.0) Every new game: the police and army at their strongest, and reinforcements on. Neither is a choice now.)
+        force = FORCE_STRONG;
+        v[OPT_RESERVES] = RESERVES_ON;
         normalize();
     }
 
@@ -875,6 +888,7 @@ final class CityConfig implements OptionSet {
             while (retired(i, v[i]));
         }
         v[OPT_SIZE] = GIGANTIC;
+        force = FORCE_STRONG;
         normalize();
         v[OPT_CIVILIANS] = PEOPLE_ABOUT;
         outskirts = 0;

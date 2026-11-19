@@ -57,8 +57,10 @@ final class FrozenNorthMap extends RegionMap {
         depth = L * (0.26f + r.nextFloat() * 0.06f);
         sea = Math.max(6, L * 0.035f);
         // The town round the head of the bay, out along both its shores.
-        int tw = Math.round(L * 0.72f), u0 = Math.max(6, Math.round(uc - tw / 2f)), u1 = Math.min(L - 6, u0 + tw);
-        int v0 = Math.round(sea) - 2, v1 = Math.min(L - 36, Math.round(depth + L * 0.26f));
+        // ((29.0) Map version 43: wider and deeper, more of the map town than snow.)
+        boolean more = city.cfg.moreTown();
+        int tw = Math.round(L * (more ? 0.86f : 0.72f)), u0 = Math.max(6, Math.round(uc - tw / 2f)), u1 = Math.min(L - 6, u0 + tw);
+        int v0 = Math.round(sea) - 2, v1 = Math.min(L - 36, Math.round(depth + L * (more ? 0.42f : 0.26f)));
         town = rect(u0, v0, u1, v1);
         return town;
     }

@@ -66,8 +66,10 @@ final class LighthouseMap extends WaterMap {
         float base = N * (0.27f + r.nextFloat() * 0.06f);
         float A = N * 0.03f, f = (float) (Math.PI * 2 / (N * (0.5f + r.nextFloat() * 0.4f))), p = r.nextFloat() * 6.28f;
         // The villages' places along the coast: spread out, the harbour town at the widest.
-        int nv = Math.max(2, Math.min(5, 2 + N / 300));
-        int VA = Math.max(40, Math.round(N * 0.1f)), HA = Math.max(64, Math.round(N * 0.24f));
+        // ((29.0) Map version 43: bigger, and one more of them on the bigger maps.)
+        boolean more = city.cfg.moreTown();
+        int nv = more ? Math.max(2, Math.min(6, 2 + N / 250)) : Math.max(2, Math.min(5, 2 + N / 300));
+        int VA = Math.max(40, Math.round(N * (more ? 0.12f : 0.1f))), HA = Math.max(64, Math.round(N * (more ? 0.3f : 0.24f)));
         int total = HA + (nv - 1) * VA;
         int free = N - total - 2 * Math.max(10, N / 20);
         int harbourAt = r.nextInt(nv);
@@ -145,7 +147,7 @@ final class LighthouseMap extends WaterMap {
         for (int k = 0; k < spans.size(); k++) {
             int[] sp = spans.get(k);
             int c0 = Math.round(road[sp[0]] - 1.5f);
-            int depth = k == 0 ? Math.max(48, Math.round(N * 0.25f)) : Math.max(34, Math.round(N * 0.13f));
+            int depth = k == 0 ? Math.max(48, Math.round(N * (more ? 0.42f : 0.25f))) : Math.max(34, Math.round(N * (more ? 0.24f : 0.13f)));
             depth = Math.min(depth, N - c0 - 8);
             towns.add(rect(sp[0], c0, sp[1], c0 + depth));
         }

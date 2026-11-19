@@ -61,7 +61,9 @@ final class SwampMap extends WaterMap {
         townLow = r.nextBoolean();
         wB = Math.max(6, Math.round(N / 26f));
         base = N * (0.5f + (r.nextFloat() - 0.5f) * 0.12f);
-        int TA = Math.max(52, Math.round(N * 0.4f)), TC = Math.max(36, Math.round(N * 0.24f));
+        // ((29.0) Map version 43: a bigger town, and more and bigger hamlets.)
+        boolean more = city.cfg.moreTown();
+        int TA = Math.max(52, Math.round(N * (more ? 0.56f : 0.4f))), TC = Math.max(36, Math.round(N * (more ? 0.34f : 0.24f)));
         int quay = 4;
         int a0 = Math.round(N * (0.06f + r.nextFloat() * 0.48f));
         a0 = Math.min(a0, N - TA - Math.max(8, N / 16));
@@ -92,8 +94,8 @@ final class SwampMap extends WaterMap {
             cb[a] = base + m * s;
         }
         // The hamlets: on solid ground out in the swamp, clear of the town and the bayou.
-        int want = N < 200 ? 1 : N < 500 ? 2 : 3;
-        int HS = Math.max(28, Math.round(N * 0.12f));
+        int want = more ? (N < 200 ? 2 : N < 500 ? 3 : 5) : N < 200 ? 1 : N < 500 ? 2 : 3;
+        int HS = Math.max(28, Math.round(N * (more ? 0.16f : 0.12f)));
         for (int tries = 0; tries < 400 && hamlets.size() < want; tries++) {
             int hs = HS + r.nextInt(Math.max(1, HS / 3));
             int ha = 6 + r.nextInt(Math.max(1, N - hs - 12)), hc = 6 + r.nextInt(Math.max(1, N - hs - 12));
