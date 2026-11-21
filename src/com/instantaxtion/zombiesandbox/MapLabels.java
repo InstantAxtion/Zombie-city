@@ -357,7 +357,10 @@ final class MapLabels {
         }
         // ((22.0) The stations and bases by name only from a middling zoom in: far out, the districts' names are enough.)
         // ((28.0) Further out now: the police, the army and the federal agents are where you look for help first.)
-        for (int i = 0, n = gv.scale / gv.dp < 0.2f ? 0 : gv.world.city.facilities.size(); i < n; i++) {
+        // ((29.6) At every zoom now, right out to the whole map, in smaller letters far out so more of them fit.)
+        float keepSize = gv.text.getTextSize();
+        if (gv.scale / gv.dp < 0.25f) gv.text.setTextSize(keepSize * 0.82f);
+        for (int i = 0, n = gv.world.city.facilities.size(); i < n; i++) {
             City.Facility f = gv.world.city.facilities.get(i);
             if (f.kind == City.FACILITY_FIRE || f.kind == City.FACILITY_HOSPITAL) continue;
             boolean zoned = false;
@@ -378,6 +381,7 @@ final class MapLabels {
             gv.text.setColor(0xFFE6E6E6);
             c.drawText(label, sx, sy, gv.text);
         }
+        gv.text.setTextSize(keepSize);
         // The ranger station, labelled like the stations in town.
         City.Building rs = gv.world.rangerStation;
         if (rs != null && !rs.collapsed) {

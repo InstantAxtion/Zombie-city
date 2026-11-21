@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.5";
-    static final int VERSION_CODE = 295;
+    static final String VERSION = "29.6";
+    static final int VERSION_CODE = 296;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.6  -  Stations on the map",
+                    "The police stations', bases' and federal offices' names stay on the map however far you zoom out, in smaller letters when you're right out.",
+            },
             {
                     "29.5  -  Harder to daze",
                     "The dead shake off being stunned twice as fast: shoved, struck, hit by a car, a police round, a dog or a riot shield, or left leaderless when their alpha falls, they're back on their feet in half the time.",
