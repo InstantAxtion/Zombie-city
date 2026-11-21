@@ -917,6 +917,14 @@ final class FleetDriving {
         return true;
     }
 
+    /** ((29.2) In a car park, a yard or on a forecourt, not on the road. */
+    boolean offPaved(float x, float y) {
+        int t = city.tileIndex(x, y);
+        if (t < 0) return false;
+        byte k = city.tiles[t];
+        return k == City.LOT || k == City.BASE || k == City.PLAZA;
+    }
+
     float followLimit(Vehicle v) {
         float fx = (float) Math.cos(v.angle), fy = (float) Math.sin(v.angle);
         float look = 30 + Math.abs(v.speed) * 1.6f, limit = Float.MAX_VALUE;
@@ -947,6 +955,14 @@ final class FleetDriving {
             // other: the knot only comes undone if one of them goes first.)
             if (v.stillT > 3 && o.stillT > 3 && o.queued && v.player == null && city.junctionIdAt(v.x, v.y) >= 0
                     && city.junctionIdAt(v.x, v.y) == city.junctionIdAt(o.x, o.y) && v.x * 7 + v.y < o.x * 7 + o.y) continue;
+            // ((29.2) A knot of them crawling at a junction for a quarter of a minute - ten patrol cars locked at the lights in
+            // a little island town, each queued behind another, each inching on now and then so no timer ever ran out: one
+            // that's been in it that long eases on through the others crawling in it rather than wait behind them.)
+            if (v.knotT > 15 && o.knotT > 5 && v.player == null && Math.abs(o.speed) < 8 && !o.parked && !o.broken && dx * dx + dy * dy < 30 * 30) continue;
+            // ((29.2) And two in a car park or a yard, each queued behind the other - nose to nose between the rows: one
+            // goes. Patrol cars sat facing each other in the station's lot for half a minute and more.)
+            if (v.stillT > 3 && o.stillT > 3 && o.queued && v.player == null && offPaved(v.x, v.y) && offPaved(o.x, o.y)
+                    && v.x * 7 + v.y < o.x * 7 + o.y) continue;
             // (10.42) In the way only if it's on the line this one is about to drive (round the bend or across
             // the junction too), not just somewhere in front of its bonnet: a car beside it in a junction,
             // turning across behind it or waiting in the next lane isn't in its way. (Right up against the front

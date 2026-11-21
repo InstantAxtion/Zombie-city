@@ -108,6 +108,11 @@ final class Fleet {
         boolean removedFromFleet;
         /** Seconds stopped; pulling out round something stopped in the lane (seconds left); queued behind traffic. */
         float stillT, passing;
+        /**
+         * ((29.2) How long it's been crawling (under 8) on and off: it builds while it crawls and drains three times as fast
+         * once it's away, so a car that inches forward in a knot of them doesn't start again from nothing each time.
+         */
+        float knotT;
         /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
         transient float backT;
         /** ((27.5) Backing straight off a length to undo a knot it's part of, giving the other the room (seconds left). */
@@ -1178,6 +1183,8 @@ final class Fleet {
         // (Time spent crawling: nudging back and forth in a jam still counts.)
         if (Math.abs(v.speed) < 8) v.stillT += vdt;
         else if (Math.abs(v.speed) > 15) v.stillT = 0;
+        if (v.parked || Math.abs(v.speed) > 15) v.knotT = Math.max(0, v.knotT - vdt * 3);
+        else if (Math.abs(v.speed) < 8) v.knotT += vdt;
         v.soundCd -= vdt;
         v.destCd -= vdt;
         v.rerouteCd -= vdt;

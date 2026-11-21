@@ -211,6 +211,9 @@ final class FleetRouting {
         return false;
     }
 
+    /** ((29.2) A search that goes ahead whatever the budget: a patrol at its spot, with nowhere next. */
+    boolean urgent;
+
     boolean newDestination(Vehicle v) {
         if (v.destCd > 0) return false;
         // ((28.0) Nothing found: it keeps the way it had, not the last one tried and turned down - one that began back the
@@ -349,7 +352,7 @@ final class FleetRouting {
     boolean route(Vehicle v, float x, float y) {
         // ((10.34) Patrol cars on their rounds share the budget too: there are a couple of hundred on a Gigantic map.)
         if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null) {
-            if (fleet.routeBudget <= 0) return false;
+            if (fleet.routeBudget <= 0 && !urgent) return false;
             fleet.routeBudget--;
         }
         // (10.45) Everyday traffic has no business inside an army base: it was driving in among the trucks at the gate.
@@ -364,6 +367,9 @@ final class FleetRouting {
         // ((26.2) Not from off the road - a station's yard, a lot: the search has to cross every paved tile to get back to
         // it, gave up every time, and patrol cars sat in the yard with their officers in them for the whole game.)
         if (casual && offTheRoad(v)) casual = false;
+        // ((29.2) Nor for a patrol at its spot with nowhere next: on the one-way slip roads of an interchange the capped
+        // search always gave up, and the car went round and round the loop, a few yards from where it had been going.)
+        if (urgent) casual = false;
         city.searchCap = casual ? 15000 : 0;
         // ((27.4) Round the streets thick with the dead - all but where it's going, if that's to a call.)
         hazardOn(hazardMul(v), x, y, emergency(v) ? HAZ_CALL : HAZ_TRIP);

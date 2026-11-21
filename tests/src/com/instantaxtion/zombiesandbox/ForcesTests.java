@@ -1467,6 +1467,12 @@ final class ForcesTests extends TestKit {
         check(b.reserve > before, "a soldier with plenty passes a mag to one running low");
     }
 
+    static boolean offTheRoad(World w, Fleet.Vehicle v) {
+        if (v.removedFromFleet) return true;
+        int t = w.city.tileIndex(v.x, v.y);
+        return t < 0 || w.city.tiles[t] != City.ROAD;
+    }
+
     static void armoryGuardsTrucks() throws Exception {
         CityConfig c = cfg(0, CityConfig.MEDIUM, 6);
         World w = new World(c);
@@ -1755,7 +1761,9 @@ final class ForcesTests extends TestKit {
             w.alert = Math.max(w.alert, 1);
             w.update(1 / 30f);
             w.evCount = 0;
-            cleared = wrecks.get(0).removedFromFleet && wrecks.get(1).removedFromFleet;
+            // ((29.2) Off the road either way: towed or pushed away, or shoved onto the pavement by the traffic going by -
+            // then there's nothing left for the bulldozer to clear.)
+            cleared = offTheRoad(w, wrecks.get(0)) && offTheRoad(w, wrecks.get(1));
         }
         check(cleared, "both wrecks pushed off the road (" + w.fleet.dozerCleared + ")");
     }

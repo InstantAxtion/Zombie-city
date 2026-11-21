@@ -690,13 +690,20 @@ final class FleetPatrols {
         if (!fleet.driving.driveStep(v, dt, Math.min(limit, person ? 15 : city.onHighway(v.x, v.y) ? 105 : city.onSlip(v.x, v.y) || city.onBelt(v.x, v.y) ? 95 : 60), queue ? 0.15f : 1f) || v.stuckTimer > 10) {
             boolean stuck = v.stuckTimer > 10;
             v.stuckTimer = 0;
+            fleet.routing.urgent = World.hypot(v.tx - v.x, v.ty - v.y) < 50;
             fleet.routing.newDestination(v);
+            fleet.routing.urgent = false;
             if (stuck && v.field != null && Math.abs(v.speed) < 6) fleet.driving.backOutIfBehind(v);
         } else if (v.destCd <= 0 && Math.abs(v.tx - v.x) < 90 && Math.abs(v.ty - v.y) < 90 && World.hypot(v.tx - v.x, v.ty - v.y) < 90) {
             // ((28.0) Nearly there on its rounds - a spot picked anywhere on the road, nowhere it has to be: on to the next
             // while it's still driving, on ahead. Driven right to it, the last tile often lay across the road or round
             // the corner it was turning, and it went round in a tight circle for it.)
+            // ((29.2) At its spot already, its next one is found now, whatever the route searches this step have come
+            // to: turned down for want of searches, it went round and round its old spot - most of the patrol cars that
+            // "stuck", driving in circles at 80, a few yards from where they'd been heading.)
+            fleet.routing.urgent = World.hypot(v.tx - v.x, v.ty - v.y) < 50;
             fleet.routing.newDestination(v);
+            fleet.routing.urgent = false;
         } else if (v.orbited) {
             // ((11.5) Gone round in a circle - a turn too tight for it off a wide road - on its rounds: somewhere else
             // instead, rather than round the block again and again.)

@@ -62,6 +62,15 @@ final class Health {
         police[0] = policeNow(w);
         int stuck = 0, spins = 0, idleMax = 0, idleSum = 0, idleSamples = 0, trips = 0;
         float overlapSecs = 0, tripSecs = 0;
+        // ((29.2) Junction waits over 20 s; trips out of a station's grounds (from setting off to 60 from where it stood);
+        // how much further than the straight line a trip to a call drives; seconds on a building's ground; people
+        // shoved aside by something driving into them.)
+        int longHolds = 0, exits = 0, slowExits = 0, detours = 0, pushed = 0;
+        float exitSecs = 0, wallSecs = 0, detourSum = 0;
+        Map<Fleet.Vehicle, float[]> hold = new IdentityHashMap<Fleet.Vehicle, float[]>();
+        Map<Fleet.Vehicle, float[]> leave = new IdentityHashMap<Fleet.Vehicle, float[]>();
+        Map<Fleet.Vehicle, float[]> route = new IdentityHashMap<Fleet.Vehicle, float[]>();
+        Map<Fleet.Vehicle, Boolean> was = new IdentityHashMap<Fleet.Vehicle, Boolean>();
         long simNanos = 0;
         Map<Fleet.Vehicle, float[]> at = new IdentityHashMap<Fleet.Vehicle, float[]>();
         Map<Fleet.Vehicle, float[]> turn = new IdentityHashMap<Fleet.Vehicle, float[]>();
@@ -106,9 +115,74 @@ final class Health {
                 if (trying && a[3] == 0 && w.time - a[2] > 30) {
                     a[3] = 1;
                     stuck++;
+                    if (System.getenv("HEALTH_STUCK") != null) {
+                        System.err.println(describe(w, v, "STUCK"));
+                        int jn = w.city.junctionIdAt(v.x, v.y);
+                        if (jn >= 0) System.err.println("   junction type " + w.city.junctions.get(jn)[4] + " box " + java.util.Arrays.toString(w.city.junctions.get(jn)));
+                        for (Fleet.Vehicle o : w.fleet.vehicles)
+                            if (o != v && !Fleet.airborne(o) && Math.hypot(o.x - v.x, o.y - v.y) < 60)
+                                System.err.println("   near " + (int) o.x + "," + (int) o.y + " ang " + String.format("%.2f", o.angle % 6.283f) + " sp " + (int) o.speed + " " + w.fleet.status(o)
+                                        + " queued " + o.queued + " held " + o.held + " still " + (int) o.stillT + " jn " + w.city.junctionIdAt(o.x, o.y) + " giveWay " + o.giveWayT + " back " + o.backT);
+                        System.err.println("   self ang " + String.format("%.2f", v.angle % 6.283f) + " giveWay " + v.giveWayT + " back " + v.backT);
+                    }
+                }
+                // Held at a junction for more than 20 s on end.
+                float[] hh = hold.get(v);
+                if (v.held && !v.parked) {
+                    if (hh == null) hold.put(v, hh = new float[]{w.time, 0});
+                    if (hh[1] == 0 && w.time - hh[0] > 20) {
+                        hh[1] = 1;
+                        longHolds++;
+                    }
+                } else hold.remove(v);
+                // Out of the yard: parked (or waiting) one moment, setting off the next, and how long till 60 from there.
+                boolean still = v.parked || v.state == Fleet.IDLE || v.state == Fleet.STANDBY || v.state == Fleet.WAIT || v.state == Fleet.MUSTER;
+                Boolean before = was.put(v, still);
+                float[] lv = leave.get(v);
+                if (before != null && before && !still && v.type != Fleet.CAR && lv == null) leave.put(v, lv = new float[]{w.time, v.x, v.y});
+                if (lv != null && System.getenv("HEALTH_EXITS") != null && (int) ((w.time - lv[0]) * 30) == 8 * 30 && Math.hypot(v.x - lv[1], v.y - lv[2]) < 30)
+                    System.err.println("AT8S " + describe(w, v, ""));
+                if (lv != null) {
+                    if (Math.hypot(v.x - lv[1], v.y - lv[2]) > 60) {
+                        exits++;
+                        exitSecs += w.time - lv[0];
+                        if (w.time - lv[0] > 15) {
+                            slowExits++;
+                            if (System.getenv("HEALTH_EXITS") != null) System.err.println("SLOWEXIT " + (int) (w.time - lv[0]) + "s from " + (int) lv[1] + "," + (int) lv[2] + " " + describe(w, v, ""));
+                        }
+                        leave.remove(v);
+                    } else if (still || w.time - lv[0] > 90) {
+                        if (!still) {
+                            exits++;
+                            slowExits++;
+                            if (System.getenv("HEALTH_EXITS") != null) System.err.println("NOEXIT 90s from " + (int) lv[1] + "," + (int) lv[2] + " " + describe(w, v, ""));
+                            exitSecs += 90;
+                        }
+                        leave.remove(v);
+                    }
+                }
+                // On a building's ground (not driving: through a wall).
+                if (!v.parked && Math.abs(v.speed) > 1) {
+                    int bt = w.city.tileIndex(v.x, v.y);
+                    if (bt >= 0 && w.city.tiles[bt] == City.BUILDING) wallSecs += DT;
                 }
                 // A patrol car's trip to a call: from being sent to being there.
                 if (v.type == Fleet.CRUISER && v.patrol) {
+                    float[] ro = route.get(v);
+                    if (v.state == Fleet.DRIVE && v.incident != null) {
+                        if (ro == null) route.put(v, ro = new float[]{v.x, v.y, v.x, v.y, 0});
+                        ro[4] += (float) Math.hypot(v.x - ro[2], v.y - ro[3]);
+                        ro[2] = v.x;
+                        ro[3] = v.y;
+                    } else if (ro != null) {
+                        float straight = (float) Math.hypot(v.x - ro[0], v.y - ro[1]);
+                        if (v.state == Fleet.SCENE && straight > 150) {
+                            float ratio = ro[4] / straight;
+                            detourSum += ratio;
+                            if (ratio > 2.2f) detours++;
+                        }
+                        route.remove(v);
+                    }
                     float[] tr = trip.get(v);
                     if (v.state == Fleet.DRIVE && v.incident != null) {
                         if (tr == null) trip.put(v, new float[]{w.time, System.identityHashCode(v.incident)});
@@ -123,7 +197,11 @@ final class Health {
                 }
                 int t = w.city.tileIndex(v.x, v.y);
                 if (t >= 0 && (w.city.tiles[t] == City.ROAD || w.city.tiles[t] == City.CAR) && !v.parked) road.add(v);
-                if (f % 3 == 0) spins += spin(turn, v, N);
+                if (f % 3 == 0) {
+                    int sp = spin(turn, v, N);
+                    spins += sp;
+                    if (sp > 0 && System.getenv("HEALTH_STUCK") != null) System.err.println(describe(w, v, "SPIN"));
+                }
             }
             // Bodies driven into each other: both on the road, overlapping by more than 30% of the smaller.
             if (f % 3 == 0) {
@@ -156,10 +234,62 @@ final class Health {
         m.put(name + ".police_120s", "" + police[2]);
         m.put(name + ".response_trips", "" + trips);
         m.put(name + ".response_trip_mean_s", String.format(java.util.Locale.ROOT, "%.1f", trips == 0 ? 0f : tripSecs / trips));
+        m.put(name + ".junction_holds_20s", "" + longHolds);
+        m.put(name + ".station_exits", "" + exits);
+        m.put(name + ".station_exit_mean_s", String.format(java.util.Locale.ROOT, "%.1f", exits == 0 ? 0f : exitSecs / exits));
+        m.put(name + ".station_exits_over_15s", "" + slowExits);
+        m.put(name + ".call_detours_over_2x", "" + detours);
+        m.put(name + ".call_route_ratio_mean", String.format(java.util.Locale.ROOT, "%.2f", trips == 0 ? 0f : detourSum / Math.max(1, trips)));
+        m.put(name + ".seconds_on_building_ground", String.format(java.util.Locale.ROOT, "%.1f", wallSecs));
         m.put(name + ".sim_ms_per_step", String.format(java.util.Locale.ROOT, "%.2f", simNanos / 1e6 / (SECONDS * 30)));
         System.err.println(name + ": " + (System.currentTimeMillis() - wall) / 1000 + " s wall, " + w.fleet.vehicles.size() + " vehicles, "
                 + w.entities.size() + " people and dead");
         return m;
+    }
+
+    static String routeTest(World w, Fleet.Vehicle v) {
+        Fleet.Route f = v.field;
+        float tx = v.tx, ty = v.ty;
+        w.fleet.routing.urgent = true;
+        float[] d = w.city.nearestDrivable(w.city.worldW() / 2, w.city.worldH() / 2);
+        int st = v.state;
+        v.state = Fleet.DRIVE;
+        boolean ok = w.fleet.routing.route(v, d[0], d[1]);
+        float[] e = w.city.nearestDrivable(v.x + (float) Math.cos(v.angle) * 500, v.y + (float) Math.sin(v.angle) * 500);
+        boolean ahead = e != null && w.fleet.routing.route(v, e[0], e[1]);
+        w.fleet.routing.mayTurnBack = true;
+        boolean turn = w.fleet.routing.route(v, d[0], d[1]);
+        w.fleet.routing.mayTurnBack = false;
+        v.state = st;
+        w.fleet.routing.urgent = false;
+        String s = ok + " ahead500 " + ahead + " withTurn " + turn + " angle " + String.format("%.2f", v.angle) + " dir " + w.city.roadDir[w.city.tileIndex(v.x, v.y)];
+        v.field = f;
+        v.tx = tx;
+        v.ty = ty;
+        return s;
+    }
+
+    /** ((29.2) One vehicle, for the stuck and spin logs (HEALTH_STUCK=1). */
+    static String describe(World w, Fleet.Vehicle v, String what) {
+        int t = w.city.tileIndex(v.x, v.y);
+        Fleet.Vehicle near = null;
+        float nd = 1e9f;
+        for (Fleet.Vehicle o : w.fleet.vehicles) {
+            if (o == v || o.removedFromFleet || Fleet.airborne(o)) continue;
+            float d = (float) Math.hypot(o.x - v.x, o.y - v.y);
+            if (d < nd) {
+                nd = d;
+                near = o;
+            }
+        }
+        return what + " t" + (int) w.time + " " + w.fleet.status(v) + " type " + v.type + " kind " + v.kind + " state " + v.state + " at " + (int) v.x + "," + (int) v.y
+                + " tile " + (t >= 0 ? w.city.tiles[t] : -1) + " jn " + w.city.junctionIdAt(v.x, v.y) + " speed " + (int) v.speed + " held " + v.held
+                + " queued " + v.queued + " qheld " + v.queuedHeld + " field " + (v.field != null) + " pathT " + v.pathT + " still " + (int) v.stillT
+                + " giveWay " + (int) v.giveWayT + " back " + (int) v.backT + " to " + (int) v.tx + "," + (int) v.ty
+                + " agency " + v.agency + " destCd " + String.format("%.1f", v.destCd) + " orbited " + v.orbited + " belt " + w.city.onBelt(v.x, v.y) + " hwy " + w.city.onHighway(v.x, v.y)
+                + " pick " + (v.destCd <= 0 ? w.fleet.routing.newDestination(v) + " -> " + (int) v.tx + "," + (int) v.ty : "cd")
+                + " toCentre " + routeTest(w, v)
+                + (near == null ? "" : " | nearest " + (int) nd + ": " + w.fleet.status(near) + " st " + near.state + " sp " + (int) near.speed + " parked " + near.parked + " broken " + near.broken);
     }
 
     /** Turned more than 300 degrees inside 40 of where it was, in under 8 s: one spin (then not again for 8 s). */
