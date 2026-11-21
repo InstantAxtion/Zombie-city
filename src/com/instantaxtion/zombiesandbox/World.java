@@ -324,6 +324,8 @@ final class World {
     }
     /** ((29.1) A blast going off now that the living live through (anything but the player's bomb); the player's bomb going off. */
     boolean friendlyBlast, playerBomb;
+    /** ((29.5) How much faster the dead get over being stunned than the living. */
+    static final float ZOMBIE_STUN_RECOVERY = 2f;
     /** ((29.2) The living shoved aside by something driving into them (for the health check). */
     int peopleShoved;
     boolean gore = true;
@@ -1189,7 +1191,9 @@ final class World {
         // ((24.0) Reloading goes on whatever else is happening: it stopped while they were dazed or stepping round a corner.)
         combat.reloadTick(e, dt);
         if (e.stun > 0) {
-            e.stun -= dt;
+            // ((29.5) The dead shake it off twice as fast: knocked back, shoved, hit by a car or a police round, they were
+            // standing dazed half the fight.)
+            e.stun -= e.isUndead() ? dt * ZOMBIE_STUN_RECOVERY : dt;
             movement.steer(e, 0, 0, 0);
             return;
         }

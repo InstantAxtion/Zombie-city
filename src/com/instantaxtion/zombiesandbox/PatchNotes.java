@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.4";
-    static final int VERSION_CODE = 294;
+    static final String VERSION = "29.5";
+    static final int VERSION_CODE = 295;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.5  -  Harder to daze",
+                    "The dead shake off being stunned twice as fast: shoved, struck, hit by a car, a police round, a dog or a riot shield, or left leaderless when their alpha falls, they're back on their feet in half the time.",
+            },
             {
                     "29.4  -  Safe zones in time, calmer crowds",
                     "Safe zones go up three fifths quicker, and people running from the dead with one going up nearby make for it and queue at its gate, instead of waiting till it opens - which used to be about when the fighting was over. Twice as many were sheltered at the peak in a test.",

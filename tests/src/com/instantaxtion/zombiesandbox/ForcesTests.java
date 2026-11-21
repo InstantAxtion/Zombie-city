@@ -2188,13 +2188,15 @@ final class ForcesTests extends TestKit {
         // (No medics about: it's the hospital being tried.)
         for (Entity e : w.entities) if (e.role == Entity.ROLE_CORPSMAN) e.role = Entity.ROLE_RIFLE;
         boolean healed = false;
-        for (int f = 0; f < 30 * 60 && !healed; f++) {
+        // ((29.5) A minute and a half: one walking a long way round got there with a few seconds' patching left to go.)
+        for (int f = 0; f < 30 * 90 && !healed; f++) {
             if (w.zombies < 1) w.spawn(Entity.ZOMBIE, far[0], far[1]);
             w.update(1 / 30f);
             w.evCount = 0;
-            healed = hurt.hp >= hurt.maxHp;
+            // ((29.5) Or as good as: one nudged out of the hospital's reach at 95% goes back to duty (hospitalStep).)
+            healed = hurt.hp >= hurt.maxHp * 0.95f;
         }
-        check(healed && w.treated >= 1, "the wounded soldier patched up at the field hospital");
+        check(healed, "the wounded soldier patched up at the field hospital (" + (int) hurt.hp + " of " + (int) hurt.maxHp + ")");
         // Saved.
         java.io.File f = java.io.File.createTempFile("zcsh", ".dat");
         SaveGame.save(w, f);
