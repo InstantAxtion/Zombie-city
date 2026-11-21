@@ -601,10 +601,11 @@ final class Movement {
         }
         // ((14.5) The long dead have rotted: slower on their feet.)
         // ((20.0) And quicker or slower by the difficulty.)
-        if (e.isUndead() && e.want > 0) e.want *= (1 - w.zombieAI.rot(e)) * w.zPace;
+        // ((29.9) And a little quicker, all of them: ZOMBIE_FASTER.)
+        if (e.isUndead() && e.want > 0) e.want *= (1 - w.zombieAI.rot(e)) * w.zPace * World.ZOMBIE_FASTER;
         // ((21.3) A runner runs: wherever it's going - after prey, to a noise, roaming, with a horde - it goes there at
         // a run, never a shamble.)
-        if (e.type == Entity.RUNNER && e.isUndead() && e.want > 0.5f && e != w.controlled) e.want = Math.max(e.want, e.runSpeed * w.zPace);
+        if (e.type == Entity.RUNNER && e.isUndead() && e.want > 0.5f && e != w.controlled) e.want = Math.max(e.want, e.runSpeed * w.zPace * World.ZOMBIE_FASTER);
         // ((21.0) Tangled in razor wire.)
         if (w.defences.any() && e.isUndead() && e.want > 0) e.want *= w.defences.snag(w, e, dt);
         // ((15.0) A horse is quickest on grass, trails and open ground.)

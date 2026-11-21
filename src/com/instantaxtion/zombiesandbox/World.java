@@ -326,6 +326,8 @@ final class World {
     boolean friendlyBlast, playerBomb;
     /** ((29.5) How much faster the dead get over being stunned than the living. */
     static final float ZOMBIE_STUN_RECOVERY = 2f;
+    /** ((29.9) The dead, every kind, an eighth quicker on their feet than before. */
+    static final float ZOMBIE_FASTER = 1.12f;
     /** ((29.2) The living shoved aside by something driving into them (for the health check). */
     int peopleShoved;
     boolean gore = true;
@@ -1397,6 +1399,14 @@ final class World {
 
     /** On the way to a vehicle - unless one of the dead needs dealing with first. True when that was their step. */
     private boolean boardingStep(final Entity e) {
+        // ((29.9) Called to a truck a long way off with the dead right there: police and soldiers stay and fight, and the
+        // truck goes on without them. A guardsman walked off towards a squad's truck nine hundred yards away past a pack
+        // of thirteen.)
+        if (e.task == Dispatch.T_BOARD && e.isArmed() && e.rig != null && e.ride == null && (e.ammo > 0 || e.reserve > 0)
+                && Math.abs(e.rig.x - e.x) + Math.abs(e.rig.y - e.y) > 250 && spatial.countZombiesNear(e.x, e.y, 120) >= 3) {
+            e.task = Dispatch.T_NONE;
+            e.rig = null;
+        }
         if (e.task == Dispatch.T_BOARD) {
             // (10.37) Police and soldiers on their way to a vehicle stop to deal with one of the dead that gets
             // close, instead of walking on with it biting them.
