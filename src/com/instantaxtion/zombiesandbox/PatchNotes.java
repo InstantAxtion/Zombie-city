@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.7";
-    static final int VERSION_CODE = 297;
+    static final String VERSION = "29.8";
+    static final int VERSION_CODE = 298;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.8  -  Smaller islands too",
+                    "Prison Island and Theme Park Island are a fifth smaller across as well, with the same people, police and army. Only the Islands and the Archipelago keep their size. Saved games stay as they were.",
+            },
             {
                     "29.7  -  Tighter cities",
                     "Every map but the island ones (Islands, Archipelago, Prison Island and Theme Park Island) is a fifth smaller across: the Default size is 664 tiles across, not 832. The same number of people live there, with the same police and army, so the city is busier and the fighting closer together.",

@@ -276,9 +276,9 @@ final class CityConfig implements OptionSet {
      * 2 and the National Guard armory (10.5), 3 the bigger maps of 10.10 with hills, mountains, lakes, streams
      * and nature parks out in the country, 4 the wilds of 10.14 (streams you can wade, trails that cross the
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
-     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0), 44 every map but the island ones a fifth smaller across (29.7). Saved games rebuild with what they had.
+     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0), 44 every map but the island ones a fifth smaller across (29.7), 45 Prison Island and Theme Park Island too (29.8). Saved games rebuild with what they had.
      */
-    int civic = 44;
+    int civic = 45;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -598,10 +598,14 @@ final class CityConfig implements OptionSet {
     /** ((29.7) How much smaller across the maps are from map version 44. */
     static final float SHRINK = 0.8f;
 
-    /** ((29.7) Map version 44, and not one of the island maps (Islands, Archipelago, Prison Island, Theme Park Island). */
+    /**
+     * ((29.7) Map version 44, and not one of the island maps (Islands, Archipelago, Prison Island, Theme Park Island).
+     * ((29.8) Map version 45: Prison Island and Theme Park Island too; only Islands and the Archipelago keep their size.)
+     */
     boolean shrunk() {
         int p = v[OPT_PRESET];
-        return civic >= 44 && p != ISLANDS && p != ARCHIPELAGO && p != PRISON_ISLAND && p != THEME_PARK;
+        if (civic < 44 || p == ISLANDS || p == ARCHIPELAGO) return false;
+        return civic >= 45 || (p != PRISON_ISLAND && p != THEME_PARK);
     }
 
     /**
