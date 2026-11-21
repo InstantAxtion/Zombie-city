@@ -308,6 +308,7 @@ final class Rides {
                     // Push sideways out of the lane.
                     float side = ddx * -fy + ddy * fx >= 0 ? 1 : -1;
                     w.movement.tryMove(o, -fy * side * 6 + fx * 3, fx * side * 6 + fy * 3);
+                    if (!o.isZombie()) w.peopleShoved++;
                     if (!o.isZombie() || o.stun > 0) continue;
                     o.hp -= speed * (o.type == Entity.GIANT ? 0.12f : o.type == Entity.BRUTE ? 0.3f : 0.9f);
                     // ((12.1) Knocked flat, not finished: one hit by a car may get up again too.)

@@ -1748,6 +1748,10 @@ final class FleetDriving {
         // this world): a car in town now covers ground like a car. Crawls, turns and queues are as before.
         if (max > 40) max = 40 + (max - 40) * DRIVE_SCALE;
         max *= World.VEHICLE_SPEED;
+        // ((29.2) Someone standing in the way: down to a crawl, nosing past them at a walking pace. Patrol cars on their
+        // rounds drove at 60 into people crossing the road, and the army's vans and trucks through the soldiers standing
+        // in their own yards, shoving them aside.)
+        if (v.player == null && Math.abs(v.speed) > 12 && w.personAhead(v.x, v.y, v.angle)) max = Math.min(max, 12);
         // (Off the road, across the grass: slower going.)
         if (city.rough(v.x, v.y)) max *= 0.65f;
         // Keep a safe distance behind whatever is ahead in the lane.

@@ -1616,10 +1616,20 @@ final class ArmedAI {
                 if (w.alert >= 1 && bx * bx + by * by < base.r * base.r * 2.2f) {
                     int rank = e.squad % 4, file = e.member % 8, blk = (e.squad / 4) % 3;
                     // ((12.0) And every fourth squad in a block of its own beside the others, not on their places.)
-                    float px = base.x + (file - 3.5f) * 9 + (blk == 0 ? 0 : blk == 1 ? -78 : 78), py = base.y + (rank - 1.5f) * 16;
+                    // ((29.2) And every twelve squads their own ranks again, in front of the others and then behind: the
+                    // thirteenth squad on had the same places as the first, and two or three soldiers shoved at each place
+                    // for the rest of the game - a big base's whole garrison jostling on the parade ground.)
+                    int layer = e.squad / 12, shift = layer == 0 ? 0 : (layer % 2 == 1 ? 1 : -1) * ((layer + 1) / 2);
+                    float px = base.x + (file - 3.5f) * 9 + (blk == 0 ? 0 : blk == 1 ? -78 : 78), py = base.y + (rank - 1.5f) * 16 + shift * 72;
                     // ((12.0) Their place on a building: the same ranks a little further down or up the base, rather
                     // than wandering about it.)
                     for (int k = 1; k <= 4 && w.city.solidAt(px, py); k++) py += (k % 2 == 1 ? 1 : -1) * k * 48;
+                    // ((29.2) More squads than a little base's parade ground holds: those whose place falls outside the yard
+                    // (behind its fence, on its buildings) stand at ease where they are, instead of pushing at the fence for it.)
+                    if (World.hypot(px - base.x, py - base.y) > base.r * 0.85f) {
+                        w.movement.steer(e, 0, 0, 0);
+                        return true;
+                    }
                     if (!w.city.solidAt(px, py)) {
                         w.holdoutLife.standAt(e, px, py, 0.6f);
                         if (e.want < 1) e.angle = World.turn(e.angle, (float) (Math.PI / 2), dt * 3);

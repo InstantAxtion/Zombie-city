@@ -324,6 +324,8 @@ final class World {
     }
     /** ((29.1) A blast going off now that the living live through (anything but the player's bomb); the player's bomb going off. */
     boolean friendlyBlast, playerBomb;
+    /** ((29.2) The living shoved aside by something driving into them (for the health check). */
+    int peopleShoved;
     boolean gore = true;
     /** ((18.4) The Destruction setting: heavy. */
     boolean heavy;

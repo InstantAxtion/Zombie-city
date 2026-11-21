@@ -118,15 +118,7 @@ final class Inspector {
         Integer turnedN = gv.world.victims.get(e.nameSeed);
         if (e.isUndead() && turnedN != null) lines.add("Has turned " + turnedN + (turnedN == 1 ? " person" : " people"));
         if (e.nameSeed == gv.world.patientZeroSeed && gv.world.patientZeroSeed != 0) lines.add("PATIENT ZERO");
-        // ((27.5) The last few notable things they did, newest first, with the time: three on a phone, five on a wider
-        // screen.)
-        if (e.histN > 0 && !e.isUndead()) {
-            int show = Math.min(e.histN, gv.getWidth() - 20 * gv.dp < 380 * gv.dp ? 3 : Entity.HIST);
-            for (int k = 0; k < show; k++) {
-                int i = (e.histN - 1 - k) % Entity.HIST;
-                lines.add((k == 0 ? "Lately: " : "            ") + World.clock((int) e.histT[i]) + "  " + e.hist[i]);
-            }
-        }
+        // ((29.2) The "Lately" lines - the last few things they did - are off the card: it was too long.)
         gv.text.setTextAlign(Paint.Align.LEFT);
         gv.text.setTextSize(14 * gv.dp);
         float lh = 18 * gv.dp, cw = Math.min(gv.getWidth() - 20 * gv.dp, 420 * gv.dp);
@@ -502,10 +494,10 @@ final class Inspector {
         }
         // ((12.0) "Empty" only when it is: with people hiding inside it said both at once.)
         else if (!b.occupants.isEmpty() || b.collapsed) {
-            if (!b.collapsed && b.capacity > b.occupants.size()) lines.add("Room for " + (b.capacity - b.occupants.size()) + " more");
+            // ((29.2) No "Room for so many more" line either.)
         }
         else if (b.infestKnown) lines.add("Zombies were inside. Nobody has gone back in.");
-        else lines.add(b.capacity > 0 ? "Empty (room for " + b.capacity + " to hide)" : "Nobody can shelter here");
+        // ((29.2) No "Empty (room for so many to hide)" line on the card any more.)
         if (!b.collapsed) {
             String supplies = "Food: " + b.food + (b.food == 0 && !b.occupants.isEmpty() ? " (they're starving)" : "");
             if (b.kind == City.MARKET || World.useOf(b) == Variants.U_ROUNDS)

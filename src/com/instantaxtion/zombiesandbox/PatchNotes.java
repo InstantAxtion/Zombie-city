@@ -2,11 +2,22 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.1";
-    static final int VERSION_CODE = 291;
+    static final String VERSION = "29.2";
+    static final int VERSION_CODE = 292;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.2  -  Smoother traffic, cars on the map",
+                    "Police cars no longer drive round in circles at the edge of town: on the highway interchanges' slip roads a patrol car that had reached its spot couldn't find its next one, and went round and round the loop. Vehicles stuck in a two-minute test: 13 to 1 on Metropolis.",
+                    "Knots at junctions come undone: a dozen patrol cars locked at a set of lights, each inching forward now and then, used to stay that way for good. Two cars nose to nose in a station's car park: one goes. Stuck on the Archipelago: 12 to 1.",
+                    "Anything driving slows to a crawl for someone standing in its way, instead of driving into them.",
+                    "Zoomed out, the police's and the army's vehicles are little cars, pointing the way they're going, darker than the people on foot.",
+                    "A zombie put down stays down: one dropped by body shots no longer gets up again.",
+                    "Five percent more people, police and soldiers in every new city.",
+                    "Soldiers at a small base no longer push at its fence for a place on the parade ground.",
+                    "The people cards no longer list what they did lately; building cards no longer say how many could hide there. The war card's Recruits and Volunteers are on the Time line, where they're not cut off.",
+            },
             {
                     "29.1  -  Fewer needless deaths, round towers",
                     "Panicking crowds no longer trample people to death: being knocked down in a stampede still hurts, but never below half their health. In a test outbreak, trampling had been killing several times as many people as the dead did.",

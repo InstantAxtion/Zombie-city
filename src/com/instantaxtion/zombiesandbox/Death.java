@@ -157,11 +157,8 @@ final class Death {
         // an ordinary officer about half the time (which half goes by who they were, not by chance).)
         if (c.riseType == Entity.ZOMBIE && (e.type == Entity.SOLDIER || (e.type == Entity.COP
                 && (e.role == Entity.ROLE_RIOT || e.role == Entity.ROLE_SWAT || (e.nameSeed & 1) == 0)))) c.riseType = Entity.ARMOURED;
-        // ((12.1) Only the head stops them for good: one dropped by body shots alone may well get up again.)
-        if (e.isUndead() && e.bodyShot && !e.gibbed && w.rnd.nextFloat() < World.GET_UP) {
-            c.rise = 7 + w.rnd.nextFloat() * 8;
-            c.riseType = e.type;
-        }
+        // ((29.2) Put down is put down: one dropped by body shots alone no longer gets up again (12.1 had it that only the
+        // head stopped them for good, and the dead seemed to come back after dying).)
         if (e.gibbed) {
             w.effects.bloodBurst(e.x, e.y, 14, 0, 0);
             if (w.rnd.nextBoolean()) return;

@@ -654,7 +654,9 @@ final class CityConfig implements OptionSet {
     }
 
     /** ((26.0) A tenth more people in every city. */
-    static final float POP_MORE = 1.1f;
+    static final float POP_MORE = 1.1f * 1.05f;
+    /** ((29.2) Five percent more police and five percent more soldiers in every city. */
+    static final float FORCE_MORE = 1.05f;
 
     /** ((22.4) Map version 36: how many live in a sandbox city of each size, at "Most", on a city of middling density. */
     private static final int[] POP_TILES = {128, 192, 256, 320, 456, 568, 832, 1040, 1464};
@@ -694,7 +696,7 @@ final class CityConfig implements OptionSet {
         // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
         // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
         // ((13.0) Up to 800 now, for the bigger cities: 480 before.)
-        return Math.round(Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8)) * FORCE_SCALE[force]);
+        return Math.round(Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8)) * FORCE_SCALE[force] * FORCE_MORE);
     }
 
     /** ((26.0) Police/army strength (a New Game choice, not one of the eight in v): Weak, Normal, Strong. */
@@ -715,7 +717,7 @@ final class CityConfig implements OptionSet {
         // ((15.5) The Military Town's great base: three times the garrison, and never fewer than 450.)
         // ((28.0) The Military Airbase: two and a half times the garrison, never fewer than 380.)
         int big = militaryTown() ? Math.min(700, Math.max(450, n * 3)) : airbase() ? Math.min(600, Math.max(380, n * 5 / 2)) : n;
-        return Math.round(big * FORCE_SCALE[force]);
+        return Math.round(big * FORCE_SCALE[force] * FORCE_MORE);
     }
 
 

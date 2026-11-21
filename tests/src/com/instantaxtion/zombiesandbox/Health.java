@@ -21,7 +21,9 @@ import java.util.Map;
  */
 final class Health {
     static final float DT = 1 / 30f;
-    static final int SECONDS = 120, OUTBREAK_AT = 10;
+    static final int SECONDS = Integer.getInteger("health.seconds", 120), OUTBREAK_AT = 10;
+    /** ((29.2) How many of the dead in each of the three packs (8 for the check; more to look at a big fight). */
+    static final int PACK = Integer.getInteger("health.pack", 8);
 
     public static void main(String[] args) throws Exception {
         if (args.length >= 3 && args[0].equals("compare")) {
@@ -71,6 +73,10 @@ final class Health {
         Map<Fleet.Vehicle, float[]> leave = new IdentityHashMap<Fleet.Vehicle, float[]>();
         Map<Fleet.Vehicle, float[]> route = new IdentityHashMap<Fleet.Vehicle, float[]>();
         Map<Fleet.Vehicle, Boolean> was = new IdentityHashMap<Fleet.Vehicle, Boolean>();
+        Map<String, Integer> shoveWhy = new java.util.TreeMap<String, Integer>();
+        Map<Entity, float[]> foot = new IdentityHashMap<Entity, float[]>();
+        Map<Fleet.Vehicle, Float> board = new IdentityHashMap<Fleet.Vehicle, Float>();
+        int footStuck = 0, idleNear = 0, boardWaits = 0;
         long simNanos = 0;
         Map<Fleet.Vehicle, float[]> at = new IdentityHashMap<Fleet.Vehicle, float[]>();
         Map<Fleet.Vehicle, float[]> turn = new IdentityHashMap<Fleet.Vehicle, float[]>();
@@ -87,8 +93,8 @@ final class Health {
                         if (q != null && Math.hypot(q[0] - cx, q[1] - cy) < (pack == 0 ? 300 : w.city.worldW() / 4f)) p = q;
                     }
                     if (p == null) p = w.city.randomWalkableInTown(r);
-                    for (int k = 0; k < 8; k++) {
-                        float[] q = w.city.findWalkable(p[0] + (k % 3) * 8, p[1] + (k / 3) * 8);
+                    for (int k = 0; k < PACK; k++) {
+                        float[] q = w.city.findWalkable(p[0] + (k % 5) * 8, p[1] + (k / 5) * 8);
                         if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);
                     }
                 }
@@ -195,6 +201,17 @@ final class Health {
                         trip.remove(v);
                     }
                 }
+                if (System.getenv("HEALTH_SHOVE") != null && Math.abs(v.speed) > 20) {
+                    for (Entity e : w.entities) {
+                        if (e.dead || e.isZombie() || e.ride != null || e.removed) continue;
+                        if (Math.abs(e.x - v.x) > 12 || Math.abs(e.y - v.y) > 12) continue;
+                        if (Math.hypot(e.x - v.x, e.y - v.y) < 9 + e.radius) {
+                            int et = w.city.tileIndex(e.x, e.y);
+                            String k = w.fleet.status(v).replaceAll(" to .*| at .*| on .*|\\(.*", "") + " | state " + v.state + " | person on tile " + w.city.tiles[et] + (w.city.junctionIdAt(e.x, e.y) >= 0 ? " (junction)" : "") + " | " + (e.fleeTimer > 0 ? "fleeing" : "calm") + " " + e.type;
+                            shoveWhy.merge(k, 1, Integer::sum);
+                        }
+                    }
+                }
                 int t = w.city.tileIndex(v.x, v.y);
                 if (t >= 0 && (w.city.tiles[t] == City.ROAD || w.city.tiles[t] == City.CAR) && !v.parked) road.add(v);
                 if (f % 3 == 0) {
@@ -212,6 +229,38 @@ final class Health {
                         if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) continue;
                         if (overlap(a, b) > 0.3f) overlapSecs += 3 * DT;
                     }
+            }
+            // ((29.2) Units on foot: stuck (trying to go somewhere, under 15 further on in 20 s), idle with the dead close
+            // (no task, a gun with rounds, one of the dead within 120, no shot in 10 s), and vehicles waiting over 30 s for
+            // their people to board.)
+            if (f % 30 == 29) {
+                for (Entity e : w.entities) {
+                    if (e.dead || e.removed || e.ride != null || !(e.type == Entity.COP || e.type == Entity.SOLDIER)) continue;
+                    float[] fp = foot.get(e);
+                    boolean trying = e.want > 2 && e.building == null && e.task != Dispatch.T_POST && e.task != Dispatch.T_HOLD && e.task != Dispatch.T_GUARD;
+                    if (fp == null || !trying || Math.hypot(e.x - fp[0], e.y - fp[1]) > 15) foot.put(e, fp = new float[]{e.x, e.y, w.time, 0});
+                    if (trying && fp[3] == 0 && w.time - fp[2] > 20) {
+                        fp[3] = 1;
+                        footStuck++;
+                        if (System.getenv("HEALTH_FOOT") != null) System.err.println("FOOTSTUCK t" + (int) w.time + " " + footDesc(w, e));
+                    }
+                    if (e.task == Dispatch.T_NONE && e.ammo + e.reserve > 0 && w.time - e.shotAt > 10 && w.countZombiesNear(e.x, e.y, 120) > 0) {
+                        idleNear++;
+                        if (System.getenv("HEALTH_FOOT") != null && w.rnd.nextFloat() < 0.05f) System.err.println("IDLENEAR t" + (int) w.time + " " + footDesc(w, e));
+                    }
+                }
+                for (Fleet.Vehicle v : w.fleet.vehicles) {
+                    if (v.removedFromFleet || (v.state != Fleet.MUSTER && v.state != Fleet.PICKUP)) {
+                        board.remove(v);
+                        continue;
+                    }
+                    Float since = board.get(v);
+                    if (since == null) board.put(v, since = w.time);
+                    if (w.time - since > 30 && w.time - since <= 31) {
+                        boardWaits++;
+                        if (System.getenv("HEALTH_FOOT") != null) System.err.println("BOARDWAIT t" + (int) w.time + " " + describe(w, v, "") + " crew " + v.crew.size() + "/" + v.crewWanted + " coming " + v.coming);
+                    }
+                }
             }
             // Police on foot far from any station with nothing to do.
             if (f % 150 == 149) {
@@ -241,10 +290,45 @@ final class Health {
         m.put(name + ".call_detours_over_2x", "" + detours);
         m.put(name + ".call_route_ratio_mean", String.format(java.util.Locale.ROOT, "%.2f", trips == 0 ? 0f : detourSum / Math.max(1, trips)));
         m.put(name + ".seconds_on_building_ground", String.format(java.util.Locale.ROOT, "%.1f", wallSecs));
+        m.put(name + ".people_shoved_by_vehicles", "" + w.peopleShoved);
+        m.put(name + ".units_on_foot_stuck_20s", "" + footStuck);
+        m.put(name + ".unit_seconds_idle_near_dead", "" + idleNear);
+        m.put(name + ".boarding_waits_30s", "" + boardWaits);
+        if (!shoveWhy.isEmpty()) {
+            List<Map.Entry<String, Integer>> l = new ArrayList<Map.Entry<String, Integer>>(shoveWhy.entrySet());
+            l.sort((x, y) -> y.getValue() - x.getValue());
+            for (int i = 0; i < Math.min(20, l.size()); i++) System.err.println("SHOVE " + l.get(i).getValue() + "  " + l.get(i).getKey());
+        }
         m.put(name + ".sim_ms_per_step", String.format(java.util.Locale.ROOT, "%.2f", simNanos / 1e6 / (SECONDS * 30)));
         System.err.println(name + ": " + (System.currentTimeMillis() - wall) / 1000 + " s wall, " + w.fleet.vehicles.size() + " vehicles, "
                 + w.entities.size() + " people and dead");
         return m;
+    }
+
+    static String footDesc(World w, Entity e) {
+        int t = w.city.tileIndex(e.x, e.y);
+        Entity z = null;
+        float zd = 1e9f;
+        for (Entity o : w.entities) {
+            if (o.dead || !o.isZombie()) continue;
+            float d = (float) Math.hypot(o.x - e.x, o.y - e.y);
+            if (d < zd) {
+                zd = d;
+                z = o;
+            }
+        }
+        return (e.type == Entity.COP ? "cop" : "soldier") + " role " + e.role + " task " + e.task + " at " + (int) e.x + "," + (int) e.y + " tile " + (t >= 0 ? w.city.tiles[t] : -1)
+                + " want " + (int) e.want + " mx " + String.format("%.1f,%.1f", e.mx, e.my) + " ammo " + e.ammo + "+" + e.reserve + " reload " + String.format("%.1f", e.reload)
+                + " lastShot " + (int) (w.time - e.shotAt) + "s rig " + (e.rig != null) + " path " + (e.path == null ? "none" : e.path.length) + " blocked " + e.blocked
+                + " inc " + (e.incident != null) + " nearestDead " + (int) zd + (z != null && w.city.los(e.x, e.y, z.x, z.y) ? " (seen)" : " (no los)") + " inside " + (e.building != null)
+                + " goal " + e.goal + " squad " + e.squad + "/" + e.member + " post " + (int) e.postX + "," + (int) e.postY
+                + baseInfo(w, e) + " leader " + (e.leader != null) + " pathDest " + (e.pathDest != null ? (int) e.pathDest.doorX + "," + (int) e.pathDest.doorY : "-")
+;
+    }
+
+    static String baseInfo(World w, Entity e) {
+        City.Facility b = w.city.nearestFacility(City.FACILITY_BASE, e.x, e.y);
+        return b == null ? "" : " base " + b.name + " at " + (int) b.x + "," + (int) b.y + " r " + (int) b.r + " d " + (int) Math.hypot(b.x - e.x, b.y - e.y);
     }
 
     static String routeTest(World w, Fleet.Vehicle v) {

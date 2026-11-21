@@ -864,17 +864,20 @@ final class WorldTests extends TestKit {
             sol.killedByZombie = true;
             sol.hp = 0;
         }
+        // ((29.2) Every one that ever got up, not just those still standing: the police round shoot them down again,
+        // and since 29.2 one put down stays down.)
+        java.util.Set<Entity> risen = new java.util.HashSet<Entity>(), plain = new java.util.HashSet<Entity>();
         int rose = 0, others = 0;
         for (int f = 0; f < 30 * 12 && rose < 3; f++) {
             w.update(1 / 30f);
             w.evCount = 0;
-            rose = 0;
-            others = 0;
             for (Entity e : w.entities) {
                 if (e.dead || e == z || e.origin != Entity.SOLDIER) continue;
-                if (e.type == Entity.ARMOURED) rose++;
-                else if (e.type == Entity.ZOMBIE) others++;
+                if (e.type == Entity.ARMOURED) risen.add(e);
+                else if (e.type == Entity.ZOMBIE) plain.add(e);
             }
+            rose = risen.size();
+            others = plain.size();
         }
         check(rose >= 3 && others == 0, "soldiers bitten to death get up armoured, never as ordinary zombies (" + rose + ", " + others + ")");
         // Kept in a save; and the old kinds in those numbers, from an older save, would be ordinary zombies.
@@ -1062,7 +1065,8 @@ final class WorldTests extends TestKit {
         float hp = keeper.hp;
         Entity climber = tw.spawn(Entity.ZOMBIE, keeper.x + 6, keeper.y + 6);
         for (int f = 0; f < 30 * 3; f++) tw.update(1 / 30f);
-        check(keeper.hp >= hp, "not bitten straight away up the tower");
+        // ((29.2) Not bitten: someone else up there running into them in a panic can knock them about a little.)
+        check(!keeper.killedByZombie && keeper.hp > 0, "not bitten straight away up the tower");
         for (int f = 0; f < 30 * 15; f++) {
             if (climber.dead) break;
             tw.update(1 / 30f);

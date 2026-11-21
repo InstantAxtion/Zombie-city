@@ -732,17 +732,31 @@ final class WorldRenderer {
         drawOverpasses(c, vx0, vx1, vy0, vy1);
         // ((28.5) Zoomed out, the police's cars and the army's vehicles carry the dot of their side too, the same as
         // the officers and soldiers on foot: they were specks, easy to lose, while everyone out of them was a dot.)
+        // ((29.2) Not a dot like the people on foot: a little car, pointing the way it's going, in its side's colour but
+        // darker, so a unit's vehicle and its people on foot are told apart at a glance.)
         if (!detailed) {
-            float r = Math.max(4 * 1.35f, 2.6f * gv.dp / gv.scale);
-            for (int pass = 0; pass < 2; pass++)
-                for (int i = 0, n = gv.world.fleet.vehicles.size(); i < n; i++) {
-                    Fleet.Vehicle v = gv.world.fleet.vehicles.get(i);
-                    if (v.broken || Fleet.airborne(v) || v.x < vx0 - 20 || v.x > vx1 + 20 || v.y < vy0 - 20 || v.y > vy1 + 20) continue;
-                    int side = unitSide(v);
-                    if (side < 0) continue;
-                    gv.fill.setColor(pass == 0 ? 0xD0101010 : ROW_COLORS[side]);
-                    c.drawCircle(v.x, v.y, pass == 0 ? r + 1.1f * gv.dp / gv.scale : r, gv.fill);
-                }
+            float r = Math.max(4 * 1.35f, 2.6f * gv.dp / gv.scale), edge = 1.1f * gv.dp / gv.scale;
+            float hl = r * 1.25f, hw = r * 0.75f;
+            for (int i = 0, n = gv.world.fleet.vehicles.size(); i < n; i++) {
+                Fleet.Vehicle v = gv.world.fleet.vehicles.get(i);
+                if (v.broken || Fleet.airborne(v) || v.x < vx0 - 20 || v.x > vx1 + 20 || v.y < vy0 - 20 || v.y > vy1 + 20) continue;
+                int side = unitSide(v);
+                if (side < 0) continue;
+                c.save();
+                c.translate(v.x, v.y);
+                c.rotate((float) Math.toDegrees(v.angle));
+                gv.fill.setColor(0xD0101010);
+                tmp.set(-hl - edge, -hw - edge, hl + edge, hw + edge);
+                c.drawRoundRect(tmp, hw * 0.6f, hw * 0.6f, gv.fill);
+                gv.fill.setColor(City.darken(ROW_COLORS[side], 0.62f));
+                tmp.set(-hl, -hw, hl, hw);
+                c.drawRoundRect(tmp, hw * 0.5f, hw * 0.5f, gv.fill);
+                // The windscreen, towards the front.
+                gv.fill.setColor(0xD0DCE6F0);
+                tmp.set(hl * 0.25f, -hw * 0.7f, hl * 0.62f, hw * 0.7f);
+                c.drawRect(tmp, gv.fill);
+                c.restore();
+            }
         }
 
         if (detailed) {
@@ -756,6 +770,8 @@ final class WorldRenderer {
     }
 
     /** ((28.5) Which side's dot a vehicle carries zoomed out: 1 the police's, 2 the army's, -1 none. */
+    private final android.graphics.RectF tmp = new android.graphics.RectF();
+
     static int unitSide(Fleet.Vehicle v) {
         if (v.type == Fleet.CRUISER || Fleet.policeTruck(v) || (v.type == Fleet.BOAT && v.kind == Fleet.K_POLICE_BOAT)) return 1;
         if (v.type == Fleet.TANK || (v.type == Fleet.AMBULANCE && v.kind == Fleet.K_ARMD_AMB)) return 2;

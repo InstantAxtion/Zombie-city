@@ -320,7 +320,8 @@ final class DrivingTests extends TestKit {
                 w.update(1 / 30f);
                 moved = Math.max(moved, (float) Math.hypot(car.x - x0, car.y - y0));
             }
-            check(car.player == null && car.state != Fleet.ABANDONED && moved > 60,
+            // ((29.2) Or on its way and stopped at the lights: that's driving on too.)
+            check(car.player == null && car.state != Fleet.ABANDONED && (moved > 60 || (moved > 30 && (car.held || car.queuedHeld))),
                     (kind == 0 ? "the patrol car" : "the car") + " drives on without the player (moved " + (int) moved + ", state " + car.state + ", model " + car.model + ", riders " + car.riders.size()
                             + ", through " + car.through + ", fleeing " + car.fleeing + ", field " + (car.field != null) + ", held " + car.held + ", speed " + (int) car.speed + ", tile " + w.city.tiles[w.city.tileIndex(car.x, car.y)] + ")");
             if (kind == 0) check(car.crew.contains(e) || !e.removed, "the officer who was driving is its crew now");

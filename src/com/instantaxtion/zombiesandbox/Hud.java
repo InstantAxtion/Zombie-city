@@ -1239,9 +1239,8 @@ final class Hud {
             gv.text.setTextSize(11.5f * gv.dp);
             // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
             float lineRoom = gv.statsRect.width() - 24 * gv.dp;
-            c.drawText(shrinkToFit("Turned " + gv.world.turned + "   Killed " + gv.world.zombiesKilled
-                    + (gv.world.recruits + gv.world.refused > 0 ? "   Recruits " + gv.world.recruits : "")
-                    + (gv.world.volunteersPolice + gv.world.volunteersArmy > 0 ? "   Volunteers " + (gv.world.volunteersPolice + gv.world.volunteersArmy) : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
+            // ((29.2) Recruits and volunteers moved down to the Time line, which has room: here they were cut off.)
+            c.drawText(shrinkToFit("Turned " + gv.world.turned + "   Killed " + gv.world.zombiesKilled, lineRoom), pad + 12 * gv.dp, y, gv.text);
             gv.text.setTextSize(11.5f * gv.dp);
             y += lh;
             // ((26.1) Only what's in use: no Hiding line (nobody hides out of sight any more), people aboard only when there are some.)
@@ -1257,7 +1256,11 @@ final class Hud {
             gv.text.setTextSize(11.5f * gv.dp);
             y += lh;
             int secs = (int) gv.world.time;
-            c.drawText("Time " + World.clock(secs), pad + 12 * gv.dp, y, gv.text);
+            c.drawText(shrinkToFit("Time " + World.clock(secs)
+                    + (gv.world.recruits + gv.world.refused > 0 ? "   Recruits " + gv.world.recruits : "")
+                    + (gv.world.volunteersPolice + gv.world.volunteersArmy > 0 ? "   Volunteers " + (gv.world.volunteersPolice + gv.world.volunteersArmy) : ""), lineRoom),
+                    pad + 12 * gv.dp, y, gv.text);
+            gv.text.setTextSize(11.5f * gv.dp);
             // ((10.59) The war so far: the living, the dead and those with guns, over the whole game.)
             float gBottom = gv.statsRect.bottom - 8 * gv.dp - lh * 5;
             drawLiveGraph(c, gv.statsRect.left + 12 * gv.dp, y + 8 * gv.dp, gv.statsRect.right - 12 * gv.dp, gBottom);

@@ -524,6 +524,8 @@ final class Entity {
     float stamina = 1;
     /** ((28.9) Run out of breath: jogging, not sprinting, till they've half of it back. */
     boolean winded;
+    /** ((29.2) How long they've been held up by others a few yards short of the spot they're making for (Holdouts.standAt). */
+    float crowdT;
     /** Police and soldiers: when they last radioed a sighting to the others, and a retreat already called. */
     float shareCd;
     /** (10.50) Until a civilian running from the dead next shouts a warning to those about. */
