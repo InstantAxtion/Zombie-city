@@ -1139,6 +1139,8 @@ final class WorldTests extends TestKit {
             w.spawn(Entity.ZOMBIE, p[0], p[1]);
         }
         w.recount();
+        // ((29.7) Into the grid the strike counts them from: on the smaller map the first pack was gone, and these weren't in it.)
+        w.spatial.buildHash();
         check((Boolean) as.invoke(w, 8, true) && w.firebombTime > 0, "an air strike called on the pack");
         w.firebombTime = 0;
         check((Boolean) as.invoke(w, 8, false) && w.firebombTime > 0, "and another");

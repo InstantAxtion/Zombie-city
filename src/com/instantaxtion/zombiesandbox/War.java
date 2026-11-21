@@ -531,9 +531,12 @@ final class War {
     boolean callAirStrike(int min, boolean first) {
         float bx = 0, by = 0;
         int best = 0;
-        for (int i = 0, n = w.entities.size(); i < n; i += Math.max(1, n / 300)) {
+        // ((29.7) Every so many of the dead, not every so many of everyone: a pack of a dozen in a city of thirty thousand
+        // fell between the ones looked at, and no strike was called on it.)
+        int every = Math.max(1, w.zombies / 300), seen = 0;
+        for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity z = w.entities.get(i);
-            if (z.dead || !z.isZombie()) continue;
+            if (z.dead || !z.isZombie() || seen++ % every != 0) continue;
             int c = w.spatial.countZombiesNear(z.x, z.y, 120);
             if (c > best) {
                 best = c;

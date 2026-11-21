@@ -276,9 +276,9 @@ final class CityConfig implements OptionSet {
      * 2 and the National Guard armory (10.5), 3 the bigger maps of 10.10 with hills, mountains, lakes, streams
      * and nature parks out in the country, 4 the wilds of 10.14 (streams you can wade, trails that cross the
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
-     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0). Saved games rebuild with what they had.
+     * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0), 44 every map but the island ones a fifth smaller across (29.7). Saved games rebuild with what they had.
      */
-    int civic = 43;
+    int civic = 44;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -590,7 +590,26 @@ final class CityConfig implements OptionSet {
         if (v[OPT_PRESET] == ARCHIPELAGO) return small ? 1040 : ARCHIPELAGO_TILES;
         // ((28.0) The water maps are never smaller than the Small size: their towns, islands and bridges need the room.)
         if ((bridgeCity() || swamp() || lighthouse()) && v[OPT_SIZE] < SMALL) return SIZES_V34[SMALL];
-        return (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
+        int t = (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
+        // ((29.7) Map version 44: a fifth smaller across again (in multiples of eight tiles), the island maps as they were.)
+        return shrunk() ? Math.max(64, Math.round(t * SHRINK / 8f) * 8) : t;
+    }
+
+    /** ((29.7) How much smaller across the maps are from map version 44. */
+    static final float SHRINK = 0.8f;
+
+    /** ((29.7) Map version 44, and not one of the island maps (Islands, Archipelago, Prison Island, Theme Park Island). */
+    boolean shrunk() {
+        int p = v[OPT_PRESET];
+        return civic >= 44 && p != ISLANDS && p != ARCHIPELAGO && p != PRISON_ISLAND && p != THEME_PARK;
+    }
+
+    /**
+     * ((29.7) Residents counted as if the city were its size before 44 (its homes cover less ground now): the same number
+     * of people, police, soldiers and medics in a smaller city.
+     */
+    int fullResidents(int residents) {
+        return shrunk() ? Math.round(residents / (SHRINK * SHRINK)) : residents;
     }
 
     /** ((22.3) The sizes from map version 34: 81% across of those before (in multiples of eight tiles). */
@@ -676,6 +695,8 @@ final class CityConfig implements OptionSet {
      */
     int civilians(int residents, int tiles) {
         if (!popLadder()) return civilians(residents);
+        // ((29.7) As many as the size had before it shrank.)
+        if (shrunk()) tiles = Math.round(tiles / SHRINK);
         int target = POP_TARGET[POP_TARGET.length - 1];
         if (tiles <= POP_TILES[0]) target = POP_TARGET[0];
         else
@@ -693,6 +714,7 @@ final class CityConfig implements OptionSet {
      * has on shift), eight more per station, at least twelve.
      */
     int cops(int residents) {
+        residents = fullResidents(residents);
         // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
         // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
         // ((13.0) Up to 800 now, for the bigger cities: 480 before.)
@@ -709,6 +731,7 @@ final class CityConfig implements OptionSet {
 
     /** Soldiers at the base (if the map has one): a garrison that grows with the city. */
     int soldiers(int residents) {
+        residents = fullResidents(residents);
         if (!militaryBase() && !outskirtsBase()) return 0;
         // (10.33: bigger garrisons.)
         // ((12.2) Bigger again: one in 40 and twelve more, up to 160 (one in 50 up to 120 to 12.0, one in 70 in 12.1).)
@@ -769,6 +792,7 @@ final class CityConfig implements OptionSet {
 
     /** Medics: the hospital's, and the paramedics at the fire stations, growing with the city. */
     int medics(int residents) {
+        residents = fullResidents(residents);
         return Math.max(4, Math.min(36, Math.round(residents / 110f)));
     }
     /** ((26.1) Every map has an army base since map version 39.) */
