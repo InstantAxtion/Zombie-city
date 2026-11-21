@@ -195,8 +195,11 @@ final class Holdouts {
         // ((29.2) Within a few yards of it and held up there by the others round them for a couple of seconds: there
         // already. Ranks on a little base's parade ground came out on top of each other, and the soldiers shoved at
         // each other for their places for the rest of the game.)
-        if (d < 30 && e.vx * e.vx + e.vy * e.vy < 9) e.crowdT += 1 / 30f;
-        else if (d >= 30) e.crowdT = 0;
+        // (Only for someone with nothing to do - a soldier falling in on base - never one making for an ammo truck, a bed
+        // in the field hospital or a place in a queue, who has to get there.)
+        boolean idle = e.task == Dispatch.T_NONE && e.type == Entity.SOLDIER;
+        if (idle && d < 30 && e.vx * e.vx + e.vy * e.vy < 9) e.crowdT += 1 / 30f;
+        else if (!idle || d >= 30) e.crowdT = 0;
         // ((12.0) Eased in, and up against something within a few steps of it counts as there: no shuffling to and
         // fro round a spot they can't quite reach.)
         if (d > 5 && !(e.blocked && d < 16) && e.crowdT < 2) w.movement.steer(e, ddx / d, ddy / d, Math.min((d > 30 ? e.runSpeed : e.speed) * speedFactor, d * 2.5f + 4));

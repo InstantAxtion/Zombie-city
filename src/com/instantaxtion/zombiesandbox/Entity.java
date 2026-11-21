@@ -526,6 +526,11 @@ final class Entity {
     boolean winded;
     /** ((29.2) How long they've been held up by others a few yards short of the spot they're making for (Holdouts.standAt). */
     float crowdT;
+    /** ((29.4) Where a calm civilian was when they last got anywhere, and for how long they've got nowhere since. */
+    float stallX, stallY, stallT;
+    /** ((29.4) Their place on a base's parade ground (an index into its parade), and which base; -1 for none yet. */
+    transient int paradeIdx = -1;
+    transient City.Facility paradeAt;
     /** Police and soldiers: when they last radioed a sighting to the others, and a retreat already called. */
     float shareCd;
     /** (10.50) Until a civilian running from the dead next shouts a warning to those about. */

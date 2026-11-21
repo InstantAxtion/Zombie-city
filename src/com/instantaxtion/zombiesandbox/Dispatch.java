@@ -2739,7 +2739,8 @@ final class Dispatch {
                     else policeZoneCd = 45;
                     continue;
                 }
-                z.built += step * Math.min(8, z.onSite) * 26f / Math.max(40, z.wall.length) / (z.military ? 26f : 30f) * (1 + 0.2f * Math.min(4, z.engineers));
+                // ((29.4) Three fifths quicker: the walls went up about as the fighting died down.)
+                z.built += step * Math.min(8, z.onSite) * 26f / Math.max(40, z.wall.length) / (z.military ? 26f : 30f) * (1 + 0.2f * Math.min(4, z.engineers)) * 1.6f;
                 raiseWall(z);
                 if (z.built >= 1) {
                     z.built = 1;
@@ -3579,7 +3580,9 @@ final class Dispatch {
         long sig = 17;
         for (int i = 0; i < zones.size(); i++) {
             SafeZone z = zones.get(i);
-            if (z.full || !z.open) continue;
+            // ((29.4) The ones going up count too: they have their own field now.)
+            if (z.full || z.removed) continue;
+            sig = sig * 3 + (z.open ? 1 : 2);
             for (int g = 0; g < z.gateOut.length; g++)
                 sig = sig * 31 + Float.floatToIntBits(z.gateOut[g][0]) * 7L + Float.floatToIntBits(z.gateOut[g][1]);
         }
@@ -3601,5 +3604,21 @@ final class Dispatch {
             }
         }
         zoneField = city.walkFieldFrom(xs, ys, n);
+        // ((29.4) And one to the gates of those going up, for those who set off for one early: each planned their own
+        // way there, and on the Big map that was a tenth of each step.)
+        n = 0;
+        for (int i = 0; i < zones.size(); i++) {
+            SafeZone z = zones.get(i);
+            if (z.full || z.open || z.removed) continue;
+            for (int g = 0; g < z.gateOut.length; g++) {
+                xs[n] = z.gateOut[g][0];
+                ys[n] = z.gateOut[g][1];
+                n++;
+            }
+        }
+        zoneUpField = n > 0 ? city.walkFieldFrom(xs, ys, n) : null;
     }
+
+    /** ((29.4) The way to the gates of the zones still going up (null with none). */
+    City.WalkField zoneUpField;
 }

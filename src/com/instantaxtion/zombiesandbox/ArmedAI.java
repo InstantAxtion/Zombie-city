@@ -1597,6 +1597,36 @@ final class ArmedAI {
         return false;
     }
 
+    /**
+     * ((29.4) A base's parade ground: places in ranks eight wide (9 apart, 15 between ranks) out from its middle, on open
+     * ground inside four fifths of its radius, nearest the middle first.
+     */
+    float[] parade(City.Facility base) {
+        if (base.parade != null) return base.parade;
+        java.util.ArrayList<float[]> spots = new java.util.ArrayList<float[]>();
+        float lim = base.r * 0.8f;
+        for (int rank = -12; rank <= 12; rank++)
+            for (int file = -12; file <= 12; file++) {
+                float px = base.x + file * 9, py = base.y + rank * 15;
+                if (World.hypot(px - base.x, py - base.y) > lim) continue;
+                if (w.city.solidAt(px, py) || w.city.insideOf(px, py) != null) continue;
+                spots.add(new float[]{px, py, (float) World.hypot(px - base.x, py - base.y)});
+            }
+        java.util.Collections.sort(spots, new java.util.Comparator<float[]>() {
+            @Override
+            public int compare(float[] a, float[] b) {
+                return Float.compare(a[2], b[2]);
+            }
+        });
+        float[] out = new float[spots.size() * 2];
+        for (int k = 0; k < spots.size(); k++) {
+            out[k * 2] = spots.get(k)[0];
+            out[k * 2 + 1] = spots.get(k)[1];
+        }
+        base.parade = out;
+        return out;
+    }
+
     /** With nothing to fight, soldiers drift back to base and fall in. True when that was their step. */
     private boolean backToBase(final Entity e, final boolean soldier, final float dt) {
         if (soldier) {
@@ -1613,24 +1643,18 @@ final class ArmedAI {
                     return true;
                 }
                 // ((11.1) And once there, fall in: squads in ranks on the parade ground, ready to go.)
+                // ((29.4) Each on a place of their own: the base lays its parade ground out in ranks of free places in its
+                // own yard, and hands each soldier who falls in there the next one. Worked out from squad numbers, the places
+                // came out on top of each other, outside the fence and on the buildings, and a little base's garrison
+                // shoved at each other for them all game.)
                 if (w.alert >= 1 && bx * bx + by * by < base.r * base.r * 2.2f) {
-                    int rank = e.squad % 4, file = e.member % 8, blk = (e.squad / 4) % 3;
-                    // ((12.0) And every fourth squad in a block of its own beside the others, not on their places.)
-                    // ((29.2) And every twelve squads their own ranks again, in front of the others and then behind: the
-                    // thirteenth squad on had the same places as the first, and two or three soldiers shoved at each place
-                    // for the rest of the game - a big base's whole garrison jostling on the parade ground.)
-                    int layer = e.squad / 12, shift = layer == 0 ? 0 : (layer % 2 == 1 ? 1 : -1) * ((layer + 1) / 2);
-                    float px = base.x + (file - 3.5f) * 9 + (blk == 0 ? 0 : blk == 1 ? -78 : 78), py = base.y + (rank - 1.5f) * 16 + shift * 72;
-                    // ((12.0) Their place on a building: the same ranks a little further down or up the base, rather
-                    // than wandering about it.)
-                    for (int k = 1; k <= 4 && w.city.solidAt(px, py); k++) py += (k % 2 == 1 ? 1 : -1) * k * 48;
-                    // ((29.2) More squads than a little base's parade ground holds: those whose place falls outside the yard
-                    // (behind its fence, on its buildings) stand at ease where they are, instead of pushing at the fence for it.)
-                    if (World.hypot(px - base.x, py - base.y) > base.r * 0.85f) {
-                        w.movement.steer(e, 0, 0, 0);
-                        return true;
-                    }
-                    if (!w.city.solidAt(px, py)) {
+                    float[] slots = parade(base);
+                    if (slots.length > 0) {
+                        if (e.paradeAt != base || e.paradeIdx < 0) {
+                            e.paradeAt = base;
+                            e.paradeIdx = (base.paradeNext++) % (slots.length / 2);
+                        }
+                        float px = slots[e.paradeIdx * 2], py = slots[e.paradeIdx * 2 + 1];
                         w.holdoutLife.standAt(e, px, py, 0.6f);
                         if (e.want < 1) e.angle = World.turn(e.angle, (float) (Math.PI / 2), dt * 3);
                         return true;

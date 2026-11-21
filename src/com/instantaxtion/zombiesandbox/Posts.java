@@ -245,6 +245,18 @@ final class Posts {
      */
     void holdPost(Entity e, float x, float y, float face, float dt) {
         float dx = x - e.x, dy = y - e.y, d2 = dx * dx + dy * dy;
+        // ((29.4) Within a few yards and held up there by the others for a couple of seconds: there. Places worked out
+        // from squad numbers (the motor pool's lines, the drill ranks) can fall on top of each other on a little base,
+        // and the soldiers shoved at each other for them all game.)
+        boolean idle = e.task == Dispatch.T_NONE;
+        if (idle && d2 < 30 * 30 && e.vx * e.vx + e.vy * e.vy < 9) e.crowdT += 1 / 30f;
+        else if (!idle || d2 >= 30 * 30) e.crowdT = 0;
+        if (e.crowdT >= 2 && d2 < 30 * 30) {
+            e.dutyFor = 0;
+            w.movement.steer(e, 0, 0, 0);
+            e.angle = World.turn(e.angle, face, dt * 2);
+            return;
+        }
         if (d2 > 9 * 9 || (e.dutyFor > 0 && d2 > 3 * 3)) {
             e.dutyFor = 1;
             if (d2 > 30 * 30) w.wilds.walkToSpot(e, x, y, e.speed * 0.8f);

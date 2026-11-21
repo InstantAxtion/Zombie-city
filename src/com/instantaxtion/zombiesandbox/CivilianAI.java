@@ -341,7 +341,10 @@ final class CivilianAI {
         if (e.task == Dispatch.T_SHELTER && e.zone != null) w.goalScore[World.G_SHELTER] = threat != null && threatDist < 28 ? 0.2f : 0.95f;
         // ((12.0) Including one still going up, for those already on their way: they queue at its gate (see
         // seekZoneStep). They used to keep the plan but stand about where they were until it opened.)
-        if ((room || (e.task == Dispatch.T_SEEK && zoneGoingUp())) && !e.refused && e.refusedUntil <= w.time) {
+        // ((29.4) And one still going up close by, for someone running from the dead - not only those already on their way:
+        // zones opened about as the fight ended, and nobody set off for one while it mattered. They queue at its gate.
+        // (Not everyone in town for any zone anywhere: whole neighbourhoods set off across the fighting for one.)
+        if ((room || (e.task == Dispatch.T_SEEK && zoneGoingUp()) || (e.fleeTimer > 0 && zoneGoingUpNear(e, 900))) && !e.refused && e.refusedUntil <= w.time) {
             // (Once on the way, the way to the zone is the way out: kept to unless the dead are right there.)
             if (e.task == Dispatch.T_SEEK) w.goalScore[World.G_ZONE] = 0.8f;
             else if (idle && (e.fleeTimer > 0 || (w.war.broadcasting() && w.readiness != 2 && e.heardZone))) w.goalScore[World.G_ZONE] = 0.42f + 0.2f * careful;
@@ -436,6 +439,15 @@ final class CivilianAI {
     }
 
     /** A safe zone being built that will take people when it opens. */
+    /** ((29.4) A zone going up within r of e. */
+    boolean zoneGoingUpNear(Entity e, float r) {
+        for (int i = 0; i < w.dispatch.zones.size(); i++) {
+            Dispatch.SafeZone z = w.dispatch.zones.get(i);
+            if (!z.open && !z.removed && !z.full && Math.abs(z.x - e.x) < r && Math.abs(z.y - e.y) < r && World.hypot(z.x - e.x, z.y - e.y) < r) return true;
+        }
+        return false;
+    }
+
     boolean zoneGoingUp() {
         for (int i = 0; i < w.dispatch.zones.size(); i++) {
             Dispatch.SafeZone z = w.dispatch.zones.get(i);
@@ -459,8 +471,21 @@ final class CivilianAI {
         City.Building home = w.dailyLife.homeOf(e);
         if (home != null && home.inside < World.room(home) * 3 / 2 && home.barricade >= 40 && !home.collapsed && (!World.WALK_IN || w.city.enterable(home))
                 && (home.doorX - e.x) * (home.doorX - e.x) + (home.doorY - e.y) * (home.doorY - e.y) < 220 * 220
-                && w.spatial.countZombiesNear(home.doorX, home.doorY, 35) == 0) return home;
+                && w.spatial.countZombiesNear(home.doorX, home.doorY, 35) == 0 && !doorCrush(home)) return home;
         return w.indoors.shelterNear(e);
+    }
+
+    /**
+     * ((29.4) Ten or more already packed at its door: somewhere else instead. A whole apartment block running home at
+     * once jammed its one entrance, two dozen in a knot outside it with the dead coming.
+     */
+    boolean doorCrush(City.Building b) {
+        int n = 0;
+        for (int i = 0, m = w.spatial.gatherLiving(b.doorX, b.doorY, 15); i < m; i++) {
+            Entity o = w.gathered[i];
+            if ((o.x - b.doorX) * (o.x - b.doorX) + (o.y - b.doorY) * (o.y - b.doorY) < 15 * 15 && ++n >= 10) return true;
+        }
+        return false;
     }
 
     /**
@@ -741,7 +766,8 @@ final class CivilianAI {
         // building in the way, for good.)
         boolean atGate = od < 34 || (z.gateOpen[g] && od < 70 && World.hypot(in[0] - e.x, in[1] - e.y) < od);
         if (!atGate) {
-            if (!z.open || ownWay || !w.movement.followField(e, w.dispatch.zoneField, speed)) w.wilds.walkToSpot(e, out[0], out[1], speed);
+            City.WalkField f = z.open ? w.dispatch.zoneField : w.dispatch.zoneUpField;
+            if (ownWay || f == null || !w.movement.followField(e, f, speed)) w.wilds.walkToSpot(e, out[0], out[1], speed);
             return true;
         }
         if (!z.open) {

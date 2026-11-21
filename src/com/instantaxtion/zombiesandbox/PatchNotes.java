@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.3";
-    static final int VERSION_CODE = 293;
+    static final String VERSION = "29.4";
+    static final int VERSION_CODE = 294;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.4  -  Safe zones in time, calmer crowds",
+                    "Safe zones go up three fifths quicker, and people running from the dead with one going up nearby make for it and queue at its gate, instead of waiting till it opens - which used to be about when the fighting was over. Twice as many were sheltered at the peak in a test.",
+                    "Soldiers at a small base each get a place of their own on its parade ground, and stand easy once they're as near as the others let them: they shoved at each other for places all game.",
+                    "People going about their day no longer walk into the same wall for ever: held up for a few seconds, they find something else to do. Two meeting in a narrow alley squeeze past each other.",
+                    "Nobody runs home into a crush of ten or more at the door: they find somewhere else.",
+                    "A little quicker on the bigger maps.",
+            },
             {
                     "29.3  -  Bigger hordes, faster spread",
                     "Hordes are much bigger: 90 to 130 in a Horde event (25 to 40 before), 400 to 550 in a mega horde, 35 in the Squads horde.",

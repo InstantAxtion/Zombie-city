@@ -505,6 +505,13 @@ final class Movement {
         return c.solidTile(x, y) && (x < 0 || y < 0 || x >= c.w || y >= c.h || c.tiles[y * c.w + x] != City.TREE);
     }
 
+    /** ((29.4) A walkway one tile wide here: solid on both sides, across one way or the other. */
+    boolean narrowAt(float x, float y) {
+        int tx = (int) (x / City.T), ty = (int) (y / City.T);
+        City c = w.city;
+        return (c.solidTile(tx - 1, ty) && c.solidTile(tx + 1, ty)) || (c.solidTile(tx, ty - 1) && c.solidTile(tx, ty + 1));
+    }
+
     void flee(Entity e, float ax, float ay, float speed) {
         int w = this.w.city.w;
         int tx = (int) (e.x / City.T), ty = (int) (e.y / City.T);
@@ -622,6 +629,23 @@ final class Movement {
                     e.mx = nx / nl;
                     e.my = ny / nl;
                 }
+            }
+        }
+        // ((29.4) A calm civilian trying to get somewhere and getting nowhere - pressing at a wall indoors on the way to a
+        // spot in the next room, nose to nose with someone in an alley - gives the errand up after four seconds and finds
+        // something else to do, instead of walking into the same wall all day.)
+        if (e.type == Entity.CIVILIAN && e.fleeTimer <= 0 && e.task == Dispatch.T_NONE && e != w.controlled) {
+            if (e.want <= 2 || Math.abs(e.x - e.stallX) > 6 || Math.abs(e.y - e.stallY) > 6) {
+                e.stallX = e.x;
+                e.stallY = e.y;
+                e.stallT = 0;
+            } else if ((e.stallT += dt) > 4) {
+                e.stallT = 0;
+                e.errand = null;
+                e.path = null;
+                e.pathDest = null;
+                e.taskTimer = 0;
+                e.goalCd = 0;
             }
         }
         if (e.want > 1 && (e.mx != 0 || e.my != 0)) lookAhead(e);
@@ -862,6 +886,12 @@ final class Movement {
                         // ((17.1) Indoors, in the doorways and between the desks, people squeeze past each other rather
                         // than jam solid (not past the dead).)
                         if (w.time - e.inT < 1 && w.time - o.inT < 1 && e.isZombie() == o.isZombie()) min *= 0.35f;
+                        // ((29.4) And outdoors in a passage one tile wide, two calm people meeting squeeze past each other:
+                        // walking opposite ways down an alley between two rows of buildings they met head on and pushed
+                        // at each other for good.)
+                        // (Only for one already held up there for half a second: looking at the tiles round every pair of
+                        // people who touch was a twentieth of a step on the Big map.)
+                        else if (e.stallT > 0.5f && e.type == Entity.CIVILIAN && o.type == Entity.CIVILIAN && e.fleeTimer <= 0 && o.fleeTimer <= 0 && narrowAt(e.x, e.y)) min *= 0.35f;
                         // ((26.0) The dead pushing at a wall crush up together into a heap against it.)
                         else if (e.climbPress > 0 && o.climbPress > 0) min *= 0.6f;
                         float d2 = ddx * ddx + ddy * ddy;
