@@ -93,6 +93,11 @@ final class Health {
                         if (q != null && Math.hypot(q[0] - cx, q[1] - cy) < (pack == 0 ? 300 : w.city.worldW() / 4f)) p = q;
                     }
                     if (p == null) p = w.city.randomWalkableInTown(r);
+                    // ((29.2) Or the Horde event, as a player would (health.horde): the hordes walk in from a few streets off.)
+                    if (Boolean.getBoolean("health.horde")) {
+                        w.hordeEvent(p[0], p[1]);
+                        continue;
+                    }
                     for (int k = 0; k < PACK; k++) {
                         float[] q = w.city.findWalkable(p[0] + (k % 5) * 8, p[1] + (k / 5) * 8);
                         if (q != null) w.spawn(Entity.ZOMBIE, q[0], q[1]);

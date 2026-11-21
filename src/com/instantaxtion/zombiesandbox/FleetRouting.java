@@ -221,6 +221,9 @@ final class FleetRouting {
         Route was = v.field;
         float wtx = v.tx, wty = v.ty, wDist = v.lastDist;
         boolean ok = pickDestination(v);
+        // ((29.2) Counted, so only a patrol whose ordinary search has already come up empty searches regardless: every patrol
+        // arriving at its spot searching the whole map was a seventh of each step on the Big map.)
+        v.pickFails = ok ? 0 : v.pickFails + 1;
         if (!ok) {
             v.destCd = 2 + w.rnd.nextFloat() * 2;
             if (v.field != was) {
@@ -297,7 +300,7 @@ final class FleetRouting {
             if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < (tries < 6 ? 400 : 160)) continue;
             // ((10.34) On the biggest maps everyday trips stay local: a drive right across one is a long search.)
             // ((16.2) Closer again on the Default and bigger maps: each of those searches was a stutter of 20 to 40 ms.)
-            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > (city.w >= 900 ? 1800 : 2400)) continue;
+            if ((v.type == CAR || v.patrol) && city.w >= 600 && tries < 10 && World.hypot(d[0] - v.x, d[1] - v.y) > reach) continue;
             // Somewhere on ahead, as a rule: a car doesn't spin round in the road for its next trip.
             float hx = (float) Math.cos(v.angle), hy = (float) Math.sin(v.angle);
             if (!offRoad && tries < 8 && (d[0] - v.x) * hx + (d[1] - v.y) * hy < 0) continue;

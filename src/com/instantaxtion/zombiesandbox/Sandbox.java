@@ -156,11 +156,15 @@ final class Sandbox {
     /** ((20.0) A horde of n (25 to 40 if n is negative) in from the nearest edge, heading for (x, y); said on the radio or not. */
     ArrayList<Entity> hordeFrom(float x, float y, int count, boolean announce) {
         ArrayList<Entity> out = new ArrayList<Entity>();
-        float[] edge = w.city.edgeSpawn(x, y);
+        // ((29.2) From somewhere out of sight a few streets off, not the edge of the map: walking in from the edge, a horde
+        // met the patrols on the beltway and the highway and was shot down there, three in four of it, before it ever got
+        // into town.)
+        float[] edge = approach(x, y);
+        if (edge == null) edge = w.city.edgeSpawn(x, y);
         if (edge == null) return out;
         Entity lead = null;
-        // ((29.2) Bigger: 45 to 70 (25 to 40 before).)
-        int n = count < 0 ? 45 + w.rnd.nextInt(26) : count;
+        // ((29.2) Bigger: 90 to 130 (25 to 40 before), to stand a chance against a city's police and army at full strength.)
+        int n = count < 0 ? 90 + w.rnd.nextInt(41) : count;
         // ((22.0) Spread out to fit: a big horde in one small blob was hundreds standing on each other.)
         float spread = 50 * (float) Math.max(1, Math.sqrt(n / 35.0));
         for (int i = 0; i < n; i++) {
@@ -189,6 +193,19 @@ final class Sandbox {
             w.dispatch.say(Dispatch.WHO_INFO, null, (out.size() >= 25 ? "A huge horde of " : "A horde of ") + out.size() + " is coming into town from "
                     + w.city.placeName(edge[0], edge[1]) + "!", edge[0], edge[1]);
         return out;
+    }
+
+    /** ((29.2) Where a horde for (x, y) turns up: 450 to 750 off, on open ground, out of sight, no guns within 200. */
+    float[] approach(float x, float y) {
+        for (int k = 0; k < 40; k++) {
+            double a = w.rnd.nextFloat() * Math.PI * 2;
+            float r = 450 + w.rnd.nextFloat() * 300;
+            float[] p = w.city.findWalkable(x + (float) Math.cos(a) * r, y + (float) Math.sin(a) * r);
+            if (p == null || w.city.insideOf(p[0], p[1]) != null || w.fleet.routing.inView(p[0], p[1]) || w.armedNear(p[0], p[1], 200) > 0) continue;
+            if (p[0] < 60 || p[1] < 60 || p[0] > w.city.worldW() - 60 || p[1] > w.city.worldH() - 60) continue;
+            return p;
+        }
+        return null;
     }
 
     /** Panic: everyone near a point screams and runs. */

@@ -113,6 +113,8 @@ final class Fleet {
          * once it's away, so a car that inches forward in a knot of them doesn't start again from nothing each time.
          */
         float knotT;
+        /** ((29.2) Times in a row newDestination has found nowhere (FleetRouting.urgent). */
+        int pickFails;
         /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
         transient float backT;
         /** ((27.5) Backing straight off a length to undo a knot it's part of, giving the other the room (seconds left). */

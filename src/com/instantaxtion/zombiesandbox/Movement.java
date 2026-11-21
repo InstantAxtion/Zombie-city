@@ -605,6 +605,25 @@ final class Movement {
             int t = w.city.tileIndex(e.x, e.y);
             if (t >= 0 && (w.city.tiles[t] == City.GRASS || w.city.tiles[t] == City.TRAIL || w.city.tiles[t] == City.DIRT)) e.want *= 1.15f;
         }
+        // ((29.2) Running from the dead, never at them: a fleeing civilian whose way on (home, after their family, to the
+        // station) leads straight at one of the dead close by veers off round it instead. In a measured outbreak one in
+        // fourteen of the seconds civilians spent near the dead they spent running at them, knowing where they were.)
+        // (Not one who's standing to fight it.)
+        if (e.type == Entity.CIVILIAN && e.fleeTimer > 0 && e.goal != World.G_FIGHT && e.want > 1 && (e.mx != 0 || e.my != 0) && e != w.controlled) {
+            Entity z = w.spatial.nearestZombie(e.x, e.y, 35);
+            if (z != null) {
+                float zx = z.x - e.x, zy = z.y - e.y, zd = (float) Math.sqrt(zx * zx + zy * zy) + 0.001f;
+                float ml = (float) Math.sqrt(e.mx * e.mx + e.my * e.my) + 0.001f, mx = e.mx / ml, my = e.my / ml;
+                if ((zx * mx + zy * my) / zd > 0.5f) {
+                    // Off to the side it was already leaning, and away.
+                    float side = zx * my - zy * mx >= 0 ? 1 : -1;
+                    float nx = -zx / zd * 0.6f + (-zy / zd) * side * 0.8f, ny = -zy / zd * 0.6f + (zx / zd) * side * 0.8f;
+                    float nl = (float) Math.sqrt(nx * nx + ny * ny) + 0.001f;
+                    e.mx = nx / nl;
+                    e.my = ny / nl;
+                }
+            }
+        }
         if (e.want > 1 && (e.mx != 0 || e.my != 0)) lookAhead(e);
         // ((11.6) A long step - the phone catching up after a slow frame, or the faster speeds - is walked as several
         // ordinary ones for anyone being worked out every frame (everyone on screen): in one long step the easing

@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.2";
-    static final int VERSION_CODE = 292;
+    static final String VERSION = "29.3";
+    static final int VERSION_CODE = 293;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.3  -  Bigger hordes, faster spread",
+                    "Hordes are much bigger: 90 to 130 in a Horde event (25 to 40 before), 400 to 550 in a mega horde, 35 in the Squads horde.",
+                    "A horde turns up a few streets from where you send it, out of sight, instead of walking in from the edge of the map - where the patrols on the beltway shot three in four of it down before it ever reached town.",
+                    "The bitten turn sooner: in a little over half the time.",
+                    "In a test, three hordes on Metropolis turned 219 people and fought on for two minutes (17 before, put down in under one).",
+                    "Fleeing civilians veer off round one of the dead in their way instead of running straight at it, on their way home or after their family.",
+            },
             {
                     "29.2  -  Smoother traffic, cars on the map",
                     "Police cars no longer drive round in circles at the edge of town: on the highway interchanges' slip roads a patrol car that had reached its spot couldn't find its next one, and went round and round the loop. Vehicles stuck in a two-minute test: 13 to 1 on Metropolis.",
