@@ -737,6 +737,39 @@ final class CityPainter extends CityPart {
      * ((27.3) A step of render.) The buildings: their shadows, every roof (drawBuilding), and the light and shade on
      * the roofs' edges.
      */
+    /**
+     * ((29.1) A round building's shadow: the circle of its foot, the circle its top throws (sx, sy) off, and the band
+     * between them - the shadow of a cylinder, not of a box.)
+     */
+    /** ((29.1) A building lot that stands up round: a silo, or a landmark's part drawn as a round tower. */
+    static boolean roundLot(int[] l) {
+        if (l[6] == SILO) return true;
+        if (l.length > 11 && l[10] >= 0) {
+            Landmarks.Def d = Landmarks.get(l[10]);
+            return d != null && l[11] >= 0 && l[11] < 31 && (d.roundParts & (1 << l[11])) != 0;
+        }
+        return false;
+    }
+
+    static void roundShadow(Canvas c, Paint p, Path path, float x, float y, float r, float sx, float sy) {
+        // (One outline, so where they overlap isn't darker: the back half of the foot's circle, then the far half of the
+        // thrown one.)
+        double a = Math.atan2(sy, sx);
+        path.reset();
+        for (int k = 0; k <= 16; k++) {
+            double t = a + Math.PI / 2 + Math.PI * k / 16;
+            float px = x + (float) Math.cos(t) * r, py = y + (float) Math.sin(t) * r;
+            if (k == 0) path.moveTo(px, py);
+            else path.lineTo(px, py);
+        }
+        for (int k = 0; k <= 16; k++) {
+            double t = a - Math.PI / 2 + Math.PI * k / 16;
+            path.lineTo(x + sx + (float) Math.cos(t) * r, y + sy + (float) Math.sin(t) * r);
+        }
+        path.close();
+        c.drawPath(path, p);
+    }
+
     private void paintBuildings(Canvas c, Paint p, int X0, int Y0, int X1, int Y1) {
         // Building shadows (longer for taller buildings), then roofs. The roof art is drawn at the
         // footprint and GameView lifts it to the building's height.
@@ -745,6 +778,15 @@ final class CityPainter extends CityPart {
             // Soft light: ambient darkening hugging each building, and a pale penumbra past the shadow's edge.
             for (Building b : city.buildings) {
                 if (city.offRegion(b.x0, b.y0, b.x1, b.y1)) continue;
+                if (b.round) {
+                    // ((29.1) A round building (a silo, a lighthouse...): its soft shade and its shadow are round too.)
+                    float r = Math.min(b.x1 - b.x0, b.y1 - b.y0) / 2, scx = (b.x0 + b.x1) / 2, scy = (b.y0 + b.y1) / 2;
+                    p.setColor(0x16000000);
+                    for (int k = 3; k >= 1; k--) c.drawCircle(scx, scy, r + k * 1.6f, p);
+                    p.setColor(0x22000000);
+                    roundShadow(c, p, shadow, scx, scy, r + 1, b.height * 0.28f * 1.12f + 2, b.height * 0.38f * 1.12f + 2);
+                    continue;
+                }
                 for (int k = 3; k >= 1; k--) {
                     p.setColor(0x16000000);
                     c.drawRect(b.x0 - k * 1.6f, b.y0 - k * 1.6f, b.x1 + k * 1.6f, b.y1 + k * 1.6f, p);
@@ -766,6 +808,10 @@ final class CityPainter extends CityPart {
         for (Building b : city.buildings) {
             if (city.offRegion(b.x0, b.y0, b.x1, b.y1)) continue;
             float sx = b.height * 0.28f, sy = b.height * 0.38f;
+            if (b.round) {
+                roundShadow(c, p, shadow, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, Math.min(b.x1 - b.x0, b.y1 - b.y0) / 2, sx, sy);
+                continue;
+            }
             shadow.reset();
             shadow.moveTo(b.x0, b.y0);
             shadow.lineTo(b.x1, b.y0);
@@ -784,7 +830,7 @@ final class CityPainter extends CityPart {
         p.setStyle(Paint.Style.STROKE);
         for (int[] b : city.buildingLots) {
             float x0 = b[0] * T, y0 = b[1] * T, x1 = (b[0] + b[2]) * T, y1 = (b[1] + b[3]) * T;
-            if (city.offRegion(x0, y0, x1, y1)) continue;
+            if (city.offRegion(x0, y0, x1, y1) || roundLot(b)) continue;
             p.setStrokeWidth(1.2f);
             p.setColor(0x34FFFFFF);
             c.drawLine(x0 + 0.6f, y0 + 0.6f, x1 - 0.6f, y0 + 0.6f, p);
@@ -4073,8 +4119,13 @@ final class CityPainter extends CityPart {
 
     /** ((27.3) A roof of drawBuilding's, as it was drawn there: kind == SILO.) */
     private void roofSilo(Canvas c, Paint p, float x0, float y0, float x1, float y1, int roof, float bw) {
-        p.setColor(0xFF4C7837);
+        // ((29.1) It stands on a concrete pad: a flat green square, never quite the green of the grass round it, looked
+        // like a lid left on the ground round every silo once silos stood up round.)
+        int pad = city.country.pavement != 0 ? city.country.pavement : city.drawnRealistic ? 0xFF96938C : 0xFF8F8D87;
+        p.setColor(darken(pad, 0.8f));
         c.drawRect(x0, y0, x1, y1, p);
+        p.setColor(pad);
+        c.drawRect(x0 + 0.8f, y0 + 0.8f, x1 - 0.8f, y1 - 0.8f, p);
         float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
         p.setColor(darken(roof, 0.7f));
         c.drawCircle(cx, cy, bw / 2 - 0.5f, p);

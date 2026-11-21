@@ -134,6 +134,8 @@ final class City {
         transient float inX, inY, gapX, gapY;
         transient int inside;
         final int roof, wall, seed, kind;
+        /** ((29.1) Round (a silo, a lighthouse, a water tower...): drawn standing up as a cylinder, not a box. */
+        boolean round;
         /** Civilians can hide inside homes, offices and warehouses: the door, room and barricade. */
         float doorX, doorY, barricade = 100, calmTimer;
         int capacity;

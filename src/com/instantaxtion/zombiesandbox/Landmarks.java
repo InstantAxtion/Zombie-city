@@ -33,6 +33,8 @@ final class Landmarks {
         /** What its buildings are to the game (City.OFFICE, SHOP, WAREHOUSE, APARTMENT or KIOSK), and inside. */
         int base = City.OFFICE, inside = Variants.I_OFFICE;
         int roofCol = 0xFF8A8A8A, accent = 0xFFD0B040;
+        /** ((29.1) Which of its buildings (bit i for plan part i) are round, and stand up as round towers in 3D. */
+        int roundParts;
         /** Set when registered. */
         int id, var = -1;
 

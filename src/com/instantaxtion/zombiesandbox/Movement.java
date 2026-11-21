@@ -857,7 +857,9 @@ final class Movement {
                         if (e.type == Entity.CIVILIAN && o.type == Entity.CIVILIAN && e.fleeTimer > 0 && e.want > e.speed * 1.3f
                                 && o.stun <= 0 && e.leader == null && o.leader != e && e.leader != o && w.rnd.nextFloat() < 0.012f) {
                             o.stun = 1.4f;
-                            o.hp -= 4;
+                            // ((29.1) Knocked down and hurt, but not trampled to death: never below half their health. In a
+                            // crowd running from the dead, being trampled killed several times as many as the dead did.)
+                            if (o.hp > o.maxHp * 0.5f) o.hp = Math.max(o.maxHp * 0.5f, o.hp - 4);
                             o.hurt = 1;
                             w.trampled++;
                         }

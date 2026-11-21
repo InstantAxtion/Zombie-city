@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.0";
-    static final int VERSION_CODE = 290;
+    static final String VERSION = "29.1";
+    static final int VERSION_CODE = 291;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "29.1  -  Fewer needless deaths, round towers",
+                    "Panicking crowds no longer trample people to death: being knocked down in a stampede still hurts, but never below half their health. In a test outbreak, trampling had been killing several times as many people as the dead did.",
+                    "The army's and the police's own explosions - grenades, mortars, shells, tank rounds, air strikes, mines, wrecks and cars going up - no longer kill the living: anyone caught in one is knocked flat and hurt. Buildings they bring down let everyone inside out, and the falling debris doesn't kill. The Bomb tool still kills anyone it catches.",
+                    "Round buildings stand up round: silos, the lighthouse, the water tower, the TV tower, the twisted tower and the science centre's sphere are cylinders in 3D, with round tops and round shadows, instead of a round roof on a square box. Silos stand on a concrete pad.",
+            },
             {
                     "29.0  -  More town, more levels, full strength",
                     "Eight more levels to earn: officers, soldiers and survivors now go up to level 15 (4,500 experience, some 450 of the dead). Past level 7, with every perk had, each level makes them tougher (+6% health) and a better shot.",

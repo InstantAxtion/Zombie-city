@@ -201,6 +201,14 @@ final class BuildingRenderer {
             // ((17.1) Its inside was drawn under everyone (drawInsides); see-through by the building.)
             float sb = seeOf(b, see);
             gv.wallFade = 1 - 0.55f * sb;
+            if (b.round) {
+                // ((29.1) A round building (a silo, a lighthouse, a water tower...): a cylinder up to its round top, not four
+                // flat walls under a square of the map.)
+                drawRound(c, b, s, cx, cy, rx0, ry0, rx1, ry1, 1 - sb);
+                drawDamage(c, b, rx0, ry0, rx1, ry1, 1 - sb);
+                drawRoofLabels(c, b, cx, cy, s, 1 - 0.82f * sb);
+                continue;
+            }
             if (cy < b.y0) drawWall(c, b, b.x0, b.y0, b.x1, b.y0, rx0, ry0, rx1, ry0, 0.8f, windows, 0);
             if (cy > b.y1) drawWall(c, b, b.x1, b.y1, b.x0, b.y1, rx1, ry1, rx0, ry1, 0.52f, windows, 1);
             if (cx < b.x0) drawWall(c, b, b.x0, b.y1, b.x0, b.y0, rx0, ry1, rx0, ry0, 0.9f, windows, 2);
@@ -220,6 +228,73 @@ final class BuildingRenderer {
             drawRoofLabels(c, b, cx, cy, s, 1 - 0.82f * sb);
         }
         gv.wallFade = 1;
+    }
+
+    private final android.graphics.Path siloPath = new android.graphics.Path();
+
+    /**
+     * ((29.1) A round building standing up: its side, the band joining the circle of its foot to the circle of its top
+     * (lifted and leant like any roof), lit from the north-west and ribbed; then its own roof from the map, cut to a
+     * circle. roofA fades the top as a roof fades when zoomed right in.
+     */
+    void drawRound(Canvas c, City.Building b, float s, float cx, float cy, float rx0, float ry0, float rx1, float ry1, float roofA) {
+        float gx = (b.x0 + b.x1) / 2, gy = (b.y0 + b.y1) / 2, r = Math.min(b.x1 - b.x0, b.y1 - b.y0) / 2 - 0.5f;
+        float tx = cx + (gx - cx) * s, ty = cy + (gy - cy) * s, tr = r * s;
+        // The side: the near half of the foot's circle, then the far half of the top's (one outline: no seam).
+        double a = Math.atan2(ty - gy, tx - gx);
+        hull(gx, gy, r, tx, ty, tr, a);
+        gv.fill.setColor(gv.hud.fade(City.darken(b.wall, 0.62f)));
+        c.drawPath(siloPath, gv.fill);
+        // The lit side, towards the north-west.
+        float lx = -0.38f, ly = -0.38f;
+        hull(gx + lx * r, gy + ly * r, r * 0.52f, tx + lx * tr, ty + ly * tr, tr * 0.52f, a);
+        gv.fill.setColor(gv.hud.fade(City.darken(b.wall, 0.88f)));
+        c.drawPath(siloPath, gv.fill);
+        // Ribs up the side that faces this way.
+        gv.stroke.setColor(gv.hud.fade(City.darken(b.wall, 0.5f)));
+        gv.stroke.setStrokeWidth(Math.max(0.3f, r * 0.05f));
+        for (int k = -2; k <= 2; k++) {
+            double t = a + Math.PI + k * 0.5;
+            float ux = (float) Math.cos(t), uy = (float) Math.sin(t);
+            c.drawLine(gx + ux * r, gy + uy * r, tx + ux * tr, ty + uy * tr, gv.stroke);
+        }
+        // The top: its roof from the map, cut to the circle.
+        siloPath.reset();
+        for (int k = 0; k < 32; k++) {
+            double t = k * Math.PI / 16;
+            float px = tx + (float) Math.cos(t) * tr, py = ty + (float) Math.sin(t) * tr;
+            if (k == 0) siloPath.moveTo(px, py);
+            else siloPath.lineTo(px, py);
+        }
+        siloPath.close();
+        gv.fill.setColor(alpha(City.darken(b.roof, 0.7f), roofA));
+        c.drawCircle(tx, ty, tr + 0.3f * s, gv.fill);
+        c.save();
+        c.clipPath(siloPath);
+        float dl = gv.world.city.detail;
+        gv.roofSrc.set((int) (b.x0 * dl), (int) (b.y0 * dl), (int) Math.ceil(b.x1 * dl), (int) Math.ceil(b.y1 * dl));
+        gv.roofDst.set(rx0, ry0, rx1, ry1);
+        gv.bmpPaint.setAlpha((int) (255 * roofA));
+        gv.world.city.drawMap(c, gv.roofSrc.left, gv.roofSrc.top, gv.roofSrc.right, gv.roofSrc.bottom, gv.roofDst, gv.bmpPaint);
+        gv.bmpPaint.setAlpha(255);
+        if (roofA >= 0.999f) sharpRoof(c, b, s, cx, cy);
+        c.restore();
+    }
+
+    /** ((29.1) siloPath: round the near half of circle (x0, y0, r0) and the far half of (x1, y1, r1), a the way from one to the other. */
+    private void hull(float x0, float y0, float r0, float x1, float y1, float r1, double a) {
+        siloPath.reset();
+        for (int k = 0; k <= 16; k++) {
+            double t = a + Math.PI / 2 + Math.PI * k / 16;
+            float px = x0 + (float) Math.cos(t) * r0, py = y0 + (float) Math.sin(t) * r0;
+            if (k == 0) siloPath.moveTo(px, py);
+            else siloPath.lineTo(px, py);
+        }
+        for (int k = 0; k <= 16; k++) {
+            double t = a - Math.PI / 2 + Math.PI * k / 16;
+            siloPath.lineTo(x1 + (float) Math.cos(t) * r1, y1 + (float) Math.sin(t) * r1);
+        }
+        siloPath.close();
     }
 
     /** ((27.3) From drawBuildings.) The trees standing up, leaning like the buildings, by kind. */

@@ -275,6 +275,7 @@ final class CityGenerator extends CityPart {
                     l[4], l[8], l[5], l[6]);
             int k = l[6];
             b.variant = l.length > 9 ? l[9] : -1;
+            b.round = CityPainter.roundLot(l);
             int k2 = k;
             if (k2 == OFFICE || k2 == HOUSE || k == WAREHOUSE || k == SHOP || k == CHURCH || k == SCHOOL || k == MARKET
                     || k == KIOSK || k == APARTMENT || k == GARAGE || k == PHARMACY || k == TRAIN_STATION || k == MALL

@@ -550,6 +550,7 @@ final class LandmarkArt4 {
         d.base = City.OFFICE;
         d.inside = Variants.I_OFFICE;
         d.roofCol = 0xFF4A7898;
+        d.roundParts = 1;
         out.add(d);
 
         // 3. A slender TV tower with a round observation pod and antenna, a membrane-roofed pavilion at its foot.
@@ -690,6 +691,7 @@ final class LandmarkArt4 {
         d.base = City.OFFICE;
         d.inside = Variants.I_OFFICE;
         d.roofCol = 0xFFC8CCD0;
+        d.roundParts = 1;
         out.add(d);
 
         // 4. A science centre: a geodesic sphere, a hall under a honeycomb roof, and an outdoor science playground.
@@ -866,6 +868,7 @@ final class LandmarkArt4 {
         d.base = City.OFFICE;
         d.inside = Variants.I_LAB;
         d.roofCol = 0xFFA8B4BA;
+        d.roundParts = 1;
         out.add(d);
 
         // 5. Old stone college ranges round a striped lawn, with a gatehouse bell tower.
@@ -1761,6 +1764,7 @@ final class LandmarkArt4 {
         d.base = City.WAREHOUSE;
         d.inside = Variants.I_FACTORY;
         d.roofCol = 0xFFE6E4DC;
+        d.roundParts = 1;
         out.add(d);
 
         // 11. A renewable energy farm: rows of solar tables, wind turbines, an inverter house and a fenced yard.

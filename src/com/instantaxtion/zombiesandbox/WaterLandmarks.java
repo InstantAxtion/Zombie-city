@@ -270,6 +270,7 @@ final class WaterLandmarks {
             }
         });
         d.inside = Variants.I_OFFICE;
+        d.roundParts = 1;
         out.add(d);
     }
 
