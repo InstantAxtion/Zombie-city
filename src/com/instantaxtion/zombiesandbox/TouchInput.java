@@ -698,7 +698,8 @@ final class TouchInput {
         if (side <= 1) g = gv.world.spawnGroup(SQUAD_ROLES[v], side == 1, wx, wy);
         else {
             g = new java.util.ArrayList<Entity>();
-            int n = side == 2 ? 6 : 20;
+            // ((29.2) A horde of 35, not 20.)
+            int n = side == 2 ? 6 : 35;
             for (int i = 0; i < n; i++) {
                 double a = i * 2.4, r = 6 + Math.sqrt(i) * 7;
                 int type = side == 2 ? Entity.CIVILIAN : i == 0 ? Entity.BRUTE : i % 7 == 3 ? Entity.BRUISER : i % 4 == 1 ? Entity.RUNNER : Entity.ZOMBIE;

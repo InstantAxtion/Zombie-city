@@ -76,7 +76,7 @@ final class Health {
         Map<String, Integer> shoveWhy = new java.util.TreeMap<String, Integer>();
         Map<Entity, float[]> foot = new IdentityHashMap<Entity, float[]>();
         Map<Fleet.Vehicle, Float> board = new IdentityHashMap<Fleet.Vehicle, Float>();
-        int footStuck = 0, idleNear = 0, boardWaits = 0;
+        int footStuck = 0, idleNear = 0, boardWaits = 0, towardDead = 0, calmNearDead = 0, bunched = 0;
         long simNanos = 0;
         Map<Fleet.Vehicle, float[]> at = new IdentityHashMap<Fleet.Vehicle, float[]>();
         Map<Fleet.Vehicle, float[]> turn = new IdentityHashMap<Fleet.Vehicle, float[]>();
@@ -262,6 +262,40 @@ final class Health {
                     }
                 }
             }
+            // ((29.2) Civilians, every second: running towards the dead, calm with one in sight close by, packed in a crowd
+            // with the dead near.)
+            if (f % 30 == 15) {
+                for (Entity e : w.entities) {
+                    if (e.dead || e.removed || e.type != Entity.CIVILIAN || e.ride != null || e.building != null || e.isArmed()) continue;
+                    if (w.countZombiesNear(e.x, e.y, 80) == 0) continue;
+                    Entity z = null;
+                    float zd = 1e9f;
+                    for (int k = 0; k < w.entities.size(); k++) {
+                        Entity o2 = w.entities.get(k);
+                        if (o2.dead || !o2.isZombie() || Math.abs(o2.x - e.x) > 80 || Math.abs(o2.y - e.y) > 80) continue;
+                        float d = (float) Math.hypot(o2.x - e.x, o2.y - e.y);
+                        if (d < zd) {
+                            zd = d;
+                            z = o2;
+                        }
+                    }
+                    if (z == null) continue;
+                    float sp = (float) Math.hypot(e.vx, e.vy);
+                    if (e.fleeTimer > 0 && sp > 10 && zd < 60 && ((z.x - e.x) * e.vx + (z.y - e.y) * e.vy) / (zd * sp) > 0.5f) {
+                        towardDead++;
+                        if (System.getenv("HEALTH_CIV") != null && w.rnd.nextFloat() < 0.1f) System.err.println("TOWARD " + civDesc(w, e, z, zd));
+                    }
+                    if (e.fleeTimer <= 0 && zd < 40 && w.city.los(e.x, e.y, z.x, z.y)) {
+                        calmNearDead++;
+                        if (System.getenv("HEALTH_CIV") != null && w.rnd.nextFloat() < 0.1f) System.err.println("CALM " + civDesc(w, e, z, zd));
+                    }
+                    if (e.fleeTimer > 0) {
+                        int crowd = 0;
+                        for (int k = w.gatherLiving(e.x, e.y, 15) - 1; k >= 0; k--) if (w.gathered[k].type == Entity.CIVILIAN && Math.hypot(w.gathered[k].x - e.x, w.gathered[k].y - e.y) < 15) crowd++;
+                        if (crowd >= 9) bunched++;
+                    }
+                }
+            }
             // Police on foot far from any station with nothing to do.
             if (f % 150 == 149) {
                 int idle = 0;
@@ -294,6 +328,10 @@ final class Health {
         m.put(name + ".units_on_foot_stuck_20s", "" + footStuck);
         m.put(name + ".unit_seconds_idle_near_dead", "" + idleNear);
         m.put(name + ".boarding_waits_30s", "" + boardWaits);
+        m.put(name + ".civilian_seconds_running_at_dead", "" + towardDead);
+        m.put(name + ".civilian_seconds_calm_near_dead", "" + calmNearDead);
+        m.put(name + ".civilian_seconds_bunched_fleeing", "" + bunched);
+        m.put(name + ".civilians_lost", "" + w.civiliansLost);
         if (!shoveWhy.isEmpty()) {
             List<Map.Entry<String, Integer>> l = new ArrayList<Map.Entry<String, Integer>>(shoveWhy.entrySet());
             l.sort((x, y) -> y.getValue() - x.getValue());
@@ -324,6 +362,13 @@ final class Health {
                 + " goal " + e.goal + " squad " + e.squad + "/" + e.member + " post " + (int) e.postX + "," + (int) e.postY
                 + baseInfo(w, e) + " leader " + (e.leader != null) + " pathDest " + (e.pathDest != null ? (int) e.pathDest.doorX + "," + (int) e.pathDest.doorY : "-")
 ;
+    }
+
+    static String civDesc(World w, Entity e, Entity z, float zd) {
+        int t = w.city.tileIndex(e.x, e.y);
+        return "civ task " + e.task + " flee " + String.format("%.1f", e.fleeTimer) + " at " + (int) e.x + "," + (int) e.y + " tile " + w.city.tiles[t] + " dead " + (int) zd
+                + " leader " + (e.leader != null) + " home " + (e.home != null) + " v " + (int) e.vx + "," + (int) e.vy + " toDead " + (int) (z.x - e.x) + "," + (int) (z.y - e.y)
+                + " threat " + (int) (e.threatX - e.x) + "," + (int) (e.threatY - e.y) + " stun " + String.format("%.1f", e.stun) + " pathDest " + (e.pathDest != null) + " zones " + w.dispatch.zones.size();
     }
 
     static String baseInfo(World w, Entity e) {

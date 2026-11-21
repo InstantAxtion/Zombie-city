@@ -125,8 +125,11 @@ final class War {
     }
 
     /** How long a bite takes to turn someone, for this strain. */
+    /** ((29.2) The bitten turn sooner: six tenths of the time they took before (on top of the strain's own pace). */
+    static final float TURN_SOONER = 0.6f;
+
     float turnTime(float base) {
-        return base * (w.trait[World.TR_FAST_TURN] ? 0.45f : w.trait[World.TR_SLOW_TURN] ? 1.8f : 1f);
+        return base * TURN_SOONER * (w.trait[World.TR_FAST_TURN] ? 0.45f : w.trait[World.TR_SLOW_TURN] ? 1.8f : 1f);
     }
 
     void reveal(int t) {

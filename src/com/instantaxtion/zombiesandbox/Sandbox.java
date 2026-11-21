@@ -141,7 +141,8 @@ final class Sandbox {
      * all one horde behind an alpha, heading for (x, y).
      */
     ArrayList<Entity> megaHorde(float x, float y) {
-        ArrayList<Entity> out = hordeFrom(x, y, 250 + w.rnd.nextInt(100), false);
+        // ((29.2) Four to five and a half hundred now (250 to 350 before).)
+        ArrayList<Entity> out = hordeFrom(x, y, 400 + w.rnd.nextInt(150), false);
         if (out.isEmpty()) return out;
         Entity lead = out.get(0);
         if (!lead.alpha) w.zombieAI.makeAlpha(lead);
@@ -158,7 +159,8 @@ final class Sandbox {
         float[] edge = w.city.edgeSpawn(x, y);
         if (edge == null) return out;
         Entity lead = null;
-        int n = count < 0 ? 25 + w.rnd.nextInt(15) : count;
+        // ((29.2) Bigger: 45 to 70 (25 to 40 before).)
+        int n = count < 0 ? 45 + w.rnd.nextInt(26) : count;
         // ((22.0) Spread out to fit: a big horde in one small blob was hundreds standing on each other.)
         float spread = 50 * (float) Math.max(1, Math.sqrt(n / 35.0));
         for (int i = 0; i < n; i++) {

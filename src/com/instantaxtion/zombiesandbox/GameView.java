@@ -48,7 +48,7 @@ final class GameView extends View implements Menu.Host {
             "A commander and eight soldiers with a gunner and a medic", "A sniper and a recon scout to spot for them",
             "Two combat engineers who dig in, with two riflemen to cover them", "Three officers, a riot shield and a marksman",
             "Four SWAT, a marksman and a K9 handler", "Five riot shields shoulder to shoulder", "A K9 handler and a partner",
-            "Six civilians together", "Twenty of the dead: walkers, runners and a brute"};
+            "Six civilians together", "Thirty-five of the dead: walkers, runners and a brute"};
     static final int[][] SQUAD_ROLES = {World.FIRE_TEAM, World.RIFLE_SQUAD, {Entity.ROLE_SNIPER, Entity.ROLE_RECON},
             {Entity.ROLE_ENGINEER, Entity.ROLE_ENGINEER, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE}, World.RESPONSE_TEAM,
             World.TACTICAL_TEAM, {Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT},
