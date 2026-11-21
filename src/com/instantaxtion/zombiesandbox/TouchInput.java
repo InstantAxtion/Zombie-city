@@ -453,7 +453,13 @@ final class TouchInput {
             gv.boxX1 = wx;
             gv.boxY1 = wy;
         } else if (gv.tool == TOOL_BOMB) {
-            gv.world.explode(wx, wy, 70, 400);
+            // ((29.1) The player's own bomb: it kills whoever it catches, the living too.)
+            gv.world.playerBomb = true;
+            try {
+                gv.world.explode(wx, wy, 70, 400);
+            } finally {
+                gv.world.playerBomb = false;
+            }
         } else if (gv.tool == TOOL_ZONE) {
             gv.world.dispatch.orderZone(wx, wy, gv.zoneVariant == 1);
         } else if (gv.tool == TOOL_ERASE) {

@@ -322,6 +322,8 @@ final class World {
     void setMaxPopulation(int cap) {
         maxEntities = cap > 0 ? cap : autoCap(city);
     }
+    /** ((29.1) A blast going off now that the living live through (anything but the player's bomb); the player's bomb going off. */
+    boolean friendlyBlast, playerBomb;
     boolean gore = true;
     /** ((18.4) The Destruction setting: heavy. */
     boolean heavy;

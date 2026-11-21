@@ -679,7 +679,14 @@ final class Combat {
         if (World.WALK_IN && w.city.insideOf(o.x, o.y) != w.city.insideOf(x, y) && !w.city.los(x, y, o.x, o.y)) return;
         float f = 1 - d / radius;
         boolean wasUp = o.hp > 0;
-        o.hp -= damage * (0.25f + 0.75f * f);
+        float hit = damage * (0.25f + 0.75f * f);
+        if (w.friendlyBlast && !o.isZombie()) {
+            // ((29.1) The living caught in the army's or the police's own blast (or a wreck going up): knocked flat and
+            // hurt - a third of it - but not killed by it. Grenades, shells and air strikes on the dead were killing far
+            // too many of the people round them. The player's own bomb still kills anyone.)
+            hit *= 0.3f;
+            if (o.hp > 1) o.hp = Math.max(1, o.hp - hit);
+        } else o.hp -= hit;
         if (wasUp && o.hp <= 0 && o.isZombie() && w.blastBy != null && !w.blastBy.isZombie()) w.experience.killMade(w.blastBy, o);
         o.hurt = 1;
         o.killedByZombie = false;
@@ -785,6 +792,18 @@ final class Combat {
     }
 
     void explode(float x, float y, float radius, float damage) {
+        // ((29.1) Every blast but the player's own bomb (grenades, shells, rockets, air strikes, mines, wrecks and cars
+        // going up) is one the living live through: see blast and collapseBuilding.)
+        boolean was = w.friendlyBlast;
+        w.friendlyBlast = !w.playerBomb;
+        try {
+            explodeNow(x, y, radius, damage);
+        } finally {
+            w.friendlyBlast = was;
+        }
+    }
+
+    private void explodeNow(float x, float y, float radius, float damage) {
         // ((13.5) From the grid as it stands, with room for the steps since it was made, and anyone come into the world
         // since: the whole grid was made again for every grenade, rocket and shell, which in a big fight on a big map
         // was a fifth of the time.)
@@ -912,9 +931,11 @@ final class Combat {
         if (b.collapsed) return;
         // Down it comes.
         int inside = b.occupants.size();
+        // ((29.1) Brought down by the army's or the police's blast: everyone inside gets out (hurt), where it can.)
+        boolean spare = w.friendlyBlast;
         for (int i = 0; i < inside; i++) {
             Entity o = b.occupants.get(i);
-            if (w.rnd.nextFloat() < 0.5f || !w.rides.release(o, b.doorX, b.doorY)) {
+            if ((!spare && w.rnd.nextFloat() < 0.5f) || !w.rides.release(o, b.doorX, b.doorY)) {
                 if (o.type == Entity.CIVILIAN) w.civiliansLost++;
             } else {
                 o.hp *= 0.4f;
@@ -934,7 +955,10 @@ final class Combat {
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity o = w.entities.get(i);
             if (o.x > b.x0 - 12 && o.x < b.x1 + 12 && o.y > b.y0 - 12 && o.y < b.y1 + 12) {
-                o.hp -= 40 + h * 0.5f;
+                float hit = 40 + h * 0.5f;
+                if (spare && !o.isZombie()) {
+                    if (o.hp > 1) o.hp = Math.max(1, o.hp - hit * 0.3f);
+                } else o.hp -= hit;
                 o.hurt = 1;
             }
         }
@@ -954,7 +978,10 @@ final class Combat {
                 Entity o = w.entities.get(i);
                 if (o.dead || o.ride != null) continue;
                 if (o.x > b.x0 - reach && o.x < b.x1 + reach && o.y > b.y0 - reach && o.y < b.y1 + reach && w.rnd.nextFloat() < 0.5f) {
-                    o.hp -= 15 + w.rnd.nextFloat() * 30;
+                    float hit = 15 + w.rnd.nextFloat() * 30;
+                    if (spare && !o.isZombie()) {
+                        if (o.hp > 1) o.hp = Math.max(1, o.hp - hit * 0.3f);
+                    } else o.hp -= hit;
                     o.hurt = 1;
                 }
             }

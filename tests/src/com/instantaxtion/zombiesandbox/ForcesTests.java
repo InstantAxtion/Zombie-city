@@ -65,6 +65,18 @@ final class ForcesTests extends TestKit {
             if (e.ammo + e.reserve == 0) dry++;
         }
         check(dry * 8 <= armed, dry + " of " + armed + " police and soldiers out of ammo after two minutes");
+        // ((29.1) The army's blasts hurt the living but don't kill them; the player's bomb kills anyone.)
+        for (int k = 0; k < 2; k++) {
+            float[] q = w.city.findWalkable(w.city.worldW() * (k == 0 ? 0.3f : 0.7f), w.city.worldH() * 0.3f);
+            Entity sol = w.spawnSoldier(Entity.ROLE_RIFLE, q[0] + 4, q[1]), civ = w.spawn(Entity.CIVILIAN, q[0] - 4, q[1]), z = w.spawn(Entity.ZOMBIE, q[0], q[1] + 3);
+            w.recount();
+            if (k == 1) w.playerBomb = true;
+            w.explode(q[0], q[1], 46, 210);
+            w.playerBomb = false;
+            if (k == 0) check(sol.hp > 0 && civ.hp > 0 && civ.hp < civ.maxHp && z.hp <= 0, "a shell among them: the dead go down, the living are hurt but live ("
+                    + (int) sol.hp + ", " + (int) civ.hp + ", " + (int) z.hp + ")");
+            else check(sol.hp <= 0 && civ.hp <= 0 && z.hp <= 0, "the player's bomb kills everyone it catches");
+        }
     }
 
     static void grenadeKills() throws Exception {
