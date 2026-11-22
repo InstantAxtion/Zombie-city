@@ -1218,6 +1218,14 @@ final class FleetService {
                 }
             }
             if (v == null) return false;
+            // ((30.0) Only when the ride beats the walk: the car or truck's drive out to them and on to the call, against
+            // walking it. Squads stood waiting a minute or more for a truck crossing the whole city to fetch them for a
+            // call they could have walked to in half the time, with the dead loose all round.)
+            if (f != null || inc != null) {
+                float gx = inc != null ? inc.x : f.x, gy = inc != null ? inc.y : f.y;
+                float dCall = (float) World.hypot(gx - sx, gy - sy), dV = (float) World.hypot(v.x - sx, v.y - sy);
+                if (1.3f * (dV + dCall) / 80f + 12 > dCall / 24f) return false;
+            }
             float[] spot = city.nearestDrivable(sx, sy);
             if (spot == null || !fleet.routing.route(v, spot[0], spot[1])) return false;
             fleet.armyUnits.seatDriver(v, drv);

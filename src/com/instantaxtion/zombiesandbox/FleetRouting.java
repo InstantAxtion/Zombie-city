@@ -289,6 +289,28 @@ final class FleetRouting {
                 if (route(v, d[0], d[1])) return true;
                 if (++routes >= 4) break;
             }
+        // ((30.0) A real outbreak: a city patrol car's rounds are round the trouble, not its usual beat - the streets a few
+        // hundred yards about the nearest call still open, where it picks up stragglers and is first there when it spreads.)
+        if (v.patrol && v.agency == 0 && v.state == PATROL && w.zombies >= 30 && w.rnd.nextFloat() < 0.75f) {
+            Dispatch.Incident near = null;
+            float nd = 1800 * 1800;
+            for (int i = 0, n = w.dispatch.incidents.size(); i < n; i++) {
+                Dispatch.Incident inc = w.dispatch.incidents.get(i);
+                if (inc.resolved) continue;
+                float d = (inc.x - v.x) * (inc.x - v.x) + (inc.y - v.y) * (inc.y - v.y);
+                if (d < nd) {
+                    nd = d;
+                    near = inc;
+                }
+            }
+            if (near != null)
+                for (int tries = 0; tries < 4 && routes < 2; tries++) {
+                    float[] d = randomRoadNear(near.x, near.y, 200, 600, false);
+                    if (d == null || World.hypot(d[0] - v.x, d[1] - v.y) < 150 || w.countZombiesNear(d[0], d[1], 120) > 0) continue;
+                    if (route(v, d[0], d[1])) return true;
+                    routes++;
+                }
+        }
         // ((16.8) On the bigger maps, picked within reach to begin with (see randomRoadNear).)
         float reach = city.w >= 900 ? 1800 : 2400;
         boolean local = (v.type == CAR || v.patrol) && city.w >= 600;

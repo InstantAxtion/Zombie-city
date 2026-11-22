@@ -859,7 +859,8 @@ final class ArmedAI {
         if (squadFormation(e, soldier, dt)) return;
         if (searchStep(e, soldier, dt)) return;
         int dist = w.city.fieldAt(w.city.zombieDist, e.x, e.y);
-        int hunt = soldier ? 200 : 40;
+        // ((30.0) Officers too go looking further for the dead in a real outbreak, rather than walk their beat.)
+        int hunt = soldier ? 200 : w.zombies >= 30 ? 90 : 40;
         // ((13.3) The dead a long way off: soldiers ride out to the nearest call there, rather than walk across town.)
         if (soldier && e.task == Dispatch.T_NONE && (e.ammo > 0 || e.reserve > 0) && dist >= World.RIDE_TILES && dist < hunt && w.rides.rideOut(e, dt)) return;
         if ((e.ammo > 0 || e.reserve > 0) && dist < hunt && w.movement.followField(e, w.city.zombieDist, e.speed * 1.3f)) return;

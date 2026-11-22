@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "29.9";
-    static final int VERSION_CODE = 299;
+    static final String VERSION = "30.0";
+    static final int VERSION_CODE = 300;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.0  -  Outbreak response",
+                    "Patrol cars in an outbreak work the streets round the trouble, and are sent to the dead with nobody near them.",
+                    "No more waiting for a truck from across the city when walking is quicker.",
+                    "Units beside a stopped vehicle climb in instead of getting stuck.",
+                    "Officers look further for the dead in an outbreak.",
+            },
             {
                     "29.9  -  Quicker dead",
                     "The dead are a little faster: every kind, walking, chasing or running, about an eighth quicker than before.",

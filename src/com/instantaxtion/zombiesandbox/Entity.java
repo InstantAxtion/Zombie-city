@@ -504,6 +504,8 @@ final class Entity {
     transient float rideCd;
     /** ((21.4) When they last got a lift, how far they had to go then, and how many lifts in a row got them nowhere.) */
     transient float rideAt = -999, rideLeft;
+    /** ((30.0) Seconds spent right beside a stopped vehicle they are boarding (Rides.boardStep). */
+    transient float boardT;
     transient int rideWasted;
     /** ((22.0) A police dog's steps until it next sniffs the air; a bite the dogs have found. */
     transient float sniffT, magCd;

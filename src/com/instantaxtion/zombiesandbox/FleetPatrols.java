@@ -533,6 +533,83 @@ final class FleetPatrols {
         }
     }
 
+    /** ((30.0) Until the next look for the dead loose with nobody about to deal with them. */
+    float sweepCd = 2;
+    int sweepAt;
+
+    /**
+     * ((30.0) A real outbreak, not a few of the dead: a patrol car on its rounds isn't on its rounds any more. Every couple
+     * of seconds the dead out in the open with no guns anywhere near them are looked for, and for each (a few at a time,
+     * well apart) the nearest patrol car on its beat with officers aboard is sent there. Half the police cars in town drove
+     * their usual rounds right through a city-wide outbreak, while a tenth of the dead walked about with nobody near them.
+     */
+    void outbreakSweep(float dt) {
+        if ((sweepCd -= dt) > 0) return;
+        sweepCd = 2;
+        if (w.zombies < 30) return;
+        // Patrol cars on their rounds a long way from the trouble, heading further off: a few at a time, they turn round
+        // for streets nearer the nearest call (see FleetRouting.pickDestination).
+        int cars = fleet.vehicles.size(), turned = 0;
+        for (int k = 0; k < cars && turned < 4; k++) {
+            sweepAt = (sweepAt + 1) % cars;
+            Vehicle v = fleet.vehicles.get(sweepAt);
+            if (v.type != CRUISER || !v.patrol || v.agency != 0 || v.state != PATROL || v.crew.isEmpty() || v.incident != null || v.pickupFor != null
+                    || v.ammoRun != null || v.broken || v.player != null || v.block != null || v.zone != null || v.leaving || v.shelter || v.destCd > 0) continue;
+            float bd = 1800 * 1800;
+            Dispatch.Incident near = null;
+            for (int i = 0, m = w.dispatch.incidents.size(); i < m; i++) {
+                Dispatch.Incident inc = w.dispatch.incidents.get(i);
+                if (inc.resolved) continue;
+                float d = (inc.x - v.x) * (inc.x - v.x) + (inc.y - v.y) * (inc.y - v.y);
+                if (d < bd) {
+                    bd = d;
+                    near = inc;
+                }
+            }
+            if (near == null || World.hypot(near.x - v.x, near.y - v.y) < 700 || World.hypot(near.x - v.tx, near.y - v.ty) < 800) continue;
+            turned++;
+            fleet.routing.newDestination(v);
+        }
+        int n = w.entities.size(), stride = Math.max(1, w.zombies / 150), sent = 0;
+        float[] done = new float[6];
+        int seen = 0;
+        for (int i = (int) (w.time * 7) % stride; i < n && sent < 3; i++) {
+            Entity z = w.entities.get(i);
+            if (z.dead || z.removed || !z.isZombie() || z.building != null) continue;
+            if (seen++ % stride != 0) continue;
+            boolean near = false;
+            for (int k = 0; k < sent; k++) if (Math.abs(done[k * 2] - z.x) < 500 && Math.abs(done[k * 2 + 1] - z.y) < 500) near = true;
+            if (near || w.spatial.armedNear(z.x, z.y, 350) > 0) continue;
+            // Something already on its way there.
+            boolean coming = false;
+            for (int j = 0, m = fleet.vehicles.size(); j < m && !coming; j++) {
+                Vehicle o = fleet.vehicles.get(j);
+                Dispatch.Incident oi = o.incident != null ? o.incident : o.pickupFor;
+                if (oi != null && o.state == DRIVE && Math.abs(oi.x - z.x) < 400 && Math.abs(oi.y - z.y) < 400) coming = true;
+            }
+            if (coming) continue;
+            Vehicle best = null;
+            float bd = 1800 * 1800;
+            for (int j = 0, m = fleet.vehicles.size(); j < m; j++) {
+                Vehicle v = fleet.vehicles.get(j);
+                if (v.type != CRUISER || !v.patrol || v.state != PATROL || v.crew.isEmpty() || v.incident != null || v.pickupFor != null
+                        || v.ammoRun != null || v.broken || v.burnt || v.player != null || v.block != null || v.zone != null || v.leaving || v.shelter) continue;
+                float d = (v.x - z.x) * (v.x - z.x) + (v.y - z.y) * (v.y - z.y);
+                if (d < bd) {
+                    bd = d;
+                    best = v;
+                }
+            }
+            if (best == null) continue;
+            Dispatch.Incident inc = w.dispatch.sighting(z.x, z.y, null);
+            if (inc == null) continue;
+            done[sent * 2] = z.x;
+            done[sent * 2 + 1] = z.y;
+            sent++;
+            if (respond(best, inc)) best.place = inc.place;
+        }
+    }
+
     boolean respond(Vehicle v, Dispatch.Incident inc) {
         v.state = DRIVE;
         if (!fleet.routing.route(v, inc.x, inc.y)) {

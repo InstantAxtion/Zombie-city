@@ -1016,6 +1016,7 @@ final class Fleet {
         if (frameNo % 30 == 0) routing.releaseRoutes();
         patrolCount = patrols.patrolCars();
         patrols.staffPatrols(dt);
+        patrols.outbreakSweep(dt);
         medevac.update(dt);
         timers(dt);
         if (trafficTimer <= 0) {

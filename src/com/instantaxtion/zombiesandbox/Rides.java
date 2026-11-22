@@ -35,8 +35,14 @@ final class Rides {
             if (e.want < 1) e.angle = World.turn(e.angle, (float) Math.atan2(ddy, ddx), 0.1f);
             return true;
         }
+        // ((30.0) Right beside it and it's standing still: a few seconds of trying is enough - they're in. Soldiers in a
+        // base's yard, blocked by the trucks and the fence round it, stood a minute or more a few yards from the Humvee
+        // they'd been called to, never close enough to its middle to climb in, while it waited for them.)
+        if (d < 70 && Math.abs(v.speed) < 5) e.boardT += w.stepDt;
+        else e.boardT = 0;
         // (10.34) Climbing in from a little further off, at a run, and round whatever's in the way.
-        if (d < 20) {
+        if (d < 20 || e.boardT > 3) {
+            e.boardT = 0;
             w.fleet.board(v, e);
             return true;
         }
