@@ -369,6 +369,8 @@ final class FleetService {
 
     /** A police car parked up at the call, lights going. */
     boolean cruiserAtScene(Vehicle v, float dt) {
+        if (v.moveUp) return moveUpStep(v, dt);
+        if (!v.squad.isEmpty() && moveUpTo(v, v.squad, dt)) return false;
         // Parked up at the call, lights going, until it's over (or there's been nothing for a while).
         v.speed = Math.max(0, v.speed - dt * 200);
         v.timer += dt;
@@ -382,8 +384,58 @@ final class FleetService {
         return false;
     }
 
+    /**
+     * ((30.2) A police car or troop truck waiting at a scene while its people fight: when they've moved off a good way
+     * (the dead led them down the street), it drives up behind them - to a clear bit of road near them with none of the
+     * dead on it - so it's there when they need it, not a long walk back. True when it set off.
+     */
+    boolean moveUpTo(Vehicle v, java.util.List<Entity> people, float dt) {
+        if ((v.moveCd -= dt) > 0 || v.player != null || v.broken) return false;
+        v.moveCd = 6;
+        float sx = 0, sy = 0;
+        int n = 0;
+        for (int i = 0; i < people.size(); i++) {
+            Entity e = people.get(i);
+            if (e.dead || e.removed || e.isZombie() || e.building != null || e.ride != null) continue;
+            if (e.type != Entity.COP && e.type != Entity.SOLDIER) continue;
+            if (World.hypot(e.x - v.x, e.y - v.y) > 1000) continue;
+            sx += e.x;
+            sy += e.y;
+            n++;
+        }
+        if (n == 0) return false;
+        sx /= n;
+        sy /= n;
+        if (World.hypot(sx - v.x, sy - v.y) < 280) return false;
+        float[] spot = city.nearestDrivable(sx, sy);
+        if (spot == null || World.hypot(spot[0] - sx, spot[1] - sy) > 150 || World.hypot(spot[0] - v.x, spot[1] - v.y) < 150
+                || w.countZombiesNear(spot[0], spot[1], 80) > 0 || city.junctionIdAt(spot[0], spot[1]) >= 0) return false;
+        if (!fleet.routing.route(v, spot[0], spot[1])) return false;
+        v.moveUp = true;
+        v.moveCd = 12;
+        v.stuckTimer = 0;
+        v.parked = false;
+        return true;
+    }
+
+    /** ((30.2) On its way up to its people: there (or held up), it stops and waits again. */
+    boolean moveUpStep(Vehicle v, float dt) {
+        v.stuckTimer += dt;
+        boolean moving = fleet.driving.driveStep(v, dt, 60, fleet.driving.carAhead(v) ? 0.5f : 1f);
+        if (moving) fleet.driving.hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
+        if (!moving || v.stuckTimer > 10 || (World.hypot(v.tx - v.x, v.ty - v.y) < 30 && city.junctionIdAt(v.x, v.y) < 0)) {
+            v.moveUp = false;
+            v.speed = 0;
+            v.stuckTimer = 0;
+        }
+        return false;
+    }
+
     /** An army truck (or APC) stopped at the scene. */
     boolean truckAtScene(Vehicle v, float dt) {
+        // ((30.2) Up behind its squad when they've moved on.)
+        if (v.moveUp) return moveUpStep(v, dt);
+        if (!v.ammoTruck && v.supply == 0 && !v.squad.isEmpty() && moveUpTo(v, v.squad, dt)) return false;
         // An APC that dropped its squad stays a while to cover them with its gun, then heads home.
         v.speed = Math.max(0, v.speed - dt * 200);
         v.timer -= dt;
@@ -960,6 +1012,13 @@ final class FleetService {
         }
         // ((30.1) Nothing to take them to: soldiers on to the nearest fight still going; two or more officers in a police
         // car out on patrol in it. Nobody drives back to sit at the station or base.)
+        // ((30.2) Unless they're short of rounds: then home to restock first.)
+        boolean low = false;
+        for (int i = 0; i < v.crew.size() && !low; i++) {
+            Entity c = v.crew.get(i);
+            if (c.isArmed() && c.ammo + c.reserve < (c.magSize + World.fullReserve(c)) * 0.35f) low = true;
+        }
+        if (low && (to == null || to.resolved) && headHome(v)) return false;
         if ((to == null || to.resolved) && !v.crew.isEmpty() && v.type == TRUCK && v.passengerType == Entity.SOLDIER && v.kind != K_RAPID_VAN) {
             Dispatch.Incident next = null;
             float nd = 3000 * 3000;

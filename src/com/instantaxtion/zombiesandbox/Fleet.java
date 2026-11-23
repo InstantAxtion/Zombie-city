@@ -115,6 +115,9 @@ final class Fleet {
         float knotT;
         /** ((29.2) Times in a row newDestination has found nowhere (FleetRouting.urgent). */
         int pickFails;
+        /** ((30.2) Moving up at a scene to where its people have got to (FleetService.moveUp), and until it next looks. */
+        boolean moveUp;
+        float moveCd = 8;
         /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
         transient float backT;
         /** ((27.5) Backing straight off a length to undo a knot it's part of, giving the other the room (seconds left). */

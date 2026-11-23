@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.1";
-    static final int VERSION_CODE = 301;
+    static final String VERSION = "30.2";
+    static final int VERSION_CODE = 302;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.2  -  Cars close by",
+                    "Police cars and army trucks drive up behind their people when the fight moves off.",
+                    "Units low on ammo far from an armoury get a lift there instead of walking.",
+                    "The dead are 7% slower.",
+                    "No set limit on how many respond to a call: it grows with the number of dead there.",
+            },
             {
                     "30.1  -  Everyone out",
                     "No reserves: free officers go out two to a car, and soldiers go out on patrol by truck or on foot.",

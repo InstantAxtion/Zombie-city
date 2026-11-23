@@ -1135,6 +1135,29 @@ final class ArmedAI {
                     e.task = Dispatch.T_NONE;
                     e.outOfAmmoSaid = false;
                 } else {
+                    // ((30.2) A long way to the armoury: a car or truck there (with any others nearby going too), not the
+                    // walk - their own if it's close, otherwise one sent for them (see FleetService.driveTo).
+                    if (e.rig == null && e.ride == null && e.agency != 3 && e.role != Entity.ROLE_PILOT && e != w.controlled
+                            && ddx * ddx + ddy * ddy > 650 * 650 && (e.driveCd -= dt) <= 0) {
+                        e.driveCd = 6;
+                        if (w.spatial.nearest(e, 70, true, false) == null) {
+                            java.util.ArrayList<Entity> group = new java.util.ArrayList<Entity>();
+                            group.add(e);
+                            int n = w.spatial.gatherLiving(e.x, e.y, 150), seats = e.type == Entity.COP ? 4 : 8;
+                            for (int i = 0; i < n && group.size() < seats; i++) {
+                                Entity o = w.gathered[i];
+                                if (o != e && !o.dead && o.type == e.type && o.task == Dispatch.T_RESUPPLY && o.rig == null && o.ride == null && o.supplyTruck == null) group.add(o);
+                            }
+                            if (w.fleet.driveTo(group, null)) {
+                                if (w.time > w.rideSaidAt) {
+                                    w.rideSaidAt = w.time + 25;
+                                    w.dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e,
+                                            "Out of rounds and a long way from " + f.name + ". Getting a lift back to restock.", e.x, e.y);
+                                }
+                                return true;
+                            }
+                        }
+                    }
                     e.aiming = false;
                     Entity t = w.spatial.nearest(e, 50, true, false);
                     float tx = 0, ty = 0, d = 99;

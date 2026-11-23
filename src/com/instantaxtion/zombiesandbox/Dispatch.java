@@ -1083,7 +1083,8 @@ final class Dispatch {
             if (inc.resolved) continue;
             int have = inc.soldiers + w.fleet.inboundSoldiers(inc);
             boolean wants = inc.militaryRequested || (war && inc.zombiesNear >= 3);
-            if (!wants || have >= 3) continue;
+            // ((30.2) As many soldiers as the dead there call for, not three and no more.)
+            if (!wants || have >= Math.max(3, inc.zombiesNear / 3)) continue;
             if (target == null || inc.zombiesNear > target.zombiesNear) target = inc;
         }
         if (target == null) return;
@@ -1100,7 +1101,7 @@ final class Dispatch {
             if (sq == null) squads.put(e.squad, sq = new ArrayList<Entity>());
             sq.add(e);
         }
-        if (squads.isEmpty() || (!war && squads.size() < 2)) return;
+        if (squads.isEmpty()) return;
         ArrayList<Entity> pick = null;
         float bd = Float.MAX_VALUE, px = 0, py = 0;
         for (ArrayList<Entity> sq : squads.values()) {
@@ -1323,8 +1324,11 @@ final class Dispatch {
 
     /** How many officers a call wants (before any share-out between calls). */
     private int needAt(Incident inc) {
-        int need = w.alert >= 2 ? Math.min(6, 2 + inc.zombiesNear / 3) : Math.min(4, 1 + inc.zombiesNear / 3);
-        if (inc.backupNeed > 0) need = Math.max(need, Math.min(12, inc.backupNeed));
+        // ((30.2) No ceiling: as many as the dead there call for - one more for every three of them, however many - and one
+        // more for each officer down. (Steeper than that, the big calls drew everyone in from across town and the next
+        // outbreak along had nobody.)
+        int need = Math.max(2, (w.alert >= 2 ? 2 : 1) + inc.zombiesNear / 3) + inc.officersDown;
+        if (inc.backupNeed > 0) need = Math.max(need, inc.backupNeed);
         // ((26.0) Close to the mobile command post: it sends a unit more.)
         if (w.ops.coordinates(inc)) need++;
         return need;
@@ -1358,7 +1362,8 @@ final class Dispatch {
         for (int i = 0; i < incidents.size(); i++) force += incidents.get(i).cops;
         // ((11.5) In an emergency - the city knows, several calls at once, or officers going down - nobody is kept
         // back: the reserve goes out too.)
-        int reserve = live >= 2 && !emergency() ? force / 7 : 0;
+        // ((30.2) Nobody kept back at all.)
+        int reserve = 0;
         int spare = Math.max(0, freeCops - reserve);
         byNeed.clear();
         byNeed.addAll(incidents);
@@ -1577,7 +1582,8 @@ final class Dispatch {
                     i -= 2;
                 }
             }
-            if (!there.isEmpty()) sent += assignOnFoot(best, Entity.COP, there);
+            // ((30.2) The rest on foot only if it's near enough to walk.)
+            if (!there.isEmpty() && World.hypot(best.x - f.x, best.y - f.y) <= ON_FOOT_MAX) sent += assignOnFoot(best, Entity.COP, there);
             if (sent > 0 && !f.turnedOut) {
                 f.turnedOut = true;
                 say(WHO_POLICE, null, "Dispatch: " + (f.name != null ? f.name.trim() : "The station") + ", everyone who's free, out to "
@@ -1613,6 +1619,7 @@ final class Dispatch {
             for (int k = 0, n = w.entities.size(); k < n && moved < 2; k++) {
                 Entity e = w.entities.get(k);
                 if (e.dead || e.type != Entity.COP || e.task != T_RESPOND || e.incident != donor || e.onScene || e.rig != null) continue;
+                if (World.hypot(e.x - starved.x, e.y - starved.y) > ON_FOOT_MAX) continue;
                 // ((27.4) Not one on a job of its own at the call (a marksman on the way up to a roof).)
                 if (w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
                 e.incident = starved;
@@ -1738,6 +1745,8 @@ final class Dispatch {
             for (int i = 0; i < units.size() && sent < room; i++) {
                 Entity e = units.get(i);
                 if (e.incident != from || w.ops.jobs.keeps(e, Jobs.P_POST)) continue;
+                // ((30.2) Officers on foot aren't sent on further than a walk; soldiers may be, in their truck (below).)
+                if (e.type == Entity.COP && e.ride == null && World.hypot(e.x - best.x, e.y - best.y) > ON_FOOT_MAX) continue;
                 e.incident = best;
                 e.onScene = false;
                 e.orderField = null;
@@ -1752,7 +1761,14 @@ final class Dispatch {
                 Entity e = units.get(i);
                 if (e.incident == best && e.type == Entity.SOLDIER && e.rig == null && World.hypot(e.x - best.x, e.y - best.y) > 600) riders.add(e);
             }
-            if (!riders.isEmpty()) w.fleet.mountUp(riders, best);
+            if (!riders.isEmpty() && !w.fleet.mountUp(riders, best))
+                for (Entity e : riders)
+                    if (World.hypot(e.x - best.x, e.y - best.y) > ON_FOOT_MAX) {
+                        // ((30.2) No truck for them: not the long walk - they stay with the call they had.)
+                        e.incident = from;
+                        best.soldiers--;
+                        left++;
+                    }
             if (sent > mostN) {
                 mostN = sent;
                 most = best;
@@ -2392,7 +2408,8 @@ final class Dispatch {
             inc = newIncident(e.x, e.y, hostiles);
             if (inc == null) return;
         }
-        int want = Math.min(12, 2 + hostiles / 2);
+        // ((30.2) As many as the dead on them call for, with no ceiling.)
+        int want = 2 + hostiles / 2;
         if (want <= inc.backupNeed) return;
         inc.backupNeed = want;
         boolean army = e.type == Entity.SOLDIER;
@@ -2404,7 +2421,7 @@ final class Dispatch {
             // Soldiers send soldiers.
             int have = inc.soldiers + w.fleet.inboundSoldiers(inc);
             if (have < want) {
-                ArrayList<Entity> squad = nearestFree(Entity.SOLDIER, e.x, e.y, Math.min(4, want - have), 1500);
+                ArrayList<Entity> squad = nearestFree(Entity.SOLDIER, e.x, e.y, want - have, 1500);
                 int n = squad.size();
                 if (n > 0 && w.fleet.mountUp(squad, inc)) {
                     chatter(WHO_MILITARY, null, "Military: " + n + " mounting up to support at " + inc.place + ".", inc.x, inc.y);

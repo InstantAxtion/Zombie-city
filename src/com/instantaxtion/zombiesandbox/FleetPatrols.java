@@ -835,6 +835,9 @@ final class FleetPatrols {
 
     /** A patrol car stopped at a scene (or calling its officers back to it): it waits while they deal with it, then takes them on. */
     boolean patrolAtScene(Vehicle v, boolean check) {
+        // ((30.2) Up behind its officers when they've moved on.)
+        if (v.moveUp) return fleet.service.moveUpStep(v, w.stepDt);
+        if (v.state == SCENE && moveUpLook(v)) return false;
         v.speed = 0;
         if (!check) return false;
         if (v.state == SCENE) {
@@ -854,7 +857,7 @@ final class FleetPatrols {
             // the car, and it drives them there to restock instead of them walking it with the dead behind.)
             for (int i = 0; i < mine.size(); i++) {
                 Entity e = mine.get(i);
-                if (e.dead || e.rig != v || e.task != Dispatch.T_RESUPPLY || World.hypot(e.x - v.x, e.y - v.y) > 320) continue;
+                if (e.dead || e.rig != v || e.task != Dispatch.T_RESUPPLY || World.hypot(e.x - v.x, e.y - v.y) > 600) continue;
                 City.Facility f = w.restockFor(e);
                 if (f == null || World.hypot(f.x - v.x, f.y - v.y) < 450) continue;
                 v.onward = null;
@@ -910,6 +913,14 @@ final class FleetPatrols {
         v.incident = null;
         if (!fleet.routing.newDestination(v)) v.stuckTimer = 99;
         return false;
+    }
+
+    private boolean moveUpLook(Vehicle v) {
+        if (v.crew.size() > 0) return false;
+        ArrayList<Entity> mine = fleet.crews.onFoot(v);
+        ArrayList<Entity> with = new ArrayList<Entity>();
+        for (int i = 0; i < mine.size(); i++) if (mine.get(i).rig == v) with.add(mine.get(i));
+        return fleet.service.moveUpTo(v, with, w.stepDt);
     }
 
     /** The officers have seen the dead from the car: it stops where it is and they get out. */
