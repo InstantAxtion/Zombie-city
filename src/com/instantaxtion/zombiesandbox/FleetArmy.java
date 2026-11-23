@@ -392,7 +392,8 @@ final class FleetArmy {
      * bays) and drives there. False if the call is close or there's no truck near them (they go on foot).
      */
     boolean mountUp(java.util.List<Entity> squad, Dispatch.Incident inc) {
-        if (squad.isEmpty() || inc == null) return false;
+        // ((30.1) Not a truck for one: a squad, or they go another way.)
+        if (squad.size() < 2 || inc == null) return false;
         float sx = 0, sy = 0;
         for (Entity e : squad) {
             sx += e.x;
@@ -522,9 +523,12 @@ final class FleetArmy {
      */
     boolean basePatrol(java.util.List<Entity> squad, City.Facility base, float tx, float ty) {
         // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
-        float[] p = city.takeParkedTruck(base.x, base.y, Math.max(260, base.r * 2.5f));
-        if (p == null || squad.isEmpty()) return false;
-        p = bay(p, base);
+        if (squad.isEmpty()) return false;
+        // ((30.1) Or one from its garages: a big base had a few trucks parked out and dozens inside, and most of its
+        // soldiers stood about the yard all game.)
+        float[] p = baseTruck(base);
+        if (p == null) return false;
+        if (p.length <= 2) p = bay(p, base);
         Vehicle v = fleet.make(TRUCK);
         fleet.setKind(v, K_HUMVEE);
         v.loop = true;

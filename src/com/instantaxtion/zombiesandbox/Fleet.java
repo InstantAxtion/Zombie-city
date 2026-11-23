@@ -1404,7 +1404,7 @@ final class Fleet {
     boolean troopTruck(java.util.List<Entity> squad, City.Facility base, Dispatch.Incident inc, int forceKind) {
         // (One of the trucks parked on the base, if there's one left; otherwise one comes round to the gate.)
         // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
-        if (squad.isEmpty()) return false;
+        if (squad.size() < 2) return false;
         float[] p = armyUnits.baseTruck(base);
         if (p == null) return false;
         int kind = 0;

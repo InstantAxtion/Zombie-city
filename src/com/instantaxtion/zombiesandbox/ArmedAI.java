@@ -1353,14 +1353,23 @@ final class ArmedAI {
 
     /** Ordered somewhere: on the way there, shooting what's close. True when that was their step. */
     private boolean moveOrderStep(final Entity e, final Entity t, final float range, final float dt) {
+        // ((30.1) A foot patrol that meets the dead deals with them, as anyone free would.)
+        if (e.task == Dispatch.T_MOVE && e.patrolWalk && t != null) {
+            e.task = Dispatch.T_NONE;
+            e.patrolWalk = false;
+            e.orderField = null;
+            return false;
+        }
         if (e.task == Dispatch.T_MOVE) {
             float ddx = e.postX - e.x, ddy = e.postY - e.y;
             float d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
-            if (d < 20) {
-                e.task = Dispatch.T_HOLD;
+            float pace = e.patrolWalk ? e.speed : e.runSpeed;
+            if (d < (e.patrolWalk ? 40 : 20)) {
+                e.task = e.patrolWalk ? Dispatch.T_NONE : Dispatch.T_HOLD;
+                e.patrolWalk = false;
                 e.orderField = null;
-            } else if (e.orderField == null || !w.movement.followField(e, e.orderField, e.runSpeed)) {
-                w.movement.steer(e, ddx / d, ddy / d, e.runSpeed);
+            } else if (e.orderField == null || !w.movement.followField(e, e.orderField, pace)) {
+                w.movement.steer(e, ddx / d, ddy / d, pace);
             }
             // ((21.2) On the way, they shoot what's close: under orders to move, they used to walk past the dead -
             // and past people being bitten - without firing a shot.)
@@ -1577,6 +1586,9 @@ final class ArmedAI {
             // The city is under attack: officers with no call guard their precinct, spread round it facing out,
             // instead of milling about.
             City.Facility st = w.city.nearestFacility(City.FACILITY_POLICE, e.x, e.y);
+            // ((30.1) Only with the dead coming for it: otherwise nobody hangs about the station - they're out (see
+            // FleetPatrols.staffPatrols, and the beat).
+            if (st != null && w.countZombiesNear(st.x, st.y, st.r + 500) == 0) st = null;
             if (st != null) {
                 float sx = st.x - e.x, sy = st.y - e.y;
                 if (sx * sx + sy * sy > 500 * 500) {

@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.0";
-    static final int VERSION_CODE = 300;
+    static final String VERSION = "30.1";
+    static final int VERSION_CODE = 301;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.1  -  Everyone out",
+                    "No reserves: free officers go out two to a car, and soldiers go out on patrol by truck or on foot.",
+                    "Police and army vehicles don't go out with one person in them.",
+                    "Nobody is sent running across the city to a call: far calls go by car or truck, or to someone nearer.",
+                    "Army trucks wait for their squad at a call and take them on, instead of driving home empty.",
+                    "Vehicles slow for people on the road and in yards.",
+            },
             {
                     "30.0  -  Outbreak response",
                     "Patrol cars in an outbreak work the streets round the trouble, and are sent to the dead with nobody near them.",

@@ -272,15 +272,17 @@ final class FleetPatrols {
      * partner: an officer on foot nearby with nothing on. A fifth of the police cars about were going round alone.)
      */
     void pairUp() {
-        for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
+        // ((30.1) Every car on its own, not one a time round: up to four pick up a partner each time.)
+        int paired = 0;
+        for (int i = 0, m = fleet.vehicles.size(); i < m && paired < 4; i++) {
             Vehicle v = fleet.vehicles.get(i);
             if (v.type != CRUISER || !v.patrol || v.state != PATROL || v.crew.size() != 1 || v.kind == K_BIKE || v.incident != null
-                    || v.player != null || v.pickupFor != null || v.broken) continue;
+                    || v.player != null || v.pickupFor != null || v.broken || FleetMedevac.needsRepair(v) || v.ammoRun != null) continue;
             // (The rangers' trucks go out with the one ranger at the wheel: the others are on foot by design, one of
             // them minding the station, and that one was being picked up and driven off, leaving it empty.)
             if (v.agency == 3) continue;
             Entity best = null;
-            float bd = 320;
+            float bd = 600;
             for (int k = 0, n = w.gatherArmed(v.x, v.y, bd); k < n; k++) {
                 Entity e = w.gathered[k];
                 if (e.dead || e.type != Entity.COP || e.task != Dispatch.T_NONE || e.rig != null || e == w.controlled || World.footPatrol(e)
@@ -292,7 +294,21 @@ final class FleetPatrols {
                     best = e;
                 }
             }
-            if (best == null) continue;
+            if (best == null) {
+                // ((30.1) Nobody to pick up out here: back to the station for a partner, rather than a car out on its own.)
+                if (v.agency == 0 && v.station != null && !v.station.fallen && World.hypot(v.station.x - v.x, v.station.y - v.y) > v.station.r + 100
+                        && fleet.routing.route(v, v.station.gateX > 0 ? v.station.gateX : v.station.x, v.station.gateY > 0 ? v.station.gateY : v.station.y)) {
+                    v.patrol = false;
+                    v.parkHome = true;
+                    v.depot = v.station;
+                    v.state = RETURN;
+                    v.speed = 0;
+                    v.stuckTimer = 0;
+                    v.jamTries = 0;
+                    paired++;
+                }
+                continue;
+            }
             float[] spot = city.nearestDrivable(best.x, best.y);
             if (spot == null || !fleet.routing.route(v, spot[0], spot[1])) continue;
             v.state = DRIVE;
@@ -307,7 +323,7 @@ final class FleetPatrols {
             best.rig = v;
             fleet.crews.note(best);
             best.task = Dispatch.T_BOARD;
-            return;
+            paired++;
         }
     }
 
@@ -319,12 +335,17 @@ final class FleetPatrols {
         seatStandby(false);
         // ((11.4) In quiet times every officer who isn't on a foot beat gets a car; under attack, only up to the
         // target, the rest guarding the precinct.)
-        if (w.alert >= 1 && fleet.patrolCount >= fleet.patrolTarget) return;
+        // ((30.1) Nobody kept back: every officer free at a station goes out, two to a car, as long as it has cars.)
+        int launched = 0;
         for (City.Facility f : city.facilities) {
+            if (launched >= 6) return;
             if (f.kind != City.FACILITY_POLICE || w.countZombiesNear(f.x, f.y, 120) > 0) continue;
             // ((26.3) A car waiting there with its officers already in it goes out on patrol first (two always kept back).)
             Vehicle seated = seatedCar(f);
-            if (seated != null && parkedAt(f) > 2 && launch(seated, f, null)) return;
+            if (seated != null && launch(seated, f, null)) {
+                launched++;
+                continue;
+            }
             boolean bike = city.cfg.nature() && (fleet.unitCount + 1) % 5 == 0;
             int want = bike ? 1 : 2;
             ArrayList<Entity> two = new ArrayList<Entity>();
@@ -336,7 +357,6 @@ final class FleetPatrols {
                 if (e.agency == 3) continue;
                 // ((11.4) The foot patrols keep walking their beat.)
                 if (World.footPatrol(e) && w.alert < 1) continue;
-                if (fleet.patrolCount >= fleet.patrolTarget && (e.role != Entity.ROLE_RIFLE || e.agency != 0)) continue;
                 if (World.hypot(e.x - f.x, e.y - f.y) < 220) two.add(e);
             }
             if (two.size() < want) continue;
@@ -347,7 +367,7 @@ final class FleetPatrols {
                 Vehicle o = fleet.vehicles.get(i);
                 if (o.standby && o.type == CRUISER && !o.broken && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) parked++;
             }
-            if (parked <= 2) continue;
+            if (parked < 1) continue;
             float[] p = fleet.service.takeStandby(CRUISER, f.x, f.y, f.r + 300);
             if (p == null) continue;
             Vehicle v = fleet.make(CRUISER);
@@ -367,7 +387,7 @@ final class FleetPatrols {
                 e.task = Dispatch.T_BOARD;
             }
             fleet.vehicles.add(v);
-            return;
+            launched++;
         }
     }
 
@@ -421,7 +441,7 @@ final class FleetPatrols {
     Vehicle seatedCar(City.Facility f) {
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Vehicle o = fleet.vehicles.get(i);
-            if (o.standby && o.type == CRUISER && !o.broken && !FleetMedevac.needsRepair(o) && !o.crew.isEmpty() && o.squad.isEmpty()
+            if (o.standby && o.type == CRUISER && !o.broken && !FleetMedevac.needsRepair(o) && o.crew.size() >= 2 && o.squad.isEmpty()
                     && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) return o;
         }
         return null;
@@ -795,7 +815,9 @@ final class FleetPatrols {
     boolean patrolMuster(Vehicle v, float dt) {
         v.speed = 0;
         v.timer += dt;
-        if (v.crew.size() >= v.crewWanted || (v.timer > 12 && !v.crew.isEmpty() && (v.timer > 40 || !partnerComing(v)))) {
+        // ((30.1) Not out on its own: a car goes with two aboard (a motorcycle, one), or not at all.)
+        int least = v.kind == K_BIKE ? 1 : Math.min(2, Math.max(1, v.crewWanted));
+        if (v.crew.size() >= v.crewWanted || (v.timer > 12 && v.crew.size() >= least && (v.timer > 40 || !partnerComing(v)))) {
             fleet.service.dropCrew(v);
             // ((10.41) Mounted up for a call: off to it with the lights on; a patrol car after.)
             Dispatch.Incident inc = v.incident;
@@ -934,7 +956,21 @@ return false;
         }
         boolean moving = here == null && fleet.driving.driveStep(v, dt, v.kind == K_BIKE ? 130 : 115, fleet.driving.carAhead(v) ? 0.5f : 1f);
         if (moving) fleet.driving.hit(v, w.runOver(v.x, v.y, 8, v.speed, v.angle));
-        if (!moving || ((World.hypot(inc.x - v.x, inc.y - v.y) < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
+        // ((30.1) Held up a long way short (a jam, the way ending early): a new way there, a few times, rather than the
+        // officers getting out to run the rest across town; then back to its rounds and the call to someone nearer.
+        float left = (float) World.hypot(inc.x - v.x, inc.y - v.y);
+        float[] road = (!moving || v.stuckTimer > 6) && left > 450 && here == null ? city.nearestDrivable(inc.x, inc.y) : null;
+        if (road != null && World.hypot(road[0] - v.x, road[1] - v.y) > 150) {
+            v.stuckTimer = 0;
+            if (++v.jamTries <= 4 && fleet.routing.route(v, inc.x, inc.y)) return false;
+            v.jamTries = 0;
+            v.state = PATROL;
+            v.incident = null;
+            if (!fleet.routing.newDestination(v)) v.stuckTimer = 99;
+            return false;
+        }
+        if (!moving || ((left < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
+            v.jamTries = 0;
             v.speed = 0;
             v.state = SCENE;
             v.quiet = 0;

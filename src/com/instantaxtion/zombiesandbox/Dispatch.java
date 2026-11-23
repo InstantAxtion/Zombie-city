@@ -823,7 +823,7 @@ final class Dispatch {
                 if (!base.alarm && !base.fallen) quickReaction(base, ready);
                 continue;
             }
-            if (base.alarm || free.size() < 6) continue;
+            if (base.alarm || free.size() < 3) continue;
             // A call close by with no soldiers at it: the quick reaction force goes now.
             Incident close = null;
             float cd = 700 * 700;
@@ -846,11 +846,11 @@ final class Dispatch {
             }
             // A patrol round the roads near the base. (10.33: one out on the roads even while all's quiet, and
             // once the news is out, more of them, into town and round the trouble.)
-            int patrols = w.alert >= 1 ? Math.min(3, 1 + free.size() / 14) : 1;
-            if (base.patrolCd <= 0 && free.size() >= 7 && w.fleet.basePatrols(base) < patrols) {
-                base.patrolCd = w.alert >= 1 ? 40 + w.rnd.nextFloat() * 30 : 150 + w.rnd.nextFloat() * 90;
+            // ((30.1) Nobody kept back on the base: everyone free goes out, a Humvee-load at a time, for as long as there
+            // are trucks parked there to take them.)
+            for (int sent = 0; sent < 8 && free.size() >= 3 && base.patrolCd <= 0; sent++) {
                 float[] to = null;
-                if (w.alert >= 1 && w.rnd.nextFloat() < 0.6f) {
+                if (w.alert >= 1 && w.rnd.nextFloat() < 0.8f) {
                     // Into town: past a call, or anywhere in the streets.
                     Incident hot = incidents.isEmpty() ? null : incidents.get(w.rnd.nextInt(incidents.size()));
                     if (hot != null) to = city.nearestDrivable(hot.x + w.rnd.nextFloat() * 300 - 150, hot.y + w.rnd.nextFloat() * 300 - 150);
@@ -860,9 +860,42 @@ final class Dispatch {
                     float a = w.rnd.nextFloat() * (float) Math.PI * 2, dist = 450 + w.rnd.nextFloat() * 350;
                     to = city.nearestDrivable(base.x + (float) Math.cos(a) * dist, base.y + (float) Math.sin(a) * dist);
                 }
-                if (to != null) w.fleet.basePatrol(nearestOf(free, base.x, base.y, 3), base, to[0], to[1]);
+                if (to == null) break;
+                ArrayList<Entity> sq = nearestOf(free, base.x, base.y, Math.min(Fleet.HUMVEE_SEATS, Math.max(3, free.size() / 2)));
+                if (!w.fleet.basePatrol(sq, base, to[0], to[1]) && !footPatrol(sq, base)) {
+                    base.patrolCd = 20;
+                    break;
+                }
+                free.removeAll(sq);
             }
         }
+    }
+
+    /**
+     * ((30.1) No truck left to take them: a squad walks a patrol out from the base, a few hundred yards, and back. Nobody
+     * stands about the yard.
+     */
+    private boolean footPatrol(ArrayList<Entity> sq, City.Facility base) {
+        if (sq.size() < 3) return false;
+        for (int tries = 0; tries < 6; tries++) {
+            float a = w.rnd.nextFloat() * World.TAU, dist = base.r + 300 + w.rnd.nextFloat() * 350;
+            float[] p = city.findWalkable(base.x + (float) Math.cos(a) * dist, base.y + (float) Math.sin(a) * dist);
+            if (p == null || w.countZombiesNear(p[0], p[1], 200) > 0 || World.hypot(p[0] - base.x, p[1] - base.y) < base.r + 150) continue;
+            City.WalkField field = city.walkField16(p[0], p[1]);
+            for (int i = 0; i < sq.size(); i++) {
+                Entity e = sq.get(i);
+                release(e);
+                e.task = T_MOVE;
+                e.patrolWalk = true;
+                e.orderField = field;
+                double b = i * Math.PI * 2 / sq.size();
+                float[] q = city.findWalkable(p[0] + (float) Math.cos(b) * 12, p[1] + (float) Math.sin(b) * 12);
+                e.postX = q != null ? q[0] : p[0];
+                e.postY = q != null ? q[1] : p[1];
+            }
+            return true;
+        }
+        return false;
     }
 
     /** ((28.7) How far the quick reaction force goes from its base: right across town, however big the map. */
@@ -1111,6 +1144,7 @@ final class Dispatch {
             }
             return;
         }
+        if (bd > ON_FOOT_MAX * ON_FOOT_MAX) return;
         for (Entity e : pick) {
             e.task = T_RESPOND;
             e.incident = target;
@@ -1177,6 +1211,7 @@ final class Dispatch {
             Entity e = units.get(i);
             release(e);
             e.task = T_MOVE;
+            e.patrolWalk = false;
             e.orderField = field;
             double a = i * Math.PI * 2 / units.size();
             float spread = units.size() > 1 ? 12 : 0;
@@ -1810,7 +1845,8 @@ final class Dispatch {
                     Entity o = units.get(j);
                     if (World.hypot(o.x - f.x, o.y - f.y) <= 220) pair.add(o);
                 }
-                if (!w.fleet.stationCar(pair, f, inc)) continue;
+                // ((30.1) Two to a car: one on their own doesn't take one out.)
+                if (pair.size() < 2 || !w.fleet.stationCar(pair, f, inc)) continue;
                 for (Entity o : pair) units.remove(o);
                 driven += pair.size();
                 i--;
@@ -1851,9 +1887,16 @@ final class Dispatch {
             say(type == Entity.COP ? WHO_POLICE : WHO_MILITARY, null, (type == Entity.COP ? "Dispatch: Units across town, grab a car" : "Military: Squads out of range, mount up")
                     + " for " + inc.place + ".", inc.x, inc.y);
         }
+        // ((30.1) Nobody runs across town to a call: those still a long way off with no car or truck to take them stay
+        // where they are, for a call nearer them (or a car going past).
+        for (int i = units.size() - 1; i >= 0; i--)
+            if (World.hypot(units.get(i).x - inc.x, units.get(i).y - inc.y) > ON_FOOT_MAX) units.remove(i);
         if (units.isEmpty()) return driven;
         return driven + assignOnFoot(inc, type, units);
     }
+
+    /** ((30.1) The furthest anyone is sent to a call on foot. */
+    static final float ON_FOOT_MAX = 650;
 
     private float driveSaidAt;
 
@@ -1934,7 +1977,7 @@ final class Dispatch {
             chatter(WHO_MILITARY, lead, "Copy that, Police. " + SQUADS[Math.max(0, lead.squad) % SQUADS.length]
                     + " squad mounting up, on our way to " + place + ".", lead.x, lead.y);
             squad.clear();
-        } else if (!squad.isEmpty()) {
+        } else if (!squad.isEmpty() && (zone != null || World.hypot(squad.get(0).x - x, squad.get(0).y - y) <= ON_FOOT_MAX)) {
             Entity lead = squad.get(0);
             for (Entity e : squad) {
                 if (zone != null) {
@@ -2367,6 +2410,15 @@ final class Dispatch {
                     chatter(WHO_MILITARY, null, "Military: " + n + " mounting up to support at " + inc.place + ".", inc.x, inc.y);
                     squad.clear();
                     return;
+                }
+                // ((30.1) Too far to walk: a truck for them, or they aren't sent.)
+                if (n > 0 && World.hypot(squad.get(0).x - inc.x, squad.get(0).y - inc.y) > ON_FOOT_MAX) {
+                    if (w.fleet.driveTo(squad, inc)) {
+                        squad.clear();
+                        return;
+                    }
+                    squad.clear();
+                    n = 0;
                 }
                 for (Entity s : squad) {
                     s.task = T_RESPOND;

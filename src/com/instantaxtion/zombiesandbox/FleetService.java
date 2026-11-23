@@ -392,7 +392,10 @@ final class FleetService {
         if (v.timer <= 0 || v.quiet > 20 || (v.ammoTruck && v.cargo <= 0)) {
             // ((28.7) A quick reaction force's van picks its five up again and takes them back to base, ready for the
             // next call: left at the scene, they stayed out there, and the base soon had nobody to send.)
-            if (v.kind == K_RAPID_VAN && !v.squad.isEmpty()) {
+            // ((30.1) Any troop truck: its squad climbs back in, and it takes them on together.)
+            boolean anyone = false;
+            for (int i = 0; i < v.squad.size() && !anyone; i++) anyone = !v.squad.get(i).dead && !v.squad.get(i).removed && !v.squad.get(i).isZombie();
+            if (anyone && !v.ammoTruck) {
                 v.state = PICKUP;
                 v.pickup = true;
                 v.timer = 0;
@@ -424,15 +427,19 @@ final class FleetService {
         // and most are in.)
         // (Never with one of them almost there.)
         boolean straggling = v.coming == 0 || v.comingNear > 120;
-        boolean ready = v.crew.size() >= v.crewWanted || (!v.crew.isEmpty() && v.coming == 0)
-                || (straggling && v.timer > 30 && v.crew.size() * 3 >= v.crewWanted * 2) || (straggling && v.timer > 60 && !v.crew.isEmpty())
-                || (v.timer > 90 && !v.crew.isEmpty());
+        // ((30.1) And never off with just the one aboard when it came for more.)
+        int least = v.leaving || v.reinforcement ? 1 : Math.min(2, Math.max(1, v.crewWanted));
+        boolean ready = v.crew.size() >= v.crewWanted || (v.crew.size() >= least && v.coming == 0)
+                || (straggling && v.timer > 30 && v.crew.size() * 3 >= v.crewWanted * 2 && v.crew.size() >= least) || (straggling && v.timer > 60 && v.crew.size() >= least)
+                || (v.timer > 90 && v.crew.size() >= least);
         if (!ready) {
             // ((10.52) A car taking outside help home waits longer: the station it came from can be a walk away,
             // and giving up only sent another, and another.)
             // ((13.7) Any truck or car waits as long while its people are on their way, and not at all once nobody is.)
             if (v.timer > 90 || (v.timer > 3 && v.coming == 0)) {
                 dropCrew(v);
+                // ((30.1) The one who did climb in gets out again: it isn't going with just them.)
+                if (!v.crew.isEmpty()) fleet.crews.crewOut(v, true);
                 // ((12.3) An army truck nobody came for goes back in its bay, or stays parked where it is: it
                 // vanished before, and a base soon had none left to send anyone anywhere.)
                 if (v.type == TRUCK && v.passengerType == Entity.SOLDIER && !v.leaving && !v.reinforcement && !v.broken && v.crew.isEmpty()) return fleet.armyUnits.backInPool(v);
@@ -735,7 +742,7 @@ final class FleetService {
         v.jamTries = 0;
         // Home: anyone aboard gets out (off duty), and it parks up ready for the next call. ((26.3) Two officers
         // who drove a police car back stay in it, waiting for the next call.)
-        boolean wait = v.type == CRUISER && v.crew.size() <= 2 && v.squad.isEmpty() && v.depot != null && v.depot.kind == City.FACILITY_POLICE;
+        boolean wait = v.type == CRUISER && v.crew.size() == 2 && v.squad.isEmpty() && v.depot != null && v.depot.kind == City.FACILITY_POLICE;
         for (int i = 0; i < v.crew.size() && wait; i++) if (v.crew.get(i).type != Entity.COP || v.crew.get(i).role != Entity.ROLE_RIFLE) wait = false;
         if (!v.crew.isEmpty() && !wait) fleet.crews.crewOut(v, true);
         parkUp(v);
@@ -757,7 +764,9 @@ final class FleetService {
         }
         // ((10.56) A troop truck that's brought a squad into town waits near them for a while, standing by:
         // when they're sent on to the next fight, they climb back in (Fleet.mountUp) instead of walking.)
-        if (v.type == TRUCK && v.supply == 0 && v.passengerType == Entity.SOLDIER && v.incident != null && city.inTown(v.x, v.y)) {
+        // ((30.1) Anywhere, not only in town: it stays with them and takes them on afterwards, rather than driving home
+        // with nobody in it and coming all the way back out for them.)
+        if (v.type == TRUCK && v.supply == 0 && v.passengerType == Entity.SOLDIER && v.incident != null && (!v.squad.isEmpty() || v.ammoTruck || city.inTown(v.x, v.y))) {
             v.state = SCENE;
             v.timer = v.ammoTruck ? 300 : 150;
             v.quiet = -40;
@@ -949,6 +958,45 @@ final class FleetService {
                 return false;
             }
         }
+        // ((30.1) Nothing to take them to: soldiers on to the nearest fight still going; two or more officers in a police
+        // car out on patrol in it. Nobody drives back to sit at the station or base.)
+        if ((to == null || to.resolved) && !v.crew.isEmpty() && v.type == TRUCK && v.passengerType == Entity.SOLDIER && v.kind != K_RAPID_VAN) {
+            Dispatch.Incident next = null;
+            float nd = 3000 * 3000;
+            for (int i = 0, n = w.dispatch.incidents.size(); i < n; i++) {
+                Dispatch.Incident q = w.dispatch.incidents.get(i);
+                if (q.resolved || q.zombiesNear < 2) continue;
+                float d = (q.x - v.x) * (q.x - v.x) + (q.y - v.y) * (q.y - v.y);
+                if (d < nd) {
+                    nd = d;
+                    next = q;
+                }
+            }
+            float[] road = next == null ? null : city.nearestDrivable(next.x, next.y);
+            if (road != null && fleet.routing.route(v, road[0], road[1])) {
+                v.squad.clear();
+                v.incident = next;
+                v.place = next.place;
+                v.state = DRIVE;
+                v.stuckTimer = 0;
+                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up. Moving on to " + next.place + ".", v.x, v.y);
+                return false;
+            }
+        }
+        if (!v.wasPatrol && v.type == CRUISER && v.crew.size() >= 2 && v.agency == 0 && !v.leaving && !v.reinforcement) {
+            boolean officers = true;
+            for (int i = 0; i < v.crew.size(); i++) if (v.crew.get(i).type != Entity.COP) officers = false;
+            if (officers) {
+                v.patrol = true;
+                v.squad.clear();
+                v.state = PATROL;
+                v.incident = null;
+                if (v.station == null) v.station = city.nearestFacility(City.FACILITY_POLICE, v.x, v.y);
+                if (v.number == 0) v.number = ++fleet.unitCount;
+                if (!fleet.routing.newDestination(v)) v.stuckTimer = 99;
+                return false;
+            }
+        }
         if (v.wasPatrol && !v.crew.isEmpty()) {
             // (10.48) A patrol car taken over: back out on patrol with its new crew.
             v.wasPatrol = false;
@@ -1010,7 +1058,8 @@ final class FleetService {
         for (int i = 0; i < fleet.vehicles.size(); i++) {
             Vehicle v = fleet.vehicles.get(i);
             // ((28.7) Not the quick reaction force's vans: they're its own, and go out only on its calls.)
-            if (!v.standby || v.type != type || v.broken || FleetMedevac.needsRepair(v) || v.kind == K_RAPID_VAN) continue;
+            // ((30.1) Nor one still being mended: with no cars kept back any more, half-repaired ones were taken out.)
+            if (!v.standby || v.type != type || v.broken || FleetMedevac.needsRepair(v) || v.kind == K_RAPID_VAN || FleetMedevac.repairing(v) != null) continue;
             float d = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
             if (d < bd) {
                 bd = d;
@@ -1122,7 +1171,8 @@ final class FleetService {
      * the station or base.)
      */
     boolean driveTo(java.util.List<Entity> group, Dispatch.Incident inc) {
-        if (group.isEmpty()) return false;
+        // ((30.1) To a call, two at least: one on their own doesn't get a car or truck of their own.)
+        if (group.isEmpty() || (inc != null && group.size() < 2)) return false;
         int type = group.get(0).type, vtype = type == Entity.COP ? CRUISER : TRUCK;
         float sx = 0, sy = 0;
         for (Entity e : group) {
@@ -1137,7 +1187,9 @@ final class FleetService {
         for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
             Vehicle o = fleet.vehicles.get(i);
             if (o.type != vtype || o.broken || o.burnt || o.player != null || o.removedFromFleet || !o.crew.isEmpty() || o.block != null
-                    || o.zone != null || o.loop || o.shelter || o.leaving || o.kind == K_BIKE || o.kind == K_DOZER || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER) continue;
+                    || o.zone != null || o.loop || o.shelter || o.leaving || o.kind == K_BIKE || o.kind == K_DOZER || o.pickupFor != null || o.state == PICKUP || o.state == MUSTER
+                    // ((30.1) Not the ammo truck, nor a truck at a scene waiting for its own squad.)
+                    || o.ammoTruck || o.supply > 0 || (o.state == SCENE && !o.squad.isEmpty())) continue;
             if (!o.standby && !o.parked && o.state != ABANDONED) continue;
             float d = (float) World.hypot(o.x - sx, o.y - sy);
             if (d < bd && w.countZombiesNear(o.x, o.y, 80) == 0) {
@@ -1209,7 +1261,8 @@ final class FleetService {
                 for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
                     Vehicle o = fleet.vehicles.get(i);
                     if (!o.standby || o.type != TRUCK || o.broken || o.burnt || o.kind == K_BIKE || o.pickupFor != null || o.player != null
-                            || o.removedFromFleet || !o.crew.isEmpty() || o.block != null || o.zone != null || o.loop || o.shelter || o.leaving || o.supply > 0) continue;
+                            || o.removedFromFleet || !o.crew.isEmpty() || o.block != null || o.zone != null || o.loop || o.shelter || o.leaving || o.supply > 0
+                            || o.ammoTruck || (o.state == SCENE && !o.squad.isEmpty())) continue;
                     float d = (float) World.hypot(o.x - sx, o.y - sy);
                     if (d < best && w.countZombiesNear(o.x, o.y, 80) == 0) {
                         best = d;

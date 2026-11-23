@@ -506,6 +506,8 @@ final class Entity {
     transient float rideAt = -999, rideLeft;
     /** ((30.0) Seconds spent right beside a stopped vehicle they are boarding (Rides.boardStep). */
     transient float boardT;
+    /** ((30.1) Out on a foot patrol from base (a T_MOVE that ends free, not holding the spot). */
+    transient boolean patrolWalk;
     transient int rideWasted;
     /** ((22.0) A police dog's steps until it next sniffs the air; a bite the dogs have found. */
     transient float sniffT, magCd;

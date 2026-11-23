@@ -1752,6 +1752,17 @@ final class FleetDriving {
         // rounds drove at 60 into people crossing the road, and the army's vans and trucks through the soldiers standing
         // in their own yards, shoving them aside.)
         if (v.player == null && Math.abs(v.speed) > 12 && w.personAhead(v.x, v.y, v.angle)) max = Math.min(max, 12);
+        // ((30.1) And slowing in good time: someone further up the road at speed, down to 25 first. With every officer and
+        // soldier out on patrol the roads and yards were full of cars and Humvees nudging people aside.)
+        else if (v.player == null && Math.abs(v.speed) > 30) {
+            float ahead = Math.min(28, Math.abs(v.speed) * 0.3f);
+            if (w.personAhead(v.x + (float) Math.cos(v.angle) * ahead, v.y + (float) Math.sin(v.angle) * ahead, v.angle)) max = Math.min(max, 25);
+        }
+        // ((30.1) Through a base's yard or a station's car park, where people are about: steady.)
+        if (v.player == null && max > 35) {
+            byte tile = city.tiles[city.tileIndex(v.x, v.y)];
+            if (tile == City.BASE || tile == City.LOT) max = 35;
+        }
         // (Off the road, across the grass: slower going.)
         if (city.rough(v.x, v.y)) max *= 0.65f;
         // Keep a safe distance behind whatever is ahead in the lane.
