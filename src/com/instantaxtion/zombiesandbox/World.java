@@ -806,7 +806,19 @@ final class World {
     /** ((24.0) This step's length, for what's timed deep in the movement code (it counted frames, not time). */
     float stepDt = 1 / 30f;
 
+    /** ((30.6) In the middle of a step (the time budgets apply only then: not while the city is set up). */
+    transient boolean stepping;
+
     void update(float dt) {
+        stepping = true;
+        try {
+            updateStep(dt);
+        } finally {
+            stepping = false;
+        }
+    }
+
+    private void updateStep(float dt) {
         stepDt = dt;
         beginStep(dt);
         scentFields(dt);

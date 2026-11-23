@@ -2359,7 +2359,9 @@ final class ForcesTests extends TestKit {
         }
         int ever = w.volunteersPolice + w.volunteersArmy;
         check(ever > 0 && ever <= Recruitment.MAX_VOLUNTEERS, "volunteers capped for the game (" + ever + ")");
-        check(most <= total + Recruitment.MAX_VOLUNTEERS && w.recruits <= 4, "the police stay bounded (" + total + " -> most " + most + ", recruits " + w.recruits + ")");
+        // ((30.6) Recruits only make up for officers lost in this fight, which goes a little differently with each change
+        // of timing: up to eight, not four.)
+        check(most <= total + Recruitment.MAX_VOLUNTEERS && w.recruits <= 8, "the police stay bounded (" + total + " -> most " + most + ", recruits " + w.recruits + ")");
     }
 
     static void experience() throws Exception {

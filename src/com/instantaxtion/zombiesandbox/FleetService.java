@@ -390,7 +390,7 @@ final class FleetService {
      * dead on it - so it's there when they need it, not a long walk back. True when it set off.
      */
     boolean moveUpTo(Vehicle v, java.util.List<Entity> people, float dt) {
-        if ((v.moveCd -= dt) > 0 || v.player != null || v.broken) return false;
+        if ((v.moveCd -= dt) > 0 || v.player != null || v.broken || fleet.routing.busyFor(v)) return false;
         v.moveCd = 6;
         float sx = 0, sy = 0;
         int n = 0;
@@ -1232,6 +1232,8 @@ final class FleetService {
     boolean driveTo(java.util.List<Entity> group, Dispatch.Incident inc) {
         // ((30.1) To a call, two at least: one on their own doesn't get a car or truck of their own.)
         if (group.isEmpty() || (inc != null && group.size() < 2)) return false;
+        // ((30.6) The searches had their share this step: asked again shortly.)
+        if (fleet.routing.busy()) return false;
         int type = group.get(0).type, vtype = type == Entity.COP ? CRUISER : TRUCK;
         float sx = 0, sy = 0;
         for (Entity e : group) {
@@ -1372,14 +1374,28 @@ final class FleetService {
 
     /** Officers in patrol cars on their way to this call. */
     int inbound(Dispatch.Incident inc) {
-        int n = 0;
-        for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
-            Vehicle v = fleet.vehicles.get(i);
-            if (v.patrol && v.incident == inc && v.state == DRIVE) n += v.crew.size();
-            else if (v.patrol && v.incident == inc && v.state == MUSTER) n += Math.max(v.crew.size(), v.crewWanted);
-            else if (v.pickupFor == inc && v.passengerType == Entity.COP) n += v.squad.size();
+        // ((30.6) Every call's count in one look through the vehicles, once a step: each call looking through them all,
+        // several times a step, was most of what the dispatcher did - a stutter of up to 40 ms as an outbreak began.)
+        if (inc.inbFrame != w.lodFrame) {
+            for (int i = 0, m = w.dispatch.incidents.size(); i < m; i++) {
+                Dispatch.Incident o = w.dispatch.incidents.get(i);
+                o.inbN = 0;
+                o.inbFrame = w.lodFrame;
+            }
+            inc.inbN = 0;
+            inc.inbFrame = w.lodFrame;
+            for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
+                Vehicle v = fleet.vehicles.get(i);
+                if (v.patrol && v.incident != null && v.state == DRIVE) addInbound(v.incident, v.crew.size());
+                else if (v.patrol && v.incident != null && v.state == MUSTER) addInbound(v.incident, Math.max(v.crew.size(), v.crewWanted));
+                else if (v.pickupFor != null && v.passengerType == Entity.COP) addInbound(v.pickupFor, v.squad.size());
+            }
         }
-        return n;
+        return inc.inbN;
+    }
+
+    private void addInbound(Dispatch.Incident o, int n) {
+        if (o.inbFrame == w.lodFrame) o.inbN += n;
     }
 
     /** (13.7) How many tied to this vehicle are still alive and on their way to climb in (and the nearest's distance). */

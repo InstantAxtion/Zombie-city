@@ -2987,6 +2987,8 @@ final class City {
      */
     int searchCap;
     int searched;
+    /** ((30.6) Road tiles looked at by every search so far (never reset: the steps take differences). */
+    long searchedAll;
     /** ((16.8) The last search gave up at searchCap. */
     boolean capped;
 
@@ -3025,6 +3027,8 @@ final class City {
             int tx = t % w, ty = t / w;
             int ht = aim ? 2 * (Math.abs(tx - fx) + Math.abs(ty - fy)) : 0;
             if (dist[t] + ht != d) continue;
+            // ((30.6) Every tile looked at counted, for the step's share of searching (FleetRouting.busy).)
+            searchedAll++;
             if (searchCap > 0 && ++searched > searchCap) {
                 for (int b = 0; b < DIAL; b++) dialN[b] = 0;
                 capped = true;

@@ -428,7 +428,18 @@ final class FleetPatrols {
     }
 
     /** ((26.3) Police cars parked at station f, ready. */
+    /** ((30.6) Cars parked at each station, counted once a step (every officer on the beat asks). */
+    private final java.util.HashMap<City.Facility, int[]> parkedCache = new java.util.HashMap<City.Facility, int[]>();
+
     int parkedAt(City.Facility f) {
+        int[] c = parkedCache.get(f);
+        if (c == null) parkedCache.put(f, c = new int[]{-1, 0});
+        if (c[0] == w.lodFrame) return c[1];
+        c[0] = w.lodFrame;
+        return c[1] = parkedAtNow(f);
+    }
+
+    int parkedAtNow(City.Facility f) {
         int n = 0;
         for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
             Vehicle o = fleet.vehicles.get(i);
@@ -441,7 +452,7 @@ final class FleetPatrols {
     Vehicle seatedCar(City.Facility f) {
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Vehicle o = fleet.vehicles.get(i);
-            if (o.standby && o.type == CRUISER && !o.broken && !FleetMedevac.needsRepair(o) && o.crew.size() >= 2 && o.squad.isEmpty()
+            if (o.standby && o.type == CRUISER && !o.broken && !FleetMedevac.needsRepair(o) && FleetMedevac.repairing(o) == null && o.crew.size() >= 2 && o.squad.isEmpty()
                     && World.hypot(o.x - f.x, o.y - f.y) < f.r + 300) return o;
         }
         return null;
@@ -524,6 +535,7 @@ final class FleetPatrols {
      * with officers aboard turns and goes to help.
      */
     void heardFight(float x, float y, float radius, float tx, float ty) {
+        if (fleet.routing.busy()) return;
         Dispatch.Incident inc = null;
         for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
             Vehicle v = fleet.vehicles.get(i);
@@ -570,7 +582,7 @@ final class FleetPatrols {
         // Patrol cars on their rounds a long way from the trouble, heading further off: a few at a time, they turn round
         // for streets nearer the nearest call (see FleetRouting.pickDestination).
         int cars = fleet.vehicles.size(), turned = 0;
-        for (int k = 0; k < cars && turned < 4; k++) {
+        for (int k = 0; k < cars && turned < 4 && !fleet.routing.busy(); k++) {
             sweepAt = (sweepAt + 1) % cars;
             Vehicle v = fleet.vehicles.get(sweepAt);
             if (v.type != CRUISER || !v.patrol || v.agency != 0 || v.state != PATROL || v.crew.isEmpty() || v.incident != null || v.pickupFor != null
@@ -593,7 +605,7 @@ final class FleetPatrols {
         int n = w.entities.size(), stride = Math.max(1, w.zombies / 150), sent = 0;
         float[] done = new float[6];
         int seen = 0;
-        for (int i = (int) (w.time * 7) % stride; i < n && sent < 3; i++) {
+        for (int i = (int) (w.time * 7) % stride; i < n && sent < 3 && !fleet.routing.busy(); i++) {
             Entity z = w.entities.get(i);
             if (z.dead || z.removed || !z.isZombie() || z.building != null) continue;
             if (seen++ % stride != 0) continue;
@@ -973,6 +985,7 @@ return false;
         float[] road = (!moving || v.stuckTimer > 6) && left > 450 && here == null ? city.nearestDrivable(inc.x, inc.y) : null;
         if (road != null && World.hypot(road[0] - v.x, road[1] - v.y) > 150) {
             v.stuckTimer = 0;
+            if (fleet.routing.busyFor(v)) return false;
             if (++v.jamTries <= 4 && fleet.routing.route(v, inc.x, inc.y)) return false;
             v.jamTries = 0;
             v.state = PATROL;

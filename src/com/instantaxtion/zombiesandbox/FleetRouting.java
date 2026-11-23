@@ -374,9 +374,54 @@ final class FleetRouting {
         return bt < 0 ? null : new float[]{(bt % city.w + 0.5f) * City.T, (bt / city.w + 0.5f) * City.T};
     }
 
+    /**
+     * ((30.6) Time spent on route searches this step, and whether it's had its share: a dozen cars sent to calls in one
+     * step as an outbreak began each searched the whole road network, a stutter of up to 60 ms (several times that on a
+     * phone). Searches that can wait a step - a car sent to a call, a lift sent for someone, a car moving up - wait once
+     * it's had four milliseconds; the rest (a car with nowhere else to go) always search.
+     */
+    long stepStart;
+    int stepFrame = -1;
+    /** ((30.6) Road tiles a step may search before the searches that can wait are put off: counted, not timed, so a
+     *  game plays out the same however fast the phone is (and a saved game loads back the same). */
+    static final long BUSY_TILES = 25000;
+
+    /**
+     * ((30.6) Busy for this vehicle: the step's time is used up and it hasn't already been waiting a second for its search.
+     * Without that, the cars late in the list were turned away step after step - officers stood about beside a patrol car
+     * that never got its way to them.
+     */
+    boolean busyFor(Vehicle v) {
+        if (!busy()) return false;
+        if (v.deniedAt >= 0 && w.time - v.deniedAt > 1f) return false;
+        if (v.deniedAt < 0) v.deniedAt = w.time;
+        return true;
+    }
+
+    boolean busy() {
+        // (Only while the city is being stepped: setting it up - the patrol cars' first beats - has no frame to keep.)
+        if (!w.stepping) return false;
+        if (stepFrame != w.lodFrame) {
+            stepFrame = w.lodFrame;
+            stepStart = city.searchedAll;
+        }
+        return city.searchedAll - stepStart > BUSY_TILES;
+    }
+
     boolean route(Vehicle v, float x, float y) {
+        busy();
+        long before = city.searchedAll;
+        boolean ok = routeTimed(v, x, y);
+        if (city.searchedAll != before) v.deniedAt = -1;
+        return ok;
+    }
+
+    private boolean routeTimed(Vehicle v, float x, float y) {
         // ((10.34) Patrol cars on their rounds share the budget too: there are a couple of hundred on a Gigantic map.)
         if ((v.type == CAR || (v.patrol && v.state == PATROL && v.incident == null)) && v.player == null) {
+            // ((30.6) And never past the step's share of time, wherever it's asked from (patrols sent out from a
+            // station, everyday traffic): they try again in a moment.)
+            if (!urgent && busyFor(v)) return false;
             if (fleet.routeBudget <= 0 && !urgent) return false;
             fleet.routeBudget--;
         }

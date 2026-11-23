@@ -118,6 +118,8 @@ final class Fleet {
         /** ((30.2) Moving up at a scene to where its people have got to (FleetService.moveUp), and until it next looks. */
         boolean moveUp;
         float moveCd = 8;
+        /** ((30.6) When its route search was first put off for want of time this step (-1: it wasn't): see FleetRouting.busyFor. */
+        transient float deniedAt = -1;
         /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
         transient float backT;
         /** ((27.5) Backing straight off a length to undo a knot it's part of, giving the other the room (seconds left). */

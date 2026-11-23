@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.5";
-    static final int VERSION_CODE = 305;
+    static final String VERSION = "30.6";
+    static final int VERSION_CODE = 306;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.6  -  Smoother",
+                    "Fewer stutters when an outbreak starts: police cars, calls and the dispatcher spread their work over several moments.",
+                    "A repaired police car isn't taken out half mended.",
+            },
             {
                     "30.5  -  Corners fixed",
                     "Where a road just turns a corner there are no traffic lights, crossings or turn arrows any more.",

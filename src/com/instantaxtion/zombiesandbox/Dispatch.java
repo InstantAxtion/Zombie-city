@@ -31,6 +31,10 @@ final class Dispatch {
     /** ((17.2) The calls in a gang war, and in an invasion.) */
 
     static final class Incident {
+        /** ((30.6) Officers on their way in vehicles, worked out once a step for every call (FleetService.inbound). */
+        transient int inbN, inbFrame = -1;
+        /** ((30.6) Waiting for its way on foot to be worked out (Dispatch.fieldSoon). */
+        transient boolean wantsField;
         float x, y, age, clearTimer, sceneTime;
         String place;
         int reported, lastLogged, cops, soldiers, zombiesNear, officersDown;
@@ -660,7 +664,7 @@ final class Dispatch {
         inc.y = y;
         inc.place = city.placeName(x, y);
         inc.reported = inc.lastLogged = count;
-        giveField(inc);
+        fieldSoon(inc);
         incidents.add(inc);
         return inc;
     }
@@ -1062,7 +1066,7 @@ final class Dispatch {
             inc.y = p[1];
             inc.place = city.placeName(p[0], p[1]);
             inc.reported = inc.lastLogged = Math.max(1, w.countZombiesNear(p[0], p[1], 140));
-            giveField(inc);
+            fieldSoon(inc);
             incidents.add(inc);
             say(WHO_POLICE, null, "Dispatch: Patrols report " + inc.reported + " of them at " + inc.place
                     + ". All available units.", inc.x, inc.y);
@@ -1349,6 +1353,13 @@ final class Dispatch {
 
     private void updateIncidents(float step) {
         refields = 0;
+        // ((30.6) The next call still without its way on foot gets one (see fieldSoon).)
+        for (int i = 0; i < incidents.size() && fieldFrame != w.lodFrame; i++)
+            if (incidents.get(i).field == null && !incidents.get(i).resolved && incidents.get(i).wantsField) {
+                incidents.get(i).wantsField = false;
+                fieldFrame = w.lodFrame;
+                giveField(incidents.get(i));
+            }
         int open = incidents.size();
         // (10.33) Several outbreaks at once: the worst calls are served first, each gets its fair share of the
         // officers there are (rather than the first call seen taking everyone), some are kept back for the next
@@ -1381,8 +1392,12 @@ final class Dispatch {
             rebalanceCd = 4;
             rebalance();
         }
+        int served = 0;
         for (int i = 0; i < byNeed.size(); i++) {
             Incident inc = byNeed.get(i);
+            // ((30.6) Sending units has had its share of this step (the worst calls first): the rest are seen to next time.
+            // As an outbreak began, every call looked through the whole city for its officers in the same step.)
+            boolean sendNow = served < ASSIGN_CALLS;
             // ((12.0) Closed already this round, to make room for a new call or merged into another: nothing more to
             // do for it - it used to be closed a second time, and could even call for help from outside.)
             if (inc.resolved) continue;
@@ -1444,11 +1459,12 @@ final class Dispatch {
             boolean severe = inc.officersDown > 0 || inc.zombiesNear >= 8;
             int have = inc.cops + inc.soldiers + w.fleet.inbound(inc);
             // The nearest patrol car takes the call first; officers on foot make up the rest.
-            if (have < need) {
+            if (have < need && sendNow) served++;
+            if (have < need && sendNow) {
                 Fleet.Vehicle car = w.fleet.patrolFor(inc.x, inc.y);
-                if (car != null && w.fleet.respond(car, inc)) have += car.crew.size();
+                if (car != null && !w.fleet.routing.busyFor(car) && w.fleet.respond(car, inc)) have += car.crew.size();
             }
-            if (have < need) {
+            if (have < need && sendNow) {
                 // (The ones kept back are for a bad call only.)
                 int want = severe ? need - have : Math.min(need - have, spare);
                 int got = want > 0 ? assign(inc, Entity.COP, want) : 0;
@@ -1785,6 +1801,22 @@ final class Dispatch {
      * with sixty calls open at once on one the phone ran out of memory and the game crashed. Past the budget, the
      * least serious call that has one gives it up to a worse one (those going to it head straight there instead).
      */
+    /**
+     * ((30.6) A new call's way on foot, now if none has been worked out this step, otherwise a step or two later (anyone
+     * going there finds their own way meanwhile): a dozen calls coming in at once as an outbreak began each worked out a
+     * walk over the whole city in the same step - a stutter of up to 40 ms here, several times that on a phone.
+     */
+    private int fieldFrame = -1;
+    /** ((30.6) Calls short of units that get some sent this step (a count, not a time: the game plays out the same anywhere). */
+    static final int ASSIGN_CALLS = 6;
+
+    private void fieldSoon(Incident inc) {
+        if (fieldFrame != w.lodFrame) {
+            fieldFrame = w.lodFrame;
+            giveField(inc);
+        } else inc.wantsField = true;
+    }
+
     void giveField(Incident inc) {
         int budget = Math.max(6, (int) (24L * 1024 * 1024 / (2L * city.w * city.h)));
         int have = 0;
