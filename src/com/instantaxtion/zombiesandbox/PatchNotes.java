@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.7";
-    static final int VERSION_CODE = 307;
+    static final String VERSION = "30.8";
+    static final int VERSION_CODE = 308;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.8  -  No more pile-ups",
+                    "Police and army vehicles no longer heap up at calls, junctions and base gates: a call takes a few cars, the rest of the officers go on foot or elsewhere.",
+                    "Four officers to a patrol car, so everyone rides with half as many cars on the road. Bases have trucks for all their soldiers.",
+                    "Quick reaction force vans are a little faster, and much quicker round corners.",
+                    "Taking over a vehicle uses one of its own crew, and when you let go it carries on with what it was doing.",
+            },
             {
                     "30.7  -  Proper corners",
                     "Where a road turns a corner, the outside of the turn is a smooth curve instead of a square slab of tarmac.",

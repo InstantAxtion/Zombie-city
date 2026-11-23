@@ -118,6 +118,11 @@ final class Fleet {
         /** ((30.2) Moving up at a scene to where its people have got to (FleetService.moveUp), and until it next looks. */
         boolean moveUp;
         float moveCd = 8;
+        /** ((30.8) What it was doing when the player took the wheel: given back to it when they let go (FleetPlayer.handBack). */
+        transient int heldState = -1;
+        transient boolean heldPatrol, heldLoop;
+        transient Dispatch.Incident heldIncident;
+        transient float heldTx, heldTy;
         /** ((30.6) When its route search was first put off for want of time this step (-1: it wasn't): see FleetRouting.busyFor. */
         transient float deniedAt = -1;
         /** ((27.4) Backing out of a jam or a dead end towards a new way round (seconds left). */
@@ -1082,7 +1087,10 @@ final class Fleet {
             // At a scene: in to the kerb, out of the traffic's way.
             // ((27.5) And while it waits for its officers to come back to it, or to come and get in: the queue behind a
             // police car stopped in the lane for that sat there as long as it did.)
-            if (((v.type == CRUISER && (v.state == SCENE || v.state == RECALL || v.state == PICKUP)) || (v.type == AMBULANCE && v.state == LOAD))
+            // ((30.8) And a troop truck waiting there for its squad.)
+            if (((v.type == CRUISER && (v.state == SCENE || v.state == RECALL || v.state == PICKUP)) || (v.type == AMBULANCE && v.state == LOAD)
+                    || (v.type == TRUCK && v.state == SCENE && !v.ammoTruck && v.kind != K_FIRE_SUPPORT && v.kind != K_DOZER && v.clearing == null
+                        && v.passengerType == Entity.SOLDIER && !v.squad.isEmpty() && !v.moveUp))
                     && Math.abs(v.speed) < 1 && !v.broken && v.player == null)
                 driving.kerbAtScene(v, vdt);
             else if (Math.abs(v.speed) > 10) v.kerbed = false;
@@ -1409,7 +1417,7 @@ final class Fleet {
     boolean troopTruck(java.util.List<Entity> squad, City.Facility base, Dispatch.Incident inc, int forceKind) {
         // (One of the trucks parked on the base, if there's one left; otherwise one comes round to the gate.)
         // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
-        if (squad.size() < 2) return false;
+        if (squad.size() < 2 || patrols.trucksFull(inc)) return false;
         float[] p = armyUnits.baseTruck(base);
         if (p == null) return false;
         int kind = 0;

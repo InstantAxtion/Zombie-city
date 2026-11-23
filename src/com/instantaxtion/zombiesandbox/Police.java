@@ -112,7 +112,8 @@ final class Police {
         if (st == null) return false;
         // ((11.4) Mostly car patrols: only one pair in four walks a beat. The rest head back in to the precinct to
         // crew a car (see Fleet.staffPatrols).)
-        if (!World.footPatrol(e) && e.agency == 0 && e.role == Entity.ROLE_RIFLE && w.fleet.patrols.parkedAt(st) > 0) {
+        if (!World.footPatrol(e) && e.agency == 0 && e.role == Entity.ROLE_RIFLE && w.fleet.patrols.parkedAt(st) > 0
+                && (w.city.cfg.civic < 50 || w.fleet.patrolCount < w.fleet.patrolTarget)) {
             float gx = st.gateX > 0 ? st.gateX : st.x, gy = st.gateY > 0 ? st.gateY : st.y;
             float bx = gx - e.x, by = gy - e.y;
             e.dutyFor = 0;

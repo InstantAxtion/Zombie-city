@@ -22,6 +22,13 @@ final class FleetPlayer {
 
     /** The player gets behind the wheel (anyone else in it stays aboard). */
     void takeWheel(Vehicle v, Entity e) {
+        // ((30.8) What it was doing, to go back to when the player lets go.)
+        v.heldState = v.state;
+        v.heldPatrol = v.patrol;
+        v.heldLoop = v.loop;
+        v.heldIncident = v.incident != null ? v.incident : v.pickupFor;
+        v.heldTx = v.tx;
+        v.heldTy = v.ty;
         v.player = e;
         v.parked = false;
         v.pulling = false;
@@ -44,6 +51,41 @@ final class FleetPlayer {
             v.state = FLY_OUT;
             v.homeX = v.baseX;
             v.homeY = v.baseY;
+        } else if ((v.type == CRUISER || v.type == TRUCK) && !v.crew.isEmpty() && !v.broken) {
+            // ((30.8) Its own crew still aboard: they drive on with what they were doing (see resume), or as handBack does.)
+            v.riders.remove(e);
+            float sx0 = v.x + (float) Math.cos(v.angle + 1.57f) * 10, sy0 = v.y + (float) Math.sin(v.angle + 1.57f) * 10;
+            float[] p0 = city.findWalkable(sx0, sy0);
+            if (p0 == null) p0 = new float[]{v.x, v.y};
+            e.x = p0[0];
+            e.y = p0[1];
+            e.vx = e.vy = 0;
+            e.dead = false;
+            e.removed = false;
+            e.ride = null;
+            e.rig = null;
+            w.entities.add(e);
+            for (int i = 0; i < v.riders.size(); i++) w.release(v.riders.get(i), sx0, sy0);
+            v.riders.clear();
+            v.parked = false;
+            v.field = null;
+            if (resume(v)) return;
+            if (v.type == CRUISER) {
+                v.patrol = true;
+                v.state = PATROL;
+                v.incident = null;
+                if (!fleet.routing.newDestination(v)) v.stuckTimer = 99;
+            } else {
+                v.pickup = true;
+                v.squad.clear();
+                if (!fleet.service.headHome(v)) {
+                    v.pickup = false;
+                    fleet.crewOut(v, true);
+                    v.parked = true;
+                    v.state = ABANDONED;
+                }
+            }
+            return;
         } else {
             v.parked = true;
             v.state = ABANDONED;
@@ -102,14 +144,16 @@ final class FleetPlayer {
             return;
         }
         // Police or army: they're its crew now (and the others of theirs riding with them); anyone else gets out.
+        // ((30.8) Each once: the crew already aboard weren't checked, and were counted in again.)
         v.riders.remove(e);
-        fleet.board(v, e);
+        if (!v.crew.contains(e)) fleet.board(v, e);
         for (Entity o : new ArrayList<Entity>(v.riders)) {
             v.riders.remove(o);
-            if (o.type == e.type) fleet.board(v, o);
-            else w.release(o, v.x, v.y);
+            if (o.type == e.type && !v.crew.contains(o)) fleet.board(v, o);
+            else if (o.type != e.type) w.release(o, v.x, v.y);
         }
         v.passengerType = e.type;
+        if (resume(v)) return;
         if (police) {
             v.patrol = true;
             v.state = PATROL;
@@ -125,6 +169,41 @@ final class FleetPlayer {
             v.parked = true;
             v.state = ABANDONED;
         }
+    }
+
+    /**
+     * ((30.8) Back to what it was doing before the player took the wheel: on to its call (lights on), or a patrol out
+     * from the base back on its way. It used to forget it - a police car on a call went back on patrol, an army truck
+     * home - whatever it had been sent to do. True if it went back to it.
+     */
+    private boolean resume(Vehicle v) {
+        Dispatch.Incident inc = v.heldIncident;
+        v.heldIncident = null;
+        if (v.crew.isEmpty()) return false;
+        if (inc != null && !inc.resolved && w.dispatch.incidents.contains(inc)) {
+            if (v.type == CRUISER) {
+                v.patrol = true;
+                if (fleet.patrols.respond(v, inc)) return true;
+                v.patrol = v.heldPatrol;
+                return false;
+            }
+            float[] road = city.nearestDrivable(inc.x, inc.y);
+            if (road != null && fleet.routing.route(v, road[0], road[1])) {
+                v.incident = inc;
+                v.place = inc.place;
+                v.state = DRIVE;
+                v.stuckTimer = 0;
+                return true;
+            }
+            return false;
+        }
+        if (v.heldLoop && v.type == TRUCK && fleet.routing.route(v, v.heldTx, v.heldTy)) {
+            v.loop = true;
+            v.state = DRIVE;
+            v.stuckTimer = 0;
+            return true;
+        }
+        return false;
     }
 
     /** Driving: the stick says where to go (pull back to reverse); the button sounds the horn, or fires the cannon. */

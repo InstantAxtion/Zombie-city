@@ -1782,6 +1782,9 @@ final class FleetDriving {
         int W = city.w;
         // ((10.49) Off or on to a slip road: a sweeping bend, not a street corner.)
         float round = city.onSlip(v.x, v.y) ? 50 : v.type == CAR ? 26 : 31;
+        // ((30.8) The quick reaction force's vans take a corner at speed: that's what they're for.)
+        boolean qrf = v.kind == K_RAPID_VAN;
+        if (qrf) round = city.onSlip(v.x, v.y) ? 70 : 55;
         int t = v.pathT, steps = 0, look = Math.min(8, 4 + (int) (Math.abs(v.speed) / 30));
         for (; steps < look; steps++) {
             int n = downhill(v.field, t);
@@ -1809,7 +1812,7 @@ final class FleetDriving {
                     t = n;
                     continue;
                 }
-                max = Math.min(max, round + steps * City.T * 0.75f);
+                max = Math.min(max, round + steps * City.T * (qrf ? 1.1f : 0.75f));
                 break;
             }
             t = n;
@@ -1870,6 +1873,7 @@ final class FleetDriving {
         // Wheels only turn the car while it's moving.
         // (Standing still, or as good as - held at a junction or in a jam - it doesn't turn on the spot.)
         float steer = Math.abs(v.speed) < 1.5f ? 0 : dt * 5 * Math.min(1, 0.05f + Math.abs(v.speed) / 18f);
+        if (v.kind == K_RAPID_VAN) steer *= 1.6f;
         // (10.42) Following its line: ease the wheel round, rather than snapping onto every last fraction of a degree.
         float turned = Math.max(-steer, Math.min(steer, v.aiming ? diff * Math.min(1, dt * 9) : diff));
         v.angle += turned;

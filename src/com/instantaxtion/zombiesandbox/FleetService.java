@@ -738,7 +738,7 @@ final class FleetService {
 
     /** A police car's or army vehicle's top speed on the road (before the open-road scaling), on a call or not. */
     static float topSpeed(int type, int kind, boolean call) {
-        return type == CRUISER ? (call ? 120 : 105) : kind == K_RAPID_VAN ? (call ? 140 : 112) : kind == K_APC ? (call ? 85 : 68) : kind == K_HUMVEE ? (call ? 115 : 100)
+        return type == CRUISER ? (call ? 120 : 105) : kind == K_RAPID_VAN ? (call ? 154 : 123) : kind == K_APC ? (call ? 85 : 68) : kind == K_HUMVEE ? (call ? 115 : 100)
                 : kind == K_MRAP ? (call ? 95 : 78) : kind == K_RIOT_VAN ? (call ? 100 : 85) : (call ? 100 : 80);
     }
 
@@ -794,7 +794,7 @@ final class FleetService {
         v.jamTries = 0;
         // Home: anyone aboard gets out (off duty), and it parks up ready for the next call. ((26.3) Two officers
         // who drove a police car back stay in it, waiting for the next call.)
-        boolean wait = v.type == CRUISER && v.crew.size() == 2 && v.squad.isEmpty() && v.depot != null && v.depot.kind == City.FACILITY_POLICE;
+        boolean wait = v.type == CRUISER && (v.crew.size() == 2 || (city.cfg.civic >= 50 && v.crew.size() >= 2 && v.crew.size() <= 4)) && v.squad.isEmpty() && v.depot != null && v.depot.kind == City.FACILITY_POLICE;
         for (int i = 0; i < v.crew.size() && wait; i++) if (v.crew.get(i).type != Entity.COP || v.crew.get(i).role != Entity.ROLE_RIFLE) wait = false;
         if (!v.crew.isEmpty() && !wait) fleet.crews.crewOut(v, true);
         parkUp(v);
@@ -818,7 +818,10 @@ final class FleetService {
         // when they're sent on to the next fight, they climb back in (Fleet.mountUp) instead of walking.)
         // ((30.1) Anywhere, not only in town: it stays with them and takes them on afterwards, rather than driving home
         // with nobody in it and coming all the way back out for them.)
-        if (v.type == TRUCK && v.supply == 0 && v.passengerType == Entity.SOLDIER && v.incident != null && (!v.squad.isEmpty() || v.ammoTruck || city.inTown(v.x, v.y))) {
+        // ((30.8) Unless three or more are stopped round it already: then home, and back for them later, rather than add to
+        // the heap.)
+        if (v.type == TRUCK && v.supply == 0 && v.passengerType == Entity.SOLDIER && v.incident != null && (!v.squad.isEmpty() || v.ammoTruck || city.inTown(v.x, v.y))
+                && (v.ammoTruck || fleet.patrols.stoppedRound(v, 60) < 3)) {
             v.state = SCENE;
             v.timer = v.ammoTruck ? 300 : 150;
             v.quiet = -40;
@@ -1234,6 +1237,9 @@ final class FleetService {
         if (group.isEmpty() || (inc != null && group.size() < 2)) return false;
         // ((30.6) The searches had their share this step: asked again shortly.)
         if (fleet.routing.busy()) return false;
+        // ((30.8) Nor another police car to a call that has all it can take.)
+        if (inc != null && group.get(0).type == Entity.COP && fleet.patrols.carsFull(inc, null)) return false;
+        if (inc != null && group.get(0).type == Entity.SOLDIER && fleet.patrols.trucksFull(inc)) return false;
         int type = group.get(0).type, vtype = type == Entity.COP ? CRUISER : TRUCK;
         float sx = 0, sy = 0;
         for (Entity e : group) {

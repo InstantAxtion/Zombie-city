@@ -170,7 +170,7 @@ final class FleetPatrols {
         // (Every fifth unit is a motorcycle officer, riding alone.)
         boolean bike = city.cfg.nature() && v.number % 5 == 0;
         if (bike) fleet.setKind(v, K_BIKE);
-        for (int k = 0; k < (bike ? 1 : 2); k++) {
+        for (int k = 0; k < (bike ? 1 : crewOf()); k++) {
             Entity e = w.create(Entity.COP, v.x, v.y);
             e.rig = v; fleet.crews.note(e);
             v.crew.add(e);
@@ -337,8 +337,10 @@ final class FleetPatrols {
         // target, the rest guarding the precinct.)
         // ((30.1) Nobody kept back: every officer free at a station goes out, two to a car, as long as it has cars.)
         int launched = 0;
+        // ((30.8) As many cars as the roads can take, no more (see Population.roadCars): the rest walk a beat.)
+        if (city.cfg.civic >= 50 && fleet.patrolCount >= fleet.patrolTarget) return;
         for (City.Facility f : city.facilities) {
-            if (launched >= 6) return;
+            if (launched >= 6 || (city.cfg.civic >= 50 && fleet.patrolCount + launched >= fleet.patrolTarget)) return;
             if (f.kind != City.FACILITY_POLICE || w.countZombiesNear(f.x, f.y, 120) > 0) continue;
             // ((26.3) A car waiting there with its officers already in it goes out on patrol first (two always kept back).)
             Vehicle seated = seatedCar(f);
@@ -347,7 +349,7 @@ final class FleetPatrols {
                 continue;
             }
             boolean bike = city.cfg.nature() && (fleet.unitCount + 1) % 5 == 0;
-            int want = bike ? 1 : 2;
+            int want = bike ? 1 : crewOf();
             ArrayList<Entity> two = new ArrayList<Entity>();
             for (int i = 0, n = w.entities.size(); i < n && two.size() < want; i++) {
                 Entity e = w.entities.get(i);
@@ -397,7 +399,7 @@ final class FleetPatrols {
      * on. False if there's no road from the station.
      */
     boolean stationCar(java.util.List<Entity> officers, City.Facility f, Dispatch.Incident inc) {
-        if (officers.isEmpty() || inc == null) return false;
+        if (officers.isEmpty() || inc == null || carsFull(inc, null)) return false;
         float[] p = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
         if (p == null || !fleet.routing.canDrive(p[0], p[1], inc.x, inc.y)) return false;
         // ((26.3) A car with its officers already in it, waiting: it goes, lights on, and these two stay at the station.)
@@ -500,9 +502,9 @@ final class FleetPatrols {
                 if (e.role != Entity.ROLE_RIFLE || e.outsider || (e.agency == 4) != f.fed || World.footPatrol(e)) continue;
                 if (World.hypot(e.x - f.x, e.y - f.y) < 220) free.add(e);
             }
-            for (int k = 0; k < empty.size() && free.size() >= 4; k++) {
+            for (int k = 0; k < empty.size() && free.size() >= (city.cfg.civic >= 50 ? crewOf() : 4); k++) {
                 Vehicle v = empty.get(k);
-                for (int j = 0; j < 2; j++) fleet.crews.board(v, free.remove(free.size() - 1));
+                for (int j = 0; j < crewOf(); j++) fleet.crews.board(v, free.remove(free.size() - 1));
                 v.passengerType = Entity.COP;
             }
         }
@@ -642,7 +644,56 @@ final class FleetPatrols {
         }
     }
 
+    /**
+     * ((30.8) How many police cars a call can take: two, and one more for every eight of the dead there, six at most. With
+     * no limit on how many officers go, every car in town drove to a big call down the same street and stopped in the lane
+     * there one behind another - a heap of a dozen cars on top of each other. The rest go on foot, or to another call.
+     */
+    /** ((30.8) Officers to a patrol car: four on map version 50 (see Population.roadCars), two before. */
+    int crewOf() {
+        return city.cfg.civic >= 50 ? 4 : 2;
+    }
+
+    boolean carsFull(Dispatch.Incident inc, Vehicle except) {
+        if (inc == null) return false;
+        int cap = Math.min(6, 2 + inc.zombiesNear / 8), n = 0;
+        for (int i = 0, m = fleet.vehicles.size(); i < m && n < cap; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == except || o.removedFromFleet || o.type != CRUISER) continue;
+            // (Calls close together count together: three calls on one street each had their six.)
+            Dispatch.Incident oi = o.incident != null && (o.state == DRIVE || o.state == SCENE || o.state == RECALL || o.state == MUSTER) ? o.incident : o.pickupFor;
+            if (oi != null && (oi == inc || (Math.abs(oi.x - inc.x) < 250 && Math.abs(oi.y - inc.y) < 250))) n++;
+        }
+        return n >= cap;
+    }
+
+    /** ((30.8) The same for the army's trucks at a call (and those close to it): three, one more for every ten of the dead, five at most. */
+    boolean trucksFull(Dispatch.Incident inc) {
+        if (inc == null) return false;
+        int cap = Math.min(5, 3 + inc.zombiesNear / 10), n = 0;
+        for (int i = 0, m = fleet.vehicles.size(); i < m && n < cap; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o.removedFromFleet || o.type != TRUCK || o.ammoTruck || o.kind == K_FIRE_SUPPORT) continue;
+            Dispatch.Incident oi = o.incident != null && (o.state == DRIVE || o.state == SCENE || o.state == MUSTER) ? o.incident : o.pickupFor;
+            if (oi != null && (oi == inc || (Math.abs(oi.x - inc.x) < 250 && Math.abs(oi.y - inc.y) < 250))) n++;
+        }
+        return n >= cap;
+    }
+
+    /** ((30.8) Police cars already stopped (at a scene, or waiting for their officers) close round this one. */
+    int stoppedRound(Vehicle v, float r) {
+        int n = 0;
+        for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == v || o.removedFromFleet || (o.type != CRUISER && o.type != TRUCK)) continue;
+            if ((o.state == SCENE || o.state == RECALL || o.state == PICKUP) && Math.abs(o.speed) < 2
+                    && Math.abs(o.x - v.x) < r && Math.abs(o.y - v.y) < r) n++;
+        }
+        return n;
+    }
+
     boolean respond(Vehicle v, Dispatch.Incident inc) {
+        if (carsFull(inc, v)) return false;
         v.state = DRIVE;
         if (!fleet.routing.route(v, inc.x, inc.y)) {
             v.state = PATROL;
@@ -764,7 +815,8 @@ final class FleetPatrols {
         boolean look = check || (Math.abs(v.speed) > 15 && w.zombieWithin(v.x, v.y, 190));
         // ((12.0) Not in the middle of a junction, though: it drives on out of it first. Stopped there for the scene,
         // it blocked the junction for everyone until its officers came back.)
-        if (look && v.crew.size() > 0 && (city.junctionIdAt(v.x, v.y) < 0 || Math.abs(v.speed) < 3) && (fleet.service.hordeAhead(v)
+        // ((30.8) Not with three or more stopped there already: it drives on (another call, another street).)
+        if (look && v.crew.size() > 0 && (city.junctionIdAt(v.x, v.y) < 0 || Math.abs(v.speed) < 3) && stoppedRound(v, 80) < 3 && (fleet.service.hordeAhead(v)
                 || (w.countZombiesNear(v.x, v.y, 90) > 0 && w.countZombiesNear(v.x, v.y, 30) < 4))) return patrolContact(v);
         if (v.state == DRIVE && v.ammoRun != null) return ammoRunStep(v, dt);
         if (v.state == DRIVE) return patrolToCall(v, dt);
@@ -993,7 +1045,10 @@ return false;
             if (!fleet.routing.newDestination(v)) v.stuckTimer = 99;
             return false;
         }
-        if (!moving || ((left < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
+        // ((30.8) Coming up on a scene with three or more already stopped there: pull up here, short of them, rather
+        // than drive in among them and stop in the lane on top of them.)
+        boolean crowded = left < 260 && (w.lodFrame & 7) == (v.number & 7) && city.junctionIdAt(v.x, v.y) < 0 && stoppedRound(v, 70) >= 3;
+        if (!moving || crowded || ((left < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
             v.jamTries = 0;
             v.speed = 0;
             v.state = SCENE;

@@ -303,6 +303,15 @@ final class FleetRouting {
                     near = inc;
                 }
             }
+            // ((30.8) Not where there are four already: every patrol car in the district chose the same few streets.)
+            if (near != null) {
+                int there = 0;
+                for (int i = 0, n = fleet.vehicles.size(); i < n && there < 4; i++) {
+                    Vehicle o = fleet.vehicles.get(i);
+                    if (o != v && o.type == CRUISER && !o.parked && Math.abs(o.x - near.x) < 500 && Math.abs(o.y - near.y) < 500) there++;
+                }
+                if (there >= 4) near = null;
+            }
             if (near != null)
                 for (int tries = 0; tries < 4 && routes < 2; tries++) {
                     float[] d = randomRoadNear(near.x, near.y, 200, 600, false);

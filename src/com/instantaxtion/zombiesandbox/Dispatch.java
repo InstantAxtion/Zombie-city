@@ -854,7 +854,15 @@ final class Dispatch {
             // once the news is out, more of them, into town and round the trouble.)
             // ((30.1) Nobody kept back on the base: everyone free goes out, a Humvee-load at a time, for as long as there
             // are trucks parked there to take them.)
-            for (int sent = 0; sent < 8 && free.size() >= 3 && base.patrolCd <= 0; sent++) {
+            // ((30.8) One at a time, and only once the last has got out of the gate: eight a time round, the Humvees
+            // came out of the garages on top of each other and stood in a heap in the yard.)
+            boolean mustering = false;
+            for (int i = 0, n = w.fleet.vehicles.size(); i < n && !mustering; i++) {
+                Fleet.Vehicle o = w.fleet.vehicles.get(i);
+                if (o.loop && (o.state == Fleet.MUSTER || (o.state == Fleet.DRIVE && Math.abs(o.speed) < 3)) && World.hypot(o.homeX - base.x, o.homeY - base.y) < Math.max(300, base.r * 3)
+                        && World.hypot(o.x - base.x, o.y - base.y) < Math.max(300, base.r * 3)) mustering = true;
+            }
+            for (int sent = 0; sent < 1 && !mustering && free.size() >= 3 && base.patrolCd <= 0; sent++) {
                 float[] to = null;
                 if (w.alert >= 1 && w.rnd.nextFloat() < 0.8f) {
                     // Into town: past a call, or anywhere in the streets.

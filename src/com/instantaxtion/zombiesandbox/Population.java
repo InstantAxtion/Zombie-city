@@ -136,11 +136,20 @@ final class Population {
         }
     }
 
+    /**
+     * ((30.8) Map version 50: four officers to a patrol car, not two - every officer on patrol still in a car, in half as
+     * many. With the maps shrunk twice and the police not, there were five hundred and more cars on the Default map, one
+     * to every seventy tiles of road, and they jammed every street and heaped up at every call.
+     */
+    int roadCars(int cars) {
+        return w.city.cfg.civic >= 50 ? Math.max(1, (cars + 1) / 2) : cars;
+    }
+
     /** The police: most out in patrol cars, the rest at their precincts. */
     private void policeOnTheBeat(final CityConfig cfg, final int stations, final int cops) {
         // Most officers are out in patrol cars, two to a car ((11.4) about five in six of them); the rest are at their
         // precinct.
-        int cars = stations > 0 ? Math.max(1, (int) (cops * World.PATROL_SHARE / 2)) : 0;
+        int cars = stations > 0 ? roadCars(Math.max(1, (int) (cops * World.PATROL_SHARE / 2))) : 0;
         w.fleet.patrolTarget = cars;
         int made = 0;
         City.Facility[] precincts = new City.Facility[Math.max(1, stations)];
@@ -1120,7 +1129,7 @@ final class Population {
         for (Entity e : w.entities) if (!e.dead && e.type == Entity.COP) cops++;
         // ((11.4) Counting those aboard the patrol cars too.)
         for (Fleet.Vehicle v : w.fleet.vehicles) if (v.patrol && v.agency == 0) cops += v.crew.size();
-        w.fleet.patrolTarget = Math.max(1, (int) (cops * World.PATROL_SHARE / 2));
+        w.fleet.patrolTarget = roadCars(Math.max(1, (int) (cops * World.PATROL_SHARE / 2)));
         w.spatial.buildHash();
         w.city.computeFields(w.entities);
         w.stats.recount();

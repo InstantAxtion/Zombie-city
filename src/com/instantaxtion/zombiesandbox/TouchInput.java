@@ -33,7 +33,21 @@ final class TouchInput {
     void driveVehicle(Fleet.Vehicle v) {
         int type = v.type == Fleet.CRUISER || Fleet.policeTruck(v) || v.kind == Fleet.K_POLICE_HELI || v.kind == Fleet.K_RESCUE_HELI ? Entity.COP
                 : Fleet.army(v) ? Entity.SOLDIER : Entity.CIVILIAN;
-        Entity e = gv.world.spawn(type, v.x, v.y);
+        // ((30.8) One of its own crew at the wheel, when it has one: a new driver used to appear for it every time, and
+        // joined its crew when the player let go - one more aboard each time.)
+        Entity e = null;
+        for (int i = 0; i < v.crew.size() && e == null; i++) {
+            Entity c = v.crew.get(i);
+            if (c.type == type || type == Entity.CIVILIAN) e = c;
+        }
+        if (e != null) {
+            v.crew.remove(e);
+            e.dead = false;
+            e.removed = false;
+            e.rig = null;
+            e.x = v.x;
+            e.y = v.y;
+        } else e = gv.world.spawn(type, v.x, v.y);
         if (e == null) return;
         takeControl(e);
         gv.world.driveInto(e, v);

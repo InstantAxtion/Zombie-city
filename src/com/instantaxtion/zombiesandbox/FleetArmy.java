@@ -393,7 +393,7 @@ final class FleetArmy {
      */
     boolean mountUp(java.util.List<Entity> squad, Dispatch.Incident inc) {
         // ((30.1) Not a truck for one: a squad, or they go another way.)
-        if (squad.size() < 2 || inc == null) return false;
+        if (squad.size() < 2 || inc == null || fleet.patrols.trucksFull(inc)) return false;
         float sx = 0, sy = 0;
         for (Entity e : squad) {
             sx += e.x;
@@ -693,7 +693,9 @@ final class FleetArmy {
                 Vehicle v = fleet.vehicles.get(i);
                 if (v.type == TRUCK && v.standby && v.kind != K_RAPID_VAN && World.hypot(v.x - f.x, v.y - f.y) < rad) have++;
             }
-            int want = Math.max(4, Math.min(40, (soldiers + 3) / 4));
+            // ((30.8) Map version 50: enough for all of them, a truck to every four, up to eighty: a big base ran out at forty
+            // and the rest of its soldiers went out on foot.)
+            int want = Math.max(4, Math.min(city.cfg.civic >= 50 ? 80 : 40, (soldiers + 3) / 4));
             f.spareTrucks = Math.max(0, want - have);
             // ((16.6) A few of them out in the yard where they can be seen, parked and ready, when the base's layout
             // left no room for any along its bottom row - an airfield or a vehicle park across it. The rest were all
