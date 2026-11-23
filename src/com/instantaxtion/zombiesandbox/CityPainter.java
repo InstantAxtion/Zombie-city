@@ -703,6 +703,7 @@ final class CityPainter extends CityPart {
         if (city.riverC != null) smoothRiver(c, p, X0, Y0, X1, Y1);
         drawTerrain(c, p, X0, Y0, X1, Y1);
         roundCorners(c, p);
+        if (city.cfg.civic >= 49) bendCorners(c, p);
         drawBaseDetails(c, p);
     }
 
@@ -1559,6 +1560,69 @@ final class CityPainter extends CityPart {
                     p.setStyle(Paint.Style.FILL);
                 }
             }
+    }
+
+    /**
+     * ((30.7) Map version 49: the outside of every bend rounded off - a curve as wide as the narrower of the two roads,
+     * the ground beyond it brought in over the square corner of tarmac - so a street turning a corner looks like one.
+     */
+    void bendCorners(Canvas c, Paint p) {
+        if (city.junction == null) city.computeJunctions();
+        Path path = new Path();
+        for (int[] jb : city.junctions) {
+            if (jb[4] != J_BEND) continue;
+            int x0 = jb[0], y0 = jb[1], x1 = jb[2], y1 = jb[3];
+            if (city.offRegion((x0 - 2) * T, (y0 - 2) * T, (x1 + 3) * T, (y1 + 3) * T)) continue;
+            boolean n = false, s = false, e = false, wl = false;
+            for (int x = x0; x <= x1; x++) {
+                if (city.paved(x, y0 - 1)) n = true;
+                if (city.paved(x, y1 + 1)) s = true;
+            }
+            for (int y = y0; y <= y1; y++) {
+                if (city.paved(x0 - 1, y)) wl = true;
+                if (city.paved(x1 + 1, y)) e = true;
+            }
+            if (!((n ^ s) && (e ^ wl))) continue;
+            // The outer corner (away from both roads), which way is out from it, and the ground there.
+            int tx = e ? x0 : x1, ty = s ? y0 : y1, sx = e ? -1 : 1, sy = s ? -1 : 1;
+            int gx = tx + sx, gy = ty + sy;
+            if (gx < 0 || gy < 0 || gx >= city.w || gy >= city.h) continue;
+            byte g = city.tiles[gy * city.w + gx];
+            if (g != GRASS && g != TREE && g != DIRT && g != SAND) continue;
+            if (city.paved(tx + sx, ty) || city.paved(tx, ty + sy)) continue;
+            float r = Math.min(x1 - x0 + 1, y1 - y0 + 1) * T;
+            float cx = (sx > 0 ? tx + 1 : tx) * T, cy = (sy > 0 ? ty + 1 : ty) * T;
+            // The square corner less a quarter circle: a quadratic through the corner is close enough to the circle.
+            path.reset();
+            path.moveTo(cx, cy);
+            path.lineTo(cx - sx * r, cy);
+            path.cubicTo(cx - sx * r * 0.45f, cy, cx, cy - sy * r * 0.45f, cx, cy - sy * r);
+            path.close();
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(g == SAND ? 0xFFD8C08A : g == DIRT ? 0xFF8A7350 : city.desert || city.region != null ? grassColour(gx, gy)
+                    : city.country.grass != 0 ? city.country.grass : city.drawnRealistic ? 0xFF4F6F36 : 0xFF4C7837);
+            c.drawPath(path, p);
+            // (And the lawn's mown stripes over it, as the grass round it has them: two tiles wide, light and dark.)
+            if (g == GRASS || g == TREE) {
+                c.save();
+                c.clipPath(path);
+                float ax = Math.min(cx, cx - sx * r), bx = Math.max(cx, cx - sx * r);
+                float ay = Math.min(cy, cy - sy * r), by = Math.max(cy, cy - sy * r);
+                for (int x = (int) Math.floor(ax / T); x * T < bx; x++) {
+                    p.setColor((x / 2) % 2 == 0 ? 0x0CFFFFFF : 0x08000000);
+                    c.drawRect(x * T, ay, x * T + T, by, p);
+                }
+                c.restore();
+            }
+            path.reset();
+            path.moveTo(cx - sx * r, cy);
+            path.cubicTo(cx - sx * r * 0.45f, cy, cx, cy - sy * r * 0.45f, cx, cy - sy * r);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(1.2f);
+            p.setColor(0xFF7E7C77);
+            c.drawPath(path, p);
+            p.setStyle(Paint.Style.FILL);
+        }
     }
 
     /** (11.1) The colour of the road surface at a tile, as the ground is first painted. */

@@ -1080,6 +1080,71 @@ final class CityRoads extends CityPart {
      * (10.52) A lane that only touches another lane, a drive or a road corner to corner, with grass (or a tree)
      * between: the corner becomes lane, so the two join (nobody drives across a corner of grass).
      */
+    /**
+     * ((30.7) Map version 49: where a street just turns a corner (a bend: two ways out of it, see City.computeJunctions),
+     * the road that pokes out past the corner - a tile or two going nowhere - goes back to grass (and the painter rounds
+     * the outer corner off: CityPainter.bendCorners): a road that turns, not a slab of tarmac with a bit sticking out.
+     */
+    void tidyBends() {
+        for (int pass = 0; pass < 2; pass++) {
+            city.junction = null;
+            city.computeJunctions();
+            java.util.ArrayList<Integer> clear = new java.util.ArrayList<Integer>();
+            for (int[] jb : city.junctions) {
+                if (jb[4] != City.J_BEND) continue;
+                int x0 = jb[0], y0 = jb[1], x1 = jb[2], y1 = jb[3];
+                boolean n = false, s = false, e = false, wl = false;
+                for (int x = x0; x <= x1; x++) {
+                    if (leg(x, y0 - 1, x, y0 - 2)) n = true;
+                    if (leg(x, y1 + 1, x, y1 + 2)) s = true;
+                }
+                for (int y = y0; y <= y1; y++) {
+                    if (leg(x0 - 1, y, x0 - 2, y)) wl = true;
+                    if (leg(x1 + 1, y, x1 + 2, y)) e = true;
+                }
+                // The stubs: road just outside a side with no way out of it, and nothing beyond.
+                if (!n) for (int x = x0; x <= x1; x++) stub(x, y0 - 1, 0, -1, clear);
+                if (!s) for (int x = x0; x <= x1; x++) stub(x, y1 + 1, 0, 1, clear);
+                if (!wl) for (int y = y0; y <= y1; y++) stub(x0 - 1, y, -1, 0, clear);
+                if (!e) for (int y = y0; y <= y1; y++) stub(x1 + 1, y, 1, 0, clear);
+            }
+            for (int i : clear) {
+                city.tiles[i] = GRASS;
+                city.roadDir[i] = 0;
+                city.mainRoad[i] = false;
+                if (city.oneWay != null) city.oneWay[i] = 0;
+            }
+            if (clear.isEmpty() && pass == 1) break;
+        }
+        city.junction = null;
+    }
+
+    private boolean leg(int x1, int y1, int x2, int y2) {
+        if (!city.paved(x1, y1)) return false;
+        return city.paved(x2, y2) || x2 < 0 || y2 < 0 || x2 >= city.w || y2 >= city.h;
+    }
+
+    /** A tile or two of plain road outside a bend going nowhere (not a driveway into a lot, not a parked car). */
+    private void stub(int x, int y, int dx, int dy, java.util.List<Integer> clear) {
+        // One or two tiles of road, then open ground (or the map's edge): nothing else beyond.
+        for (int k = 0; k < 3; k++) {
+            int tx = x + dx * k, ty = y + dy * k;
+            if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) {
+                if (k == 0) return;
+                break;
+            }
+            byte t = city.tiles[ty * city.w + tx];
+            if (t == ROAD && k < 2 && !city.hwyTile(tx, ty)) continue;
+            if (k > 0 && (t == GRASS || t == TREE || t == DIRT || t == SAND)) break;
+            return;
+        }
+        for (int k = 0; k < 2; k++) {
+            int tx = x + dx * k, ty = y + dy * k;
+            if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h || city.tiles[ty * city.w + tx] != ROAD) break;
+            clear.add(ty * city.w + tx);
+        }
+    }
+
     void mendLanePinches() {
         for (int pass = 0; pass < 3; pass++) {
             boolean mended = false;

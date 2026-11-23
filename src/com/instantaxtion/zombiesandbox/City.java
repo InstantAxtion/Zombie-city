@@ -471,6 +471,7 @@ final class City {
             if (cfg.civic >= 12) roadGen.connectStations();
             if (cfg.civic >= 19) roadGen.tidyRoads();
             if (cfg.civic >= 22) roadGen.mendLanePinches();
+            if (cfg.civic >= 49) roadGen.tidyBends();
             for (int[] e : cfg.edits) applyEdit(e[0], e[1], e[2], false);
             gen.computeSolid();
             for (int i = generated; i < buildingLots.size(); i++) gen.createBuilding(buildingLots.get(i));
