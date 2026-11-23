@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "31.0";
-    static final int VERSION_CODE = 310;
+    static final String VERSION = "31.1";
+    static final int VERSION_CODE = 311;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "31.1  -  Fewer maps",
+                    "The Space Center and the Frozen North are gone from the map list (old saves still load).",
+            },
             {
                     "31.0  -  Police and helicopters",
                     "Police are tougher, steadier and better shots; no more foot patrols - officers go out in cars.",

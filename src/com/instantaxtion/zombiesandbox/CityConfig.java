@@ -237,6 +237,8 @@ final class CityConfig implements OptionSet {
                 || value == CROSSROADS || value == BORDER_TOWN || value == AIRBASE || value == CANYON || value == STADIUM_CITY
                 // ((31.0) And Theme Park Island. It still builds for old saves and codes.)
                 || value == THEME_PARK
+                // ((31.1) And the Space Center and the Frozen North. They still build for old saves and codes.)
+                || value == SPACE_CENTER || value == FROZEN_NORTH
                 || removed(value);
         // (The number of zombies at the start isn't a choice any more: the game starts quiet.)
         if (option == OPT_ZOMBIES) return value != 0;

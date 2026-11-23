@@ -90,8 +90,8 @@ final class MapTests extends TestKit {
             for (long seed : new long[]{3, 11}) {
                 CityConfig c = cfg(preset, CityConfig.SMALL, seed);
                 // ((28.5) Crossroads and Canyon Town aren't offered any more, but still build for old saves and codes.)
-                check(c.preset() == preset && CityConfig.retired(CityConfig.OPT_PRESET, preset) == (preset != CityConfig.FROZEN_NORTH),
-                        CityConfig.PRESETS[preset] + (preset == CityConfig.FROZEN_NORTH ? " is offered" : " is retired"));
+                // ((31.1) The Frozen North neither.)
+                check(c.preset() == preset && CityConfig.retired(CityConfig.OPT_PRESET, preset), CityConfig.PRESETS[preset] + " is retired");
                 City city = new City(c, 0.05f);
                 String m = CityConfig.PRESETS[preset] + "/" + seed + ": ";
                 int w = city.w, h = city.h, n = w * h;
