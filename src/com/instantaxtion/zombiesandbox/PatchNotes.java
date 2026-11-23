@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.4";
-    static final int VERSION_CODE = 304;
+    static final String VERSION = "30.5";
+    static final int VERSION_CODE = 305;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.5  -  Corners fixed",
+                    "Where a road just turns a corner there are no traffic lights, crossings or turn arrows any more.",
+                    "Lane lines stop at the corner instead of running across the other road.",
+                    "The highway's route sign stands on the verge, not over a road.",
+            },
             {
                     "30.4  -  Smaller again",
                     "Every map is another fifth smaller, with fewer civilians to match.",
