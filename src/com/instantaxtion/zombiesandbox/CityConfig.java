@@ -278,7 +278,7 @@ final class CityConfig implements OptionSet {
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
      * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0), 44 every map but the island ones a fifth smaller across (29.7), 45 Prison Island and Theme Park Island too (29.8). Saved games rebuild with what they had.
      */
-    int civic = 45;
+    int civic = 46;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -586,13 +586,23 @@ final class CityConfig implements OptionSet {
         // ((22.3) Map version 34: every city a fifth smaller across (nine tenths, twice), the same number of people in it -
         // an outbreak quicker to work out, a new city quicker to make and a third less memory for the map.)
         boolean small = civic >= 34;
-        if (v[OPT_PRESET] == ISLANDS) return nature() ? (small ? 1040 : ISLANDS_TILES) : 512;
-        if (v[OPT_PRESET] == ARCHIPELAGO) return small ? 1040 : ARCHIPELAGO_TILES;
+        int t;
+        if (v[OPT_PRESET] == ISLANDS) t = nature() ? (small ? 1040 : ISLANDS_TILES) : 512;
+        else if (v[OPT_PRESET] == ARCHIPELAGO) t = small ? 1040 : ARCHIPELAGO_TILES;
         // ((28.0) The water maps are never smaller than the Small size: their towns, islands and bridges need the room.)
-        if ((bridgeCity() || swamp() || lighthouse()) && v[OPT_SIZE] < SMALL) return SIZES_V34[SMALL];
-        int t = (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
+        else if ((bridgeCity() || swamp() || lighthouse()) && v[OPT_SIZE] < SMALL) t = SIZES_V34[SMALL];
+        else t = (small ? SIZES_V34 : nature() ? SIZES : OLD_SIZES)[v[OPT_SIZE]];
         // ((29.7) Map version 44: a fifth smaller across again (in multiples of eight tiles), the island maps as they were.)
-        return shrunk() ? Math.max(64, Math.round(t * SHRINK / 8f) * 8) : t;
+        // ((30.3) Map version 46: every map a fifth smaller again, the island maps too.)
+        float s = shrinkScale();
+        return s < 1 ? Math.max(64, Math.round(t * s / 8f) * 8) : t;
+    }
+
+    /** ((30.3) How much smaller across than its size used to be (1 none): a fifth on 44 (45 for the two islands), a fifth again on 46. */
+    float shrinkScale() {
+        float s = shrunk() ? SHRINK : 1;
+        if (civic >= 46) s *= SHRINK;
+        return s;
     }
 
     /** ((29.7) How much smaller across the maps are from map version 44. */
@@ -613,7 +623,8 @@ final class CityConfig implements OptionSet {
      * of people, police, soldiers and medics in a smaller city.
      */
     int fullResidents(int residents) {
-        return shrunk() ? Math.round(residents / (SHRINK * SHRINK)) : residents;
+        float s = shrinkScale();
+        return s < 1 ? Math.round(residents / (s * s)) : residents;
     }
 
     /** ((22.3) The sizes from map version 34: 81% across of those before (in multiples of eight tiles). */
@@ -700,7 +711,8 @@ final class CityConfig implements OptionSet {
     int civilians(int residents, int tiles) {
         if (!popLadder()) return civilians(residents);
         // ((29.7) As many as the size had before it shrank.)
-        if (shrunk()) tiles = Math.round(tiles / SHRINK);
+        float sc = shrinkScale();
+        if (sc < 1) tiles = Math.round(tiles / sc);
         int target = POP_TARGET[POP_TARGET.length - 1];
         if (tiles <= POP_TILES[0]) target = POP_TARGET[0];
         else
@@ -711,6 +723,16 @@ final class CityConfig implements OptionSet {
                     break;
                 }
         float dens = density() == 0 ? 0.5f : 1f;
+        if (civic >= 46) {
+            // ((30.3) Map version 46: 5,000 people on the Default size, 7,500 on Big, 10,000 on Large (the island maps as Big),
+            // the country towns no fewer than the Default, whatever the map; smaller (old) sizes fewer, in step.)
+            float k = tiles >= POP_TILES[6] ? Math.min(1f, (tiles - POP_TILES[6]) / (float) (POP_TILES[8] - POP_TILES[6])) : -1;
+            float people = k >= 0 ? (tiles <= POP_TILES[7] ? 5000 + 2500 * (tiles - POP_TILES[6]) / (float) (POP_TILES[7] - POP_TILES[6])
+                    : 7500 + 2500 * (tiles - POP_TILES[7]) / (float) (POP_TILES[8] - POP_TILES[7]))
+                    : 5000f * target / POP_TARGET[6];
+            if (k < 0) people *= dens;
+            return Math.round(Math.min(10000, people) * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT]);
+        }
         return Math.round(target * dens * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT] * POP_MORE);
     }
     /**

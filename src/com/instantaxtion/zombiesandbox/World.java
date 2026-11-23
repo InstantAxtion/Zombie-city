@@ -308,6 +308,8 @@ final class World {
     /** ((22.4) The civilians at the start: on map version 36 the size's head count less the police and soldiers. */
     static int civiliansFor(CityConfig cfg, City city, int[] force) {
         int n = cfg.civilians(city.totalResidents, city.w);
+        // ((30.3) Map version 46: the figure is the civilians themselves, the police and soldiers on top.)
+        if (cfg.civic >= 46) return n;
         return cfg.popLadder() ? Math.max(n / 2, n - force[0] - force[1]) : n;
     }
 

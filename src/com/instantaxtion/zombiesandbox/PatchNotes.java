@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.2";
-    static final int VERSION_CODE = 302;
+    static final String VERSION = "30.3";
+    static final int VERSION_CODE = 303;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.3  -  Smaller, quicker cities",
+                    "Every map is a fifth smaller across, the island maps too.",
+                    "5,000 civilians on Default, 7,500 on Big (and the island maps), 10,000 on Large.",
+                    "The game runs much faster on every size. Saved games stay as they were.",
+            },
             {
                     "30.2  -  Cars close by",
                     "Police cars and army trucks drive up behind their people when the fight moves off.",
