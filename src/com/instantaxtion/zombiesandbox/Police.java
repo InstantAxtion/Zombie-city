@@ -112,10 +112,35 @@ final class Police {
         if (st == null) return false;
         // ((11.4) Mostly car patrols: only one pair in four walks a beat. The rest head back in to the precinct to
         // crew a car (see Fleet.staffPatrols).)
-        if (!World.footPatrol(e) && e.agency == 0 && e.role == Entity.ROLE_RIFLE && w.fleet.patrols.parkedAt(st) > 0
-                && (w.city.cfg.civic < 50 || w.fleet.patrolCount < w.fleet.patrolTarget)) {
+        // ((31.0) Map version 50: no beats on foot at all - back to the precinct for a car (a lift there, from a long way
+        // off), and out in it.)
+        boolean noBeat = w.city.cfg.civic >= 50 && e.agency == 0 && e.role == Entity.ROLE_RIFLE;
+        if (noBeat || (!World.footPatrol(e) && e.agency == 0 && e.role == Entity.ROLE_RIFLE && w.fleet.patrols.parkedAt(st) > 0
+                && (w.city.cfg.civic < 50 || w.fleet.patrolCount < w.fleet.patrolTarget))) {
             float gx = st.gateX > 0 ? st.gateX : st.x, gy = st.gateY > 0 ? st.gateY : st.y;
             float bx = gx - e.x, by = gy - e.y;
+            if (noBeat && bx * bx + by * by > World.RIDE_HOME * World.RIDE_HOME && e.rig == null && e.ride == null && (e.driveCd -= dt) <= 0) {
+                e.driveCd = 6;
+                java.util.ArrayList<Entity> group = new java.util.ArrayList<Entity>();
+                group.add(e);
+                for (int i = 0, n = w.spatial.gatherLiving(e.x, e.y, 150); i < n && group.size() < 4; i++) {
+                    Entity o = w.gathered[i];
+                    if (o != e && !o.dead && o.type == Entity.COP && o.task == Dispatch.T_NONE && o.rig == null && o.ride == null) group.add(o);
+                }
+                if (w.fleet.driveTo(group, null)) return true;
+            }
+            // ((31.0) Waiting for a car: each at a spot of their own round the yard, in two or three rings, not all on the
+            // gate - a crowd of a hundred there, shoving, was a quarter of every step.)
+            if (noBeat && bx * bx + by * by < (st.r + 200) * (st.r + 200)) {
+                float a = (e.callsign * 2.39996f) % World.TAU, r = st.r * 0.55f + (e.callsign % 4) * 9;
+                float px = st.x + (float) Math.cos(a) * r, py = st.y + (float) Math.sin(a) * r;
+                if (!w.city.solidAt(px, py)) {
+                    e.dutyFor = 0;
+                    e.dutyHx = e.dutyHy = 0;
+                    w.holdoutLife.standAt(e, px, py, 0.6f);
+                    return true;
+                }
+            }
             e.dutyFor = 0;
             e.dutyHx = e.dutyHy = 0;
             if (bx * bx + by * by > 40 * 40) w.wilds.walkToSpot(e, gx, gy, e.speed);

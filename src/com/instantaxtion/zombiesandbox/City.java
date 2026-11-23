@@ -78,6 +78,8 @@ final class City {
         /** ((29.4) Its parade ground: free places in its yard {x, y, ...}, laid out the first time they're asked for; the next to hand out. */
         transient float[] parade;
         transient int paradeNext;
+        /** ((31.0) Who stands on each parade place now (ArmedAI.backToBase). */
+        transient Entity[] paradeWho;
 
         Facility(int kind, float x, float y, float r, float gateX, float gateY, String name) {
             this.kind = kind;

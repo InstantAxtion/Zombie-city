@@ -1201,6 +1201,17 @@ final class CityBlocks extends CityPart {
             if (f.kind == FACILITY_HOSPITAL && hospital == null) hospital = f;
         }
         if (hq != null) addServicePad(hq.x, hq.y, PAD_POLICE);
+        // ((31.0) Map version 51: a police helicopter at every third station besides, up to four in all.)
+        if (city.cfg.civic >= 51) {
+            int k = 0, extra = 0;
+            for (Facility f : new java.util.ArrayList<Facility>(city.facilities)) {
+                if (f.kind != FACILITY_POLICE || f == hq || f.fed) continue;
+                if (k++ % 3 == 2 && extra < 3) {
+                    addServicePad(f.x, f.y, PAD_POLICE);
+                    extra++;
+                }
+            }
+        }
         if (hospital != null) addServicePad(hospital.x, hospital.y, PAD_RESCUE);
         else if (hq != null) addServicePad(hq.x, hq.y, PAD_RESCUE);
         if (city.rangerLot != null) addServicePad(city.rangerLot[0], city.rangerLot[1], PAD_RESCUE);

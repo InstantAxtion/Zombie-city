@@ -1664,6 +1664,13 @@ final class ArmedAI {
         return out;
     }
 
+    /** ((31.0) Someone still on parade place k: alive, idle, and on foot at the base. */
+    private boolean paradeHeld(City.Facility base, int k) {
+        Entity o = base.paradeWho[k];
+        return o != null && !o.dead && o.paradeAt == base && o.paradeIdx == k && o.task == Dispatch.T_NONE && o.rig == null && o.ride == null
+                && World.hypot(o.x - base.x, o.y - base.y) < base.r * 1.5f;
+    }
+
     /** With nothing to fight, soldiers drift back to base and fall in. True when that was their step. */
     private boolean backToBase(final Entity e, final boolean soldier, final float dt) {
         if (soldier) {
@@ -1684,13 +1691,23 @@ final class ArmedAI {
                 // own yard, and hands each soldier who falls in there the next one. Worked out from squad numbers, the places
                 // came out on top of each other, outside the fence and on the buildings, and a little base's garrison
                 // shoved at each other for them all game.)
-                if (w.alert >= 1 && bx * bx + by * by < base.r * base.r * 2.2f) {
+                // ((31.0) Map version 50: always, while they wait for a truck - not a crowd in the yard.)
+                if ((w.alert >= 1 || w.city.cfg.civic >= 50) && bx * bx + by * by < base.r * base.r * 2.2f) {
                     float[] slots = parade(base);
                     if (slots.length > 0) {
-                        if (e.paradeAt != base || e.paradeIdx < 0) {
+                        // ((31.0) A place nobody else holds: handed out in turn, they came round again onto places still
+                        // taken once more had fallen in than there were places, and a big base's garrison stood in a heap
+                        // shoving at each other - a third of each step.)
+                        int places = slots.length / 2;
+                        if (base.paradeWho == null || base.paradeWho.length != places) base.paradeWho = new Entity[places];
+                        if (e.paradeAt != base || e.paradeIdx < 0 || e.paradeIdx >= places || (base.paradeWho[e.paradeIdx] != e && paradeHeld(base, e.paradeIdx))) {
                             e.paradeAt = base;
-                            e.paradeIdx = (base.paradeNext++) % (slots.length / 2);
+                            int k = base.paradeNext % places;
+                            for (int tries = 0; tries < places && paradeHeld(base, k); tries++) k = (k + 1) % places;
+                            base.paradeNext = k + 1;
+                            e.paradeIdx = k;
                         }
+                        base.paradeWho[e.paradeIdx] = e;
                         float px = slots[e.paradeIdx * 2], py = slots[e.paradeIdx * 2 + 1];
                         w.holdoutLife.standAt(e, px, py, 0.6f);
                         if (e.want < 1) e.angle = World.turn(e.angle, (float) (Math.PI / 2), dt * 3);
@@ -1733,6 +1750,8 @@ final class ArmedAI {
                     float nerve = soldier ? (e.task == Dispatch.T_RESPOND ? 7 : 5) : World.doctrine(e) != null ? World.doctrine(e)[5] : 4;
                     // ((10.59) A veteran stands longer.)
                     nerve += World.rank(e) * 0.75f + (World.perk(e, World.P_NERVE) ? 2 : 0) + (w.ops.boosts(e) ? 2 : 0)
+                            // ((31.0) Map version 51: officers trained to hold together - a little longer before falling back.)
+                            + (!soldier && w.city.cfg.civic >= 51 ? 1.5f : 0)
                             // ((27.5) On a commander's line, with the others either side: they stand a little longer.)
                             + (e.lineT > w.time && e.cmdBy != null && !e.cmdBy.dead ? 1.5f : 0);
                     if (odds >= nerve - (e.goal == World.A_FALLBACK ? 1.5f : 0))

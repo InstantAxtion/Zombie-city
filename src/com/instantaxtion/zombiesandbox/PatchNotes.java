@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.9";
-    static final int VERSION_CODE = 309;
+    static final String VERSION = "31.0";
+    static final int VERSION_CODE = 310;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "31.0  -  Police and helicopters",
+                    "Police are tougher, steadier and better shots; no more foot patrols - officers go out in cars.",
+                    "New: army gunships, and more police helicopters that go up for smaller outbreaks.",
+                    "Wider streets in every town for the extra traffic. Theme Park Island and the Events menu are gone.",
+                    "Bases and stations run smoother: soldiers fall in on places of their own and trucks leave the yard without queueing.",
+            },
             {
                     "30.9  -  Better parking",
                     "No limit on cars or trucks at a call any more: everyone sent still goes.",

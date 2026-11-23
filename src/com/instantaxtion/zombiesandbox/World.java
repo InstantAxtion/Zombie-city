@@ -475,6 +475,7 @@ final class World {
         war.rollStrain();
         // ((17.0) No virus in a gang war or an invasion.)
         dispatch = new Dispatch(this, cfg.reinforcements());
+        noFootPatrols = cfg.civic >= 50;
         fleet = new Fleet(this);
         ops = new Ops(this);
         burned = new boolean[city.w * city.h];
@@ -2539,8 +2540,13 @@ final class World {
 
     /** ((11.4) One pair of officers in four walks a beat; the rest patrol by car.) */
     static boolean footPatrol(Entity e) {
+        // ((31.0) No foot patrols on map version 50 and on: every officer on patrol is in a car.)
+        if (noFootPatrols) return false;
         return (e.callsign / 2) % 4 == 0;
     }
+
+    /** ((31.0) Set for the city being played (map version 50 and on). */
+    static boolean noFootPatrols;
 
     // ------------------------------------------------------------------ (11.5) posts kept manned
 

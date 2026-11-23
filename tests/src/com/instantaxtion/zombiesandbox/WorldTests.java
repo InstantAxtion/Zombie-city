@@ -1145,7 +1145,9 @@ final class WorldTests extends TestKit {
         w.firebombTime = 0;
         check((Boolean) as.invoke(w, 8, false) && w.firebombTime > 0, "and another");
         check(!(Boolean) as.invoke(w, 500, false), "not on a crowd too small");
-        // Kept in a save.
+        // Kept in a save. ((30.10) Still on when it's saved: with the stronger police the pack can be gone, and the
+        // quarantine lifted, by now.)
+        w.quarantined = true;
         w.strikes = 2;
         w.strikeCd = 33;
         java.io.File f = java.io.File.createTempFile("zcsq", ".dat");

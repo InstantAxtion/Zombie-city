@@ -61,7 +61,8 @@ final class GameView extends View implements Menu.Host {
     /** Tools no longer on the bar: the medic (now in the People picker), Orders, Place, Events and Build. */
     boolean hiddenTool(int t) {
         // ((25.0) Events back on the bar: the plane crash, prison break and riot, and the airstrike with its cooldown.)
-        return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_BUILD || t == TOOL_ZONE;
+        // ((31.0) And the Events menu gone again: a horde is on the Squads picker, and the rest happen by themselves.)
+        return t == 5 || t == TOOL_ORDER || t == TOOL_PLACE || t == TOOL_BUILD || t == TOOL_ZONE || t == TOOL_EVENT;
     }
     static final String[] PLACE_NAMES = {"Car", "Police car", "Tank", "Barricade", "Crate", "Medkit", "BearCat", "Recon Humvee", "Police drone", "Razor wire", "MG nest", "Armoured van", "Sandbags", "Concrete barrier",
             "Command post", "Special forces", "Police boat"};

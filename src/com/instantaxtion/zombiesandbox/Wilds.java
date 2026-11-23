@@ -380,7 +380,9 @@ final class Wilds {
         }
         // (10.49) A spot that's crept a little (a cordon post as the zone shifts) keeps the way already planned
         // while it's still far off: replanned as it gets near.
-        float slack = Math.max(1, d * 0.12f);
+        // ((31.0) Up to a tile and a half: a guard's place on a safe zone's wall shifts a little each time one comes or goes,
+        // and every guard on every wall planned the whole way again, most steps - the biggest part of each step in an outbreak.)
+        float slack = Math.max(e.task == Dispatch.T_GUARD ? City.T * 1.5f : 1, d * 0.12f);
         // ((14.9) A way that couldn't be found is looked for again every few seconds: it used to be left empty for
         // good, and they walked straight at the spot - into the wall of whatever building was in the way - for ever.)
         boolean retry = e.path != null && e.path.length == 0 && w.time >= e.pathRetry;

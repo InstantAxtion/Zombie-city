@@ -824,7 +824,7 @@ final class FleetService {
         int leaving = 0;
         for (int i = 0, m = fleet.vehicles.size(); i < m && leaving < 3; i++) {
             Vehicle o = fleet.vehicles.get(i);
-            if ((o.state == DRIVE || o.state == MUSTER) && World.hypot(o.x - f.x, o.y - f.y) < f.r + City.T * 2) leaving++;
+            if ((o.state == MUSTER || (o.state == DRIVE && Math.abs(o.speed) < 8)) && World.hypot(o.x - f.x, o.y - f.y) < f.r + City.T * 2) leaving++;
         }
         return leaving >= 3;
     }

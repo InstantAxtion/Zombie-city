@@ -862,7 +862,9 @@ final class Dispatch {
                 if (o.loop && (o.state == Fleet.MUSTER || (o.state == Fleet.DRIVE && Math.abs(o.speed) < 3)) && World.hypot(o.homeX - base.x, o.homeY - base.y) < Math.max(300, base.r * 3)
                         && World.hypot(o.x - base.x, o.y - base.y) < Math.max(300, base.r * 3)) mustering = true;
             }
-            for (int sent = 0; sent < 1 && !mustering && free.size() >= 3 && base.patrolCd <= 0; sent++) {
+            // ((31.0) Map version 50: up to three a time round, the gate permitting (FleetService.gateBusy).)
+            if (city.cfg.civic >= 50) mustering = w.fleet.service.gateBusy(base);
+            for (int sent = 0; sent < (city.cfg.civic >= 50 ? 3 : 1) && !mustering && free.size() >= 3 && base.patrolCd <= 0; sent++) {
                 float[] to = null;
                 if (w.alert >= 1 && w.rnd.nextFloat() < 0.8f) {
                     // Into town: past a call, or anywhere in the streets.
@@ -876,7 +878,8 @@ final class Dispatch {
                 }
                 if (to == null) break;
                 ArrayList<Entity> sq = nearestOf(free, base.x, base.y, Math.min(Fleet.HUMVEE_SEATS, Math.max(3, free.size() / 2)));
-                if (!w.fleet.basePatrol(sq, base, to[0], to[1]) && !footPatrol(sq, base)) {
+                // ((31.0) No foot patrols on map version 50: with no truck to take them, the next goes when one is back.)
+                if (!w.fleet.basePatrol(sq, base, to[0], to[1]) && (city.cfg.civic >= 50 || !footPatrol(sq, base))) {
                     base.patrolCd = 20;
                     break;
                 }
@@ -1513,7 +1516,8 @@ final class Dispatch {
                 }
             }
             // The police helicopter goes up over the bigger ones.
-            if (!inc.policeAirRequested && inc.zombiesNear >= 8) {
+            // ((31.0) Up over any call with five of the dead or more, not eight.)
+            if (!inc.policeAirRequested && inc.zombiesNear >= (city.cfg.civic >= 51 ? 5 : 8)) {
                 // (The police helicopter on its pad, when it's ready: the pilot and a marksman run out to it.)
                 Fleet.Vehicle heli = w.fleet.readyHeli(Fleet.K_POLICE_HELI, inc.x, inc.y);
                 if (heli != null && w.fleet.launchHeli(heli, inc.x, inc.y, inc.place, inc, 1)) {

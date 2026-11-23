@@ -620,6 +620,11 @@ final class CityGenerator extends CityPart {
             roadW = 3;
             minSide = 13;
         }
+        // ((31.0) Map version 51: wider streets for the traffic - every street in town two lanes each way at the least,
+        // and the main routes across it (the first few splits) three: with every officer and soldier out in a car or a
+        // truck, the one-lane-each-way streets jammed solid at every call.)
+        // (Not on Theme Park Island: its park takes every block it can get, and wider streets left none for the police.)
+        if (city.cfg.civic >= 51 && !rural && !city.themePark) roadW = big && depth <= 2 ? 7 : 5;
         boolean vertical;
         if (bw > bh * 1.3f) vertical = true;
         else if (bh > bw * 1.3f) vertical = false;
@@ -1120,21 +1125,26 @@ final class CityGenerator extends CityPart {
             List<Integer> options = new ArrayList<Integer>();
             // ((28.0) Map version 41: an island with no room for its precinct doesn't stop the rest; then, if there's
             // still nowhere, the stations may stand closer together. Theme Park Island and the Archipelago often had one.)
-            for (int relax = 0; relax < (city.cfg.civic >= 41 && city.islandRects != null ? 3 : 1) && options.isEmpty(); relax++)
+            // ((31.0) Map version 51: the wider streets leave smaller blocks - closer together, then on a smaller block,
+            // rather than a town with no police station at all.)
+            boolean wide = city.cfg.civic >= 51;
+            for (int relax = 0; relax < (wide ? 4 : (city.cfg.civic >= 41 && city.islandRects != null) ? 3 : 1) && options.isEmpty(); relax++)
             for (int k = 0; k < city.blocks.size(); k++) {
                 int[] b = city.blocks.get(k);
-                if (used[k] || b[2] - b[0] - 2 < 6 || b[3] - b[1] - 2 < 6) continue;
+                int least = wide && relax >= 2 ? 5 : 6;
+                if (used[k] || b[2] - b[0] - 2 < least || b[3] - b[1] - 2 < least) continue;
                 float cx = (b[0] + b[2]) / 2f * T, cy = (b[1] + b[3]) / 2f * T;
                 // (On the Islands, the first three precincts go one to each island.)
                 // ((25.0) On Theme Park Island the headquarters is in the staff town.)
                 if (relax == 0 && city.islandRects != null && n < city.islandRects.length && city.island((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) != (city.themePark ? 1 - n : n)) continue;
                 boolean near = false;
                 // ((28.0) Closer together on the water maps' small towns and islands.)
-                float spread = (special != null ? special.spread() : 1f) * (relax == 2 ? 0.5f : 1f);
+                float spread = (special != null ? special.spread() : 1f) * (relax == 2 || (wide && relax == 1) ? 0.5f : 1f);
                 for (Facility f : city.facilities)
                     if ((f.kind == FACILITY_POLICE && World.hypot(f.x - cx, f.y - cy) < spread * city.w * T / (city.cfg.policeStations() > 3 ? 4.5f : 3f))
                             || World.hypot(f.x - cx, f.y - cy) < spread * Math.max(20, city.w / 6f) * T) near = true;
-                if (!near) options.add(k);
+                // (Last of all, on the wide-street maps: anywhere it fits.)
+                if (!near || relax == 3) options.add(k);
             }
             if (options.isEmpty() && special != null) continue;
             if (options.isEmpty()) break;

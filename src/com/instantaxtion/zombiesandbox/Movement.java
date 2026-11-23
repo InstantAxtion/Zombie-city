@@ -860,7 +860,8 @@ final class Movement {
             // a tenth of each step on the biggest maps.)
             if (sepEvery == 4 && e.type == Entity.CIVILIAN && e.task == Dispatch.T_NONE && e.fleeTimer <= 0 && e.stun <= 0 && !w.onScreen(e)) continue;
             // ((10.34) Someone standing still is left be: whoever walks into them steps aside themselves.)
-            if (e.want <= 0.5f && e.stun <= 0 && e.vx == 0 && e.vy == 0 && w.entities.size() > 6000) continue;
+            // ((31.0) And on any map, a soldier or officer stood at their post or on parade.)
+            if (e.want <= 0.5f && e.stun <= 0 && e.vx == 0 && e.vy == 0 && (w.entities.size() > 6000 || e.type == Entity.SOLDIER || e.type == Entity.COP)) continue;
             // Only the cells within touching distance (the biggest body is under 8 across, plus a little for
             // movement since the grid was built).
             float reach = e.radius + 10;

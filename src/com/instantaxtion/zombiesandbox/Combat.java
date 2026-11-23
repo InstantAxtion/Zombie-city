@@ -336,7 +336,9 @@ final class Combat {
         if (e.weapon == Entity.W_SHOTGUN && d < 45) return 0.3f * World.TRAINED_HEADSHOT * ranked;
         // ((27.5) Aimed pistol fire at close quarters is what police train for: the closer it gets, the surer the shot to the
         // head (at 1 to 3 in 100 a hit, a pair of officers could empty everything they carried into a dozen of them).)
-        if (e.type == Entity.COP) base = (e.role == Entity.ROLE_SWAT ? 0.42f : 0.3f) * (d < 70 ? POLICE_HEAD_CLOSE : POLICE_HEAD_FAR);
+        if (e.type == Entity.COP) base = (e.role == Entity.ROLE_SWAT ? 0.42f : 0.3f) * (d < 70 ? POLICE_HEAD_CLOSE : POLICE_HEAD_FAR)
+                // ((31.0) Map version 51: better trained - a quarter more of their shots to the head.)
+                * (w.city.cfg.civic >= 51 ? 1.25f : 1f);
         else if (e.type == Entity.SOLDIER)
             base = e.role == Entity.ROLE_GUNNER ? 0.2f : e.role == Entity.ROLE_GUARD ? 0.3f : e.role == Entity.ROLE_COMMANDER ? 0.3f : 0.36f;
         else return World.HEADSHOT * ranked;
@@ -726,6 +728,25 @@ final class Combat {
             w.effects.tracer(fx, fy, t.x + w.rnd.nextFloat() * 24 - 12, t.y + w.rnd.nextFloat() * 24 - 12);
         }
         w.emit(Sfx.RIFLE, fx, fy);
+    }
+
+    /** ((31.0) A gunship's cannon shell bursting at (x, y): the dead close round it hit hard, the living never fired near. */
+    void cannonBurst(float fx, float fy, float x, float y) {
+        w.shotsFired++;
+        int n = w.spatial.gatherZ(x, y, 14);
+        for (int i = 0; i < n; i++) {
+            Entity z = w.gathered[i];
+            if (z.dead || !z.isZombie()) continue;
+            float d = (float) Math.hypot(z.x - x, z.y - y);
+            if (d > 13) continue;
+            z.hp -= (z.big() ? 30 : 60) * (1 - d / 26);
+            z.hurt = 1;
+            z.killedByZombie = false;
+            w.effects.bloodBurst(z.x, z.y, 3, 0, 0);
+        }
+        w.effects.tracer(fx, fy, x, y);
+        w.particle(x, y, 0, 0, 0.5f, 5, 0xFFE8C060, World.P_SMOKE);
+        w.emit(Sfx.CANNON, fx, fy);
     }
 
     /** A marksman's careful shot from above (the police helicopter): most of them drop the zombie for good. */

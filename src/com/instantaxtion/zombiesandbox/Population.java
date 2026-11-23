@@ -142,7 +142,8 @@ final class Population {
      * to every seventy tiles of road, and they jammed every street and heaped up at every call.
      */
     int roadCars(int cars) {
-        return w.city.cfg.civic >= 50 ? Math.max(1, (cars + 1) / 2) : cars;
+        // (Every officer, not five in six: nobody walks a beat now.)
+        return w.city.cfg.civic >= 50 ? Math.max(1, (int) Math.ceil(cars / World.PATROL_SHARE / 2)) : cars;
     }
 
     /** The police: most out in patrol cars, the rest at their precincts. */
@@ -613,7 +614,8 @@ final class Population {
                 else if (tr == Entity.TR_VETERAN) w.combat.setGun(e, Entity.W_RIFLE, 90);
                 break;
             case Entity.COP:
-                e.hp = 60;
+                // ((31.0) Map version 51: body armour under the uniform - a fifth tougher.)
+                e.hp = w.city.cfg.civic >= 51 ? 80 : 60;
                 e.radius = 3.8f;
                 e.speed = 22;
                 e.runSpeed = 40;

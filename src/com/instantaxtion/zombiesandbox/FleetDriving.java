@@ -1796,7 +1796,11 @@ final class FleetDriving {
         // ((29.2) Someone standing in the way: down to a crawl, nosing past them at a walking pace. Patrol cars on their
         // rounds drove at 60 into people crossing the road, and the army's vans and trucks through the soldiers standing
         // in their own yards, shoving them aside.)
-        if (v.player == null && Math.abs(v.speed) > 12 && w.personAhead(v.x, v.y, v.angle)) max = Math.min(max, 12);
+        // ((31.0) Not in a base's yard, though: soldiers there step out of a truck's way, and a truck crawling behind every
+        // one of them on the parade ground held up the next patrol out, and the next.)
+        boolean yard = city.cfg.civic >= 50 && city.tiles[city.tileIndex(v.x, v.y)] == City.BASE;
+        if (yard) {
+        } else if (v.player == null && Math.abs(v.speed) > 12 && w.personAhead(v.x, v.y, v.angle)) max = Math.min(max, 12);
         // ((30.1) And slowing in good time: someone further up the road at speed, down to 25 first. With every officer and
         // soldier out on patrol the roads and yards were full of cars and Humvees nudging people aside.)
         else if (v.player == null && Math.abs(v.speed) > 30) {

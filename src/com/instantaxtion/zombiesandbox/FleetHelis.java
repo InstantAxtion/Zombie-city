@@ -35,7 +35,10 @@ final class FleetHelis {
         return true;
     }
 
+    private int armyPads;
+
     void stationHelis() {
+        armyPads = 0;
         java.util.List<float[]> pads = city.helipads();
         for (int k = 0; k < pads.size(); k++) {
             float[] p = pads.get(k);
@@ -53,6 +56,11 @@ final class FleetHelis {
                 v.state = IDLE;
                 int kind = City.padKind(p);
                 if (kind == City.PAD_POLICE) fleet.setKind(v, K_POLICE_HELI);
+                // ((31.0) Map version 51: two army pads in three have a gunship on them (the first a transport).)
+                else if (kind == City.PAD_ARMY && city.cfg.civic >= 51 && armyPads++ % 3 != 0) {
+                    fleet.setKind(v, K_GUNSHIP);
+                    v.number = ++fleet.airNumber;
+                }
                 else if (kind == City.PAD_RESCUE) {
                     fleet.setKind(v, K_RESCUE_HELI);
                     v.number = ++fleet.rescueNumber;
@@ -168,6 +176,36 @@ final class FleetHelis {
      * marksman) walk out to it and climb aboard, it spins up, and only then does it take off. extra: how many
      * more to take from the free units nearby (door gunners, troops).
      */
+    /**
+     * ((31.0) Every few seconds in a real outbreak: each gunship ready on its pad goes up over the worst fight that
+     * no other gunship is over already (six of the dead or more).
+     */
+    private float gunshipCd = 3;
+
+    void gunships(float dt) {
+        if ((gunshipCd -= dt) > 0) return;
+        gunshipCd = 3;
+        if (w.zombies < 12) return;
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle v = fleet.vehicles.get(i);
+            if (v.type != HELI || v.kind != K_GUNSHIP || v.state != IDLE || v.refuel > 0 || livePilot(v) == null) continue;
+            Dispatch.Incident best = null;
+            for (int k = 0, m = w.dispatch.incidents.size(); k < m; k++) {
+                Dispatch.Incident q = w.dispatch.incidents.get(k);
+                if (q.resolved || q.zombiesNear < 6 || (best != null && q.zombiesNear <= best.zombiesNear)) continue;
+                boolean covered = false;
+                for (int j = 0; j < n && !covered; j++) {
+                    Vehicle o = fleet.vehicles.get(j);
+                    if (o != v && o.kind == K_GUNSHIP && o.state != IDLE && o.incident != null && World.hypot(o.incident.x - q.x, o.incident.y - q.y) < 400) covered = true;
+                }
+                if (!covered) best = q;
+            }
+            if (best == null) return;
+            if (launchHeli(v, best.x, best.y, best.place, best, 0))
+                w.dispatch.say(Dispatch.WHO_MILITARY, null, "Gunship " + v.number + " scrambling for " + best.place + ".", best.x, best.y);
+        }
+    }
+
     boolean launchHeli(Vehicle v, float tx, float ty, String place, Dispatch.Incident inc, int extra) {
         if (v == null || v.state != IDLE) return false;
         Entity pilot = livePilot(v);
@@ -495,8 +533,13 @@ final class FleetHelis {
             v.state = CIRCLE;
             v.circle = (float) Math.atan2(v.y - v.ty, v.x - v.tx);
             v.hold = 0;
-            if (v.kind == K_POLICE_HELI) {
-                v.timer = 90;
+            if (v.kind == K_GUNSHIP) {
+                v.timer = 120;
+                w.dispatch.say(Dispatch.WHO_MILITARY, null, "Gunship " + v.number + ": Over " + (v.place != null ? v.place : "the target")
+                        + ". Cannon hot, engaging the pack.", v.x, v.y);
+            } else if (v.kind == K_POLICE_HELI) {
+                // ((31.0) Longer over the scene: two minutes and a half, not a minute and a half.)
+                v.timer = 150;
                 w.dispatch.say(Dispatch.WHO_POLICE, null, "Police helicopter: Over " + (v.place != null ? v.place : "the scene")
                         + ". Marksman at the door, spotlight on. We'll call them out for you.", v.x, v.y);
             } else {
@@ -611,7 +654,30 @@ final class FleetHelis {
             v.hold = 7 + w.rnd.nextFloat() * 4;
             v.circle += v.escort != null ? 0 : 1.05f;
         }
-        float r = v.escort != null ? 70 : v.kind == K_POLICE_HELI ? 110 : 140;
+        float r = v.escort != null ? 70 : v.kind == K_POLICE_HELI ? 110 : v.kind == K_GUNSHIP ? 100 : 140;
+        // ((31.0) A gunship follows its fight as it moves, and moves on to the next nearest when it's over.)
+        if (v.kind == K_GUNSHIP && v.hold > 0 && (int) (v.timer * 0.5f) != (int) ((v.timer + dt) * 0.5f)) {
+            Dispatch.Incident inc = v.incident;
+            if (inc == null || inc.resolved) {
+                inc = null;
+                float bd = 1500 * 1500;
+                for (int i = 0, n = w.dispatch.incidents.size(); i < n; i++) {
+                    Dispatch.Incident q = w.dispatch.incidents.get(i);
+                    if (q.resolved || q.zombiesNear < 3) continue;
+                    float d = (q.x - v.x) * (q.x - v.x) + (q.y - v.y) * (q.y - v.y);
+                    if (d < bd) {
+                        bd = d;
+                        inc = q;
+                    }
+                }
+                v.incident = inc;
+            }
+            if (inc != null) {
+                v.tx = inc.x;
+                v.ty = inc.y;
+                v.place = inc.place;
+            }
+        }
         aim[0] = v.tx + (float) Math.cos(v.circle) * r;
         aim[1] = v.ty + (float) Math.sin(v.circle) * r;
         aim[2] = v.escort != null ? 75 : 45;
@@ -622,7 +688,18 @@ final class FleetHelis {
         v.alt += (0.75f - v.alt) * Math.min(1, dt);
         // Door gunners (the police helicopter's marksman takes careful single shots).
         v.gunCd -= dt;
-        if (v.kind == K_POLICE_HELI) {
+        if (v.kind == K_GUNSHIP) {
+            // ((31.0) The gunship's cannon: short bursts of shells that burst among a pack, never where the living are.)
+            if (v.gunCd <= 0) {
+                Entity z = w.nearestZombie(v.tx, v.ty, 220);
+                if (z == null) z = w.nearestZombie(v.x, v.y, 260);
+                if (z != null && !w.spatial.peopleNear(z.x, z.y, 24)) {
+                    v.burst++;
+                    v.gunCd = v.burst % 6 == 0 ? 1.1f : 0.16f;
+                    w.combat.cannonBurst(v.x, v.y, z.x + w.rnd.nextFloat() * 10 - 5, z.y + w.rnd.nextFloat() * 10 - 5);
+                } else v.gunCd = 0.4f;
+            }
+        } else if (v.kind == K_POLICE_HELI) {
             // ((14.8) Spotting from above for the units on the ground.)
             if (v.escort == null) w.heliSpot(v, dt);
             if (v.gunCd <= 0) {

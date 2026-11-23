@@ -337,10 +337,8 @@ final class FleetPatrols {
         // target, the rest guarding the precinct.)
         // ((30.1) Nobody kept back: every officer free at a station goes out, two to a car, as long as it has cars.)
         int launched = 0;
-        // ((30.8) As many cars as the roads can take, no more (see Population.roadCars): the rest walk a beat.)
-        if (city.cfg.civic >= 50 && fleet.patrolCount >= fleet.patrolTarget) return;
         for (City.Facility f : city.facilities) {
-            if (launched >= 6 || (city.cfg.civic >= 50 && fleet.patrolCount + launched >= fleet.patrolTarget)) return;
+            if (launched >= 6) return;
             if (f.kind != City.FACILITY_POLICE || w.countZombiesNear(f.x, f.y, 120) > 0) continue;
             // ((26.3) A car waiting there with its officers already in it goes out on patrol first (two always kept back).)
             Vehicle seated = seatedCar(f);
@@ -718,7 +716,8 @@ final class FleetPatrols {
                 Entity e = w.entities.get(i);
                 if (!e.dead && e.type == Entity.COP && World.hypot(e.x - f.x, e.y - f.y) < f.r + 250) officers++;
             }
-            int want = Math.max(2, Math.min(8, (officers + 1) / 2)) - have;
+            // ((31.0) Map version 50: a car for every four of them, and a couple more - nobody walks a beat for want of one.)
+            int want = (city.cfg.civic >= 50 ? Math.max(2, Math.min(30, (officers + 3) / 4 + 2)) : Math.max(2, Math.min(8, (officers + 1) / 2))) - have;
             float[] g = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
             for (int k = 0; k < want && g != null; k++) {
                 float[] p = fleet.armyUnits.bay(g, f);

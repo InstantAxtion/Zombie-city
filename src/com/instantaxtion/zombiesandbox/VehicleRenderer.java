@@ -1136,6 +1136,7 @@ final class VehicleRenderer {
     void drawHeli(Canvas c, Fleet.Vehicle v) {
         boolean rescue = v.kind == Fleet.K_RESCUE_HELI;
         boolean police = v.kind == Fleet.K_POLICE_HELI || rescue;
+        boolean gunship = v.kind == Fleet.K_GUNSHIP;
         if (rescue && v.team != null) {
             // The winch line down to anyone on it.
             for (int i = 0; i < v.team.size(); i++) {
@@ -1164,8 +1165,18 @@ final class VehicleRenderer {
         gv.stroke.setStrokeWidth(0.9f);
         c.drawLine(-6, -5.5f, 7, -5.5f, gv.stroke);
         c.drawLine(-6, 5.5f, 7, 5.5f, gv.stroke);
-        gv.fill.setColor(police ? 0xFFF2F2F2 : 0xFF4F5E36);
-        gv.oval.set(-8, -5, 9, 5);
+        if (gunship) {
+            // ((31.0) The gunship: stub wings with rocket pods, a slim dark body, the cannon under the nose.)
+            gv.fill.setColor(0xFF2E3328);
+            c.drawRect(-3, -9, 1, 9, gv.fill);
+            gv.fill.setColor(0xFF1C1F18);
+            c.drawRect(-3.5f, -10, 1.5f, -7.5f, gv.fill);
+            c.drawRect(-3.5f, 7.5f, 1.5f, 10, gv.fill);
+            c.drawRect(8, -0.6f, 12, 0.6f, gv.fill);
+        }
+        gv.fill.setColor(police ? 0xFFF2F2F2 : gunship ? 0xFF3A4232 : 0xFF4F5E36);
+        if (gunship) gv.oval.set(-8, -3.4f, 10, 3.4f);
+        else gv.oval.set(-8, -5, 9, 5);
         c.drawOval(gv.oval, gv.fill);
         if (rescue) {
             // Rescue colours: red and white, the winch arm out of the door.

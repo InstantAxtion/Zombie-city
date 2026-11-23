@@ -82,6 +82,8 @@ final class Fleet {
      * near the middle of town (see Dispatch.quickReaction).
      */
     static final int K_RAPID_VAN = 32, RAPID_SEATS = 5;
+    /** ((31.0) The army's attack helicopter: a gunship with a cannon, sent over the worst of the fighting (FleetHelis.gunships). */
+    static final int K_GUNSHIP = 33;
     /** ((27.5) The army's armoured ambulance (type AMBULANCE), parked at its base for the wounded: see FleetMedevac.) */
     static final int K_ARMD_AMB = 17;
 
@@ -479,7 +481,8 @@ final class Fleet {
                 if (v.kind == K_COMMAND) return "Police mobile command post";
                 if (v.kind == K_ARMY_POST) return "Army mobile command post";
                 return v.swat ? Country.swat()[0] + " van" : v.guardUnit ? Country.guard()[1] + " truck" : v.supply > 0 ? "Army supply truck" : v.ammoTruck ? "Army ammo truck  -  " + v.cargo + " rounds" : "Army truck";
-            case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
+            case HELI: return v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter"
+                    : v.kind == K_GUNSHIP ? "Gunship " + Math.max(1, v.number) + "  -  army attack helicopter" : "Air " + Math.max(1, v.number) + "  -  army helicopter";
             case TANK: return "Tank";
             case AMBULANCE: return v.kind == K_ARMD_AMB ? "Army armoured ambulance" : "Ambulance";
             case TRAIN: return "Train";
@@ -500,7 +503,7 @@ final class Fleet {
         switch (v.type) {
             case HELI:
                 if (v.state == IDLE) {
-                    String who = v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + v.number;
+                    String who = v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : v.kind == K_GUNSHIP ? "Gunship " + v.number : "Air " + v.number;
                     return who + ": " + (v.refuel > 0 ? "Refuelling on the pad (" + (int) v.refuel + "s)" : helis.livePilot(v) == null ? "Grounded, no pilot" : "On the pad, ready");
                 }
                 if (v.state == MUSTER) return (v.kind == K_RESCUE_HELI ? "Rescue helicopter" : v.kind == K_POLICE_HELI ? "Police helicopter" : "Air " + v.number)
@@ -1024,6 +1027,7 @@ final class Fleet {
     void update(float dt) {
         // ((27.5) A base's fire support truck out to a big fight.)
         fireSupport.tick(dt);
+        helis.gunships(dt);
         frameNo++;
         if (frameNo % 30 == 0) routing.releaseRoutes();
         patrolCount = patrols.patrolCars();
