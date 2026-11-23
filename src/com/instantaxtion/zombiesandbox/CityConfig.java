@@ -278,7 +278,7 @@ final class CityConfig implements OptionSet {
      * lanes, a ranger station and fire lookout towers), 5 the lanes of 10.18 (no stretch of tarmac in the
      * middle of a dirt lane) and the real cities, 6 the driveways of 10.19, 7 the helipads and busier outskirts of 10.20, 8 dirt lanes that stay dirt into town (10.23), 9 streets that line up, more kinds of road and hills in town (10.24), 10 curved streets in the suburbs (10.25), 11 farm fields and park paths kept clear (10.26), 12 the ring road, wider avenues and stations on the road network (10.28), 13 highway interchanges with slip roads instead of crossroads (10.29), 14 fuller country on the Massive maps with a big army base and its checkpoints (10.30), 15 one-way slip roads that run in alongside the highway, and the Gigantic size (10.31), 16 bridges over the highway at the interchanges, the army base checkpoints (10.32), 17 nothing joining the highway but its slip roads, and fuller maps (10.33), 18 every road joined up, and livelier maps (10.34), 21 another police station on every map from the Default size up, 22 the beltway right round the map, 23 an army base out in the country from the Default size up (bigger on the Massive maps) and a police headquarters, 24 buildings of more shapes than a box (10.52), 25 about the same number of people on every map (10.63), 28 winding neighbourhoods on more of the map and homes set back by different amounts (11.5), 29 the airport on the big city maps (16.0), 30 no hospital (16.5), 31 no fire stations (16.9), 40 every city its own (27.5: its grid, district mix, downtown, park, colours and the new neighbourhoods), 41 police stations on every island (28.0), 42 the quick reaction force's base near the middle of town (28.7), 43 more town on the mostly-country maps (29.0), 44 every map but the island ones a fifth smaller across (29.7), 45 Prison Island and Theme Park Island too (29.8). Saved games rebuild with what they had.
      */
-    int civic = 46;
+    int civic = 47;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -602,6 +602,8 @@ final class CityConfig implements OptionSet {
     float shrinkScale() {
         float s = shrunk() ? SHRINK : 1;
         if (civic >= 46) s *= SHRINK;
+        // ((30.4) Map version 47: a fifth smaller again.)
+        if (civic >= 47) s *= SHRINK;
         return s;
     }
 
@@ -731,7 +733,9 @@ final class CityConfig implements OptionSet {
                     : 7500 + 2500 * (tiles - POP_TILES[7]) / (float) (POP_TILES[8] - POP_TILES[7]))
                     : 5000f * target / POP_TARGET[6];
             if (k < 0) people *= dens;
-            return Math.round(Math.min(10000, people) * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT]);
+            // ((30.4) Map version 47: fewer in step with the smaller ground (a fifth smaller across, so 64% of the people).)
+            float area = civic >= 47 ? SHRINK * SHRINK : 1;
+            return Math.round(Math.min(10000, people) * area * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT]);
         }
         return Math.round(target * dens * RESIDENT_SHARE[v[OPT_CIVILIANS]] / RESIDENT_SHARE[PEOPLE_ABOUT] * POP_MORE);
     }
@@ -744,8 +748,11 @@ final class CityConfig implements OptionSet {
         // About one officer for every 16 residents the game simulates, plus eight for each station ((12.2) more than
         // ever: one in 24 and six a station up to 12.0, one in 48 and three in 12.1).
         // ((13.0) Up to 800 now, for the bigger cities: 480 before.)
-        return Math.round(Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8)) * FORCE_SCALE[force] * FORCE_MORE);
+        return Math.round(Math.max(12, Math.min(800, Math.round(residents / 16f) + policeStations() * 8)) * FORCE_SCALE[force] * FORCE_MORE * forceCut());
     }
+
+    /** ((30.4) Map version 47: police, soldiers and the help from outside 15% fewer. */
+    float forceCut() { return civic >= 47 ? 0.85f : 1f; }
 
     /** ((26.0) Police/army strength (a New Game choice, not one of the eight in v): Weak, Normal, Strong. */
     static final int OPT_FORCE = 10;
@@ -766,7 +773,7 @@ final class CityConfig implements OptionSet {
         // ((15.5) The Military Town's great base: three times the garrison, and never fewer than 450.)
         // ((28.0) The Military Airbase: two and a half times the garrison, never fewer than 380.)
         int big = militaryTown() ? Math.min(700, Math.max(450, n * 3)) : airbase() ? Math.min(600, Math.max(380, n * 5 / 2)) : n;
-        return Math.round(big * FORCE_SCALE[force] * FORCE_MORE);
+        return Math.round(big * FORCE_SCALE[force] * FORCE_MORE * forceCut());
     }
 
 
@@ -813,7 +820,9 @@ final class CityConfig implements OptionSet {
                 // ((10.52) One more on every map from the Default size up.)
                 + (civic >= 21 && s >= LARGE ? 1 : 0);
         // ((13.0) Twice as many, and two more again on the Colossal map.)
-        return was * 2 + (s >= COLOSSAL ? 2 : 0);
+        int n2 = was * 2 + (s >= COLOSSAL ? 2 : 0);
+        // ((30.4) Map version 47: in step with the smaller maps - about half as many on maps half as wide as they were.)
+        return civic >= 47 && n2 > 0 ? Math.max(1, Math.round(n2 * shrinkScale())) : n2;
     }
 
     /** Medics: the hospital's, and the paramedics at the fire stations, growing with the city. */
@@ -834,7 +843,9 @@ final class CityConfig implements OptionSet {
     int extraBases() {
         if (!militaryBase() || bigGarrison()) return 0;
         int s = v[OPT_SIZE];
-        return s < LARGE ? 0 : s <= MASSIVE ? 1 : s == HUGE ? 2 : s == GIGANTIC ? 3 : 4;
+        int n = s < LARGE ? 0 : s <= MASSIVE ? 1 : s == HUGE ? 2 : s == GIGANTIC ? 3 : 4;
+        // ((30.4) Map version 47: fewer, for the smaller maps.)
+        return civic >= 47 ? Math.round(n * shrinkScale()) : n;
     }
 
     /** How many of a landmark (0 church, 1 school, 2 fire station, 3 supermarket, 4 gas station, 5 cemetery). */

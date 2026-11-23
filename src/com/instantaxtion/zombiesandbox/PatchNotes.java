@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.3";
-    static final int VERSION_CODE = 303;
+    static final String VERSION = "30.4";
+    static final int VERSION_CODE = 304;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.4  -  Smaller again",
+                    "Every map is another fifth smaller, with fewer civilians to match.",
+                    "Fewer police stations and army bases, and 15% fewer police, soldiers and reinforcements.",
+                    "The dead are back to their speed before 29.9.",
+            },
             {
                     "30.3  -  Smaller, quicker cities",
                     "Every map is a fifth smaller across, the island maps too.",

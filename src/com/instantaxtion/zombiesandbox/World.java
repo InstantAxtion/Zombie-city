@@ -329,7 +329,7 @@ final class World {
     /** ((29.5) How much faster the dead get over being stunned than the living. */
     static final float ZOMBIE_STUN_RECOVERY = 2f;
     /** ((29.9) The dead, every kind, an eighth quicker on their feet than before. */
-    static final float ZOMBIE_FASTER = 1.04f;
+    static final float ZOMBIE_FASTER = 1f;
     /** ((29.2) The living shoved aside by something driving into them (for the health check). */
     int peopleShoved;
     boolean gore = true;

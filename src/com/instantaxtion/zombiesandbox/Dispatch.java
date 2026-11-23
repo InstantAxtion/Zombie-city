@@ -380,8 +380,10 @@ final class Dispatch {
     Dispatch(World w, int reinforcementLevel) {
         this.w = w;
         this.city = w.city;
-        policeReserve = reinforcementLevel > 0 ? OUTSIDE_POLICE : 0;
-        squadReserve = reinforcementLevel > 0 ? OUTSIDE_SOLDIERS : 0;
+        // ((30.4) 15% fewer from outside on map version 47.)
+        float cut = w.city != null ? w.city.cfg.forceCut() : 1f;
+        policeReserve = reinforcementLevel > 0 ? Math.round(OUTSIDE_POLICE * cut) : 0;
+        squadReserve = reinforcementLevel > 0 ? Math.round(OUTSIDE_SOLDIERS * cut) : 0;
         airSorties = 0;
         tankReserve = TANKS[reinforcementLevel];
     }
