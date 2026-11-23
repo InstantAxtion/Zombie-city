@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "30.8";
-    static final int VERSION_CODE = 308;
+    static final String VERSION = "30.9";
+    static final int VERSION_CODE = 309;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "30.9  -  Better parking",
+                    "No limit on cars or trucks at a call any more: everyone sent still goes.",
+                    "Cars arriving at a busy call stop short and pull into a space of their own along the kerb, instead of driving into the middle.",
+                    "Cars stopped on top of each other ease apart, onto the pavement if they must.",
+                    "Army patrols sweep on from one spot to the next instead of going back through the gate each time, and trucks leave a base a few at a time.",
+            },
             {
                     "30.8  -  No more pile-ups",
                     "Police and army vehicles no longer heap up at calls, junctions and base gates: a call takes a few cars, the rest of the officers go on foot or elsewhere.",

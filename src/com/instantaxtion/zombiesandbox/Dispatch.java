@@ -892,7 +892,8 @@ final class Dispatch {
     private boolean footPatrol(ArrayList<Entity> sq, City.Facility base) {
         if (sq.size() < 3) return false;
         for (int tries = 0; tries < 6; tries++) {
-            float a = w.rnd.nextFloat() * World.TAU, dist = base.r + 300 + w.rnd.nextFloat() * 350;
+            // ((30.9) Within a walk of it (World.RIDE_HOME): further out, every squad called a truck to fetch it back.)
+            float a = w.rnd.nextFloat() * World.TAU, dist = Math.min(World.RIDE_HOME - 60, base.r + 250 + w.rnd.nextFloat() * 200);
             float[] p = city.findWalkable(base.x + (float) Math.cos(a) * dist, base.y + (float) Math.sin(a) * dist);
             if (p == null || w.countZombiesNear(p[0], p[1], 200) > 0 || World.hypot(p[0] - base.x, p[1] - base.y) < base.r + 150) continue;
             City.WalkField field = city.walkField16(p[0], p[1]);

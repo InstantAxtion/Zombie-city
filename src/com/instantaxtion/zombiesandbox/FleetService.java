@@ -598,6 +598,23 @@ final class FleetService {
             v.speed = 0;
             return routeHomeOrPark(v);
         }
+        if (v.state == DRIVE && v.loop && city.cfg.civic >= 50 && ++v.loops < 6 && !crewLow(v)) {
+            // ((30.9) On to another sweep, not back through the gate after each: with every soldier out on patrol, the
+            // Humvees going in and out of the base round each sweep heaped up in its yard by the dozen.)
+            float[] to = null;
+            if (!w.dispatch.incidents.isEmpty() && w.rnd.nextFloat() < 0.7f) {
+                Dispatch.Incident hot = w.dispatch.incidents.get(w.rnd.nextInt(w.dispatch.incidents.size()));
+                to = city.nearestDrivable(hot.x + w.rnd.nextFloat() * 300 - 150, hot.y + w.rnd.nextFloat() * 300 - 150);
+            }
+            if (to == null) to = fleet.randomTownRoad();
+            if (to != null && fleet.routing.route(v, to[0], to[1])) {
+                v.tx = to[0];
+                v.ty = to[1];
+                v.place = city.placeName(to[0], to[1]);
+                v.stuckTimer = 0;
+                return false;
+            }
+        }
         if (v.state == DRIVE && v.loop) {
             // The end of the patrol's sweep: back to base.
             v.state = RETURN;
@@ -798,6 +815,26 @@ final class FleetService {
         for (int i = 0; i < v.crew.size() && wait; i++) if (v.crew.get(i).type != Entity.COP || v.crew.get(i).role != Entity.ROLE_RIFLE) wait = false;
         if (!v.crew.isEmpty() && !wait) fleet.crews.crewOut(v, true);
         parkUp(v);
+        return false;
+    }
+
+    /** ((30.9) Two vehicles already setting off from (or mustering in) the yard of f: the next waits its turn. */
+    boolean gateBusy(City.Facility f) {
+        if (f == null || city.cfg.civic < 50) return false;
+        int leaving = 0;
+        for (int i = 0, m = fleet.vehicles.size(); i < m && leaving < 3; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if ((o.state == DRIVE || o.state == MUSTER) && World.hypot(o.x - f.x, o.y - f.y) < f.r + City.T * 2) leaving++;
+        }
+        return leaving >= 3;
+    }
+
+    /** ((30.9) Anyone aboard down to a third of their rounds. */
+    private boolean crewLow(Vehicle v) {
+        for (int i = 0; i < v.crew.size(); i++) {
+            Entity c = v.crew.get(i);
+            if (c.isArmed() && c.ammo + c.reserve < (c.magSize + World.fullReserve(c)) / 3) return true;
+        }
         return false;
     }
 
@@ -1237,9 +1274,6 @@ final class FleetService {
         if (group.isEmpty() || (inc != null && group.size() < 2)) return false;
         // ((30.6) The searches had their share this step: asked again shortly.)
         if (fleet.routing.busy()) return false;
-        // ((30.8) Nor another police car to a call that has all it can take.)
-        if (inc != null && group.get(0).type == Entity.COP && fleet.patrols.carsFull(inc, null)) return false;
-        if (inc != null && group.get(0).type == Entity.SOLDIER && fleet.patrols.trucksFull(inc)) return false;
         int type = group.get(0).type, vtype = type == Entity.COP ? CRUISER : TRUCK;
         float sx = 0, sy = 0;
         for (Entity e : group) {
@@ -1269,6 +1303,9 @@ final class FleetService {
             City.Facility f = city.nearestFacility(type == Entity.COP ? City.FACILITY_POLICE : City.FACILITY_BASE, sx, sy);
             // ((12.3) The army sends a truck from further off: driven, even a long way round beats the walk.)
             boolean fromBase = f != null && (inc == null || World.hypot(f.x - sx, f.y - sy) <= World.hypot(inc.x - sx, inc.y - sy) * (type == Entity.SOLDIER ? 1.5f : 0.8f));
+            // ((30.9) Out through the gate one or two at a time: with two already setting off from its yard, the next
+            // waits (they ask again shortly). Fifteen at once heaped up between the gate and the garages.)
+            if (fromBase && gateBusy(f)) return false;
             Entity drv = null;
             if (fromBase) {
                 for (int i = 0; i < fleet.vehicles.size() && v == null; i++) {

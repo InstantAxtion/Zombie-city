@@ -120,6 +120,8 @@ final class Fleet {
         float moveCd = 8;
         /** ((30.8) What it was doing when the player took the wheel: given back to it when they let go (FleetPlayer.handBack). */
         transient int heldState = -1;
+        /** ((30.9) Sweeps a base patrol has driven since it left the base. */
+        transient int loops;
         transient boolean heldPatrol, heldLoop;
         transient Dispatch.Incident heldIncident;
         transient float heldTx, heldTy;
@@ -1417,7 +1419,7 @@ final class Fleet {
     boolean troopTruck(java.util.List<Entity> squad, City.Facility base, Dispatch.Incident inc, int forceKind) {
         // (One of the trucks parked on the base, if there's one left; otherwise one comes round to the gate.)
         // ((11.7) One of the trucks parked on the base, or no patrol: none appear from nowhere.)
-        if (squad.size() < 2 || patrols.trucksFull(inc)) return false;
+        if (squad.size() < 2 || service.gateBusy(base)) return false;
         float[] p = armyUnits.baseTruck(base);
         if (p == null) return false;
         int kind = 0;

@@ -393,7 +393,7 @@ final class FleetArmy {
      */
     boolean mountUp(java.util.List<Entity> squad, Dispatch.Incident inc) {
         // ((30.1) Not a truck for one: a squad, or they go another way.)
-        if (squad.size() < 2 || inc == null || fleet.patrols.trucksFull(inc)) return false;
+        if (squad.size() < 2 || inc == null) return false;
         float sx = 0, sy = 0;
         for (Entity e : squad) {
             sx += e.x;

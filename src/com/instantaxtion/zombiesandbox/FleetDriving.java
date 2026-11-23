@@ -75,6 +75,11 @@ final class FleetDriving {
         // four tiles could be taken, and it stood in the junction for good.)
         if (v.kerbed && !v.pulling && v.player == null && (int) (v.anim * 0.5f) != (int) ((v.anim - dt) * 0.5f)
                 && city.junctionIdAt(v.x, v.y) >= 0) offLane(v, v.stillT > 8 ? 6 : 4);
+        // ((30.9) On top of another, or one of a crowd stopped in the street: every couple of seconds it looks for a space of
+        // its own off the lane - the kerb further along, a side street, a car park, the verge - and pulls into it. A big
+        // call's cars stopped one behind another in the lane, on top of each other, and blocked the street.)
+        else if (v.kerbed && !v.pulling && v.player == null && (int) (v.anim * 0.5f) != (int) ((v.anim - dt) * 0.5f)
+                && (vehicleWithin(v.x, v.y, 10, v) || (crowdAround(v, 40) >= 2 && !inSpace(v)))) offLane(v, v.stillT > 8 ? 8 : 5);
         if (!v.kerbed) {
             v.kerbed = true;
             v.pullOff = false;
@@ -172,6 +177,42 @@ final class FleetDriving {
         v.pullOff = true;
     }
 
+    /** ((30.9) Somewhere a stopped car can be eased onto: the pavement, a plaza, a car park, the verge - not a building or the water. */
+    boolean standable(float x, float y) {
+        int t = city.tileIndex(x, y);
+        if (t < 0 || city.solid[t]) return false;
+        byte k = city.tiles[t];
+        return k == City.SIDEWALK || k == City.PLAZA || k == City.LOT || k == City.GRASS || k == City.DIRT || k == City.SAND || k == City.BASE;
+    }
+
+    /** ((30.9) Other vehicles stopped within r of this one. */
+    int crowdAround(Vehicle v, float r) {
+        int n = 0;
+        for (int i = 0, m = fleet.vehicles.size(); i < m; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == v || o.removedFromFleet || airborne(o) || Math.abs(o.speed) > 3) continue;
+            if (Math.abs(o.x - v.x) < r && Math.abs(o.y - v.y) < r) n++;
+        }
+        return n;
+    }
+
+    /** ((30.9) Parked out of the lane already: off the road, or right against its edge. */
+    boolean inSpace(Vehicle v) {
+        int t = city.tileIndex(v.x, v.y);
+        if (t < 0) return true;
+        byte k = city.tiles[t];
+        if (k != City.ROAD && k != City.CAR) return true;
+        int W = city.w;
+        int[] nb = {t - 1, t + 1, t - W, t + W};
+        for (int n : nb) if (n >= 0 && n < city.tiles.length && city.tiles[n] != City.ROAD && city.tiles[n] != City.CAR) {
+            float cx = (t % W + 0.5f) * City.T, cy = (t / W + 0.5f) * City.T;
+            float ex = (n % W + 0.5f) * City.T, ey = (n / W + 0.5f) * City.T;
+            // (Within a few units of that edge.)
+            if (Math.abs((v.x - cx) * (ex - cx) + (v.y - cy) * (ey - cy)) / City.T > City.T * 0.2f) return true;
+        }
+        return false;
+    }
+
     /** ((28.0) Another vehicle (on the ground) with its centre within r of (x, y). */
     boolean vehicleWithin(float x, float y, float r, Vehicle self) {
         for (int i = 0; i < fleet.vehicles.size(); i++) {
@@ -261,10 +302,14 @@ final class FleetDriving {
                 float closing = va - vb;
                 float push = (reach - d) * 0.5f;
                 // Nobody is shoved off the road (onto grass, a kerb, a median): the other car takes the push.
-                boolean aOk = city.drivable(a.x - nx * push, a.y - ny * push), bOk = city.drivable(b.x + nx * push, b.y + ny * push);
+                // ((30.9) Two stopped on top of each other may be eased apart onto the pavement or the verge, too: kept to the
+                // road, two in a lane against a median or a kerb could never be parted, and a heap of them stayed a heap.)
+                boolean still = Math.abs(a.speed) < 3 && Math.abs(b.speed) < 3 && a.player == null && b.player == null;
+                boolean aOk = city.drivable(a.x - nx * push, a.y - ny * push) || (still && standable(a.x - nx * push, a.y - ny * push));
+                boolean bOk = city.drivable(b.x + nx * push, b.y + ny * push) || (still && standable(b.x + nx * push, b.y + ny * push));
                 float pa = aOk ? (bOk ? push : push * 2) : 0, pb = bOk ? (aOk ? push : push * 2) : 0;
-                if (pa > 0 && !city.drivable(a.x - nx * pa, a.y - ny * pa)) pa = push;
-                if (pb > 0 && !city.drivable(b.x + nx * pb, b.y + ny * pb)) pb = push;
+                if (pa > 0 && !city.drivable(a.x - nx * pa, a.y - ny * pa) && !(still && standable(a.x - nx * pa, a.y - ny * pa))) pa = push;
+                if (pb > 0 && !city.drivable(b.x + nx * pb, b.y + ny * pb) && !(still && standable(b.x + nx * pb, b.y + ny * pb))) pb = push;
                 a.x -= nx * pa;
                 a.y -= ny * pa;
                 b.x += nx * pb;

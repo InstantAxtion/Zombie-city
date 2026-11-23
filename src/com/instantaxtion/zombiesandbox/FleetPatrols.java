@@ -399,7 +399,7 @@ final class FleetPatrols {
      * on. False if there's no road from the station.
      */
     boolean stationCar(java.util.List<Entity> officers, City.Facility f, Dispatch.Incident inc) {
-        if (officers.isEmpty() || inc == null || carsFull(inc, null)) return false;
+        if (officers.isEmpty() || inc == null) return false;
         float[] p = city.nearestDrivable(f.gateX > 0 ? f.gateX : f.x, f.gateY > 0 ? f.gateY : f.y);
         if (p == null || !fleet.routing.canDrive(p[0], p[1], inc.x, inc.y)) return false;
         // ((26.3) A car with its officers already in it, waiting: it goes, lights on, and these two stay at the station.)
@@ -693,7 +693,6 @@ final class FleetPatrols {
     }
 
     boolean respond(Vehicle v, Dispatch.Incident inc) {
-        if (carsFull(inc, v)) return false;
         v.state = DRIVE;
         if (!fleet.routing.route(v, inc.x, inc.y)) {
             v.state = PATROL;
@@ -815,8 +814,7 @@ final class FleetPatrols {
         boolean look = check || (Math.abs(v.speed) > 15 && w.zombieWithin(v.x, v.y, 190));
         // ((12.0) Not in the middle of a junction, though: it drives on out of it first. Stopped there for the scene,
         // it blocked the junction for everyone until its officers came back.)
-        // ((30.8) Not with three or more stopped there already: it drives on (another call, another street).)
-        if (look && v.crew.size() > 0 && (city.junctionIdAt(v.x, v.y) < 0 || Math.abs(v.speed) < 3) && stoppedRound(v, 80) < 3 && (fleet.service.hordeAhead(v)
+        if (look && v.crew.size() > 0 && (city.junctionIdAt(v.x, v.y) < 0 || Math.abs(v.speed) < 3) && (fleet.service.hordeAhead(v)
                 || (w.countZombiesNear(v.x, v.y, 90) > 0 && w.countZombiesNear(v.x, v.y, 30) < 4))) return patrolContact(v);
         if (v.state == DRIVE && v.ammoRun != null) return ammoRunStep(v, dt);
         if (v.state == DRIVE) return patrolToCall(v, dt);
@@ -1048,6 +1046,10 @@ return false;
         // ((30.8) Coming up on a scene with three or more already stopped there: pull up here, short of them, rather
         // than drive in among them and stop in the lane on top of them.)
         boolean crowded = left < 260 && (w.lodFrame & 7) == (v.number & 7) && city.junctionIdAt(v.x, v.y) < 0 && stoppedRound(v, 70) >= 3;
+        // ((30.9) Nearly there and other cars round it already: it stops here, out of the junction, and finds itself a space
+        // at the kerb (FleetDriving.kerbAtScene) - the cars of a big call spread along the streets leading to it, rather
+        // than all driving to the one spot and stopping in the middle of it on top of each other.)
+        if (!crowded && left < 170 && city.junctionIdAt(v.x, v.y) < 0 && fleet.driving.crowdAround(v, 30) >= 1) crowded = true;
         if (!moving || crowded || ((left < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
             v.jamTries = 0;
             v.speed = 0;
