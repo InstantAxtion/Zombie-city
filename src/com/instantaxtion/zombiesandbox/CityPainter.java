@@ -3170,6 +3170,8 @@ final class CityPainter extends CityPart {
                 int ax = st.vertical ? cx : cx + s, ay = st.vertical ? cy + s : cy;
                 int bx = st.vertical ? cx : cx + 2 * s, by = st.vertical ? cy + 2 * s : cy;
                 if (!city.crosswalk(ax, ay) || !city.junctionAt(bx, by)) continue;
+                // ((30.5) Not before a bend: there's nowhere to turn.)
+                if (bendAt(bx, by)) continue;
                 float hx = st.vertical ? 0 : s, hy = st.vertical ? s : 0;
                 // The right-hand side of someone driving that way.
                 float rx = -hy, ry = hx;
@@ -3362,6 +3364,22 @@ final class CityPainter extends CityPart {
         // The route shield at each end of the highway.
         for (int end = 0; end < 2; end++) {
             float k = end == 0 ? 3 : len - 5, a = end == 0 ? 7.6f : -1.8f;
+            // ((30.5) On the verge, not over a road beside the highway: the nearest spot along it, either side, with no road
+            // under the sign.)
+            if (city.cfg.civic >= 48) {
+                float[] as = end == 0 ? new float[]{7.6f, -1.8f, 9.6f, -3.8f} : new float[]{-1.8f, 7.6f, -3.8f, 9.6f};
+                boolean found = false;
+                for (int dk = 0; dk < 20 && !found; dk++)
+                    for (float aa : as) {
+                        float kk = end == 0 ? 3 + dk : len - 5 - dk;
+                        if (signClear(kk, aa)) {
+                            k = kk;
+                            a = aa;
+                            found = true;
+                            break;
+                        }
+                    }
+            }
             float sx = city.hwyAxis == 0 ? k * T : (city.hwyAt + a) * T, sy = city.hwyAxis == 0 ? (city.hwyAt + a) * T : k * T;
             p.setColor(city.country.shieldColor);
             c.drawRect(sx, sy, sx + 26, sy + 14, p);
@@ -3524,6 +3542,8 @@ final class CityPainter extends CityPart {
                 // Only between junctions.
                 int mx = st.vertical ? st.x0 + st.width / 2 : x, my = st.vertical ? y : st.y0 + st.width / 2;
                 if (mx < 0 || my < 0 || mx >= city.w || my >= city.h || city.roadDir[my * city.w + mx] != dir || !city.paved(mx, my)) continue;
+                // ((30.5) Not across the corner where the street ends turning into another: its lines stop at the bend.)
+                if (city.cfg.civic >= 48 && (k < 3 || k >= n - 3) && bendAt(mx, my)) continue;
                 // (10.28) Only where the street is still road all the way across: a stretch that went back to
                 // grass, or was cut short, gets no lines painted on the grass.
                 boolean whole = true;
@@ -4371,6 +4391,19 @@ final class CityPainter extends CityPart {
             p.setColor(0xFF4A5530);
             for (float yy = cy; yy < cy + hl - 1; yy += 2.2f) c.drawRect(cx - hw + 0.8f, yy, cx + hw - 0.8f, yy + 0.5f, p);
         }
+    }
+
+    /** ((30.5) No road, water or building under a highway route shield at (k along, a across, in tiles). */
+    private boolean signClear(float k, float a) {
+        for (float dk = 0; dk <= 1.7f; dk += 0.85f)
+            for (float da = 0; da <= 0.9f; da += 0.9f) {
+                float kk = k + dk, aa = city.hwyAt + a + da;
+                int tx = (int) Math.floor(city.hwyAxis == 0 ? kk : aa), ty = (int) Math.floor(city.hwyAxis == 0 ? aa : kk);
+                if (tx < 0 || ty < 0 || tx >= city.w || ty >= city.h) return false;
+                byte t = city.tiles[ty * city.w + tx];
+                if (t != GRASS && t != TREE && t != DIRT && t != SAND) return false;
+            }
+        return true;
     }
 
     /** Part of a bend: two roads meeting at a corner, where nobody stops. */

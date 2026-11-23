@@ -3367,6 +3367,25 @@ final class City {
             junctions.clear();
             junctions.addAll(out);
         }
+        // ((30.5) Map version 48: a junction needs three ways out of it (each at least two tiles long). A street turning a
+        // corner - however wide, with a tile of road poking out past it - is a bend: no lights, crossings or turn arrows.
+        // Where the town's last street met the road along the bottom of the map beside the highway, it had all three.)
+        if (cfg.civic >= 48)
+            for (int[] jb : junctions) {
+                if (jb[4] == J_ROUNDABOUT || jb[4] == J_BEND) continue;
+                int legs = 0;
+                boolean nLeg = false, sLeg = false, eLeg = false, wLeg = false;
+                for (int x = jb[0]; x <= jb[2]; x++) {
+                    if (legAt(x, jb[1] - 1, x, jb[1] - 2)) nLeg = true;
+                    if (legAt(x, jb[3] + 1, x, jb[3] + 2)) sLeg = true;
+                }
+                for (int y = jb[1]; y <= jb[3]; y++) {
+                    if (legAt(jb[0] - 1, y, jb[0] - 2, y)) wLeg = true;
+                    if (legAt(jb[2] + 1, y, jb[2] + 2, y)) eLeg = true;
+                }
+                legs = (nLeg ? 1 : 0) + (sLeg ? 1 : 0) + (eLeg ? 1 : 0) + (wLeg ? 1 : 0);
+                if (legs <= 2) jb[4] = J_BEND;
+            }
         // The road inside a junction's box (the short links between merged parts) belongs to it too.
         for (int id = 0; id < junctions.size(); id++) {
             int[] jb = junctions.get(id);
@@ -3374,6 +3393,12 @@ final class City {
                 for (int x = jb[0]; x <= jb[2]; x++)
                     if (junctionId.get(y * w + x) < 0 && paved(x, y)) junctionId.set(y * w + x, id);
         }
+    }
+
+    /** ((30.5) A way out of a junction: road just outside it and the tile beyond (or the map's edge beyond). */
+    private boolean legAt(int x1, int y1, int x2, int y2) {
+        if (!paved(x1, y1)) return false;
+        return paved(x2, y2) || x2 < 0 || y2 < 0 || x2 >= w || y2 >= h;
     }
 
     static final int J_STOP = 0, J_LIGHTS = 1, J_ROUNDABOUT = 2, J_BEND = 3;
