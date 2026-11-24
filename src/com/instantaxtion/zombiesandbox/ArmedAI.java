@@ -450,6 +450,11 @@ final class ArmedAI {
      */
     boolean hospitalStep(Entity e, float dt) {
         if (e.medCd > 0) e.medCd -= dt;
+        // ((31.2) Map version 52: nobody drops out hurt - they fight on.)
+        if (w.noMedevac) {
+            if (e.task == Dispatch.T_HEAL && e.ride == null) endHeal(e);
+            return false;
+        }
         if (e.infected || e == w.controlled || e.ride != null) {
             if (e.task == Dispatch.T_HEAL && e.ride == null) endHeal(e);
             return false;

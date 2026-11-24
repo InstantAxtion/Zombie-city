@@ -53,11 +53,14 @@ final class FleetMedevac {
         if ((tick -= dt) > 0) return;
         float step = 0.5f - tick;
         tick = 0.5f;
-        if ((baseCd -= step) <= 0) {
-            baseCd = 10;
-            stockBases();
+        // ((31.2) Map version 52: no ambulances out for the wounded; vehicles are still mended at home.)
+        if (!w.noMedevac) {
+            if ((baseCd -= step) <= 0) {
+                baseCd = 10;
+                stockBases();
+            }
+            assignPickups();
         }
-        assignPickups();
         repairs(step);
     }
 

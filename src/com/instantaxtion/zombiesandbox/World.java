@@ -476,6 +476,7 @@ final class World {
         // ((17.0) No virus in a gang war or an invasion.)
         dispatch = new Dispatch(this, cfg.reinforcements());
         noFootPatrols = cfg.civic >= 50;
+        noRecruits = noMedevac = cfg.civic >= 52;
         fleet = new Fleet(this);
         ops = new Ops(this);
         burned = new boolean[city.w * city.h];
@@ -2547,6 +2548,11 @@ final class World {
 
     /** ((31.0) Set for the city being played (map version 50 and on). */
     static boolean noFootPatrols;
+    /**
+     * ((31.2) Map version 52: nobody is recruited (no civilians signing up, no reserve pilots), and nobody drops out
+     * hurt to wait for an ambulance - the wounded fight on, patched up by the medics round them.
+     */
+    boolean noRecruits, noMedevac;
 
     // ------------------------------------------------------------------ (11.5) posts kept manned
 

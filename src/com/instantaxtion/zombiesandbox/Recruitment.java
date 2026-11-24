@@ -32,7 +32,7 @@ final class Recruitment {
         int cops = Math.max(0, w.counts[Entity.COP] - volCops), soldiers = Math.max(0, w.counts[Entity.SOLDIER] - volSoldiers);
         w.peakCops = Math.max(w.peakCops, cops);
         w.peakSoldiers = Math.max(w.peakSoldiers, soldiers);
-        if (w.peakZombies < 5) return;
+        if (w.peakZombies < 5 || w.noRecruits) return;
         w.policeDrive = drive(Entity.COP, City.FACILITY_POLICE, w.peakCops, cops, w.policeDrive);
         w.armyDrive = drive(Entity.SOLDIER, City.FACILITY_BASE, w.peakSoldiers, soldiers, w.armyDrive);
         volunteers();
@@ -69,7 +69,7 @@ final class Recruitment {
 
     void volunteers() {
         // ((28.0) Not once the city's fight is over, won or lost: they kept coming out of the stations for good after.)
-        if (!VOLUNTEERS || w.alert < 2 || w.peakZombies < 5 || w.warResult != 0) return;
+        if (!VOLUNTEERS || w.noRecruits || w.alert < 2 || w.peakZombies < 5 || w.warResult != 0) return;
         int about = 0, enlisting = 0;
         for (int i = 0, n = w.entities.size(); i < n; i++) {
             Entity e = w.entities.get(i);
@@ -193,7 +193,7 @@ final class Recruitment {
      * police, rescue and army helicopters: a couple for each of them do.
      */
     void reservePilots() {
-        if (w.pilotsAsked || w.alert < 1) return;
+        if (w.pilotsAsked || w.alert < 1 || w.noRecruits) return;
         int helis = 0;
         for (int i = 0, n = w.fleet.vehicles.size(); i < n; i++) if (w.fleet.vehicles.get(i).type == Fleet.HELI && w.fleet.vehicles.get(i).padAt != null) helis++;
         if (helis == 0) return;
