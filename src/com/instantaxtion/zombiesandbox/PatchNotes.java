@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.0";
-    static final int VERSION_CODE = 320;
+    static final String VERSION = "32.1";
+    static final int VERSION_CODE = 321;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.1  -  Bigger forces",
+                    "About 25% more police, soldiers and outside backup on every new map.",
+            },
             {
                     "32.0  -  Mass outbreaks",
                     "Thousands of zombies are now a real fight: the bigger the outbreak, the harder each zombie is to put down, grenades do less to a packed horde, and a crowd of them spoils the shooters' aim. Small outbreaks play as before.",

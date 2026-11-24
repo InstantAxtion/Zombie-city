@@ -259,6 +259,8 @@ final class MapTests extends TestKit {
                     check(barracks >= 10 && city.helipads.size() >= 4, m + "barracks rows (" + barracks + ") and the heliport (" + city.helipads.size() + ")");
                     CityConfig o = new CityConfig();
                     o.v[CityConfig.OPT_SIZE] = CityConfig.SMALL;
+                    // ((32.1) On the same map version: map version 54 has a quarter more soldiers everywhere.)
+                    o.civic = c.civic;
                     int ours = World.forces(c, city)[1], usual = World.forces(o, city)[1];
                     check(ours >= 380 && ours >= usual * 2, m + "far more soldiers (" + ours + " to " + usual + ")");
                 } else if (preset == CityConfig.BORDER_TOWN) {
