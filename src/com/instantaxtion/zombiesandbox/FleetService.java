@@ -447,7 +447,10 @@ final class FleetService {
             // ((30.1) Any troop truck: its squad climbs back in, and it takes them on together.)
             boolean anyone = false;
             for (int i = 0; i < v.squad.size() && !anyone; i++) anyone = !v.squad.get(i).dead && !v.squad.get(i).removed && !v.squad.get(i).isZombie();
-            if (anyone && !v.ammoTruck) {
+            // ((32.0) Twice it has stopped for them and nobody climbed in: it lets them go and heads home. Two trucks sat at
+            // a call for the rest of the game, calling a squad in that stood beside them and never came.)
+            if (anyone && !v.ammoTruck && v.pickTries < 2) {
+                v.pickTries++;
                 v.state = PICKUP;
                 v.pickup = true;
                 v.timer = 0;
@@ -455,6 +458,12 @@ final class FleetService {
                 v.standby = false;
                 return false;
             }
+            if (anyone && !v.ammoTruck) {
+                for (int i = 0; i < v.squad.size(); i++) if (v.squad.get(i).rig == v) v.squad.get(i).rig = null;
+                v.squad.clear();
+                v.incident = null;
+            }
+            v.pickTries = 0;
             v.state = RETURN;
             v.speed = 0;
             v.standby = false;
@@ -1053,6 +1062,7 @@ final class FleetService {
         // ((30.1) Nothing to take them to: soldiers on to the nearest fight still going; two or more officers in a police
         // car out on patrol in it. Nobody drives back to sit at the station or base.)
         // ((30.2) Unless they're short of rounds: then home to restock first.)
+        if (!v.crew.isEmpty()) v.pickTries = 0;
         boolean low = false;
         for (int i = 0; i < v.crew.size() && !low; i++) {
             Entity c = v.crew.get(i);

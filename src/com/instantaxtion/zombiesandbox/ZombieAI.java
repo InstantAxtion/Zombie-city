@@ -1105,6 +1105,8 @@ final class ZombieAI {
                 : z.type == Entity.ZOMBIE_DOG ? 7 : 17;
         z.biteCd = z.type == Entity.RUNNER || z.type == Entity.ZOMBIE_DOG ? 0.55f : 0.9f;
         z.biteAt = w.time;
+        // ((32.0) Map version 53: harder in a mass outbreak (see Balance).)
+        if (t.type == Entity.COP || t.type == Entity.SOLDIER) dmg *= Balance.bite(w);
         t.hp -= dmg;
         t.hurt = 1;
         t.killedByZombie = true;
@@ -1249,9 +1251,17 @@ final class ZombieAI {
     /** The shared route patch to (x, y) (spots within a few steps of each other share one), or null. */
     World.Lure lureField(float x, float y) {
         int tx = Math.max(0, Math.min(w.city.w - 1, (int) (x / City.T))), ty = Math.max(0, Math.min(w.city.h - 1, (int) (y / City.T)));
-        int key = (ty / 3) * 65536 + tx / 3;
+        // ((32.0) In a mass outbreak, one shared route for every spot within six tiles of each other, not three: with
+        // gunfire all over town, a route for each was a tenth of each step.)
+        boolean mass = w.zombies > 300;
+        int key = mass ? (1 << 30) + (ty / 6) * 65536 + tx / 6 : (ty / 3) * 65536 + tx / 3;
+        if (mass) {
+            tx = Math.min(w.city.w - 1, (tx / 6) * 6 + 3);
+            ty = Math.min(w.city.h - 1, (ty / 6) * 6 + 3);
+        }
         World.Lure f = w.lures.get(key);
-        if (f != null && w.time - f.made < 20) return f;
+        // ((32.0) Kept twice as long in a mass outbreak.)
+        if (f != null && w.time - f.made < (w.zombies > 300 ? 40 : 20)) return f;
         if (w.pathBudget < 0.1f) return f;
         w.pathBudget -= 0.1f;
         if (w.city.solid[ty * w.city.w + tx]) {

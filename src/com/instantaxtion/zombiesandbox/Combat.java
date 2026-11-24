@@ -184,7 +184,16 @@ final class Combat {
      * The zombie most worth shooting: close ones first, but ones attacking someone, runners and screamers
      * jump the queue, and crawlers wait. Only targets in sight count.
      */
+    /** ((32.0) See pickTarget. */
+    static final float NEAR_PICK = 90;
+
     Entity pickTarget(Entity e, float range) {
+        // ((32.0) In a mass outbreak, the one they've just picked stays theirs for a quarter of a second while it's up, in
+        // range and in sight: it was weighed up afresh against every one of the horde, step after step.)
+        Entity was = e.aimPick;
+        if (w.zombies > 300 && was != null && !was.dead && was.hp > 0 && was.isZombie() && w.time - e.pickT < 0.25f && w.time >= e.pickT
+                && (was.x - e.x) * (was.x - e.x) + (was.y - e.y) * (was.y - e.y) < range * range) return was;
+        e.pickT = w.time;
         float best = Float.MAX_VALUE, blockedBest = Float.MAX_VALUE;
         Entity res = null, blocked = null;
         // ((27.4) The others fighting alongside: what threatens any of them counts, and one of them reloading with the
@@ -192,14 +201,23 @@ final class Combat {
         int nm = e.raider ? 0 : mates(e, MATE_R);
         int cx0 = Math.max(0, (int) ((e.x - range) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((e.x + range) / World.CELL));
         int cy0 = Math.max(0, (int) ((e.y - range) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((e.y + range) / World.CELL));
-        for (int cy = cy0; cy <= cy1; cy++)
-            for (int cx = cx0; cx <= cx1; cx++) {
+        // ((32.0) In a mass outbreak, the near ones first: with a horde all round, a clear shot within NEAR_PICK settles it,
+        // and the hundreds further out aren't each weighed up (and looked at for a clear line) for every shot - a fifth
+        // of each step with six thousand of the dead about.)
+        boolean ringed = w.zombies > 300 && range > NEAR_PICK;
+        for (int pass = ringed ? 0 : 1; pass < 2; pass++) {
+        if (pass == 1 && ringed && (res != null || blocked != null)) break;
+        float lo2 = pass == 1 && ringed ? NEAR_PICK * NEAR_PICK : -1, hi = pass == 0 ? NEAR_PICK : range;
+        int px0 = Math.max(cx0, (int) ((e.x - hi) / World.CELL)), px1 = Math.min(cx1, (int) ((e.x + hi) / World.CELL));
+        int py0 = Math.max(cy0, (int) ((e.y - hi) / World.CELL)), py1 = Math.min(cy1, (int) ((e.y + hi) / World.CELL));
+        for (int cy = py0; cy <= py1; cy++)
+            for (int cx = px0; cx <= px1; cx++) {
                 int c = cy * w.gw + cx;
                 for (int k = w.cellStart[c], end = w.cellStart[c] + w.zCount[c]; k < end; k++) {
                     Entity o = w.sorted[k];
                     if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float ddx = o.x - e.x, ddy = o.y - e.y, d2 = ddx * ddx + ddy * ddy;
-                    if (d2 > range * range) continue;
+                    if (d2 > hi * hi || d2 <= lo2) continue;
                     float score = (float) Math.sqrt(d2);
                     // The same senses as the dead: they see a long way in front, but only notice what's close behind
                     // them (unless they're already on alert).
@@ -235,6 +253,7 @@ final class Combat {
                     }
                 }
             }
+        }
         // ((21.2) Nothing clear to shoot, and one of the dead on someone with them in the way: that's the one. The shot
         // isn't taken through them (aimAndFire won't): they step round for an angle on it.)
         if (res == null && blocked != null) res = blocked;
@@ -426,6 +445,11 @@ final class Combat {
         if (marked) hit *= 1.25f;
         if (World.COVER && !t.isUndead() && !marked && w.armedAI.inCover(t, e.x, e.y)) hit *= 0.5f;
         if (World.COVER) hit *= 1 - 0.45f * e.suppress;
+        // ((32.0) Map version 53: in a mass outbreak, the dead pressing round them spoil their aim (see Balance).)
+        if (t.isZombie() && w.zombies > 300 && (e.type == Entity.COP || e.type == Entity.SOLDIER)) {
+            int nz = w.spatial.countZombiesNear(e.x, e.y, 60);
+            if (nz > 3) hit /= 1 + Balance.panic(w) * (nz - 3);
+        }
         if (w.rnd.nextFloat() < hit) hits(e, t, d, range, dmg, mx, my);
         else misses(e, t, d, dmg, mx, my);
         muzzle(e, soldier, mx, my);
@@ -578,7 +602,7 @@ final class Combat {
         boolean wasUp = t.hp > 0;
         // Only a hit to the head really stops a zombie; body shots just wear it down.
         boolean headshot = t.isUndead() && w.rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : t.type == Entity.BRUISER ? 0.7f : 1)
-                * (t.spottedUntil > w.time && e.isArmed() ? World.SPOTTED_AIM : 1);
+                * (t.spottedUntil > w.time && e.isArmed() ? World.SPOTTED_AIM : 1) * (e.type == Entity.COP || e.type == Entity.SOLDIER ? Balance.headshot(w) : 1);
         if (headshot && t.type == Entity.GIANT) {
             // ((25.0) A shot to a giant's head hurts it, and no more.)
             t.hp -= dmg * World.GUN_DAMAGE * 8;
@@ -596,11 +620,11 @@ final class Combat {
             if (w.gore) w.effects.decal(t.x + w.rnd.nextFloat() * 6 - 3, t.y + w.rnd.nextFloat() * 6 - 3, 2.5f + w.rnd.nextFloat() * 2, 0xAA5A0808);
         } else {
             // ((10.32) Body armour on one of the dead takes most of a body shot.)
-            t.hp -= t.isUndead() ? dmg * World.GUN_DAMAGE * Director.GUN[w.difficulty] * (t.armored ? 0.5f : 1) * (1 + w.zombieAI.rot(t)) : dmg * (t.armored ? 0.65f : 1);
+            t.hp -= t.isUndead() ? dmg * World.GUN_DAMAGE * Director.GUN[w.difficulty] * (t.armored ? 0.5f : 1) * (1 + w.zombieAI.rot(t)) / Balance.toughness(w) : dmg * (t.armored ? 0.65f : 1);
             if (wasUp && t.hp <= 0) t.bodyShot = true;
             // ((27.5) Stopping power: a police round in the body checks one of the dead for a moment - not the big ones,
             // and not through armour.)
-            if (e.type == Entity.COP && t.isUndead() && !t.big() && !t.armored && t.hp > 0) t.stun = Math.max(t.stun, POLICE_STAGGER);
+            if (e.type == Entity.COP && t.isUndead() && !t.big() && !t.armored && t.hp > 0) t.stun = Math.max(t.stun, POLICE_STAGGER * Balance.stagger(w));
         }
         t.hurt = 1;
         if (wasUp && t.hp <= 0 && t.isZombie()) {
@@ -682,6 +706,8 @@ final class Combat {
         float f = 1 - d / radius;
         boolean wasUp = o.hp > 0;
         float hit = damage * (0.25f + 0.75f * f);
+        // ((32.0) Map version 53: in a mass outbreak, less of the dead go down to a blast (see Balance).)
+        if (o.isZombie()) hit *= Balance.blast(w);
         if (w.friendlyBlast && !o.isZombie()) {
             // ((29.1) The living caught in the army's or the police's own blast (or a wreck going up): knocked flat and
             // hurt - a third of it - but not killed by it. Grenades, shells and air strikes on the dead were killing far

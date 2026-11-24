@@ -89,6 +89,8 @@ final class Entity {
     transient float goneAt = -1;
     /** ((24.0) The one of the dead they last picked to shoot. */
     transient Entity aimPick;
+    /** ((32.0) When aimPick was last chosen (Combat.pickTarget). */
+    transient float pickT = -100;
     /** ((27.4) Falling back with the others: where they're all making for, and until when. */
     transient float rallyX, rallyY, rallyT;
     /** ((27.5) On a commander's line: the officer, their place on it, and until when (see Commanders). */

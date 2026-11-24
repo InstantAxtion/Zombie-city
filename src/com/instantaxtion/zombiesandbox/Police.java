@@ -114,7 +114,10 @@ final class Police {
         // crew a car (see Fleet.staffPatrols).)
         // ((31.0) Map version 50: no beats on foot at all - back to the precinct for a car (a lift there, from a long way
         // off), and out in it.)
-        boolean noBeat = w.city.cfg.civic >= 50 && e.agency == 0 && e.role == Entity.ROLE_RIFLE;
+        // ((32.0) Map version 53: nor anyone else - the K9 handlers, riot officers and the other agencies' officers still
+        // walked theirs.)
+        boolean noBeat = (w.city.cfg.civic >= 50 && e.agency == 0 && e.role == Entity.ROLE_RIFLE)
+                || (w.city.cfg.civic >= 53 && e.role != Entity.ROLE_MOUNTED && e.role != Entity.ROLE_TRAFFIC);
         if (noBeat || (!World.footPatrol(e) && e.agency == 0 && e.role == Entity.ROLE_RIFLE && w.fleet.patrols.parkedAt(st) > 0
                 && (w.city.cfg.civic < 50 || w.fleet.patrolCount < w.fleet.patrolTarget))) {
             float gx = st.gateX > 0 ? st.gateX : st.x, gy = st.gateY > 0 ? st.gateY : st.y;

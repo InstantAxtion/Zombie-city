@@ -407,6 +407,8 @@ final class Fleet {
         int detours;
         /** ((28.6) Waiting to pick its people up: the nearest of them coming, and how long since anyone got nearer. */
         float pickNear, pickStall;
+        /** ((32.0) Times in a row it has stopped to pick its squad up and come away with nobody (FleetService.truckAtScene). */
+        int pickTries;
         /** ((14.0) A bulldozer: the wreck it's on its way to push off the road, its base, and the seconds left pushing.) */
         Vehicle clearing;
         City.Facility dozerBase;

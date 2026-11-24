@@ -2,11 +2,18 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "31.2";
-    static final int VERSION_CODE = 312;
+    static final String VERSION = "32.0";
+    static final int VERSION_CODE = 320;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.0  -  Mass outbreaks",
+                    "Thousands of zombies are now a real fight: the bigger the outbreak, the harder each zombie is to put down, grenades do less to a packed horde, and a crowd of them spoils the shooters' aim. Small outbreaks play as before.",
+                    "About 6,000 zombies is a long, bloody win for the city; 10,000 can overrun it.",
+                    "Big hordes run up to twice as fast: shooters keep their target instead of re-checking the whole crowd every frame, and the dead share their routes.",
+                    "Fixes: army trucks no longer wait forever at a scene for a squad that never boards; K9, riot and other officers no longer walk foot beats.",
+            },
             {
                     "31.2  -  No recruits, no medevac",
                     "Recruitment is gone: no civilian volunteers or reserve pilots.",
