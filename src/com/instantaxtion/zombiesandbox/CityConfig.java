@@ -285,7 +285,8 @@ final class CityConfig implements OptionSet {
     // ((31.2) 52: no recruitment, and no medevac - the wounded fight on (World.noRecruits, World.noMedevac).)
     // ((32.0) 53: the mass outbreak's balance (Balance).)
     // ((32.1) 54: a quarter more police, soldiers and help from outside (forceCut).)
-    int civic = 54;
+    // ((32.2) 55: slow zombies (World.slowDead).)
+    int civic = 55;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }

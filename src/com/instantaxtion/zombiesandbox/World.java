@@ -490,7 +490,7 @@ final class World {
         hashCnt = new int[gw * gh * 3];
         // ((20.0) The director, with dice of its own, so nothing else's luck changes with it.)
         difficulty = Math.max(0, Math.min(3, cfg.difficulty));
-        zPace = Director.Z_SPEED[difficulty];
+        zPace = Director.Z_SPEED[difficulty] * slowDead(cfg);
         director = new Director(difficulty, (testSeed >= 0 ? testSeed + 7 : new Random().nextLong()) * 31 + 5);
         applyRules();
         // ((11.5) No courthouse armoury: the government buildings are just buildings now.)
@@ -1451,13 +1451,18 @@ final class World {
     /** How quick the dead are for the difficulty. */
     float zPace;
 
+    /** ((32.2) Map version 55: the dead are slow - three tenths off every one of them, the runners too. */
+    static float slowDead(CityConfig cfg) {
+        return cfg != null && cfg.civic >= 55 ? 0.7f : 1f;
+    }
+
     /**
      * ((21.1) A game is always Normal, whatever it was saved as: nothing about it is harder or easier than what the
      * player puts in it. ((28.2) Only the campaign's missions had a difficulty of their own, and they're gone.)
      */
     void applyRules() {
         difficulty = Director.NORMAL;
-        zPace = Director.Z_SPEED[difficulty];
+        zPace = Director.Z_SPEED[difficulty] * slowDead(city.cfg);
         director.level = difficulty;
         city.cfg.difficulty = difficulty;
     }
