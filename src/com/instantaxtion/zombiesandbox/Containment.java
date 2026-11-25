@@ -11,6 +11,9 @@ import java.util.Random;
 final class Containment {
     private final World w;
 
+    /** ((33.0) Those free for a zone's line, nearest it first (see updateCordon). */
+    private final ArrayList<Entity> nearFirst = new ArrayList<Entity>();
+
     Containment(World w) {
         this.w = w;
     }
@@ -154,7 +157,11 @@ final class Containment {
         }
         int clusters = findClusters();
         // Each bunch of the dead: the zone already round it moves with it (gradually), or a new one is declared.
-        boolean[] matched = new boolean[World.MAX_ZONES + 1];
+        // ((33.0) Map version 61: in a mass outbreak, up to eight zones held at once, not four - with hordes all over a
+        // big city, only the four biggest had perimeters, and the police not on one (a third of them out in patrol cars)
+        // met the rest wherever they ran into them.)
+        int maxZones = w.city.cfg.civic >= 61 && w.zombies > 300 ? 8 : World.MAX_ZONES;
+        boolean[] matched = new boolean[Math.max(maxZones, w.infection.size()) + 1];
         for (int c = 0; c < clusters; c++) {
             World.InfectionZone best = null;
             int bi = -1;
@@ -174,7 +181,7 @@ final class Containment {
                 // (Redrawn only when they've really moved or spread: a line forever being redrawn is never held.)
                 if (bd > Math.max(180, best.r * 0.6f) || w.clusterR[c] > best.r + 140 || (w.clusterR[c] < best.r * 0.5f && best.quietFor == 0))
                     placeZone(best, w.clusterX[c], w.clusterY[c], Math.max(w.clusterR[c], best.r * 0.8f));
-            } else if (w.clusterN[c] >= 6 && w.infection.size() < World.MAX_ZONES) {
+            } else if (w.clusterN[c] >= 6 && w.infection.size() < maxZones) {
                 World.InfectionZone z = new World.InfectionZone();
                 placeZone(z, w.clusterX[c], w.clusterY[c], w.clusterR[c]);
                 w.infection.add(z);
@@ -289,6 +296,7 @@ final class Containment {
                     z.manned[best]++;
                     e.postX = z.post[best * 2];
                     e.postY = z.post[best * 2 + 1];
+                    spreadOnPost(e, z, best);
                 }
             } else if (cordonCandidate(e)) unposted++;
         }
@@ -298,8 +306,33 @@ final class Containment {
         int budget = police ? unposted : unposted / 2, perPost = police ? 3 : 2;
         for (World.InfectionZone z : w.infection) {
             if (!z.critical) continue;
-            for (int i = 0, m = w.entities.size(); i < m && budget > 0; i++) {
-                Entity e = w.entities.get(i);
+            // ((33.0) Map version 61: the nearest to the line first. Taken in whatever order they came in the city's list,
+            // the posts were filled by officers from up to 1400 away - walking across, and often through, the zone - while
+            // those standing a street from the line were left with nothing to do.)
+            java.util.List<Entity> order = w.entities;
+            if (w.city.cfg.civic >= 61) {
+                nearFirst.clear();
+                // (And from no further than 700 past the line in a mass outbreak, with posts that move as the dead do: from
+                // further, they were still walking to it when it moved again. Further off, the patrol cars take crews to
+                // the posts nobody's on - below.)
+                float reach = z.r + (w.zombies > 300 ? 700 : 1400);
+                for (int i = 0, m = w.entities.size(); i < m; i++) {
+                    Entity e = w.entities.get(i);
+                    if (e.dead || w.controlled == e || !cordonCandidate(e)) continue;
+                    if (World.hypot(e.x - z.x, e.y - z.y) > reach) continue;
+                    nearFirst.add(e);
+                }
+                final World.InfectionZone fz = z;
+                java.util.Collections.sort(nearFirst, new java.util.Comparator<Entity>() {
+                    @Override
+                    public int compare(Entity a, Entity b) {
+                        return Float.compare(Math.abs((float) World.hypot(a.x - fz.x, a.y - fz.y) - fz.r), Math.abs((float) World.hypot(b.x - fz.x, b.y - fz.y) - fz.r));
+                    }
+                });
+                order = nearFirst;
+            }
+            for (int i = 0, m = order.size(); i < m && budget > 0; i++) {
+                Entity e = order.get(i);
                 if (e.dead || w.controlled == e || !cordonCandidate(e)) continue;
                 if (World.hypot(e.x - z.x, e.y - z.y) > z.r + 1400) continue;
                 int best = -1;
@@ -316,6 +349,7 @@ final class Containment {
                 e.task = Dispatch.T_CORDON;
                 e.postX = z.post[best * 2];
                 e.postY = z.post[best * 2 + 1];
+                spreadOnPost(e, z, best);
                 // ((27.4) On the line round the zone: its, until the zone's lifted or the post goes.)
                 w.ops.jobs.claim(e, z, Jobs.P_POST, "on the cordon");
                 z.manned[best]++;
@@ -448,6 +482,21 @@ final class Containment {
                 px = cx + (float) Math.cos(aa) * rr;
                 py = cy + (float) Math.sin(aa) * rr;
                 ok = px > 20 && py > 20 && px < w.city.worldW() - 20 && py < w.city.worldH() - 20 && !w.city.solidAt(px, py);
+            }
+            // ((33.0) Map version 61: not in among the dead - a horde bigger than the ring (it's never drawn wider than
+            // 640) had posts in the middle of it, and the officers sent to them walked into it. Out along the same line
+            // to the first open spot with no more than one of them within 70, up to 300 further.)
+            if (ok && w.city.cfg.civic >= 61 && w.spatial.countZombiesNear(px, py, 70) > 1) {
+                float ux = (px - cx) / Math.max(1, (float) World.hypot(px - cx, py - cy)), uy = (py - cy) / Math.max(1, (float) World.hypot(px - cx, py - cy));
+                for (float out = 60; out <= 300; out += 60) {
+                    float qx = px + ux * out, qy = py + uy * out;
+                    if (qx <= 20 || qy <= 20 || qx >= w.city.worldW() - 20 || qy >= w.city.worldH() - 20 || w.city.solidAt(qx, qy)) continue;
+                    if (w.spatial.countZombiesNear(qx, qy, 70) <= 1) {
+                        px = qx;
+                        py = qy;
+                        break;
+                    }
+                }
             }
             z.post[p * 2] = ok ? px : -1;
             z.post[p * 2 + 1] = ok ? py : -1;
@@ -835,6 +884,22 @@ final class Containment {
             }
         }
         return best;
+    }
+
+    /**
+     * ((33.0) Map version 61: the three on a post each have a place of their own along the line there - one at the post,
+     * one 18 to either side of it along the ring - not all three on the one spot, shoulder to shoulder, in each other's
+     * way and all in reach of the same few of the dead. (Where the side is a wall, the post itself.)
+     */
+    private void spreadOnPost(Entity e, World.InfectionZone z, int p) {
+        if (w.city.cfg.civic < 61) return;
+        int slot = (e.callsign & 0x7FFFFFFF) % 3 - 1;
+        if (slot == 0) return;
+        float a = World.TAU * p / World.CORDON_POSTS;
+        float sx = e.postX - (float) Math.sin(a) * 18 * slot, sy = e.postY + (float) Math.cos(a) * 18 * slot;
+        if (w.city.solidAt(sx, sy)) return;
+        e.postX = sx;
+        e.postY = sy;
     }
 
     /** Police and soldiers with nothing to do and rounds to shoot (not the specialists). */

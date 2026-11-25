@@ -100,6 +100,12 @@ final class Posts {
     String dutyText(Entity e) {
         if (e.type == Entity.COP) {
             City.Facility st = w.city.nearestFacility(City.FACILITY_POLICE, e.x, e.y);
+            // ((33.0) Map version 61: nobody walks a beat now (see Police.policeBeat) - an officer making for their spot
+            // in the station's yard to wait for a car was shown as "Walking the beat".)
+            if (e.dutyFor > 0 && w.city.cfg.civic >= 61 && st != null && st.name != null) {
+                boolean near = World.hypot(st.x - e.x, st.y - e.y) < st.r + 200;
+                return (near ? "Waiting for a car at " : "Heading back to ") + st.name.trim();
+            }
             if (e.dutyFor > 0) {
                 String street = w.city.placeName(e.x, e.y);
                 boolean stopped = Math.abs(e.vx) + Math.abs(e.vy) < 3;
@@ -238,7 +244,8 @@ final class Posts {
     /** (11.3) On the beat, or on duty on base, while the city is quiet. */
     boolean onDuty(Entity e) {
         if (w.alert != 0) return false;
-        if (e.type == Entity.COP) return e.dutyFor > 0;
+        // ((33.0) Map version 61: an officer walking to the station yard isn't on a beat, and is free for a car to fetch.)
+        if (e.type == Entity.COP) return e.dutyFor > 0 && w.city.cfg.civic < 61;
         if (e.type != Entity.SOLDIER) return false;
         City.Facility base = w.city.nearestFacility(City.FACILITY_BASE, e.x, e.y);
         return base != null && !base.fallen && World.hypot(base.x - e.x, base.y - e.y) < base.r * 2.4f;
