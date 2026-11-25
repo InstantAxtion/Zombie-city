@@ -71,6 +71,15 @@ final class CityConfig implements OptionSet {
     /** (10.47) Whether the people flee the city once the news breaks (not one of the eight in v either). */
     static final int OPT_EXODUS = 9;
     private static final String[] EXODUS = {"Off", "On foot", "Bus & train", "All ways"};
+    /**
+     * ((32.3) Civilians on or off, on the New Game screen (not one of the eight in v: it sets OPT_CIVILIANS to None, or
+     * back to the usual share). Off, the police and army are half as many again (forceCut).
+     */
+    static final int OPT_NO_CIV = 11;
+    private static final String[] CIVS = {"On", "Off"};
+
+    /** ((32.3) A city with no civilians in it. */
+    boolean noCivilians() { return v[OPT_CIVILIANS] == 0; }
     /** ((20.0) How hard the game is. ((21.1) Not a choice: always Normal since the campaign's missions went in 28.2.) */
     int difficulty = Director.NORMAL;
     private static final String[] LABELS = {"Map", "Map size", "Civilians", "Cops", "Military", "Zombies",
@@ -286,7 +295,8 @@ final class CityConfig implements OptionSet {
     // ((32.0) 53: the mass outbreak's balance (Balance).)
     // ((32.1) 54: a quarter more police, soldiers and help from outside (forceCut).)
     // ((32.2) 55: slow zombies (World.slowDead).)
-    int civic = 55;
+    // ((32.3) 56: the police hold the perimeter, the army does the killing.)
+    int civic = 56;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
@@ -760,7 +770,11 @@ final class CityConfig implements OptionSet {
     }
 
     /** ((30.4) Map version 47: police, soldiers and the help from outside 15% fewer. ((32.1) Map version 54: a quarter more again.) */
-    float forceCut() { return civic >= 54 ? 0.85f * 1.25f : civic >= 47 ? 0.85f : 1f; }
+    float forceCut() {
+        float f = civic >= 54 ? 0.85f * 1.25f : civic >= 47 ? 0.85f : 1f;
+        // ((32.3) Map version 56: no civilians - half as many police and soldiers again.)
+        return civic >= 56 && noCivilians() ? f * 1.5f : f;
+    }
 
     /** ((26.0) Police/army strength (a New Game choice, not one of the eight in v): Weak, Normal, Strong. */
     static final int OPT_FORCE = 10;
@@ -941,7 +955,8 @@ final class CityConfig implements OptionSet {
         if (retired(OPT_COUNTRY, v[OPT_COUNTRY])) v[OPT_COUNTRY] = Country.USA;
         // ((16.1) A size no longer offered: the Default.)
         if (retired(OPT_SIZE, v[OPT_SIZE])) v[OPT_SIZE] = GIGANTIC;
-        v[OPT_CIVILIANS] = PEOPLE_ABOUT;
+        // ((32.3) Civilians on or off is a choice again: off is kept, anything else is the usual share.)
+        if (v[OPT_CIVILIANS] != 0) v[OPT_CIVILIANS] = PEOPLE_ABOUT;
         outskirts = 0;
         // ((29.0) Every new game: the police and army at their strongest, and reinforcements on. Neither is a choice now.)
         force = FORCE_STRONG;
@@ -953,6 +968,7 @@ final class CityConfig implements OptionSet {
     static final int PEOPLE_ABOUT = 3;
 
     void randomize(Random r) {
+        boolean none = noCivilians();
         for (int i = 0; i < v.length; i++) {
             // (A random city is a made-up one: not one of the real cities.)
             do v[i] = r.nextInt(VALUES[i].length);
@@ -961,7 +977,7 @@ final class CityConfig implements OptionSet {
         v[OPT_SIZE] = GIGANTIC;
         force = FORCE_STRONG;
         normalize();
-        v[OPT_CIVILIANS] = PEOPLE_ABOUT;
+        v[OPT_CIVILIANS] = none ? 0 : PEOPLE_ABOUT;
         outskirts = 0;
         keepCity = false;
     }
@@ -971,10 +987,10 @@ final class CityConfig implements OptionSet {
     @Override public int count() { return LABELS.length; }
     @Override public String label(int i) { return LABELS[i]; }
     @Override public String[] values(int i) {
-        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_FORCE ? FORCES : VALUES[i];
+        return i == OPT_OUTSKIRTS ? OUTSKIRTS : i == OPT_EXODUS ? EXODUS : i == OPT_FORCE ? FORCES : i == OPT_NO_CIV ? CIVS : VALUES[i];
     }
     @Override public int get(int i) {
-        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_FORCE ? force : v[i];
+        return i == OPT_OUTSKIRTS ? outskirts : i == OPT_EXODUS ? exodus : i == OPT_FORCE ? force : i == OPT_NO_CIV ? (noCivilians() ? 1 : 0) : v[i];
     }
     @Override public void set(int i, int value) {
         if (i == OPT_OUTSKIRTS) {
@@ -987,6 +1003,10 @@ final class CityConfig implements OptionSet {
         }
         if (i == OPT_FORCE) {
             force = Math.max(0, Math.min(2, value));
+            return;
+        }
+        if (i == OPT_NO_CIV) {
+            v[OPT_CIVILIANS] = value == 1 ? 0 : PEOPLE_ABOUT;
             return;
         }
         v[i] = value;

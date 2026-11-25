@@ -17,6 +17,23 @@ final class Balance {
         return 1 - 0.6f * massFor(w);
     }
 
+    /**
+     * ((32.3) Map version 56: the police are kitted out to hold a line - bite-proof sleeves, gloves and vests: a bite does
+     * a quarter of the harm (policeGear), and one in twenty that would have infected does (policeInfect). 1 before.
+     */
+    static float policeGear(World w) {
+        return w.city.cfg.civic >= 56 ? 0.25f : 1f;
+    }
+
+    static float policeInfect(World w) {
+        return w.city.cfg.civic >= 56 ? 0.05f : 1f;
+    }
+
+    /** ((32.3) Map version 56: the army does the killing - its soldiers a third surer of the head shot. */
+    static float soldierAim(World w) {
+        return w.city.cfg.civic >= 56 ? 1.35f : 1f;
+    }
+
     /** Divides a body shot's damage to the dead. */
     static float toughness(World w) {
         return 1 + 2 * massFor(w);

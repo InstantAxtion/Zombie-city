@@ -602,7 +602,7 @@ final class Combat {
         boolean wasUp = t.hp > 0;
         // Only a hit to the head really stops a zombie; body shots just wear it down.
         boolean headshot = t.isUndead() && w.rnd.nextFloat() < headshotChance(e, t, d, range) * (t.armored ? 0.6f : 1) * (t.type == Entity.BRUTE ? 0.4f : t.type == Entity.BRUISER ? 0.7f : 1)
-                * (t.spottedUntil > w.time && e.isArmed() ? World.SPOTTED_AIM : 1) * (e.type == Entity.COP || e.type == Entity.SOLDIER ? Balance.headshot(w) : 1);
+                * (t.spottedUntil > w.time && e.isArmed() ? World.SPOTTED_AIM : 1) * (e.type == Entity.COP || e.type == Entity.SOLDIER ? Balance.headshot(w) * (e.type == Entity.SOLDIER ? Balance.soldierAim(w) : 1) : 1);
         if (headshot && t.type == Entity.GIANT) {
             // ((25.0) A shot to a giant's head hurts it, and no more.)
             t.hp -= dmg * World.GUN_DAMAGE * 8;

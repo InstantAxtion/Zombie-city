@@ -1340,6 +1340,14 @@ final class Dispatch {
         e.orderField = null;
     }
 
+    /**
+     * ((32.3) Map version 56: in a mass outbreak (over 300 of the dead), a call for the army rather than the police - four
+     * or more of the dead there, with the army in the city to send (and not a post on a perimeter or a checkpoint, which are the police's).
+     */
+    boolean armysCall(Incident inc) {
+        return city.cfg.civic >= 56 && w.zombies > 300 && inc.zombiesNear >= 4 && inc.cordonPost < 0 && inc.checkpointSpot == null && w.counts[Entity.SOLDIER] >= 10;
+    }
+
     /** How many officers a call wants (before any share-out between calls). */
     private int needAt(Incident inc) {
         // ((30.2) No ceiling: as many as the dead there call for - one more for every three of them, however many - and one
@@ -1464,6 +1472,17 @@ final class Dispatch {
                 resolve(inc);
                 continue;
             }
+            // ((32.3) Map version 56: a call with the dead in numbers is the army's. No police are sent in on foot, and those
+            // there come away to hold the perimeter round it (Containment.updateCordon) - the soldiers go in. Officers on
+            // foot in among the fighting were where nine in ten of the police killed in a big outbreak died.)
+            boolean army = armysCall(inc);
+            if (army) {
+                if (sendNow) for (int k = 0, n = w.entities.size(); k < n; k++) {
+                    Entity e = w.entities.get(k);
+                    if (e.incident == inc && e.task == T_RESPOND && e.type == Entity.COP && e.role != Entity.ROLE_SWAT && !e.dead) release(e);
+                }
+                if (!inc.militaryRequested) requestMilitary(inc.x, inc.y, inc.place, inc, null);
+            }
             // (Officers there asked for more: they get what they asked for, if it's to be had.)
             int need = needAt(inc);
             // (Its share of the force, with other calls going on: never less than two.)
@@ -1472,11 +1491,11 @@ final class Dispatch {
             int have = inc.cops + inc.soldiers + w.fleet.inbound(inc);
             // The nearest patrol car takes the call first; officers on foot make up the rest.
             if (have < need && sendNow) served++;
-            if (have < need && sendNow) {
+            if (have < need && sendNow && !army) {
                 Fleet.Vehicle car = w.fleet.patrolFor(inc.x, inc.y);
                 if (car != null && !w.fleet.routing.busyFor(car) && w.fleet.respond(car, inc)) have += car.crew.size();
             }
-            if (have < need && sendNow) {
+            if (have < need && sendNow && !army) {
                 // (The ones kept back are for a bad call only.)
                 int want = severe ? need - have : Math.min(need - have, spare);
                 int got = want > 0 ? assign(inc, Entity.COP, want) : 0;
@@ -1531,7 +1550,8 @@ final class Dispatch {
                 inc.airRequested = true;
                 requestAir(inc.x, inc.y, inc.place);
             }
-            if (!inc.militaryRequested && known && (inc.zombiesNear >= 8 || (inc.officersDown > 0 && inc.zombiesNear >= 3)
+            // ((32.3) Map version 56: the army is the one that goes in - called for four of the dead, not eight.)
+            if (!inc.militaryRequested && known && (inc.zombiesNear >= (city.cfg.civic >= 56 ? 4 : 8) || (inc.officersDown > 0 && inc.zombiesNear >= 3)
                     || (open >= 4 && inc.zombiesNear >= 4))) {
                 requestMilitary(inc.x, inc.y, inc.place, inc, null);
             }

@@ -1107,6 +1107,8 @@ final class ZombieAI {
         z.biteAt = w.time;
         // ((32.0) Map version 53: harder in a mass outbreak (see Balance).)
         if (t.type == Entity.COP || t.type == Entity.SOLDIER) dmg *= Balance.bite(w);
+        // ((32.3) Map version 56: the police's bite-proof sleeves and vests (see Balance.policeGear).)
+        if (t.type == Entity.COP) dmg *= Balance.policeGear(w);
         t.hp -= dmg;
         t.hurt = 1;
         t.killedByZombie = true;
@@ -1119,6 +1121,7 @@ final class ZombieAI {
         if (!w.bitBy.containsKey(t.nameSeed) && w.bitBy.size() < 20000) w.bitBy.put(t.nameSeed, z.nameSeed);
         float chance = (w.trait[World.TR_VIRULENT] ? 0.65f : w.trait[World.TR_WEAK_BITE] ? 0.22f : 0.4f) * World.BITE_INFECT * Director.INFECT[w.difficulty];
         boolean was = t.infected;
+        if (t.type == Entity.COP) chance *= Balance.policeInfect(w);
         if (!t.infected && t.type != Entity.DOG && w.rnd.nextFloat() < chance) {
             t.infected = true;
             t.infectTimer = w.war.turnTime(8 + w.rnd.nextFloat() * 10);

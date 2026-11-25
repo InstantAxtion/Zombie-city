@@ -615,7 +615,8 @@ final class Population {
                 break;
             case Entity.COP:
                 // ((31.0) Map version 51: body armour under the uniform - a fifth tougher.)
-                e.hp = w.city.cfg.civic >= 51 ? 80 : 60;
+                // ((32.3) Map version 56: heavier armour for holding a line - 100.)
+                e.hp = w.city.cfg.civic >= 56 ? 100 : w.city.cfg.civic >= 51 ? 80 : 60;
                 e.radius = 3.8f;
                 e.speed = 22;
                 e.runSpeed = 40;
@@ -1336,7 +1337,9 @@ final class Population {
         int area = (p[2] - p[0]) * (p[3] - p[1]);
         // ((15.8) Up to 350 in the bigger prison.)
         int inmates = Math.max(30, Math.min(350, area / 9)), guards = Math.max(3, Math.min(10, inmates / 35));
-        for (int i = 0; i < inmates; i++) {
+        // ((32.3) A city with no civilians: an empty prison (its guards still on the walls).)
+        int put = w.city.cfg.civic >= 56 && w.city.cfg.noCivilians() ? 0 : inmates;
+        for (int i = 0; i < put; i++) {
             float[] q = w.prison.prisonYardSpot();
             if (q == null) break;
             Entity e = spawn(Entity.CIVILIAN, q[0], q[1]);

@@ -1852,6 +1852,17 @@ final class Menu {
         }
         y += 10 * dp;
         // ((29.0) The police and army's strength and the reinforcements aren't choices any more: always Strong, always On.)
+        // ((32.3) Civilians on or off.)
+        y = segRow(c, CityConfig.OPT_NO_CIV, "Civilians", lx, y, lw);
+        plain.setTextSize(12.5f * dp);
+        plain.setColor(MUTED);
+        y -= 6 * dp;
+        for (String line : wrap(config.noCivilians() ? "Off: nobody lives in the city - just the police, the army and the dead. Half as many police and soldiers again."
+                : "On: the city is full of its people, going about their day.", lw - 4 * dp, plain)) {
+            c.drawText(line, lx + 2 * dp, y + 10 * dp, plain);
+            y += 16 * dp;
+        }
+        y += 12 * dp;
         y = segRow(c, CityConfig.OPT_EXODUS, "Fleeing citizens", lx, y, lw);
         plain.setTextSize(12.5f * dp);
         plain.setColor(MUTED);

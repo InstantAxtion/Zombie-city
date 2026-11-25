@@ -1049,6 +1049,11 @@ return false;
         // at the kerb (FleetDriving.kerbAtScene) - the cars of a big call spread along the streets leading to it, rather
         // than all driving to the one spot and stopping in the middle of it on top of each other.)
         if (!crowded && left < 170 && city.junctionIdAt(v.x, v.y) < 0 && fleet.driving.crowdAround(v, 30) >= 1) crowded = true;
+        // ((32.3) Map version 56: a call with the dead in numbers is the army's to go into - the car pulls up on the
+        // perimeter (see ArmedAI.perimeterRing), and its officers hold the line from there. Driving into the middle of it,
+        // they got out among the dead and were bitten. (Not where the dead are round the car already: they stay in it.)
+        if (!crowded && w.city.cfg.civic >= 56 && v.agency == 0 && inc.zombiesNear >= 4 && city.junctionIdAt(v.x, v.y) < 0
+                && left < ArmedAI.perimeterRing(w, inc) + 60 && w.countZombiesNear(v.x, v.y, 110) == 0) crowded = true;
         if (!moving || crowded || ((left < 50 || v.stuckTimer > 6) && city.junctionIdAt(v.x, v.y) < 0)) {
             v.jamTries = 0;
             v.speed = 0;

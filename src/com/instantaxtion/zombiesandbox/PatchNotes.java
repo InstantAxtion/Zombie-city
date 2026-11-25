@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.2";
-    static final int VERSION_CODE = 322;
+    static final String VERSION = "32.3";
+    static final int VERSION_CODE = 323;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.3  -  Police hold the line",
+                    "In big outbreaks the army goes in and does the killing; police hold the perimeter and stay out of the worst of it.",
+                    "Police wear bite-proof gear (bites do much less harm and rarely infect), sprint clear when one of the dead is on them, and patch themselves up after a fight. About 40% fewer police killed.",
+                    "New option: Civilians Off - an empty city of police, army and the dead, with 50% more police and soldiers.",
+            },
             {
                     "32.2  -  Slow zombies",
                     "All zombies are 30% slower on new maps: the dead shamble, and only runners can keep up with someone running.",

@@ -293,7 +293,9 @@ final class Containment {
             } else if (cordonCandidate(e)) unposted++;
         }
         // Half of the free units go on the lines (the most critical first); the rest stay free for 911 calls.
-        int budget = unposted / 2;
+        // ((32.3) Map version 56: all of the police free (the soldiers aren't on the lines), three to a post.)
+        boolean police = w.city.cfg.civic >= 56;
+        int budget = police ? unposted : unposted / 2, perPost = police ? 3 : 2;
         for (World.InfectionZone z : w.infection) {
             if (!z.critical) continue;
             for (int i = 0, m = w.entities.size(); i < m && budget > 0; i++) {
@@ -303,7 +305,7 @@ final class Containment {
                 int best = -1;
                 float bd = Float.MAX_VALUE;
                 for (int p = 0; p < World.CORDON_POSTS; p++) {
-                    if (z.post[p * 2] < 0 || z.manned[p] >= 2) continue;
+                    if (z.post[p * 2] < 0 || z.manned[p] >= perPost) continue;
                     float d = (float) World.hypot(z.post[p * 2] - e.x, z.post[p * 2 + 1] - e.y) + z.manned[p] * 300;
                     if (d < bd) {
                         bd = d;
@@ -841,6 +843,8 @@ final class Containment {
         // ((27.4) Not one another job has.)
         if (w.ops.jobs.keeps(e, Jobs.P_POST)) return false;
         if (e.type == Entity.COP) return e.agency == 0 && e.role != Entity.ROLE_SAR && e.role != Entity.ROLE_SWAT;
+        // ((32.3) Map version 56: the perimeter is the police's; the soldiers are kept free for the fighting.)
+        if (w.city.cfg.civic >= 56) return false;
         return e.type == Entity.SOLDIER && (e.role == Entity.ROLE_RIFLE || e.role == Entity.ROLE_GUNNER);
     }
 }
