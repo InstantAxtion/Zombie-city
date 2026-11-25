@@ -67,11 +67,14 @@ final class Hud {
             // ((12.0) On a square-root scale, as on the Stats screen: the dead and the armed were a flat line along the
             // bottom beside thousands of people.)
             float px = bx, py = by - ph * (float) Math.sqrt(h[0] / (float) max);
-            for (int i = step; i < n; i += step) {
+            // ((33.0) On to the latest sample every time: stepping over them, it stopped short of the right-hand end,
+            // up to a few samples behind what's happening now.)
+            for (int i = Math.min(step, n - 1); ; i = Math.min(i + step, n - 1)) {
                 float nx = bx + pw * i / (n - 1), ny = by - ph * (float) Math.sqrt(h[i] / (float) max);
                 c.drawLine(px, py, nx, ny, gv.stroke);
                 px = nx;
                 py = ny;
+                if (i >= n - 1) break;
             }
         }
     }
@@ -114,6 +117,8 @@ final class Hud {
     void drawBanner(Canvas c, String msg) {
         gv.text.setTextSize(14 * gv.dp);
         gv.text.setTextAlign(Paint.Align.CENTER);
+        // ((33.0) A long message a little smaller, then cut, to stay inside its box: it ran off both sides of a phone.)
+        msg = shrinkToFit(msg, gv.getWidth() - 56 * gv.dp);
         float tw = Math.min(gv.getWidth() - 24 * gv.dp, gv.text.measureText(msg) + 32 * gv.dp);
         float y = gv.getHeight() - 70 * gv.dp;
         gv.fill.setStyle(Paint.Style.FILL);
@@ -156,14 +161,7 @@ final class Hud {
                 }
             }
             // ((12.0) The fallen buildings counted once a second, not every frame: tens of thousands on a big map.)
-            if (gv.world != gv.miniCountWorld || gv.world.time - gv.miniCountAt > 1 || gv.world.time < gv.miniCountAt) {
-                gv.miniCountWorld = gv.world;
-                gv.miniCountAt = gv.world.time;
-                int n = 0;
-                for (int i = 0; i < gv.world.city.buildings.size(); i++) if (gv.world.city.buildings.get(i).collapsed) n++;
-                gv.miniCount = n;
-            }
-            int collapsed = gv.miniCount;
+            int collapsed = fallenBuildings();
             if (gv.miniMap == null || gv.miniWorld != gv.world || gv.miniCollapsed != collapsed) {
                 // Redrawn only when the city changes.
                 gv.miniWorld = gv.world;
@@ -359,6 +357,18 @@ final class Hud {
         }
     }
 
+    /** ((12.0) The buildings fallen, counted again at most once a second (from drawMinimap). ((33.0) The tactical map's too.) */
+    int fallenBuildings() {
+        if (gv.world != gv.miniCountWorld || gv.world.time - gv.miniCountAt > 1 || gv.world.time < gv.miniCountAt) {
+            gv.miniCountWorld = gv.world;
+            gv.miniCountAt = gv.world.time;
+            int n = 0;
+            for (int i = 0; i < gv.world.city.buildings.size(); i++) if (gv.world.city.buildings.get(i).collapsed) n++;
+            gv.miniCount = n;
+        }
+        return gv.miniCount;
+    }
+
     /** ((27.5) Three stacked squares, the top one tinted when an overlay is on. */
     void drawOverlayIcon(Canvas c, float x, float y) {
         gv.fill.setColor(0xE0101216);
@@ -456,7 +466,8 @@ final class Hud {
             c.drawText(fitText(name, r.width() - 24 * gv.dp), r.left + 12 * gv.dp, r.top + 19 * gv.dp, gv.text);
             gv.text.setTextSize(11.5f * gv.dp);
             gv.text.setColor(0xFFB8BCC4);
-            String line = h.dead + " of the dead   " + (h.armed == 0 ? "no police or soldiers" : h.armed + (h.armed == 1 ? " officer or soldier" : " police and soldiers"));
+            // ((33.0) Big numbers with separators.)
+            String line = World.big(h.dead) + " of the dead   " + (h.armed == 0 ? "no police or soldiers" : World.big(h.armed) + (h.armed == 1 ? " officer or soldier" : " police and soldiers"));
             c.drawText(fitText(line, r.width() - 24 * gv.dp), r.left + 12 * gv.dp, r.top + 36 * gv.dp, gv.text);
             y += rowH;
         }
@@ -587,8 +598,9 @@ final class Hud {
         float mw = aspect >= 1 ? size : size * aspect, mh = aspect >= 1 ? size / aspect : size;
         float tacL = keySide ? Math.max(12 * gv.dp, (gv.getWidth() - mw - 190 * gv.dp) / 2) : (gv.getWidth() - mw) / 2;
         gv.tacRect.set(tacL, top, tacL + mw, top + mh);
-        int collapsed = 0;
-        for (int i = 0; i < city.buildings.size(); i++) if (city.buildings.get(i).collapsed) collapsed++;
+        // ((33.0) The fallen buildings counted once a second, as for the minimap, not every frame the map is open: tens of
+        // thousands of buildings on a big map.)
+        int collapsed = fallenBuildings();
         if (gv.tacMap == null || gv.tacWorld != gv.world || gv.tacCollapsed != collapsed) {
             gv.tacWorld = gv.world;
             gv.tacCollapsed = collapsed;
@@ -626,11 +638,15 @@ final class Hud {
             }
         }
         float cw = gv.tacRect.width() / TAC_GRID, ch = gv.tacRect.height() / TAC_GRID;
+        // ((33.0) The red against the thickest square on the map: with thousands of the dead, every square with a dozen
+        // was as red as the heart of the horde.)
+        int zMost = 1;
+        for (int k = 0; k < gv.tacZ.length; k++) zMost = Math.max(zMost, gv.tacZ[k]);
         for (int k = 0; k < gv.tacZ.length; k++) {
             int z = gv.tacZ[k], hu = gv.tacH[k];
             if (z == 0 && hu == 0) continue;
             float x0 = gv.tacRect.left + (k % TAC_GRID) * cw, y0 = gv.tacRect.top + (k / TAC_GRID) * ch;
-            if (z > 0) gv.fill.setColor(alpha(0xFFFF3A20, Math.min(0.8f, 0.25f + z * 0.05f)));
+            if (z > 0) gv.fill.setColor(alpha(0xFFFF3A20, heatAlpha(z, zMost, 0.2f, 0.85f)));
             else gv.fill.setColor(alpha(0xFF4F8FE0, Math.min(0.55f, 0.18f + hu * 0.015f)));
             c.drawRect(x0, y0, x0 + cw, y0 + ch, gv.fill);
         }
@@ -746,11 +762,12 @@ final class Hud {
             living += gv.tacH[k];
         }
         // ((12.0) On two lines where one won't fit: it ran off both sides of a phone held upright.)
-        String key = "Dead " + dead + "   Living (outdoors) " + living, hint = "Rings: calls   Tap to go there";
+        // ((33.0) Which colour is which, and the counts with separators.)
+        String key = "Red: dead " + World.big(dead) + "   Blue: living (outdoors) " + World.big(living), hint = "Rings: calls   Tap to go there";
         if (keySide) {
             gv.text.setTextAlign(Paint.Align.LEFT);
             float kx = gv.tacRect.right + 16 * gv.dp, ky = gv.tacRect.top + 20 * gv.dp, kw = gv.getWidth() - kx - 12 * gv.dp;
-            String[] keyLines = {"Dead " + dead, "Living (outdoors) " + living, "Rings: calls", "Tap to go there"};
+            String[] keyLines = {"Red: dead " + World.big(dead), "Blue: living (outdoors) " + World.big(living), "Rings: calls", "Tap to go there"};
             for (String l : keyLines) {
                 c.drawText(fitText(l, kw), kx, ky, gv.text);
                 ky += 18 * gv.dp;
@@ -833,9 +850,12 @@ final class Hud {
             gv.heat[hy * hg + hx]++;
         }
         float cw = (float) MINI / hg;
+        // ((33.0) Shaded against the thickest square, as on the tactical map: in a mass outbreak it was all one red.)
+        int most = 1;
+        for (int k = 0; k < gv.heat.length; k++) most = Math.max(most, gv.heat[k]);
         for (int k = 0; k < gv.heat.length; k++) {
             if (gv.heat[k] == 0) continue;
-            gv.fill.setColor(alpha(0xFFFF3A20, Math.min(0.65f, 0.15f + gv.heat[k] * 0.04f)));
+            gv.fill.setColor(alpha(0xFFFF3A20, heatAlpha(gv.heat[k], most, 0.12f, 0.65f)));
             float hx = (k % hg) * cw, hy = (k / hg) * cw;
             mc.drawRect(hx, hy, hx + cw, hy + cw, gv.fill);
         }
@@ -846,12 +866,14 @@ final class Hud {
             gv.miniStamp = 8;
             java.util.Arrays.fill(gv.miniSeen, 0);
         }
+        // ((33.0) The dead first, then the police and the army over them: a horde drawn over the units hid them.)
+        for (int pass = 0; pass < 2; pass++)
         for (int i = 0, n = gv.world.entities.size(); i < n; i++) {
             Entity e = gv.world.entities.get(i);
             int col, kind;
             // (Just the police, the army and the dead: the crowd of everyone else hid them.)
             float d = 1.4f;
-            if (e.dead) continue;
+            if (e.dead || e.isZombie() != (pass == 0)) continue;
             if (e.isZombie()) {
                 col = 0xFF7CE04A;
                 kind = 1;
@@ -880,6 +902,16 @@ final class Hud {
             gv.fill.setColor(col);
             mc.drawRect(x - d, y - d, x + d, y + d, gv.fill);
         }
+    }
+
+    /**
+     * ((33.0) How strong a square of the heat map is: n of the dead in it against the most in any square, on a square-root
+     * scale between lo and hi, so a few stand out from none and the heart of a horde from its edges. With a dozen or
+     * fewer in the thickest square it's as before (the more there, the stronger).
+     */
+    static float heatAlpha(int n, int most, float lo, float hi) {
+        float f = (float) Math.sqrt(n / (float) Math.max(12, most));
+        return lo + (hi - lo) * Math.min(1, f);
     }
 
     void caption(int type, float dx, float dy) {

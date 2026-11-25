@@ -32,7 +32,8 @@ final class Settings implements OptionSet {
      * ((21.4) The settings offered, by index: the rest stay as they come (FPS, radio, name tags, radio lines,
      * destruction, the extra volumes and sound options, screen effects and colour grading).
      */
-    private static final int[] SHOWN = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 24, 14};
+    // ((33.0) And Show FPS back on the list: with tens of thousands on the map, how fast it's drawing matters.)
+    private static final int[] SHOWN = {0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 24, 14, 6};
 
     private final SharedPreferences prefs;
     private final int[] v = DEFAULTS.clone();
@@ -88,6 +89,19 @@ final class Settings implements OptionSet {
     boolean nameTags() { return v[12] == 1; }
     /** Realistic graphics (textured ground, soft shadows, shading) or the classic flat look. */
     boolean realistic() { return v[13] == 1; }
+
+    /**
+     * ((33.0) A choice the tools remember from one time the game is played to the next (the brush size, the kind of
+     * zombie): what was saved under key, or def when nothing was or it's out of range (0 to count - 1).
+     */
+    int remembered(String key, int def, int count) {
+        int saved = prefs.getInt(key, def);
+        return saved >= 0 && saved < count ? saved : def;
+    }
+
+    void remember(String key, int value) {
+        if (prefs.getInt(key, -1) != value) prefs.edit().putInt(key, value).apply();
+    }
 
     /** True if the player has not opened the patch notes since this version was installed. */
     boolean hasUnreadNotes() {

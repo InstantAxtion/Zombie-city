@@ -6,7 +6,8 @@ import android.content.SharedPreferences;
 /** Best results across every game played, saved on the phone. ((11.5) No achievements any more.) */
 final class Records {
     static final String[] RECORD_NAMES = {"Longest outbreak survived", "Most zombies killed in a game",
-            "Biggest horde", "Most volunteers in a game", "Zombies killed, all games", "Games played",
+            // ((33.0) Most zombies at once in the volunteers' place: nobody signs up any more.)
+            "Biggest horde", "Most zombies at once", "Zombies killed, all games", "Games played",
             // ((12.0) Two more.)
             "Most kills by one person", "Most survivors, city saved",
             // ((20.0) The score.)
@@ -24,22 +25,28 @@ final class Records {
         }
     }
 
+    /** ((33.0) Where each record is kept: the fourth under a new name, not the old volunteers' count. */
+    private static String key(int i) {
+        return i == 3 ? "recPeak" : "rec" + i;
+    }
+
     int record(int i) {
-        return prefs.getInt("rec" + i, 0);
+        return prefs.getInt(key(i), 0);
     }
 
     String recordText(int i) {
         int v = record(i);
         if (i == 0) return World.clock(v);
-        return String.valueOf(v);
+        // ((33.0) With thousands separators.)
+        return World.big(v);
     }
 
     void best(int i, int value) {
-        if (value > record(i)) prefs.edit().putInt("rec" + i, value).apply();
+        if (value > record(i)) prefs.edit().putInt(key(i), value).apply();
     }
 
     void add(int i, int amount) {
-        if (amount != 0) prefs.edit().putInt("rec" + i, record(i) + amount).apply();
+        if (amount != 0) prefs.edit().putInt(key(i), record(i) + amount).apply();
     }
 
     void gameStarted() {
@@ -57,7 +64,7 @@ final class Records {
     /** ((21.4) Wipes the records and the hall of fame.) */
     void resetStats() {
         SharedPreferences.Editor ed = prefs.edit();
-        for (int i = 0; i < RECORD_NAMES.length; i++) ed.putInt("rec" + i, 0);
+        for (int i = 0; i < RECORD_NAMES.length; i++) ed.putInt(key(i), 0);
         ed.putString("hall", "");
         ed.apply();
         hallText = "";
@@ -75,7 +82,7 @@ final class Records {
         if (w.humans > 0) best(0, (int) w.outbreakTime);
         best(1, w.zombiesKilled);
         best(2, w.biggestHorde);
-        best(3, w.recruits);
+        best(3, w.peakZombies);
         best(6, w.bestKills());
         if (w.warResult == 1) best(7, w.humans);
         best(8, w.score());

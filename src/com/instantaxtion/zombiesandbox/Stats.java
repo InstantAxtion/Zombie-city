@@ -316,7 +316,9 @@ final class Stats {
 
     /** (14.4) A moment that happened somewhere: the timeline can take you there. */
     void timeline(String text, float x, float y) {
-        if (w.timeline.size() >= 40) return;
+        // ((33.0) Full, the oldest but the first moment makes way: after forty, nothing new went on it, and the end of a
+        // long outbreak - the city falling, or saved - was never on the timeline.)
+        if (w.timeline.size() >= 40) w.timeline.remove(1);
         World.Moment m = new World.Moment();
         m.time = w.time;
         m.text = text;

@@ -96,10 +96,11 @@ final class GameView extends View implements Menu.Host {
             "Handler and police dog: the dog sniffs out hidden zombies and bites",
             "On a police motorcycle: patrols fast and calls in the hordes it passes"};
     static final String[] MIL_INFO = {"Rifle in bursts, grenades for crowds", "Boosts soldiers nearby, calls in support",
-            "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians and safe zones",
+            "Long-range scoped rifle", "Belt-fed machine gun", "Guardsmen who protect civilians",
             "Grenade launcher for packs of the dead", "Well armed, tough, lands from the sea",
             "Quick and light: scouts ahead and marks hordes", "Patches up wounded police and soldiers (not bites)",
-            "Gets a safe zone's wall up three times as fast", "Shells packs of the dead a few streets off"};
+            // ((33.0) What engineers do now there are no safe zones to wall in: sandbags between their post and the dead.)
+            "Digs in: lays sandbags towards the dead where the squad holds", "Shells packs of the dead a few streets off"};
     /** What the enemy tool makes: one of the dead. */
     int enemyType() {
         return ZOMBIE_VARIANTS[Math.min(zombieVariant, ZOMBIE_VARIANTS.length - 1)];
@@ -237,6 +238,8 @@ final class GameView extends View implements Menu.Host {
     boolean running, simPaused;
     long lastFrame;
     int speedIdx, brushIdx;
+    /** ((33.0) Where the brush last put people down (world), how far it spread them, and how long its ring has left. */
+    float brushX, brushY, brushR, brushT;
     /** (11.3) Frames that failed to draw (and were skipped). */
     int drawErrors;
     int tool = TOOL_PAN;
@@ -349,6 +352,12 @@ final class GameView extends View implements Menu.Host {
         buildIcons();
         settings = new Settings(context);
         City.realistic = settings.realistic();
+        // ((33.0) The brush size and each spawn tool's last choice, as they were left last time.)
+        brushIdx = settings.remembered("brush", 0, BRUSHES.length);
+        zombieVariant = settings.remembered("zombieKind", 0, ZOMBIE_VARIANTS.length);
+        copVariant = settings.remembered("copKind", 0, COP_ROLES.length);
+        milVariant = settings.remembered("milKind", 0, MIL_ROLES.length);
+        squadVariant = settings.remembered("squadKind", 0, SQUAD_NAMES.length);
         sound = new Sound(context);
         menu = new Menu(this, settings, dp);
         records = new Records(context);
@@ -1439,7 +1448,9 @@ final class GameView extends View implements Menu.Host {
             text.setTextSize(12 * dp);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setColor(0xFFFFFF66);
-            c.drawText((int) (fps + 0.5f) + " FPS" + (world.quality == World.Q_REDUCED ? "  (reduced detail)"
+            // ((33.0) And how many people are being drawn: what the frame rate goes up and down with.)
+            c.drawText((int) (fps + 0.5f) + " FPS" + (menu.isOpen() ? "" : "   " + World.big(onScreen.size()) + " on screen")
+                    + (world.quality == World.Q_REDUCED ? "  (reduced detail)"
                             : world.quality == World.Q_LOW ? "  (low detail)" : ""), getWidth() - 8 * dp,
                     menu.isOpen() ? getHeight() - 30 * dp : barTop - 8 * dp, text);
         }

@@ -232,6 +232,7 @@ final class WorldRenderer {
         gv.vfx.drawAbove(c, vx0, vy0, vx1, vy1);
         drawAircraft(c, vx0, vy0, vx1, vy1);
 
+        drawBrushRing(c);
         // (10.46) Infection zones: a dashed hazard ring round each, red while it's held, amber while it waits its turn.
         drawMarkers(c);
         // ((11.0) Police drones: a little quadcopter, its shadow below, rotors blurring, lights blinking, and the patch
@@ -518,6 +519,9 @@ final class WorldRenderer {
     /** ((27.3) Step 4.) Everyone on screen (dots when zoomed out), and the selection and orders over them. */
     void drawPeople(Canvas c, float vx0, float vy0, float vx1, float vy1, boolean detailed) {
         float patch = 2.6f * gv.dp / gv.scale;
+        // ((33.0) How big a crowd is on screen: the dead in a big one are drawn plainly (EntityRenderer.lite).)
+        int many = gv.onScreen.size();
+        gv.entityRenderer.crowd = many >= EntityRenderer.GREAT_CROWD ? 2 : many >= EntityRenderer.CROWD ? 1 : 0;
         int pw = 0, ph = 0;
         if (!detailed) {
             pw = (int) ((vx1 - vx0) / patch) + 2;
@@ -537,9 +541,14 @@ final class WorldRenderer {
                 if (e.postX < vx0 - 20 || e.postX > vx1 + 20 || e.postY < vy0 - 20 || e.postY > vy1 + 20) continue;
                 drawMortarPit(c, e);
             }
+        // ((33.0) In a crowd, close in, the dead and the civilians first and the police and the army over them: one
+        // officer in a horde of hundreds was lost under it.)
+        int passes = detailed && gv.entityRenderer.crowd > 0 ? 2 : 1;
+        for (int pass = 0; pass < passes; pass++)
         for (int i = 0, n = gv.onScreen.size(); i < n; i++) {
             Entity e = gv.onScreen.get(i);
             if (e.x < vx0 || e.x > vx1 || e.y < vy0 || e.y > vy1) continue;
+            if (passes == 2 && (e.isUndead() || e.type == Entity.CIVILIAN) != (pass == 0)) continue;
             if (detailed && e.job == Entity.J_FISHER && e.jobStep == 1 && e.type == Entity.CIVILIAN && !e.aware) {
                 // A line out over the water, the float bobbing.
                 float ca = (float) Math.cos(e.angle), sa = (float) Math.sin(e.angle);
@@ -583,7 +592,10 @@ final class WorldRenderer {
         if (!detailed) {
             // (Civilians are the crowd, not the story: smaller, see-through, with a faint edge.)
             float base = Math.max(4 * 1.35f, 2.6f * gv.dp / gv.scale);
-            for (int k = 0; k < gv.dotBuf.length; k++) {
+            // ((33.0) The dead's dots first, then civilians, then the police and the army on top: drawn last, a horde
+            // covered the units fighting it, and from far out the police and the army seemed to have gone.)
+            for (int kk = 0; kk < gv.dotBuf.length; kk++) {
+                int k = (kk + 6) % 8;
                 if (gv.dotN[k] == 0) continue;
                 boolean civ = (k & 1) == 1;
                 float r = civ ? base * 0.7f : base;
@@ -767,6 +779,21 @@ final class WorldRenderer {
                 gv.entityRenderer.drawSpeechIcon(c, e);
             }
         }
+    }
+
+    /**
+     * ((33.0) The brush's reach, for a moment after it's put people down: a ring the size it spreads them (10, 50 or
+     * 100), so it's clear where they went and how big the brush is.
+     */
+    void drawBrushRing(Canvas c) {
+        if (gv.brushT <= 0) return;
+        gv.brushT -= gv.frameDt;
+        float a = Math.max(0, Math.min(1, gv.brushT / 0.6f));
+        gv.stroke.setStrokeWidth(1.6f * gv.dp / gv.scale);
+        gv.stroke.setColor(alpha(0xFFFFFFFF, 0.55f * a));
+        c.drawCircle(gv.brushX, gv.brushY, gv.brushR, gv.stroke);
+        gv.fill.setColor(alpha(0xFFFFFFFF, 0.08f * a));
+        c.drawCircle(gv.brushX, gv.brushY, gv.brushR, gv.fill);
     }
 
     /** ((28.5) Which side's dot a vehicle carries zoomed out: 1 the police's, 2 the army's, -1 none. */
