@@ -109,6 +109,21 @@ final class Movement {
                 }
             }
         if (bx < 0) return false;
+        // ((33.0) In a mass outbreak, one of the dead on a shared route keeps the spot ahead it made for from the same
+        // tile for a few steps, while that's still downhill on the route, instead of looking along the lines of sight
+        // again every step: a twentieth of each step with tens of thousands of the dead on the move. Map version 61.)
+        boolean memo = ahead && e.isZombie() && w.zombies > 1500 && w.city.cfg.civic >= 61;
+        int here = ty * w.city.w + tx;
+        if (memo && e.aheadFrom == here && w.lodFrame - e.aheadAt < 6 && w.lodFrame >= e.aheadAt) {
+            ahead = false;
+            if (e.aheadTo >= 0) {
+                int ax = e.aheadTo % w.city.w, ay = e.aheadTo / w.city.w, qx = ax - x0, qy = ay - y0;
+                if (qx >= 0 && qy >= 0 && qx < s && qy < s && dd[qy * s + qx] < best) {
+                    bx = ax;
+                    by = ay;
+                } else ahead = true;
+            }
+        }
         if (ahead) {
             // (10.39) On down the route a few tiles more, and straight for the furthest of those in sight,
             // rather than zig-zagging tile to tile.
@@ -141,6 +156,11 @@ final class Movement {
             if (fx >= 0) {
                 bx = fx;
                 by = fy;
+            }
+            if (memo) {
+                e.aheadFrom = here;
+                e.aheadAt = w.lodFrame;
+                e.aheadTo = fx >= 0 ? fy * w.city.w + fx : -2;
             }
         }
         float gx = bx * City.T + City.T / 2f - e.x, gy = by * City.T + City.T / 2f - e.y;
@@ -858,7 +878,8 @@ final class Movement {
             // ((32.4) With over twenty thousand of the dead, those of them off screen every eighth step: a sixth of each
             // step went on keeping crowds nobody could see from overlapping.)
             // ((33.0) From ten thousand.)
-            if (sepEvery == 4 && w.zombies > 10000 && e.isZombie() && (i + w.lodFrame) % 8 != 0 && !w.onScreen(e)) continue;
+            // ((33.0) Every sixteenth with over twenty thousand (map version 61): still most of what was left of it.)
+            if (sepEvery == 4 && w.zombies > 10000 && e.isZombie() && (i + w.lodFrame) % (w.zombies > 20000 && w.city.cfg.civic >= 61 ? 16 : 8) != 0 && !w.onScreen(e)) continue;
             // ((16.8) And in the biggest crowds, not at all for someone going calmly about their day off screen: nobody
             // sees two of them brush past each other, and they're kept apart again the moment they're looked at. Over
             // a tenth of each step on the biggest maps.)
