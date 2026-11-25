@@ -104,10 +104,10 @@ final class Entity {
      * ((33.0) In a mass outbreak, for one of the dead: whether the way straight to the one it's after was open when last
      * looked, and when to look again (ZombieAI.chaseStep); the route ahead it last made for, from which tile, and on
      * which step (Movement.followPatch); and the step on which a straight line to where it was going was last found
-     * blocked (ZombieAI.zombieWalkTo).
+     * blocked (ZombieAI.zombieWalkTo); and when it next counts the others on the same one (ZombieAI.chaseStep).
      */
     transient boolean passOk;
-    transient float passCd;
+    transient float passCd, frenzyCd;
     transient int aheadFrom = -1, aheadTo = -1, aheadAt, walkBlockedAt = -100, walkBlockedTo = -1;
     /** ((27.4) Falling back with the others: where they're all making for, and until when. */
     transient float rallyX, rallyY, rallyT;

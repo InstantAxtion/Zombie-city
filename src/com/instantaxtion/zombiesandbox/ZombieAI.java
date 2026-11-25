@@ -276,7 +276,14 @@ final class ZombieAI {
     /** Someone in sight: a charge or a lunge, the moan that brings the others, and after them - round by its own angle, over or through what's between - to bite. True when that was their step. */
     private boolean chaseStep(final Entity z, final Entity t, final float dt) {
         if (t != null) {
-            if (w.rnd.nextFloat() < 0.2f) z.frenzy = w.spatial.countZombiesNear(t.x, t.y, 35) >= 3;
+            // ((33.0) In a mass outbreak, how many others are on the same one is counted three times a second on a
+            // clock of its own, not by a throw of the dice every step for each of thousands. Map version 61.)
+            if (w.zombies > 1500 && w.city.cfg.civic >= 61) {
+                if ((z.frenzyCd -= dt) <= 0) {
+                    z.frenzyCd = 0.3f + (z.nameSeed & 7) * 0.01f;
+                    z.frenzy = w.spatial.countZombiesNear(t.x, t.y, 35) >= 3;
+                }
+            } else if (w.rnd.nextFloat() < 0.2f) z.frenzy = w.spatial.countZombiesNear(t.x, t.y, 35) >= 3;
             // A brute lowers its head and charges.
             // ((22.6) A bruiser lunges: shorter and more often.)
             if (z.type == Entity.BRUISER && z.chargeCd <= 0) {
@@ -318,6 +325,7 @@ final class ZombieAI {
                     z.noiseY = t.y;
                     w.surging.add(z);
                     w.emit(Sfx.ROAR, z.x, z.y);
+                    if (w.city.cfg.civic >= 61) roarFright(z);
                 }
                 herd(z, t.x, t.y);
             }
@@ -382,6 +390,27 @@ final class ZombieAI {
             z.passCd = 0.2f + (z.nameSeed & 3) * 0.02f;
         }
         return z.passOk;
+    }
+
+    /**
+     * ((33.0) An alpha's roar carries: the people out on the streets within earshot know what it means, and run from it
+     * before the horde comes round the corner - they used to stroll on until the first of it was in sight. Map version
+     * 61.)
+     */
+    private void roarFright(final Entity z) {
+        if (w.hashSize < 0) return;
+        final float r = 170;
+        for (int i = 0, n = w.spatial.gatherLiving(z.x, z.y, r); i < n; i++) {
+            Entity o = w.gathered[i];
+            if (o.dead || o.type != Entity.CIVILIAN || o == w.controlled || o.ride != null || o.militia || o.task == Dispatch.T_SHELTER) continue;
+            float ddx = o.x - z.x, ddy = o.y - z.y;
+            if (ddx * ddx + ddy * ddy > r * r) continue;
+            o.aware = true;
+            o.fear = Math.max(o.fear, 40);
+            o.threatX = z.x;
+            o.threatY = z.y;
+            o.fleeTimer = Math.max(o.fleeTimer, o.hasGun ? 2 : 6);
+        }
     }
 
     /** Lost sight of them: to where they were last seen, into the car or the building they got into, on along their trail. True when that was their step. */

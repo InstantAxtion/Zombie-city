@@ -1152,7 +1152,9 @@ final class World {
     private boolean zombieLod(final Entity e, final int i, final float dt) {
         if (city.cfg.civic < 61 || e.charge > 0 || e.vaultT > 0 || e.surge > 0 || e == controlled || e.stun > 0 || zombies < 400 || onScreen(e)) return false;
         int h = lodHDist(e);
-        int every = h > 40 ? (zombies > 10000 ? 4 : 2) : h > 14 ? 2 : 1;
+        // ((33.0) And, in a mass outbreak, one a little nearer - eight tiles and more - with nobody in sight when it last
+        // looked: it only looks twice a second anyway (see ZombieAI.thinkZombie), and can't bite anyone it hasn't seen.)
+        int every = h > 40 ? (zombies > 10000 ? 4 : 2) : h > 14 || (h > 8 && zombies > 1500 && e.seekT == null) ? 2 : 1;
         if (every == 1) return false;
         boolean turn = (i + lodFrame) % every == 0;
         e.lodStep = turn ? every : 0;
