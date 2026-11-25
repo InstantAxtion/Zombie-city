@@ -28,6 +28,15 @@ final class Inspector {
     }
 
 
+    /**
+     * ((33.0) Lines dropped from the end of a card until it fits between the buttons along the top and the tool bar
+     * (and the undo button): on a phone held sideways a soldier's card ran up off the top of the screen.
+     */
+    void trimLines(java.util.List<String> lines, float lh, float extra) {
+        float room = gv.barTop - 20 * gv.dp - (gv.lastAction.isEmpty() ? 0 : 44 * gv.dp) - (gv.topRects[0].bottom + 6 * gv.dp);
+        while (lines.size() > 1 && 30 * gv.dp + lines.size() * lh + extra > room) lines.remove(lines.size() - 1);
+    }
+
     /** A civilian with no home of their own (one who turned up after the city was built). */
     boolean homeless(Entity e) {
         return e.type == Entity.CIVILIAN && e.home == null && e.homeChecked && gv.world.city.cfg.nature();
@@ -144,6 +153,8 @@ final class Inspector {
         gv.text.setTextSize(12.5f * gv.dp);
         float drop = !lines.isEmpty() && gv.text.measureText(lines.get(0)) > besideRoom ? 10 * gv.dp : 0;
         gv.text.setTextSize(14 * gv.dp);
+        // ((33.0) Never taller than the room under the buttons along the top: the last lines go instead.)
+        trimLines(lines, lh, 8 * gv.dp + drop);
         float ch = 30 * gv.dp + lines.size() * lh + 8 * gv.dp + drop;
         float left = (gv.getWidth() - cw) / 2, top = gv.barTop - ch - 20 * gv.dp - (gv.lastAction.isEmpty() ? 0 : 44 * gv.dp);
         gv.oval.set(left, top, left + cw, top + ch);
@@ -219,6 +230,16 @@ final class Inspector {
             who.append(named++ == 0 ? "" : ", ").append(Names.person(o.nameSeed));
         }
         if (named > 0) lines.add("With " + who + (more > 0 ? " and " + more + " more" : ""));
+        // ((33.0) What the people aboard have put down between them, and how many are hurt: how a crew is doing at a glance.)
+        int crewKills = v.driver != null && !v.crew.contains(v.driver) ? v.driver.kills : 0, hurt = 0;
+        for (int k = 0; k < v.crew.size() + v.riders.size(); k++) {
+            Entity o = k < v.crew.size() ? v.crew.get(k) : v.riders.get(k - v.crew.size());
+            crewKills += o.kills;
+            if (o.hp < o.maxHp * 0.35f) hurt++;
+        }
+        if (crewKills > 0 || hurt > 0)
+            lines.add((crewKills > 0 ? "Kills by those aboard: " + World.big(crewKills) : "") + (crewKills > 0 && hurt > 0 ? "   " : "")
+                    + (hurt > 0 ? World.count(hurt, "badly hurt", "badly hurt") : ""));
         // ((12.0) And its own people out of it, on foot at the scene.)
         if (v.type == Fleet.CRUISER || v.type == Fleet.TRUCK) {
             int out = gv.world.fleet.crewOnFoot(v);
@@ -241,6 +262,8 @@ final class Inspector {
             lines.addAll(wrapped22);
             gv.text.setTextSize(ts0);
         }
+        // ((33.0) Never taller than the room under the buttons along the top: the last lines go instead.)
+        trimLines(lines, lh, 8 * gv.dp);
         float ch = 30 * gv.dp + lines.size() * lh + 8 * gv.dp;
         float left = (gv.getWidth() - cw) / 2, top = gv.barTop - ch - 20 * gv.dp - (gv.lastAction.isEmpty() ? 0 : 44 * gv.dp);
         gv.oval.set(left, top, left + cw, top + ch);
@@ -395,6 +418,8 @@ final class Inspector {
         java.util.ArrayList<String> wrapped = new java.util.ArrayList<String>();
         for (String ln : lines) wrapped.addAll(gv.hud.wrapLine(ln, cw - 24 * gv.dp));
         lines = wrapped;
+        // ((33.0) Never taller than the room under the buttons along the top: the last lines go instead.)
+        trimLines(lines, lh, 8 * gv.dp);
         float ch = 30 * gv.dp + lines.size() * lh + 8 * gv.dp;
         float left = (gv.getWidth() - cw) / 2, top = gv.barTop - ch - 20 * gv.dp - (gv.lastAction.isEmpty() ? 0 : 44 * gv.dp);
         gv.oval.set(left, top, left + cw, top + ch);
@@ -446,6 +471,8 @@ final class Inspector {
             lines.addAll(wrapped22);
             gv.text.setTextSize(ts0);
         }
+        // ((33.0) Never taller than the room under the buttons along the top: the last lines go instead.)
+        trimLines(lines, lh, 8 * gv.dp);
         float ch = 30 * gv.dp + lines.size() * lh + 8 * gv.dp;
         float left = (gv.getWidth() - cw) / 2, top = gv.barTop - ch - 20 * gv.dp - (gv.lastAction.isEmpty() ? 0 : 44 * gv.dp);
         gv.oval.set(left, top, left + cw, top + ch);
@@ -508,19 +535,21 @@ final class Inspector {
                     + (b.looted ? "shelves stripped bare" : ""));
         }
         String role = null;
+        // ((33.0) No "can become a safe zone" on the maps that have none (map version 58 on).)
+        boolean zones = gv.world.city.cfg.civic < 58;
         switch (b.kind) {
             case City.POWER: role = gv.world.blackout ? "BLACKOUT: overrun. Clear the zombies out to get the power back." : "Keeps the lights, sirens and broadcasts on"; break;
             case City.HOSPITAL: role = "A big place to work, and to hide"; break;
             case City.STATION: role = "Police armoury: officers restock here"; break;
             case City.BARRACKS: role = "Army barracks: soldiers restock at the base"; break;
-            case City.MARKET: role = "Food and hunting ammo; can become a safe zone"; break;
-            case City.MALL: role = "Plenty of food and room; can become a safe zone"; break;
-            case City.SCHOOL: case City.CHURCH: case City.STADIUM: role = "Can become a safe zone"; break;
+            case City.MARKET: role = "Food and hunting ammo" + (zones ? "; can become a safe zone" : ""); break;
+            case City.MALL: role = "Plenty of food and room" + (zones ? "; can become a safe zone" : ""); break;
+            case City.SCHOOL: case City.CHURCH: case City.STADIUM: role = zones ? "Can become a safe zone" : null; break;
             case City.PHARMACY: role = "Patches up the hurt (nothing stops a bite)"; break;
             case City.FIRE_STATION: role = "The fire station (no crews any more): the paramedics are based here"; break;
             case City.HOUSE: case City.APARTMENT: role = "Home: the people who live here run back to it"; break;
             case City.CITY_HALL: role = "The Mayor's office"; break;
-            case City.COURTHOUSE: role = "The county courthouse; can become a safe zone"; break;
+            case City.COURTHOUSE: role = "The county courthouse" + (zones ? "; can become a safe zone" : ""); break;
             case City.JAIL: role = "The county jail"; break;
             case City.CALL_CENTRE: role = "The 911 call centre"; break;
             case City.ARMORY: {
@@ -580,6 +609,9 @@ final class Inspector {
             warn = warn22;
             gv.text.setTextSize(ts0);
         }
+        // ((33.0) Never taller than the room under the buttons along the top: the last lines go instead.)
+        trimLines(lines, lh, 8 * gv.dp);
+        while (warn.size() > lines.size()) warn.remove(warn.size() - 1);
         float ch = 30 * gv.dp + lines.size() * lh + 8 * gv.dp;
         float left = (gv.getWidth() - cw) / 2, top = gv.barTop - ch - 20 * gv.dp - (gv.lastAction.isEmpty() ? 0 : 44 * gv.dp);
         gv.oval.set(left, top, left + cw, top + ch);

@@ -94,6 +94,12 @@ final class ToolBar {
         }
     }
 
+    /** ((33.0) The choice just made on a spawn tool's picker, kept for the next time the game is played. */
+    void rememberVariant(int t) {
+        String key = t == TOOL_ZOMBIE ? "zombieKind" : t == TOOL_COP ? "copKind" : t == TOOL_MIL ? "milKind" : t == TOOL_SQUAD ? "squadKind" : null;
+        if (key != null) gv.settings.remember(key, variant(t));
+    }
+
     /**
      * The option picker above the tool bar: every choice for the category as a big button with its picture and
      * name, and a line about the one that's selected.

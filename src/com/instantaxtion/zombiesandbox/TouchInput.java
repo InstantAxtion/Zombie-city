@@ -296,6 +296,7 @@ final class TouchInput {
                 if (gv.pickerRects[k].contains(x, y)) {
                     gv.sound.play(Sfx.TAP, 0.7f, 0);
                     gv.toolBar.setVariant(gv.picker, k);
+                    gv.toolBar.rememberVariant(gv.picker);
                     gv.picker = -1;
                     return true;
                 }
@@ -433,6 +434,8 @@ final class TouchInput {
                 break;
             case BTN_BRUSH:
                 gv.brushIdx = (gv.brushIdx + 1) % BRUSHES.length;
+                // ((33.0) Kept for next time.)
+                gv.settings.remember("brush", gv.brushIdx);
                 break;
             case BTN_CLEAR:
                 gv.clearMenu = !gv.clearMenu;
@@ -685,7 +688,7 @@ final class TouchInput {
         for (int i = 0; i < n; i++) {
             float ox = 0, oy = 0;
             if (n > 1) {
-                double a = gv.rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(gv.rnd.nextDouble()) * (n >= 100 ? 76 : n >= 50 ? 54 : n > 10 ? 36 : 20);
+                double a = gv.rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(gv.rnd.nextDouble()) * brushRadius(n);
                 ox = (float) (Math.cos(a) * r);
                 oy = (float) (Math.sin(a) * r);
             }
@@ -700,10 +703,24 @@ final class TouchInput {
                 }
             } else failed++;
         }
+        // ((33.0) The ring of where they went, for a moment (WorldRenderer.drawBrushRing).)
+        gv.brushX = wx;
+        gv.brushY = wy;
+        gv.brushR = n > 1 ? brushRadius(n) : 8;
+        gv.brushT = 0.6f;
         // ((12.0) Nobody placed: say why, rather than nothing happening at all.)
+        boolean full = gv.world.entities.size() >= gv.world.maxEntities;
         if (failed == n && n > 0 && gv.world.messageTime <= 0)
-            gv.world.say(gv.world.entities.size() >= gv.world.maxEntities ? "The city is full: no room for anyone else (Max population, in Settings)"
+            gv.world.say(full ? "The city is full: no room for anyone else (Max population, in Settings)"
                     : "Nowhere to put them there");
+        // ((33.0) Some placed but not all because the city is full: it said nothing, and the brush seemed to stop working.)
+        else if (failed > 0 && full && gv.world.messageTime <= 0)
+            gv.world.say("Only " + (n - failed) + " of " + n + " placed: the city is full (Max population, in Settings)");
+    }
+
+    /** ((33.0) How far round the finger a brush of n spreads them. */
+    static float brushRadius(int n) {
+        return n >= 100 ? 76 : n >= 50 ? 54 : n > 10 ? 36 : 20;
     }
 
     /** ((33.0) The mixed brush's pick: 70 in 100 walkers, 15 runners, 9 bruisers, 4 brutes, 2 armoured. */

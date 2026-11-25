@@ -215,9 +215,19 @@ final class EntityRenderer {
         if (e.type == Entity.COP && e.role == Entity.ROLE_MOUNTED) drawHorse(c, e);
         // ((25.0) A giant is drawn far bigger than it stands in the street: two and a half times a brute.)
         float r = e.type == Entity.GIANT ? e.radius * GIANT_DRAW : e.radius;
+        // ((33.0) A crowd on screen: the dead and the civilians in it drawn plainly - no shadow, limbs, hair or health
+        // bar - and in a great crowd as two circles each. The police and the army keep every detail.)
+        lite = crowd > 0 && (e.isUndead() || e.type == Entity.CIVILIAN) && e.type != Entity.GIANT && !e.alpha
+                && e != gv.world.controlled && e != gv.follow;
+        if (lite && crowd >= 2) {
+            drawCrowdDot(c, e, r);
+            return;
+        }
+        if (lite) healthBar = false;
         // ((11.5) Small on screen - a dozen pixels across - just the body, the head and any gun drawn (see below), and
         // no separate shadow: the dark outline does that job at this size.)
-        boolean small = gv.scale < 1.8f && !healthBar && e != gv.world.controlled;
+        // ((33.0) Health bars on no longer keep everyone in full detail there: the bars are drawn on their own.)
+        boolean small = (gv.scale < 1.8f || lite) && e != gv.world.controlled;
         // One light source for everything: shadows fall down and to the right.
         if (small) {
             // (None.)
@@ -265,6 +275,23 @@ final class EntityRenderer {
         drawStatusMarks(c, e, healthBar, r, spd, anim);
     }
 
+    /**
+     * ((33.0) How crowded the screen is, set before the people are drawn: 0 not very, 1 a crowd (CROWD on screen), 2 a
+     * great crowd (GREAT_CROWD). And whether the one being drawn now is drawn plainly for it.
+     */
+    int crowd;
+    boolean lite;
+    static final int CROWD = 250, GREAT_CROWD = 900;
+
+    /** ((33.0) One of a great crowd: its body and its head towards where it faces, two circles and no turning the canvas. */
+    void drawCrowdDot(Canvas c, Entity e, float r) {
+        gv.fill.setColor(e.hurt > 0.3f ? 0xFFF2F2F2 : e.body);
+        c.drawCircle(e.x, e.y, r * 0.78f, gv.fill);
+        float ca = (float) Math.cos(e.angle), sa = (float) Math.sin(e.angle);
+        gv.fill.setColor(e.head);
+        c.drawCircle(e.x + ca * r * 0.28f, e.y + sa * r * 0.28f, r * 0.5f, gv.fill);
+    }
+
     /** ((27.3) From drawEntity.) Zoomed out: the body as a plain oval with its head. */
     void drawBodyDot(Canvas c, Entity e, float r) {
         gv.oval.set(-r * 0.62f, -r, r * 0.62f, r);
@@ -284,7 +311,8 @@ final class EntityRenderer {
         } else if (e.isUndead()) {
             // (Arms out in front.)
             gv.stroke.setColor(e.skin);
-            gv.stroke.setStrokeWidth(r * 1.3f);
+            // ((33.0) Two arms' width, not one fat one, close up in a crowd (see lite).)
+            gv.stroke.setStrokeWidth(gv.scale < 1.8f ? r * 1.3f : r * 0.75f);
             c.drawLine(r * 0.2f, 0, r * 1.4f, 0, gv.stroke);
         }
         gv.fill.setColor(e.head);
@@ -664,7 +692,7 @@ final class EntityRenderer {
                 c.drawLine(e.x + ux * r * 1.4f + ox, e.y + uy * r * 1.4f + oy, e.x + ux * r * (2.6f + (k & 1)) + ox, e.y + uy * r * (2.6f + (k & 1)) + oy, gv.stroke);
             }
         }
-        if (gv.realistic && gv.scale > 3f) {
+        if (gv.realistic && gv.scale > 3f && !lite) {
             // Light from the top left: a soft highlight on the shoulders and head, shade on the far side.
             gv.fill.setColor(0x26FFFFFF);
             c.drawCircle(e.x - r * 0.28f, e.y - r * 0.3f, r * 0.42f, gv.fill);

@@ -201,6 +201,7 @@ final class Menu {
         awaitDown = true;
         if (s == NOTES) settings.markNotesRead();
         if (s == TOP) topAt = -99;
+        heroesAt = -99;
         if (s == SETUP && !config.keepCity) {
             config.newSeed(rnd);
             config.dropRetired();
@@ -657,6 +658,27 @@ final class Menu {
 
     /** ((13.3) The Top Fighters list, looked up again once a second rather than every frame. */
     private java.util.ArrayList<Entity> topList = new java.util.ArrayList<Entity>();
+    /**
+     * ((33.0) The best fighters for the Stats and Report screens, worked out once a second: every frame, it went through
+     * everyone in the city and sorted all who'd ever killed one of the dead.
+     */
+    private java.util.ArrayList<int[]> heroesList = new java.util.ArrayList<int[]>();
+    private float heroesAt = -99;
+    private World heroesWorld;
+
+    private java.util.ArrayList<int[]> heroes(World world) {
+        if (world != heroesWorld || time - heroesAt > 1 || time < heroesAt) {
+            heroesWorld = world;
+            heroesAt = time;
+            heroesList = world.heroes(5);
+        }
+        return heroesList;
+    }
+
+    /** ((33.0) The first n of the list, or all of it. */
+    private static java.util.List<int[]> firstOf(java.util.ArrayList<int[]> l, int n) {
+        return l.size() <= n ? l : l.subList(0, n);
+    }
     private float topAt = -99;
 
     /**
@@ -694,18 +716,21 @@ final class Menu {
         }
         // Each side's losses, side by side.
         String other = "The dead";
+        // ((33.0) Big numbers with separators; and who put the dead down, the police or the army.)
         String[][] ours = {
-                {"Police officers lost", String.valueOf(world.copsLost)},
-                {"Soldiers lost", String.valueOf(world.soldiersLost)},
-                {"Civilians lost", String.valueOf(world.civiliansLost)},
-                {"People turned", String.valueOf(world.turned)},
-                {"Score", String.valueOf(world.score())},
+                {"Police officers lost", World.big(world.copsLost)},
+                {"Soldiers lost", World.big(world.soldiersLost)},
+                {"Civilians lost", World.big(world.civiliansLost)},
+                {"People turned", World.big(world.turned)},
+                {"Score", World.big(world.score())},
         };
         String[][] theirs = {
-                {"Destroyed", String.valueOf(world.zombiesKilled)},
-                {"Most at once", String.valueOf(world.peakZombies)},
-                {"Biggest horde", String.valueOf(world.biggestHorde)},
-                {"Still walking", String.valueOf(world.zombieCount())},
+                {"Destroyed", World.big(world.zombiesKilled)},
+                {"   by the police", World.big(world.killsBy[0])},
+                {"   by the army", World.big(world.killsBy[1])},
+                {"Most at once", World.big(world.peakZombies)},
+                {"Biggest horde", World.big(world.biggestHorde)},
+                {"Still walking", World.big(world.zombieCount())},
                 {"Mines set off", String.valueOf(world.minesBlown)},
                 {"Alphas killed", world.alphasKilled + " of " + world.alphas},
                 {"Died in the wire", String.valueOf(world.defences.wireKills)},
@@ -739,9 +764,12 @@ final class Menu {
             for (int sI = 0; sI < 2; sI++) {
                 stroke.setColor(cols[sI]);
                 stroke.setStrokeWidth(2.2f * dp);
+                // ((33.0) On a square-root scale, as on the Stats screen: beside tens of thousands of the dead the police
+                // and army were a flat line along the bottom.)
                 for (int i = 1; i < n; i++) {
                     float ax = plot.left + plot.width() * (i - 1) / (n - 1), bx = plot.left + plot.width() * i / (n - 1);
-                    float ay = plot.bottom - plot.height() * series[sI][i - 1] / (float) max, by = plot.bottom - plot.height() * series[sI][i] / (float) max;
+                    float ay = plot.bottom - plot.height() * (float) Math.sqrt(series[sI][i - 1] / (float) max);
+                    float by = plot.bottom - plot.height() * (float) Math.sqrt(series[sI][i] / (float) max);
                     c.drawLine(ax, ay, bx, by, stroke);
                 }
             }
@@ -788,7 +816,7 @@ final class Menu {
         text.setColor(INK);
         c.drawText("Best of the city's fighters", x0, y + 4 * dp, text);
         y += 14 * dp;
-        java.util.ArrayList<int[]> heroes = world.heroes(5);
+        java.util.ArrayList<int[]> heroes = heroes(world);
         for (int i = 0; i < heroes.size(); i++) {
             int[] hr = heroes.get(i);
             tmp.set(x0, y, x0 + maxW, y + 40 * dp);
@@ -800,7 +828,7 @@ final class Menu {
             c.drawText(fit(text, who, maxW - 150 * dp), x0 + 10 * dp, y + 25 * dp, text);
             text.setTextAlign(Paint.Align.RIGHT);
             text.setColor(hr[4] == 1 ? ACCENT : MUTED);
-            c.drawText(hr[3] + (hr[3] == 1 ? " kill" : " kills") + (hr[4] == 1 ? "" : "  (fallen)"), x0 + maxW - 10 * dp, y + 25 * dp, text);
+            c.drawText(World.big(hr[3]) + (hr[3] == 1 ? " kill" : " kills") + (hr[4] == 1 ? "" : "  (fallen)"), x0 + maxW - 10 * dp, y + 25 * dp, text);
             text.setTextAlign(Paint.Align.LEFT);
             y += 46 * dp;
         }
@@ -1087,7 +1115,7 @@ final class Menu {
             plain.setColor(0xFF8A9099);
             // ((12.0) On a square-root scale: on a straight one, a few hundred of the dead beside fifteen thousand
             // people was a flat line along the bottom.)
-            c.drawText(String.valueOf(Math.round(max * (k / 4f) * (k / 4f))), plot.left - 6 * dp, y + 4 * dp, plain);
+            c.drawText(World.big(Math.round(max * (k / 4f) * (k / 4f))), plot.left - 6 * dp, y + 4 * dp, plain);
         }
         plain.setTextAlign(Paint.Align.LEFT);
         int secs = (int) (n * world.statStep);
@@ -1137,23 +1165,29 @@ final class Menu {
         int t = (int) world.time;
         String[][] totals = {
                 {"Time", World.clock(t)},
-                {"People now", String.valueOf(world.humanCount() + world.hiding + world.riding + world.visiting)},
-                {"Zombies now", String.valueOf(world.zombieCount())},
-                {"Most zombies at once", String.valueOf(world.peakZombies)},
-                {"Zombies killed", String.valueOf(world.zombiesKilled)},
+                // ((33.0) With thousands separators, the kills each on a line of their own, the rate they're going
+                // down at, and the police and soldiers lost.)
+                {"People now", World.big(world.humanCount() + world.hiding + world.riding + world.visiting)},
+                {"Zombies now", World.big(world.zombieCount())},
+                {"Most zombies at once", World.big(world.peakZombies)},
+                {"Zombies killed", World.big(world.zombiesKilled)},
                 // ((12.0) And by whom.)
-                {"   by police, army, civilians", world.killsBy[0] + " / " + world.killsBy[1] + " / " + world.killsBy[2]},
-                {"People turned", String.valueOf(world.turned)},
-                {"Civilians lost", String.valueOf(world.civiliansLost)},
-                {"Left by bus or train", String.valueOf(world.fledByTransit)},
+                {"   by the police", World.big(world.killsBy[0])},
+                {"   by the army", World.big(world.killsBy[1])},
+                {"   by civilians", World.big(world.killsBy[2])},
+                {"Killed in the last minute", World.big(world.killsPerMinute())},
+                {"Police, soldiers lost", World.big(world.copsLost) + ", " + World.big(world.soldiersLost)},
+                {"People turned", World.big(world.turned)},
+                {"Civilians lost", World.big(world.civiliansLost)},
+                {"Left by bus or train", World.big(world.fledByTransit)},
                 // ((12.0) More of what the game was already keeping count of.)
-                {"Fled the city (came home)", world.fled + " (" + world.cameHome + ")"},
-                {"Bites", String.valueOf(world.bites)},
-                {"Biggest horde", String.valueOf(world.biggestHorde)},
-                {"Most police, army at once", world.peakCops + ", " + world.peakSoldiers},
-                {"Cars wrecked, buildings collapsed", world.carsWrecked + ", " + world.collapsedCount},
-                {"911 calls", String.valueOf(world.dispatch.calls)},
-                {"Shots fired", String.valueOf(world.shotsFired)},
+                {"Fled the city (came home)", World.big(world.fled) + " (" + World.big(world.cameHome) + ")"},
+                {"Bites", World.big(world.bites)},
+                {"Biggest horde", World.big(world.biggestHorde)},
+                {"Most police, army at once", World.big(world.peakCops) + ", " + World.big(world.peakSoldiers)},
+                {"Cars wrecked, buildings collapsed", World.big(world.carsWrecked) + ", " + World.big(world.collapsedCount)},
+                {"911 calls", World.big(world.dispatch.calls)},
+                {"Shots fired", World.big(world.shotsFired)},
                 // ((12.0) How good a shot the city is.)
                 {"Shots per zombie put down", world.killsBy[0] + world.killsBy[1] + world.killsBy[2] > 0
                         ? String.format(java.util.Locale.US, "%.1f", world.shotsFired / (float) (world.killsBy[0] + world.killsBy[1] + world.killsBy[2])) : "-"},
@@ -1165,14 +1199,14 @@ final class Menu {
                 {"Balance of power", world.warResult == 1 ? "The city survived" : world.warResult == 2 ? "The city fell"
                         : "People " + (int) (world.warBalance * 100) + "%"},
         };
-        java.util.ArrayList<int[]> heroes = world.heroes(3);
+        java.util.List<int[]> heroes = firstOf(heroes(world), 3);
         String[][] withHeroes = new String[totals.length + heroes.size()][];
         System.arraycopy(totals, 0, withHeroes, 0, totals.length);
         for (int i = 0; i < heroes.size(); i++) {
             int[] hr = heroes.get(i);
             String who = hr[1] == Entity.DOG ? Names.dog(hr[0]) : Names.person(hr[0]);
             withHeroes[totals.length + i] = new String[]{(i == 0 ? "Top killer: " : "   ") + who + (hr[4] == 0 ? " (fallen)" : ""),
-                    hr[3] + " kills"};
+                    World.big(hr[3]) + " kills"};
         }
         totals = withHeroes;
         // (10.32) The outbreak as it happened: the key moments, with when.
