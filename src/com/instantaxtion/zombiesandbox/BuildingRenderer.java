@@ -90,6 +90,8 @@ final class BuildingRenderer {
         for (int i = 0, n = gv.world.city.buildings.size(); i < n; i++) {
             City.Building b = gv.world.city.buildings.get(i);
             if (b.collapsed || b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue;
+            // ((32.7) Map version 59: no house interiors drawn.)
+            if (b.kind == City.HOUSE && gv.world.city.cfg.civic >= 59) continue;
             drawInterior(c, b, 1);
         }
     }

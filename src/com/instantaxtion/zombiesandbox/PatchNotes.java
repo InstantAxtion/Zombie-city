@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.6";
-    static final int VERSION_CODE = 326;
+    static final String VERSION = "32.7";
+    static final int VERSION_CODE = 327;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.7  -  No safe zones",
+                    "Safe zones are gone: no walled zones go up, and police and soldiers aren't tied down guarding them.",
+                    "No house interiors: people go into houses out of sight, and houses show no rooms when zoomed in.",
+            },
             {
                     "32.6  -  Brush",
                     "Brush sizes are now 10, 50 and 100 (the 1 is gone).",

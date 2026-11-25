@@ -3027,6 +3027,8 @@ final class Dispatch {
         city.extraScent = scent;
         city.extraScentN = scentN;
         int zombies = w.zombieCount();
+        // ((32.7) Map version 58: no safe zones - none are set up.)
+        if (city.cfg.civic >= 58) return;
         // New zones only while there are live 911 incidents to shelter people from.
         if (incidents.isEmpty()) return;
         // ((24.0) Not before the city has been told: walls went up round a school full of children while nobody knew.)

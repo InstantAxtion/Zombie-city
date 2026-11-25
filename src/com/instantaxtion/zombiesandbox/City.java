@@ -2034,6 +2034,8 @@ final class City {
      */
     boolean enterable(Building b) {
         if (b == null || b.collapsed || b.main != null) return false;
+        // ((32.7) Map version 59: no house interiors - people go into a house out of sight, as before 17.1.)
+        if (b.kind == HOUSE && cfg.civic >= 59) return false;
         if (b.enter == 0) {
             boolean ok = b.capacity > 0 && b.x1 - b.x0 >= 28 && b.y1 - b.y0 >= 28 && Interiors.insideOf(b) >= 0 && b.doorX > 0;
             if (ok) ok = buildWalls(b);
