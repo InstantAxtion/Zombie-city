@@ -300,7 +300,8 @@ final class CityConfig implements OptionSet {
     // ((32.7) 58: no safe zones (Dispatch).)
     // ((32.7) 59: no house interiors (City.enterable, BuildingRenderer.drawInsides).)
     // ((32.9) 60: no building interiors (City.enterable).)
-    int civic = 60;
+    // ((33.0) 61: the largest update's fixes and features.)
+    int civic = 61;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }

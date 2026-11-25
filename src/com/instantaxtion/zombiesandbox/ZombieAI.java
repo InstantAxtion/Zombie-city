@@ -154,7 +154,8 @@ final class ZombieAI {
         // one is still there and in reach), and one with nobody in sight looks again every half second, not every step:
         // the looking - everyone within reach, and a line of sight to each - was the biggest part of each step.)
         Entity t;
-        if (w.zombies > 3000) {
+        // ((33.0) From 1500 of the dead, not 3000.)
+        if (w.zombies > 1500) {
             z.seekCd -= dt;
             Entity was = z.seekT;
             if (z.seekCd > 0 && (was == null || (!was.dead && !was.removed && was.ride == null
@@ -1275,7 +1276,7 @@ final class ZombieAI {
         // gunfire all over town, a route for each was a tenth of each step.)
         // ((32.4) Ten tiles, kept a minute, with over 3000.)
         boolean mass = w.zombies > 300;
-        int cell = w.zombies > 3000 ? 10 : 6;
+        int cell = w.zombies > 1500 ? 10 : 6;
         int key = mass ? (cell << 26) + (ty / cell) * 65536 + tx / cell : (ty / 3) * 65536 + tx / 3;
         if (mass) {
             tx = Math.min(w.city.w - 1, (tx / cell) * cell + cell / 2);
@@ -1283,7 +1284,7 @@ final class ZombieAI {
         }
         World.Lure f = w.lures.get(key);
         // ((32.0) Kept twice as long in a mass outbreak.)
-        if (f != null && w.time - f.made < (w.zombies > 3000 ? 60 : w.zombies > 300 ? 40 : 20)) return f;
+        if (f != null && w.time - f.made < (w.zombies > 1500 ? 60 : w.zombies > 300 ? 40 : 20)) return f;
         if (w.pathBudget < 0.1f) return f;
         w.pathBudget -= 0.1f;
         if (w.city.solid[ty * w.city.w + tx]) {

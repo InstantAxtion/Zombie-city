@@ -15,7 +15,7 @@ final class Settings implements OptionSet {
             // ((19.5) The Visuals Update.)
             "Effects", "Screen effects", "Colour grading"};
     private static final String[][] VALUES = {VOLUME, VOLUME, {"Bird's-eye", "3D"}, ON_OFF, ON_OFF, ON_OFF, ON_OFF,
-            {"Auto", "2500", "5000", "8000", "12000"}, ON_OFF, ON_OFF, {"Small", "Normal", "Large"}, ON_OFF, ON_OFF,
+            {"Auto", "2500", "5000", "8000", "12000", "25000", "50000", "100000"}, ON_OFF, ON_OFF, {"Small", "Normal", "Large"}, ON_OFF, ON_OFF,
             {"Classic", "Realistic"}, ON_OFF, {"1", "2", "3", "4"}, {"Normal", "Heavy"},
             VOLUME, VOLUME, VOLUME, ON_OFF, {"Full", "Night"}, ON_OFF, ON_OFF,
             {"Low", "Medium", "High", "Ultra"}, ON_OFF, ON_OFF};
@@ -25,7 +25,8 @@ final class Settings implements OptionSet {
     // ((22.0) One line of radio on screen, not two.)
     private static final int[] DEFAULTS = {2, 3, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 3, 3, 3, 0, 0, 0, 1, 2, 1, 1};
     /** 0 is Auto: room for everyone who lives in the city, and plenty of zombies. */
-    private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000};
+    // ((33.0) And 25,000, 50,000 and 100,000, for hordes of tens of thousands.)
+    private static final int[] MAX_POP = {0, 2500, 5000, 8000, 12000, 25000, 50000, 100000};
 
     /**
      * ((21.4) The settings offered, by index: the rest stay as they come (FPS, radio, name tags, radio lines,

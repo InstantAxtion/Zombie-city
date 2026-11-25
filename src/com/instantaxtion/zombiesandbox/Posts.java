@@ -158,7 +158,23 @@ final class Posts {
             float[] q = w.city.solidAt(tx, ty) ? w.city.findWalkable(tx, ty) : new float[]{tx, ty};
             if (q == null) return false;
             float dx = q[0] - e.x, dy = q[1] - e.y;
-            if (dx * dx + dy * dy < 10 * 10) {
+            // ((33.0) No nearer the end of the stretch for six seconds (the fence line blocked): that's the end of it.)
+            boolean stuckEnd = false;
+            if (w.city.cfg.civic >= 61) {
+                if (Math.abs(e.postForX - q[0]) > 20 || Math.abs(e.postForY - q[1]) > 20) {
+                    e.postForX = q[0];
+                    e.postForY = q[1];
+                    e.postBest = Float.MAX_VALUE;
+                    e.postTryT = 0;
+                }
+                float pd = (float) Math.sqrt(dx * dx + dy * dy);
+                if (pd < e.postBest - 4) {
+                    e.postBest = pd;
+                    e.postTryT = 0;
+                } else e.postTryT += dt;
+                stuckEnd = e.postTryT > 6;
+            }
+            if (dx * dx + dy * dy < 10 * 10 || stuckEnd) {
                 // At the end of the stretch: a look round, then back the other way.
                 if (e.dutyWait <= 0) e.dutyWait = 4 + w.rnd.nextFloat() * 4;
                 e.dutyWait -= dt;
@@ -244,6 +260,33 @@ final class Posts {
      * it, so nobody shuffles and spins on the spot.
      */
     void holdPost(Entity e, float x, float y, float face, float dt) {
+        // ((33.0) A post in a wall or inside a building: the nearest open ground to it. And one they get no nearer to
+        // for six seconds - the far side of a fence, a corner the others fill - is wherever they've got to: a base's
+        // motor pool and fence line had dozens walking on the spot, all game, for places they could never reach.)
+        if (w.city.cfg.civic >= 61) {
+            if (w.city.solidAt(x, y) || w.city.insideOf(x, y) != null) {
+                float[] q = w.city.findWalkable(x, y);
+                if (q != null) {
+                    x = q[0];
+                    y = q[1];
+                }
+            }
+            if (Math.abs(e.postForX - x) > 20 || Math.abs(e.postForY - y) > 20) {
+                e.postForX = x;
+                e.postForY = y;
+                e.postBest = Float.MAX_VALUE;
+                e.postTryT = 0;
+            }
+            float pd = (float) World.hypot(x - e.x, y - e.y);
+            if (pd < e.postBest - 4) {
+                e.postBest = pd;
+                e.postTryT = 0;
+            } else e.postTryT += dt;
+            if (e.postTryT > 6 && pd < 300) {
+                x = e.x;
+                y = e.y;
+            }
+        }
         float dx = x - e.x, dy = y - e.y, d2 = dx * dx + dy * dy;
         // ((29.4) Within a few yards and held up there by the others for a couple of seconds: there. Places worked out
         // from squad numbers (the motor pool's lines, the drill ranks) can fall on top of each other on a little base,

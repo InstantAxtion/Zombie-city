@@ -2317,6 +2317,7 @@ final class Dispatch {
                 armyArrived = false;
                 armySaid = false;
             }
+            callout(city.worldW() / 2, city.worldH() / 2, "NATIONAL GUARD MOBILISED", WHO_COLORS[WHO_MILITARY]);
             say(WHO_MILITARY, null, "Governor: The National Guard is mobilised - " + World.count(sold, "soldier", "soldiers") + " and "
                     + World.count(cops, "officer", "officers") + " from across the state are on their way.", city.worldW() / 2, city.worldH() / 2, true);
         }

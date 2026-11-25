@@ -54,8 +54,45 @@ final class World {
     /** ((12.0) A game clock: m:ss, or h:mm:ss once past an hour - it read 75:03.) */
     /** ((12.0) "1 hostile", "3 hostiles": a count and the word for that many.) */
     static String count(int n, String one, String many) {
-        return n + " " + (n == 1 ? one : many);
+        return big(n) + " " + (n == 1 ? one : many);
     }
+
+    private static final int[] Z_MILES = {1000, 5000, 10000, 25000, 50000}, K_MILES = {1000, 10000, 50000, 100000};
+
+    /** ((33.0) Each once a game: the dead passing 1,000, 5,000 ... 50,000 at once, and 1,000 ... 100,000 put down. */
+    private void milestoneCalls() {
+        if (dispatch == null) return;
+        for (int i = 0; i < Z_MILES.length; i++) {
+            int bit = 1 << i;
+            if ((milestones & bit) != 0 || zombies < Z_MILES[i]) continue;
+            milestones |= bit;
+            dispatch.say(Dispatch.WHO_INFO, null, "News: " + big(Z_MILES[i]) + " of the dead are now walking the city.", city.worldW() / 2, city.worldH() / 2);
+        }
+        for (int i = 0; i < K_MILES.length; i++) {
+            int bit = 1 << (8 + i);
+            if ((milestones & bit) != 0 || zombiesKilled < K_MILES[i]) continue;
+            milestones |= bit;
+            dispatch.say(Dispatch.WHO_INFO, null, "News: " + big(K_MILES[i]) + " of the dead put down so far.", city.worldW() / 2, city.worldH() / 2);
+        }
+    }
+
+    /** ((33.0) A number with thousands separators: 12,345. */
+    static String big(int n) {
+        if (n < 1000 && n > -1000) return String.valueOf(n);
+        return String.format(java.util.Locale.US, "%,d", n);
+    }
+
+    /** ((33.0) The dead put down in the last minute (from killHist, a count each second). */
+    int killsPerMinute() {
+        int oldest = killHist[(killHistAt + 1) % killHist.length];
+        return Math.max(0, zombiesKilled - oldest);
+    }
+
+    /** ((33.0) zombiesKilled each second for the last minute, and where the newest is. */
+    final int[] killHist = new int[60];
+    int killHistAt;
+    /** ((33.0) The milestones already called out on the radio (bits): see slowClocks. */
+    int milestones;
 
     static String clock(int secs) {
         secs = Math.max(0, secs);
@@ -1128,6 +1165,10 @@ final class World {
         if (lifeTimer <= 0) {
             lifeTimer = 1;
             aftermathLife.cityLife();
+            // ((33.0) The kill rate's history, and the milestones of a big outbreak called out on the radio.)
+            killHistAt = (killHistAt + 1) % killHist.length;
+            killHist[killHistAt] = zombiesKilled;
+            milestoneCalls();
         }
         recruitTimer -= dt;
         if (recruitTimer <= 0) {

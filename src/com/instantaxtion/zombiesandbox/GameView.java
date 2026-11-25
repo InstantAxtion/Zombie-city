@@ -43,18 +43,20 @@ final class GameView extends View implements Menu.Host {
             "Place", "Events", "Safe Zone", "Bomb", "Erase", "Build", "Squads"};
     /** ((22.4) Ready-made groups, a whole one to a tap: what's in each (type, then roles for police and soldiers). */
     static final String[] SQUAD_NAMES = {"Fire team", "Rifle squad", "Sniper team", "Engineer squad", "Response team",
-            "Tactical team", "Riot line", "K9 patrol", "Survivors", "Horde"};
+            "Tactical team", "Riot line", "K9 patrol", "Survivors", "Horde", "Big horde", "Mega horde"};
     static final String[] SQUAD_INFO = {"Four soldiers and a medic: rifles, a grenadier, a machine gunner",
             "A commander and eight soldiers with a gunner and a medic", "A sniper and a recon scout to spot for them",
             "Two combat engineers who dig in, with two riflemen to cover them", "Three officers, a riot shield and a marksman",
             "Four SWAT, a marksman and a K9 handler", "Five riot shields shoulder to shoulder", "A K9 handler and a partner",
-            "Six civilians together", "Thirty-five of the dead: walkers, runners and a brute"};
+            "Six civilians together", "Thirty-five of the dead: walkers, runners and a brute",
+            "A hundred and fifty of the dead in one mass", "Five hundred of the dead in one mass"};
     static final int[][] SQUAD_ROLES = {World.FIRE_TEAM, World.RIFLE_SQUAD, {Entity.ROLE_SNIPER, Entity.ROLE_RECON},
             {Entity.ROLE_ENGINEER, Entity.ROLE_ENGINEER, Entity.ROLE_RIFLE, Entity.ROLE_RIFLE}, World.RESPONSE_TEAM,
             World.TACTICAL_TEAM, {Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT, Entity.ROLE_RIOT},
-            {Entity.ROLE_K9, 0}, null, null};
+            {Entity.ROLE_K9, 0}, null, null, null, null};
     /** 0 soldiers, 1 police, 2 civilians, 3 the dead. */
-    static final int[] SQUAD_SIDE = {0, 0, 0, 0, 1, 1, 1, 1, 2, 3};
+    // ((33.0) 3 a horde of 35, 4 of 150, 5 of 500.)
+    static final int[] SQUAD_SIDE = {0, 0, 0, 0, 1, 1, 1, 1, 2, 3, 4, 5};
     static final String[] BUILD_NAMES = {"Road", "Pavement", "Grass", "Trees", "Wall", "House", "Shop", "Clear"};
     static final String[] BUILD_INFO = {"Drag to lay a road", "Drag to pave", "Drag to grass over", "Drag to plant trees",
             "Drag to build a wall nobody can cross", "Tap to put up a house", "Tap to put up a shop", "Grass over, or knock a building down"};
@@ -77,7 +79,8 @@ final class GameView extends View implements Menu.Host {
             "Park ranger", "Search & rescue", "K9 unit", "Motorcycle cop"};
     static final String[] CLEAR_NAMES = {"Everyone", "Zombies only", "Bodies & blood", "Wrecks",
             "Barricades"};
-    static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT, Entity.ARMOURED};
+    // ((33.0) And a mixed brush (-1): mostly walkers, with runners, bruisers, the odd brute and armoured one.)
+    static final int[] ZOMBIE_VARIANTS = {Entity.ZOMBIE, Entity.RUNNER, Entity.BRUISER, Entity.BRUTE, Entity.GIANT, Entity.ARMOURED, -1};
     static final int[] CIV_VARIANTS = {Entity.CIVILIAN};
     static final int[] MIL_ROLES = {Entity.ROLE_RIFLE, Entity.ROLE_COMMANDER, Entity.ROLE_SNIPER, Entity.ROLE_GUNNER,
             Entity.ROLE_GUARD, Entity.ROLE_GRENADIER, Entity.ROLE_MARINE, Entity.ROLE_RECON, Entity.ROLE_CORPSMAN, Entity.ROLE_ENGINEER, Entity.ROLE_MORTAR};
@@ -111,7 +114,7 @@ final class GameView extends View implements Menu.Host {
 
     static String[] namesOf(int[] types) {
         String[] n = new String[types.length];
-        for (int k = 0; k < n.length; k++) n[k] = Entity.NAMES[types[k]];
+        for (int k = 0; k < n.length; k++) n[k] = types[k] < 0 ? "Mixed" : Entity.NAMES[types[k]];
         return n;
     }
 
@@ -144,7 +147,8 @@ final class GameView extends View implements Menu.Host {
     static final String[] ZOMBIE_INFO = {"Slow, relentless shambler", "Fast and fragile",
             "Between the two: quicker than a zombie, tougher, a heavy bite and a short lunge", "Big and tough, shoves people aside",
             "Huge and slow: smashes barricades, throws cars aside; takes a squad, a tank or explosives",
-            "A dead officer or soldier still in armour: the helmet stops the first shot to the head"};
+            "A dead officer or soldier still in armour: the helmet stops the first shot to the head",
+            "A mix: mostly shamblers, with runners, bruisers, the odd brute and armoured one"};
     static final String[] PLACE_INFO = {"A car in traffic", "A police car with two officers", "Holds the area for a few minutes",
             "Drag to build a wall zombies must batter down", "Ammo for anyone passing", "Heals the hurt nearby",
             "Armoured truck with six tactical officers, off to the worst call", "Two scouts who roam the town and mark every horde",

@@ -857,7 +857,8 @@ final class Movement {
             if (big && (i + w.lodFrame) % sepEvery != 0 && !w.onScreen(e)) continue;
             // ((32.4) With over twenty thousand of the dead, those of them off screen every eighth step: a sixth of each
             // step went on keeping crowds nobody could see from overlapping.)
-            if (sepEvery == 4 && w.zombies > 20000 && e.isZombie() && (i + w.lodFrame) % 8 != 0 && !w.onScreen(e)) continue;
+            // ((33.0) From ten thousand.)
+            if (sepEvery == 4 && w.zombies > 10000 && e.isZombie() && (i + w.lodFrame) % 8 != 0 && !w.onScreen(e)) continue;
             // ((16.8) And in the biggest crowds, not at all for someone going calmly about their day off screen: nobody
             // sees two of them brush past each other, and they're kept apart again the moment they're looked at. Over
             // a tenth of each step on the biggest maps.)

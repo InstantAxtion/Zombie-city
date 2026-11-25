@@ -151,7 +151,16 @@ final class Police {
                     e.dutyHx = e.dutyHy = 0;
                     // (Near enough is there.)
                     if (w.city.cfg.civic >= 59 && World.hypot(px - e.x, py - e.y) < 14) w.movement.steer(e, 0, 0, 0);
+                    // ((33.0) Round whatever's in the way, and settled wherever they stop getting nearer (Posts.holdPost):
+                    // steered straight at it, they slid along the station's wall for good.)
+                    else if (w.city.cfg.civic >= 61) w.posts.holdPost(e, px, py, (float) Math.atan2(e.y - st.y, e.x - st.x), dt);
                     else w.holdoutLife.standAt(e, px, py, 0.6f);
+                    return true;
+                }
+                // ((33.0) No spot of their own to be had: they wait where they are, by the station, rather than walk to a
+                // gate they can't reach - round and round in the lot for minutes.)
+                if (w.city.cfg.civic >= 61) {
+                    w.movement.steer(e, 0, 0, 0);
                     return true;
                 }
             }

@@ -95,6 +95,9 @@ final class Entity {
     transient Entity seekT;
     /** ((32.8) In World.entities now (see World.addEntity, Death.cleanup). */
     transient boolean listed;
+    /** ((33.0) Getting to a post: the nearest they've come, and for how long no nearer (Posts.holdPost). */
+    transient float postBest = Float.MAX_VALUE, postTryT;
+    transient float postForX, postForY;
     transient float seekCd;
     /** ((27.4) Falling back with the others: where they're all making for, and until when. */
     transient float rallyX, rallyY, rallyT;

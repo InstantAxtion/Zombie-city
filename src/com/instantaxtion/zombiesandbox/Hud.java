@@ -1185,7 +1185,9 @@ final class Hud {
                     // ((21.0) How hard the dead are pressing, as the director sees it; or that it's down to the last of them.)
                     : gv.world.mopping ? "   Mopping up" : gv.world.outbreak && gv.world.director.phase != Director.CALM ? "   " + Director.PHASES[gv.world.director.phase] : "";
             int secs0 = (int) gv.world.time;
-            String line = "People " + (gv.world.humanCount() + gv.world.hiding + gv.world.riding + gv.world.visiting) + "   Zombies " + gv.world.zombieCount()
+            // ((33.0) The police and army too, and big numbers with separators.)
+            String line = "People " + World.big(gv.world.humanCount() + gv.world.hiding + gv.world.riding + gv.world.visiting) + "   Zombies " + World.big(gv.world.zombieCount())
+                    + "   Police " + World.big(gv.world.counts[Entity.COP]) + "   Army " + World.big(gv.world.counts[Entity.SOLDIER])
                     + phase + "   " + World.clock(secs0);
             // (Short of the buttons along the top in landscape.)
             float room = (gv.portrait ? gv.getWidth() - 10 * gv.dp : gv.topRects[0].left - 8 * gv.dp) - gv.statsRect.left - 24 * gv.dp;
@@ -1210,7 +1212,7 @@ final class Hud {
             // beside a large "Cops 414".)
             float rowScale = 1;
             for (int t = 0; t < rows.length; t++) {
-                float need = gv.text.measureText(gv.rowLabel(t)) + gv.text.measureText(String.valueOf(rows[t]));
+                float need = gv.text.measureText(gv.rowLabel(t)) + gv.text.measureText(World.big(rows[t]));
                 rowScale = Math.min(rowScale, (colW - 46 * gv.dp) / need);
             }
             for (int t = 0; t < rows.length; t++) {
@@ -1221,7 +1223,8 @@ final class Hud {
                 gv.text.setColor(0xFFE6E6E6);
                 gv.text.setTextAlign(Paint.Align.LEFT);
                 // Label and number never run into each other: shrink the row if the column is narrow.
-                String num = String.valueOf(rows[t]);
+                // ((33.0) With thousands separators: 12,345 reads at a glance; 12345 doesn't.)
+                String num = World.big(rows[t]);
                 // ((15.9) And those called in from outside and on their way.)
                 int coming = t == 1 ? d.incoming(Entity.COP) : t == 2 ? d.incoming(Entity.SOLDIER) : 0;
                 if (coming > 0) num += "  +" + coming;
@@ -1240,16 +1243,23 @@ final class Hud {
             // ((12.0) And each line cut to the panel: on a narrow screen with big text they ran off its edge.)
             float lineRoom = gv.statsRect.width() - 24 * gv.dp;
             // ((29.2) Recruits and volunteers moved down to the Time line, which has room: here they were cut off.)
-            c.drawText(shrinkToFit("Turned " + gv.world.turned + "   Killed " + gv.world.zombiesKilled, lineRoom), pad + 12 * gv.dp, y, gv.text);
+            // ((33.0) And how fast they're going down, and the most there have been.)
+            c.drawText(shrinkToFit("Turned " + World.big(gv.world.turned) + "   Killed " + World.big(gv.world.zombiesKilled)
+                    + (gv.world.outbreak ? "   " + World.big(gv.world.killsPerMinute()) + "/min" : "")
+                    + (gv.world.peakZombies > 0 ? "   Peak " + World.big(gv.world.peakZombies) : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
             gv.text.setTextSize(11.5f * gv.dp);
             y += lh;
             // ((26.1) Only what's in use: no Hiding line (nobody hides out of sight any more), people aboard only when there are some.)
-            c.drawText(shrinkToFit("911 calls " + d.calls + "   Safe zones " + d.zones.size() + "   Sheltered " + d.sheltered
-                    + (gv.world.riding > 0 ? "   In vehicles " + gv.world.riding : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
+            // ((33.0) No safe zones on the maps that have none.)
+            boolean zonesOn = gv.world.city.cfg.civic < 58 || !d.zones.isEmpty();
+            c.drawText(shrinkToFit("911 calls " + World.big(d.calls) + (zonesOn ? "   Safe zones " + d.zones.size() + "   Sheltered " + d.sheltered : "")
+                    + (gv.world.riding > 0 ? "   In vehicles " + World.big(gv.world.riding) : ""), lineRoom), pad + 12 * gv.dp, y, gv.text);
             gv.text.setTextSize(11.5f * gv.dp);
             y += lh;
             // ((12.0) Cut to the panel: on a narrow screen it ran off the edge.)
-            c.drawText(shrinkToFit("Outside help: " + d.policeReserve + " police, " + (d.squadReserve + d.airReserve) + " army"
+            // ((33.0) And the National Guard, once it's mobilised.)
+            c.drawText(shrinkToFit("Outside help: " + World.big(d.policeReserve) + " police, " + World.big(d.squadReserve + d.airReserve) + " army"
+                    + (d.guardCalled ? " (Guard)" : "")
                     + (d.armyCalled && !d.armyArrived ? " (convoy in " + Math.max(0, (int) d.armyEta) + "s)" : "")
                     + (d.pressure > 0 ? "   " + PRESSURE[d.pressure] : ""), gv.statsRect.width() - 24 * gv.dp),
                     pad + 12 * gv.dp, y, gv.text);

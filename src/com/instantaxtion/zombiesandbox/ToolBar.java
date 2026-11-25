@@ -183,6 +183,7 @@ final class ToolBar {
             return;
         }
         int type = t == TOOL_ZOMBIE ? gv.enemyType() : t == TOOL_CIV ? CIV_VARIANTS[gv.civVariant] : TOOL_TYPE[t];
+        if (t == TOOL_ZOMBIE && type < 0) type = Entity.ZOMBIE;
         if (type >= 0) {
             Entity e = gv.icons[type];
             if (type == Entity.COP) {

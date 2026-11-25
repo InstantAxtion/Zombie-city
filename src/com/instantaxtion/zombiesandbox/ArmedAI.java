@@ -1731,7 +1731,9 @@ final class ArmedAI {
                         }
                         base.paradeWho[e.paradeIdx] = e;
                         float px = slots[e.paradeIdx * 2], py = slots[e.paradeIdx * 2 + 1];
-                        w.holdoutLife.standAt(e, px, py, 0.6f);
+                        // ((33.0) Round the others and the trucks to it, and settled wherever they stop getting nearer.)
+                        if (w.city.cfg.civic >= 61) w.posts.holdPost(e, px, py, (float) (Math.PI / 2), dt);
+                        else w.holdoutLife.standAt(e, px, py, 0.6f);
                         if (e.want < 1) e.angle = World.turn(e.angle, (float) (Math.PI / 2), dt * 3);
                         return true;
                     }

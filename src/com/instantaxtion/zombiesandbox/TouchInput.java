@@ -677,6 +677,7 @@ final class TouchInput {
             return;
         }
         int type = gv.tool == TOOL_ZOMBIE ? gv.enemyType() : gv.tool == TOOL_CIV ? CIV_VARIANTS[gv.civVariant] : TOOL_TYPE[gv.tool];
+        boolean mixed = type < 0;
         int n = BRUSHES[gv.brushIdx];
         // Only one commander at a time.
         if (gv.tool == TOOL_MIL && MIL_ROLES[gv.milVariant] == Entity.ROLE_COMMANDER) n = 1;
@@ -690,7 +691,7 @@ final class TouchInput {
             }
             Entity e = gv.tool == TOOL_MIL ? gv.world.spawnSoldier(MIL_ROLES[gv.milVariant], wx + ox, wy + oy)
                     : gv.tool == TOOL_COP ? gv.world.spawnCop(COP_ROLES[gv.copVariant], wx + ox, wy + oy)
-                    : gv.world.spawn(type, wx + ox, wy + oy);
+                    : gv.world.spawn(mixed ? mixedZombie(gv.rnd.nextFloat()) : type, wx + ox, wy + oy);
             if (e != null) {
                 gv.lastAction.add(e);
                 if (e.type == Entity.GIANT && gv.giantSaid != e) {
@@ -705,6 +706,11 @@ final class TouchInput {
                     : "Nowhere to put them there");
     }
 
+    /** ((33.0) The mixed brush's pick: 70 in 100 walkers, 15 runners, 9 bruisers, 4 brutes, 2 armoured. */
+    static int mixedZombie(float r) {
+        return r < 0.70f ? Entity.ZOMBIE : r < 0.85f ? Entity.RUNNER : r < 0.94f ? Entity.BRUISER : r < 0.98f ? Entity.BRUTE : Entity.ARMOURED;
+    }
+
     /** ((22.4) The Squads tool: one whole group where the finger lands. */
     void spawnSquad(float wx, float wy) {
         int v = gv.squadVariant, side = SQUAD_SIDE[v];
@@ -713,9 +719,9 @@ final class TouchInput {
         else {
             g = new java.util.ArrayList<Entity>();
             // ((29.2) A horde of 35, not 20.)
-            int n = side == 2 ? 6 : 35;
+            int n = side == 2 ? 6 : side == 4 ? 150 : side == 5 ? 500 : 35;
             for (int i = 0; i < n; i++) {
-                double a = i * 2.4, r = 6 + Math.sqrt(i) * 7;
+                double a = i * 2.4, r = 6 + Math.sqrt(i) * (n > 35 ? 5.5 : 7);
                 int type = side == 2 ? Entity.CIVILIAN : i == 0 ? Entity.BRUTE : i % 7 == 3 ? Entity.BRUISER : i % 4 == 1 ? Entity.RUNNER : Entity.ZOMBIE;
                 Entity e = gv.world.spawn(type, wx + (float) (Math.cos(a) * r), wy + (float) (Math.sin(a) * r));
                 if (e != null) g.add(e);
