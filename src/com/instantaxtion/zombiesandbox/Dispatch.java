@@ -786,6 +786,27 @@ final class Dispatch {
     private float baseCd = 5;
 
     /**
+     * ((33.0) The call most short of soldiers, seen from (x, y): the dead there against the soldiers on it or on their way
+     * (one for every three of them, four at the least), less a little for every 800 away. Null if none is short.
+     */
+    Incident armyShort(float x, float y) {
+        Incident best = null;
+        float bs = -Float.MAX_VALUE;
+        for (int i = 0; i < incidents.size(); i++) {
+            Incident inc = incidents.get(i);
+            if (inc.resolved || inc.cordonPost >= 0 || inc.checkpointSpot != null || inc.zombiesNear < 4) continue;
+            int short_ = Math.max(4, inc.zombiesNear / 3) - inc.soldiers - w.fleet.inboundSoldiers(inc);
+            if (short_ <= 0) continue;
+            float score = Math.min(short_, 24) - (float) World.hypot(inc.x - x, inc.y - y) / 800f;
+            if (score > bs) {
+                bs = score;
+                best = inc;
+            }
+        }
+        return best;
+    }
+
+    /**
      * The bases don't just wait to be called (cities built since 10.10): a Humvee patrol (since 10.33 even before the
      * city knows, and more of them into town after)
      * sweeps the roads near each base every few minutes; a call close by that has no soldiers gets a quick
@@ -1259,7 +1280,10 @@ final class Dispatch {
     void heavyContact(Entity commander, float x, float y, int count) {
         String place = city.placeName(x, y);
         City.Facility base = city.nearestFacility(City.FACILITY_BASE, x, y);
-        if (tankReserve > 0 && base != null && w.fleet.count(Fleet.TANK) == 0
+        // ((33.0) Map version 61: in a mass outbreak, the armour isn't kept back while one tank is out: up to three on the
+        // streets at once, while there are tanks to send - the base's sat in the motor pool all game with hordes about.)
+        int tanksOut = city.cfg.civic >= 61 && w.zombies > 300 ? 3 : 1;
+        if (tankReserve > 0 && base != null && w.fleet.count(Fleet.TANK) < tanksOut
                 && w.fleet.sendTank(base.x, base.y, x, y, place)) {
             tankReserve--;
             if (commander != null) say(WHO_MILITARY, commander, "Heavy contact at " + place + ", " + count
@@ -1513,7 +1537,9 @@ final class Dispatch {
                 sendSwat(inc);
             }
             // A crowd of the dead: the riot van brings six officers with shields to hold a line.
-            if (!inc.riotRequested && riotVans > 0 && inc.zombiesNear >= 10) {
+            // ((33.0) Map version 61: not to a call that's the army's - its officers (not SWAT) were stood down the moment
+            // they got out of the van, on foot in the middle of the crowd it was sent for.)
+            if (!inc.riotRequested && riotVans > 0 && inc.zombiesNear >= 10 && !(army && city.cfg.civic >= 61)) {
                 inc.riotRequested = true;
                 City.Facility station = unitStation(City.FACILITY_POLICE, Entity.COP, Entity.ROLE_RIOT, inc.x, inc.y);
                 if (station == null) riotVans = 0;
@@ -1607,6 +1633,9 @@ final class Dispatch {
             for (int i = 0; i < incidents.size(); i++) {
                 Incident inc = incidents.get(i);
                 if (inc.resolved || inc.zombiesNear == 0 || inc.cordonPost >= 0) continue;
+                // ((33.0) Map version 61: not a call that's the army's (armysCall) - the station's officers were sent out to
+                // it in pairs, only to be stood down on arrival (updateIncidents) and left on foot by the horde.)
+                if (city.cfg.civic >= 61 && armysCall(inc)) continue;
                 int have = inc.cops + inc.soldiers + w.fleet.inbound(inc);
                 int short_ = needAt(inc) + 2 - have;
                 if (short_ <= 0) continue;
@@ -1651,6 +1680,8 @@ final class Dispatch {
         for (int i = 0; i < incidents.size(); i++) {
             Incident starved = incidents.get(i);
             if (starved.resolved || starved.zombiesNear == 0 || starved.cops + w.fleet.inbound(starved) > 0 || starved.age < 6) continue;
+            // ((33.0) Map version 61: nor are officers diverted to one that's the army's.)
+            if (city.cfg.civic >= 61 && armysCall(starved)) continue;
             if (freeCops > 0) continue;
             Incident donor = null;
             int most = 1;
@@ -2170,6 +2201,9 @@ final class Dispatch {
         if (from.isEmpty()) return;
         int soldiers = squadReserve;
         if (soldiers <= 0) return;
+        // ((33.0) Map version 61: in a mass outbreak, a big army comes in as several columns, each to one of the worst
+        // fights by its own way in (see splitConvoy) - not one column of a hundred trucks to one street.)
+        if (city.cfg.civic >= 61 && w.zombies > 300 && soldiers >= 64 && splitConvoy(soldiers)) return;
         squadReserve = 0;
         float[] p = null;
         for (float[] q : from)
@@ -2213,6 +2247,79 @@ final class Dispatch {
                 + "" + (tanks > 0 ? ", " + tanks + " tank" + (tanks > 1 ? "s" : "") : "")
                 + (air > 0 ? ", " + air + " helicopter" + (air > 1 ? "s" : "") + " flying cover" : "") + ". Heading for " + place + ".", p[0], p[1]);
         callout(p[0], p[1], "ARMY CONVOY", WHO_COLORS[WHO_MILITARY]);
+    }
+
+    /**
+     * ((33.0) The army from outside as up to four columns, a column of at least 32 soldiers to each of the worst fights
+     * (the most of the dead, at least 700 apart), each in by the way in nearest it that has a road there: one column
+     * of everything to the single worst street put a hundred trucks in one queue, and the rest of the city waited for
+     * them to spread out from it. The tanks go with the first. False (nothing sent) with fewer than two such fights.
+     */
+    private boolean splitConvoy(int soldiers) {
+        ArrayList<Incident> picks = new ArrayList<Incident>();
+        int k = Math.min(4, soldiers / 32);
+        while (picks.size() < k) {
+            Incident best = null;
+            for (int i = 0; i < incidents.size(); i++) {
+                Incident inc = incidents.get(i);
+                if (inc.resolved || inc.cordonPost >= 0 || inc.checkpointSpot != null || inc.zombiesNear < 4 || picks.contains(inc)) continue;
+                boolean apart = true;
+                for (int j = 0; j < picks.size() && apart; j++) apart = World.hypot(picks.get(j).x - inc.x, picks.get(j).y - inc.y) >= 700;
+                if (apart && (best == null || inc.zombiesNear > best.zombiesNear)) best = inc;
+            }
+            if (best == null) break;
+            picks.add(best);
+        }
+        if (picks.size() < 2) return false;
+        // (Each one's way in, by road: a fight with none is left out, its share to the others.)
+        ArrayList<float[]> ways = new ArrayList<float[]>();
+        for (int i = picks.size() - 1; i >= 0; i--) {
+            float[] way = null;
+            for (float[] q : entries(picks.get(i).x, picks.get(i).y))
+                if (w.fleet.canDrive(q[0], q[1], picks.get(i).x, picks.get(i).y)) {
+                    way = q;
+                    break;
+                }
+            if (way == null) picks.remove(i);
+            else ways.add(0, way);
+        }
+        if (picks.size() < 2) return false;
+        squadReserve = 0;
+        int n = picks.size(), trucks = 0;
+        Convoy first = null;
+        for (int c = 0; c < n; c++) {
+            Incident target = picks.get(c);
+            float[] p = ways.get(c);
+            int share = soldiers / n + (c == 0 ? soldiers % n : 0);
+            Convoy cv = trackConvoy(Entity.SOLDIER, "ARMY CONVOY", w.fleet.vehicles.size(), p[0], p[1], target.x, target.y, target.place);
+            int k2 = 0;
+            for (int left = share; left > 0; k2++, trucks++) {
+                int m = Math.min(left, k2 < 2 ? 4 : 8);
+                left -= m;
+                enqueue(cv, Entity.SOLDIER, m, p, target.x, target.y, target, null, target.place);
+                if (city.cfg.nature()) column.get(column.size() - 1).vkind = k2 < 2 ? Fleet.K_HUMVEE : k2 == 2 ? Fleet.K_IFV : k2 == 3 ? Fleet.K_GUNTRUCK
+                        : k2 % 4 == 3 ? Fleet.K_APC : 0;
+            }
+            if (c == 0)
+                for (int t = 0; t < 2; t++) {
+                    enqueue(cv, Entity.SOLDIER, 0, p, target.x, target.y, target, null, target.place);
+                    column.get(column.size() - 1).tank = true;
+                }
+            target.militaryRequested = true;
+            callout(p[0], p[1], "ARMY CONVOY", WHO_COLORS[WHO_MILITARY]);
+            if (c == 0) first = cv;
+        }
+        // (Air cover over the first, as over the one column.)
+        for (int hk = 0; hk < 4; hk++) {
+            Fleet.Vehicle h = w.fleet.readyHeli(0, ways.get(0)[0], ways.get(0)[1]);
+            if (h == null || !w.fleet.launchHeli(h, ways.get(0)[0], ways.get(0)[1], "the convoy", null, 2)) break;
+            h.escort = first;
+        }
+        StringBuilder to = new StringBuilder();
+        for (int c = 0; c < n; c++) to.append(c == 0 ? "" : c == n - 1 ? " and " : ", ").append(picks.get(c).place);
+        say(WHO_MILITARY, null, "Military: The army is entering the city in " + n + " columns - " + World.count(soldiers, "soldier", "soldiers") + " in "
+                + World.count(trucks, "vehicle", "vehicles") + " and 2 tanks - for " + to + ".", ways.get(0)[0], ways.get(0)[1]);
+        return true;
     }
 
     private int policeWaves, lastWave = -1;
@@ -2745,6 +2852,41 @@ final class Dispatch {
         return n;
     }
 
+    /**
+     * ((33.0) A post on the line round the held infection zone nearest (x, y) - the one with the fewest on it - as a call
+     * for those dropped off there to take it (see ArmedAI.takeDroppedPost); null with no zone held.
+     */
+    private Incident perimeterCall(float x, float y) {
+        World.InfectionZone best = null;
+        float bd = Float.MAX_VALUE;
+        for (World.InfectionZone z : w.infection) {
+            if (!z.critical) continue;
+            float d = (float) World.hypot(z.x - x, z.y - y) - z.r;
+            if (d < bd) {
+                bd = d;
+                best = z;
+            }
+        }
+        if (best == null) return null;
+        int p = -1;
+        float pd = Float.MAX_VALUE;
+        for (int k = 0; k < World.CORDON_POSTS; k++) {
+            if (best.post[k * 2] < 0) continue;
+            float d = best.manned[k] * 400 + (float) World.hypot(best.post[k * 2] - x, best.post[k * 2 + 1] - y);
+            if (d < pd) {
+                pd = d;
+                p = k;
+            }
+        }
+        if (p < 0) return null;
+        Incident inc = new Incident();
+        inc.x = best.post[p * 2];
+        inc.y = best.post[p * 2 + 1];
+        inc.place = "the perimeter on " + city.placeName(inc.x, inc.y);
+        inc.cordonPost = p;
+        return inc;
+    }
+
     private void arrive(Arrival a) {
         // ((10.60) The call they were sent to is over by the time they get here: on to whichever needs them most.)
         if (a.zone == null && (a.incident == null || a.incident.resolved || a.incident.zombiesNear == 0)) {
@@ -2754,6 +2896,18 @@ final class Dispatch {
                 a.x = n.x;
                 a.y = n.y;
                 a.place = n.place;
+            }
+        }
+        // ((33.0) Map version 61: police from outside sent for a fight that's the army's (armysCall) are put down on the
+        // perimeter round it instead - at the post on the nearest held infection zone's line with the fewest on it - not
+        // in among the dead at the call, where they were stood down as they got out of their cars.)
+        if (a.type == Entity.COP && !a.swat && a.zone == null && city.cfg.civic >= 61 && a.incident != null && armysCall(a.incident)) {
+            Incident post = perimeterCall(a.incident.x, a.incident.y);
+            if (post != null) {
+                a.incident = post;
+                a.x = post.x;
+                a.y = post.y;
+                a.place = post.place;
             }
         }
         java.util.List<float[]> from = entries(a.x, a.y);

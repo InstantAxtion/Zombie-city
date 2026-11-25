@@ -392,9 +392,18 @@ final class War {
         w.guardWave++;
         w.guardCalledAt = w.time;
         float tx = w.city.worldW() / 2, ty = w.city.worldH() / 2;
+        Dispatch.Incident to = null;
         if (!w.dispatch.zones.isEmpty()) {
             tx = w.dispatch.zones.get(0).x;
             ty = w.dispatch.zones.get(0).y;
+        } else if (w.city.cfg.civic >= 61) {
+            // ((33.0) Map version 61: with no safe zone to go to, to the fight most short of soldiers (Dispatch.armyShort),
+            // not the middle of the map - they drove to an empty square downtown and stood there with the city burning.)
+            to = w.dispatch.armyShort(tx, ty);
+            if (to != null) {
+                tx = to.x;
+                ty = to.y;
+            }
         }
         float[] from;
         if (muster) from = new float[]{arm.doorX, arm.doorY};
@@ -404,7 +413,7 @@ final class War {
         }
         int trucks = muster ? 3 : 2;
         int before = w.fleet.vehicles.size();
-        for (int k = 0; k < trucks; k++) w.fleet.send(Entity.SOLDIER, 6, from[0], from[1], tx, ty, null, null, w.city.placeName(tx, ty));
+        for (int k = 0; k < trucks; k++) w.fleet.send(Entity.SOLDIER, 6, from[0], from[1], tx, ty, to, null, w.city.placeName(tx, ty));
         for (int i = before; i < w.fleet.vehicles.size(); i++) {
             Fleet.Vehicle v = w.fleet.vehicles.get(i);
             v.guardUnit = true;

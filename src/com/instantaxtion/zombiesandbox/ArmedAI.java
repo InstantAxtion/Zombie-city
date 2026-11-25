@@ -790,6 +790,7 @@ final class ArmedAI {
         if (!soldier && (e.role == Entity.ROLE_MOUNTED || e.role == Entity.ROLE_TRAFFIC) && e != w.controlled
                 && w.police.specialPolice(e, w.spatial.nearest(e, 150, true, false), dt)) return;
         if (rideToFarCall(e, soldier, dt)) return;
+        if (clearStrike(e, range, dt)) return;
         boolean dry = e.ammo <= 0 && e.reserve <= 0 && e.reload <= 0;
         float stock = (e.ammo + e.reserve) / (float) Math.max(1, e.magSize + World.fullReserve(e));
         e.lowCd -= dt;
@@ -871,6 +872,10 @@ final class ArmedAI {
         int dist = w.city.fieldAt(w.city.zombieDist, e.x, e.y);
         // ((30.0) Officers too go looking further for the dead in a real outbreak, rather than walk their beat.)
         int hunt = soldier ? 200 : w.zombies >= 30 ? 90 : 40;
+        // ((33.0) Map version 61: in a mass outbreak the police don't go looking for the horde on foot - they hold the
+        // perimeter (Containment.updateCordon puts the free ones on it) and the army goes in. Walking up the field to the
+        // nearest of thousands, officers with nothing to do walked into it.)
+        if (!soldier && w.city.cfg.civic >= 61 && w.zombies > 300) hunt = 12;
         // ((13.3) The dead a long way off: soldiers ride out to the nearest call there, rather than walk across town.)
         if (soldier && e.task == Dispatch.T_NONE && (e.ammo > 0 || e.reserve > 0) && dist >= World.RIDE_TILES && dist < hunt && w.rides.rideOut(e, dt)) return;
         if ((e.ammo > 0 || e.reserve > 0) && dist < hunt && w.movement.followField(e, w.city.zombieDist, e.speed * 1.3f)) return;
@@ -881,6 +886,41 @@ final class ArmedAI {
         if (backToBase(e, soldier, dt)) return;
         w.movement.wander(e, e.speed * 0.6f);
     }
+
+    /**
+     * ((33.0) Map version 61: an air strike called (War.callAirStrike) - the police and soldiers within reach of where the
+     * bombs will fall (230, and a margin) get out of it, at a run, shooting whatever gets close on the way, and back to
+     * what they were doing once they're clear. Everyone else was warned to run; they stood their posts and fought on
+     * where the bombs came down, knocked flat with the dead all round. True when that was their step.
+     */
+    private boolean clearStrike(final Entity e, final float range, final float dt) {
+        if (w.firebombTime <= 0 || w.city.cfg.civic < 61 || e == w.controlled || e.ride != null || e.aloft || e.roof != null) return false;
+        float ax = e.x - w.firebombX, ay = e.y - w.firebombY, ad = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
+        if (ad > 330) return false;
+        float mx = ax / ad, my = ay / ad;
+        Entity t = w.spatial.nearest(e, 50, true, false);
+        if (t != null) {
+            // (Round the one in the way, still out.)
+            float tx = e.x - t.x, ty = e.y - t.y, td = (float) Math.sqrt(tx * tx + ty * ty) + 0.001f;
+            mx += 0.8f * tx / td;
+            my += 0.8f * ty / td;
+            float ml = (float) Math.sqrt(mx * mx + my * my) + 0.001f;
+            mx /= ml;
+            my /= ml;
+        }
+        if (e.blocked) w.wilds.walkToSpot(e, w.firebombX + ax / ad * 360, w.firebombY + ay / ad * 360, e.runSpeed);
+        else w.movement.flee(e, mx, my, e.runSpeed);
+        if (t != null && (e.ammo > 0 || e.reserve > 0)) w.combat.aimAndFire(e, t, (float) World.hypot(t.x - e.x, t.y - e.y), range, dt);
+        else e.aiming = false;
+        if (w.time - strikeClearSaidAt > 8) {
+            strikeClearSaidAt = w.time;
+            w.dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Air strike inbound! Clear the area, move!", e.x, e.y);
+        }
+        return true;
+    }
+
+    /** ((33.0) When the last call to clear an air strike's area went out on the radio. */
+    private float strikeClearSaidAt = -99;
 
     /** How far they'll take a shot: by what they are, and by the gun. */
     private float shotRange(final Entity e, final boolean soldier) {
@@ -1008,6 +1048,19 @@ final class ArmedAI {
     /** Running low: off to restock before it's too late. */
     private void restockWhenLow(final Entity e, final boolean soldier, final boolean dry, final float stock) {
         // Running low: back to restock before it's too late (when there's somewhere to get it and nothing on top of them).
+        // ((33.0) Map version 61: an officer on a perimeter running low gets a magazine or two off whoever's alongside
+        // (no further than 120) before running dry, and is back on the line after (borrowStep); with nobody to ask, they
+        // stay on it. Kept to the line as they were, they fired until the gun clicked empty and only then left it.)
+        if (w.city.cfg.civic >= 61 && e.task == Dispatch.T_CORDON && !soldier && !dry && stock < 0.22f && e.lowCd <= 0) {
+            e.lowCd = 15;
+            Entity mate = w.ammo.lenderFor(e, 120);
+            if (mate != null) {
+                e.task = Dispatch.T_BORROW;
+                e.protector = mate;
+                e.taskTimer = 12;
+                w.dispatch.chatter(Dispatch.WHO_POLICE, e, "Running low on the line. " + Dispatch.name(mate) + ", spare a mag?", e.x, e.y);
+            }
+        }
         if (!dry && stock < 0.22f && e.lowCd <= 0 && (e.task == Dispatch.T_NONE || e.task == Dispatch.T_RESPOND)) {
             e.lowCd = 25;
             City.Facility f = w.ammo.restockPoint(e);
@@ -1068,6 +1121,9 @@ final class ArmedAI {
                 e.reload = 2;
                 e.talkTimer = l.talkTimer = 1.5f;
                 e.task = Dispatch.T_NONE;
+                // ((33.0) Map version 61: off the perimeter only for the magazine - back to their post on it.)
+                if (w.city.cfg.civic >= 61 && e.type == Entity.COP && e.postX > 0 && w.containment.zoneOfPost(e.postX, e.postY) != null
+                        && World.hypot(e.postX - e.x, e.postY - e.y) < 400) e.task = Dispatch.T_CORDON;
                 e.protector = null;
                 e.outOfAmmoSaid = false;
             }
@@ -1255,6 +1311,17 @@ final class ArmedAI {
                     w.wilds.walkToSpot(e, e.postX, e.postY, e.runSpeed * 0.9f);
                     return true;
                 }
+                // ((33.0) Map version 61: still a long way from their place on the line (150 or more), with one of the dead
+                // in sight but not on them: on to the line, shooting as they go. They stopped for every one that came near
+                // and fought it where they stood, and nine in ten of those on a cordon were more than 150 from their post.)
+                if (w.city.cfg.civic >= 61 && pd > 150 && t != null && w.spatial.countZombiesNear(e.x, e.y, 60) < 2) {
+                    float td = (float) World.hypot(t.x - e.x, t.y - e.y) + 0.001f;
+                    if (td > 45) {
+                        w.wilds.walkToSpot(e, e.postX, e.postY, e.speed * 1.2f);
+                        w.combat.aimAndFire(e, t, td, shotRange(e, false), dt);
+                        return true;
+                    }
+                }
                 if (t == null) {
                     // On the line: facing in, towards where the dead are.
                     w.holdoutLife.standAt(e, e.postX, e.postY, 0.6f);
@@ -1352,7 +1419,7 @@ final class ArmedAI {
                 // Flankers work round to the side for a clear angle, instead of all firing down one line.
                 float side = e.callsign % 2 == 0 ? 1 : -1;
                 w.movement.steer(e, -ddy / d * side, ddx / d * side, e.speed * 0.5f);
-            } else w.movement.steer(e, 0, 0, 0);
+            } else if (!spreadOut(e, ddx / d, ddy / d)) w.movement.steer(e, 0, 0, 0);
             if (!w.combat.aimAndFire(e, t, d, range, dt) && !stationary && guarding == null) {
                 // Someone in the line of fire: step sideways for a clear shot.
                 float side = (e.callsign + e.member) % 2 == 0 ? 1 : -1;
@@ -1374,7 +1441,20 @@ final class ArmedAI {
             if (thrower && e.grenades > 0 && e.grenadeCd <= 0 && d > 55
                     && d < (launcher ? 280 : 200) && (w.spatial.countZombiesNear(t.x, t.y, 40) >= (launcher ? 5 : 7) || (launcher && t.type == Entity.GIANT)) && !w.spatial.peopleNear(t.x, t.y, 60)
                     && w.city.insideOf(e.x, e.y) == null && w.city.insideOf(t.x, t.y) == null) {
-                w.combat.throwGrenade(e, t.x, t.y);
+                float gx = t.x, gy = t.y;
+                // ((33.0) Map version 61: into the middle of the pack round the one they're shooting at, not at that one -
+                // the nearest of a crowd is at its edge, and half the blast went on empty street. Only where the middle is
+                // clear of our people too, in sight, and no nearer than the pin allows.)
+                if (w.city.cfg.civic >= 61) {
+                    float[] pc = w.spatial.zombieCentre(t.x, t.y, 45);
+                    if (pc[2] >= 3 && World.hypot(pc[0] - e.x, pc[1] - e.y) > 55 && !w.spatial.peopleNear(pc[0], pc[1], 60)
+                            && w.city.los(e.x, e.y, pc[0], pc[1]) && w.city.insideOf(pc[0], pc[1]) == null
+                            && w.spatial.countZombiesNear(pc[0], pc[1], 36) > w.spatial.countZombiesNear(t.x, t.y, 36)) {
+                        gx = pc[0];
+                        gy = pc[1];
+                    }
+                }
+                w.combat.throwGrenade(e, gx, gy);
                 // (A launcher reloads quicker than a man can pull another pin.)
                 if (launcher) {
                     e.grenadeCd = 7;
@@ -1384,6 +1464,47 @@ final class ArmedAI {
             return true;
         }
         return false;
+    }
+
+    /**
+     * ((33.0) Map version 61: standing to fire with others of their side shoulder to shoulder (two or more within 14), a
+     * soldier or officer sidesteps along the line - across the way the dead are (fx, fy), away from the crowd at their
+     * elbow, never towards the dead - so the line spreads out instead of standing in a knot, where three in four of the
+     * soldiers at a fight were, firing past each other's ears and all in reach of the same few of the dead. True when
+     * they stepped.
+     */
+    private boolean spreadOut(Entity e, float fx, float fy) {
+        if (w.city.cfg.civic < 61) return false;
+        float ax = 0, ay = 0;
+        int n = 0;
+        for (int i = 0, m = w.spatial.gatherArmed(e.x, e.y, 14); i < m; i++) {
+            Entity o = w.gathered[i];
+            if (o == e || o.dead || o.type != e.type) continue;
+            float dx = e.x - o.x, dy = e.y - o.y, d2 = dx * dx + dy * dy;
+            if (d2 >= 14 * 14) continue;
+            float dd = (float) Math.sqrt(d2) + 0.001f;
+            // (Right on top of each other: apart by who they are, not both the same way.)
+            if (dd < 0.5f) {
+                dx = (e.callsign + e.member) % 2 == 0 ? -fy : fy;
+                dy = (e.callsign + e.member) % 2 == 0 ? fx : -fx;
+                dd = 1;
+            }
+            ax += dx / dd * (14 - dd);
+            ay += dy / dd * (14 - dd);
+            n++;
+        }
+        if (n < 2) return false;
+        // (Along the line only: what's towards or away from the dead taken out of it.)
+        float along = ax * fx + ay * fy;
+        float sx = ax - along * fx, sy = ay - along * fy;
+        if (along < 0) {
+            sx += along * fx * 0.3f;
+            sy += along * fy * 0.3f;
+        }
+        float sl = (float) Math.sqrt(sx * sx + sy * sy);
+        if (sl < 0.5f) return false;
+        w.movement.steer(e, sx / sl, sy / sl, e.speed * 0.6f);
+        return true;
     }
 
     /** Ordered somewhere: on the way there, shooting what's close. True when that was their step. */
@@ -1605,7 +1726,10 @@ final class ArmedAI {
         // Go and check where the last one was seen.
         if (e.task == Dispatch.T_NONE && e.fear > 0 && (e.ammo > 0 || e.reserve > 0)) {
             float lx = e.threatX - e.x, ly = e.threatY - e.y, ld = (float) Math.sqrt(lx * lx + ly * ly) + 0.001f;
-            if (ld < 20 || (e.goal == World.A_SEARCH && e.goalTime > 15 && e.blocked)) e.fear = 0;
+            // ((33.0) Map version 61: nor, in a mass outbreak, does an officer walk off after the last one they saw more
+            // than a street away (see the hunt, below).)
+            if (!soldier && ld > 120 && w.city.cfg.civic >= 61 && w.zombies > 300) e.fear = 0;
+            else if (ld < 20 || (e.goal == World.A_SEARCH && e.goalTime > 15 && e.blocked)) e.fear = 0;
             else {
                 // Bounding overwatch: half the squad moves up while the other half covers, then they swap.
                 boolean cover = soldier && e.leader != null && ld > 60 && ((int) (w.time / 3) + e.member) % 2 == 0;
@@ -1899,6 +2023,16 @@ final class ArmedAI {
             }
             rear = rearGuard(e, c);
         }
+        // ((33.0) Map version 61: off a perimeter, back out - away from the middle of the zone the dead are coming from -
+        // not along the line towards the others (or a rally point the far side of it), with the crowd at their shoulder.)
+        if (w.city.cfg.civic >= 61 && (e.task == Dispatch.T_CORDON || e.task == Dispatch.T_POST)) {
+            World.InfectionZone z = w.containment.zoneOfPost(e.postX, e.postY);
+            if (z != null) {
+                float ox = e.x - z.x, oy = e.y - z.y, ol = (float) Math.sqrt(ox * ox + oy * oy) + 0.001f;
+                gx = ox / ol * 1.4f;
+                gy = oy / ol * 1.4f;
+            }
+        }
         float tx = t.x - e.x, ty = t.y - e.y, td = (float) Math.sqrt(tx * tx + ty * ty) + 0.001f;
         float mx = ax * 0.6f + gx * 0.4f, my = ay * 0.6f + gy * 0.4f, ml = (float) Math.sqrt(mx * mx + my * my) + 0.001f;
         // Turning to fire: when one gets close, or they've opened a gap and can afford to. ((27.4) The rear guard keeps
@@ -1908,6 +2042,24 @@ final class ArmedAI {
         // out, until there's a gap, then turn. Firing as they went they made 28 to its 22 to 25, and it was on them for
         // seconds at a time, biting, all the way back.)
         boolean sprint = !soldier && w.city.cfg.civic >= 56 && td < 30;
+        // ((33.0) Map version 61: with the dead closing round them (four within 60), nobody heads for the others or the
+        // rally point - often across the crowd's face - but out by the most open way there is (see sense), flat out, the
+        // police without stopping to shoot. Most of the police killed in a big outbreak died falling back, eight or more
+        // of the dead round them, still making for a rally point.)
+        if (w.city.cfg.civic >= 61 && World.TACTICS && w.spatial.countZombiesNear(e.x, e.y, 60) >= 4) {
+            sense(e);
+            if (e.tN >= 3) {
+                mx = e.escX * 0.75f + ax * 0.25f;
+                my = e.escY * 0.75f + ay * 0.25f;
+                ml = (float) Math.sqrt(mx * mx + my * my) + 0.001f;
+                if (!soldier) shoot = false;
+                else shoot = shoot && td < 45;
+                w.movement.flee(e, mx / ml, my / ml, e.runSpeed);
+                if (shoot) w.combat.aimAndFire(e, t, td, range, dt);
+                else e.aiming = false;
+                return;
+            }
+        }
         if (sprint) {
             shoot = false;
             // (Away from the one on them first, then from the rest: away from the middle of the crowd alone, they ran
@@ -2106,6 +2258,12 @@ final class ArmedAI {
                     Entity o = w.sorted[k];
                     if (o == e || o.dead || !o.isArmed() || o.aiming || o.fear > 0 || o.task != Dispatch.T_NONE) continue;
                     if ((o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) > r * r) continue;
+                    // ((33.0) Map version 61: in a mass outbreak an officer with nothing to do isn't drawn off to go and look
+                    // (searchStep walks them to it) - the perimeter is theirs, the looking the army's. (Still told: see below.)
+                    if (o.type == Entity.COP && w.city.cfg.civic >= 61 && w.zombies > 300) {
+                        if (soldier) otherSide = true;
+                        continue;
+                    }
                     o.threatX = x;
                     o.threatY = y;
                     o.fear = 12;

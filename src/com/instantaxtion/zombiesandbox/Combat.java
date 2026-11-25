@@ -716,6 +716,7 @@ final class Combat {
             if (o.hp > 1) o.hp = Math.max(1, o.hp - hit);
         } else o.hp -= hit;
         if (wasUp && o.hp <= 0 && o.isZombie() && w.blastBy != null && !w.blastBy.isZombie()) w.experience.killMade(w.blastBy, o);
+        else if (wasUp && o.hp <= 0 && o.isZombie() && blastSide >= 0) credit(o, true, blastSide);
         o.hurt = 1;
         o.killedByZombie = false;
         if (o.hp <= 0 && f > 0.4f) o.gibbed = true;
@@ -739,14 +740,44 @@ final class Combat {
             w.effects.particle(fx, fy, w.rnd.nextFloat() * 30 - 15, w.rnd.nextFloat() * 30 - 15, 1.2f, 4, 0xFF8A8478, World.P_SMOKE);
         w.effects.tracer(fx, fy, tx, ty);
         w.shotsFired++;
-        explode(tx, ty, 50, 230);
+        blastSide = Entity.SOLDIER;
+        try {
+            explode(tx, ty, 50, 230);
+        } finally {
+            blastSide = -1;
+        }
+    }
+
+    /**
+     * ((33.0) Map version 61: the dead put down by the army's and the police's heavy weapons - a tank's gun, the
+     * helicopters' door guns and cannon, the turrets on the armour, the police helicopter's marksman - count among that
+     * side's kills (side: Entity.COP, Entity.SOLDIER, or anything else for the townspeople). With no one to give them to,
+     * they were nobody's: the game's "kills by police, army, civilians" left out everything the armour did.
+     */
+    private void credit(Entity t, boolean wasUp, int side) {
+        if (!wasUp || t.hp > 0 || !t.isZombie() || w.city.cfg.civic < 61) return;
+        w.killsBy[side == Entity.COP ? 0 : side == Entity.SOLDIER ? 1 : 2]++;
+    }
+
+    /** ((33.0) Whose a blast with nobody to credit is (see credit), or -1 for no one's. */
+    private int blastSide = -1;
+
+    /** ((33.0) Whose the vehicle firing from (fx, fy) is, for credit: its passengers' side (townspeople with none). */
+    private int sideAt(float fx, float fy) {
+        for (int i = 0, n = w.fleet.vehicles.size(); i < n; i++) {
+            Fleet.Vehicle v = w.fleet.vehicles.get(i);
+            if (v.x == fx && v.y == fy) return v.passengerType == Entity.COP || v.passengerType == Entity.SOLDIER ? v.passengerType : Entity.CIVILIAN;
+        }
+        return Entity.SOLDIER;
     }
 
     /** One burst from the helicopter's door gun. */
     void airShot(float fx, float fy, Entity t) {
         w.shotsFired++;
         if (w.rnd.nextFloat() < 0.75f) {
+            boolean wasUp = t.hp > 0;
             t.hp -= 22;
+            credit(t, wasUp, Entity.SOLDIER);
             t.hurt = 1;
             w.effects.bloodBurst(t.x, t.y, 4, 0, 0);
             w.effects.tracer(fx, fy, t.x, t.y);
@@ -765,7 +796,9 @@ final class Combat {
             if (z.dead || !z.isZombie()) continue;
             float d = (float) Math.hypot(z.x - x, z.y - y);
             if (d > 13) continue;
+            boolean wasUp = z.hp > 0;
             z.hp -= (z.big() ? 30 : 60) * (1 - d / 26);
+            credit(z, wasUp, Entity.SOLDIER);
             z.hurt = 1;
             z.killedByZombie = false;
             w.effects.bloodBurst(z.x, z.y, 3, 0, 0);
@@ -779,7 +812,9 @@ final class Combat {
     void marksmanShot(float fx, float fy, Entity t) {
         w.shotsFired++;
         if (w.rnd.nextFloat() < 0.85f && !w.spatial.peopleNear(t.x, t.y, 10)) {
+            boolean wasUp = t.hp > 0;
             t.hp -= !t.big() && w.rnd.nextFloat() < 0.55f ? t.hp + 1 : 40;
+            credit(t, wasUp, Entity.COP);
             t.hurt = 1;
             t.killedByZombie = false;
             w.effects.bloodBurst(t.x, t.y, 5, 0, 0);
@@ -806,7 +841,9 @@ final class Combat {
                     if (o.dead || o.hp <= 0 || !o.isZombie()) continue;
                     float d = (float) World.hypot(o.x - x, o.y - y);
                     if (d > r) continue;
+                    boolean wasUp = o.hp > 0;
                     o.hp -= dmg * (1 - 0.5f * d / r) * (o.armored ? 0.6f : 1);
+                    credit(o, wasUp, Entity.SOLDIER);
                     o.hurt = 1;
                     o.killedByZombie = false;
                 }
@@ -823,7 +860,9 @@ final class Combat {
         w.shotsFired++;
         if (w.rnd.nextFloat() < 0.7f) {
             boolean head = !t.big() && w.rnd.nextFloat() < 0.15f;
+            boolean wasUp = t.hp > 0;
             t.hp -= head ? t.hp + 1 : dmg;
+            if (wasUp && t.hp <= 0) credit(t, true, sideAt(fx, fy));
             t.hurt = 1;
             t.killedByZombie = false;
             w.effects.bloodBurst(t.x, t.y, 4, 0, 0);
