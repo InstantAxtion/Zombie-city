@@ -81,7 +81,8 @@ final class BuildingRenderer {
      * long before the buildings round them.)
      */
     float seeOf(City.Building b, float zoomSee) {
-        return zoomSee;
+        // ((32.9) Roofs stay on, however close in: there are no interiors to see under them now.)
+        return 0;
     }
 
     void drawInsides(Canvas c, float vx0, float vy0, float vx1, float vy1) {

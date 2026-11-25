@@ -528,7 +528,7 @@ final class WorldRenderer {
         // ((17.1) The insides of buildings with people in them (and of every building, zoomed right in): floors, rooms
         // and furniture, under the people walking about in them.)
         // ((17.2) Who holds which part of the city in a gang war.)
-        if (detailed) gv.buildingRenderer.drawInsides(c, vx0, vy0, vx1, vy1);
+        // ((32.9) No building interiors drawn: rooms and furniture under every roof, zoomed in, for nothing much to see.)
         // ((14.9) Mortar pits under their teams.)
         if (detailed)
             for (int i = 0, n = gv.onScreen.size(); i < n; i++) {

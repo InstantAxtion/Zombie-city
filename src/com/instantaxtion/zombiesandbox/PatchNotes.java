@@ -2,11 +2,16 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.8";
-    static final int VERSION_CODE = 328;
+    static final String VERSION = "32.9";
+    static final int VERSION_CODE = 329;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.9  -  No interiors",
+                    "All building interiors are gone: roofs stay on when zoomed in, and no rooms or furniture are drawn - less to draw close up.",
+                    "People go into buildings out of sight instead of walking around inside them.",
+            },
             {
                     "32.8  -  Bug fixes",
                     "The New Game screen's police and army numbers now match the game (they were about 100 police short).",

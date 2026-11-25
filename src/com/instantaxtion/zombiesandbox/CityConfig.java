@@ -299,7 +299,8 @@ final class CityConfig implements OptionSet {
     // ((32.4) 57: help from outside sized for tens of thousands of the dead (Dispatch.massHelp, the National Guard).)
     // ((32.7) 58: no safe zones (Dispatch).)
     // ((32.7) 59: no house interiors (City.enterable, BuildingRenderer.drawInsides).)
-    int civic = 59;
+    // ((32.9) 60: no building interiors (City.enterable).)
+    int civic = 60;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }
