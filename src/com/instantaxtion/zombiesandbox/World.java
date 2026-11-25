@@ -1043,6 +1043,7 @@ final class World {
             // There are few enough of them that it costs next to nothing. (Police and soldiers only get the lighter
             // treatment a long way from any of the dead, and civilians' makes no difference: both are kept.)
             if (!LOD || e.isZombie() || (LOD_FULL & 2) != 0 && e.type == Entity.CIVILIAN) {
+                if (LOD && e.isZombie() && zombieLod(e, i, dt)) continue;
                 think(e, dt);
                 if (!e.dead && e.lodStep > 0) movement.move(e, dt);
                 continue;
@@ -1139,6 +1140,28 @@ final class World {
             // thousands of people just to move them cost almost as much again in fetching each one.)
             if (!e.dead && e.lodStep > 0) movement.move(e, dt * e.lodStep);
         }
+    }
+
+    /**
+     * ((33.0) One of the dead off screen with none of the living anywhere near - out of sight and smell, a dozen tiles
+     * and more on foot from anyone - thinks and moves every other step, two steps' worth at a time (every fourth, from
+     * forty tiles, in a mass outbreak): it can't bite or see anyone from there, so nothing about a fight changes, and
+     * with tens of thousands of the dead out roaming it was a good part of each step. True when that was their turn
+     * (or they were passed over). Map version 61.)
+     */
+    private boolean zombieLod(final Entity e, final int i, final float dt) {
+        if (city.cfg.civic < 61 || e.charge > 0 || e.vaultT > 0 || e.surge > 0 || e == controlled || e.stun > 0 || zombies < 400 || onScreen(e)) return false;
+        int h = lodHDist(e);
+        int every = h > 40 ? (zombies > 10000 ? 4 : 2) : h > 14 ? 2 : 1;
+        if (every == 1) return false;
+        boolean turn = (i + lodFrame) % every == 0;
+        e.lodStep = turn ? every : 0;
+        if (turn) {
+            think(e, dt * every);
+            if (!e.dead && e.lodStep > 0) movement.move(e, dt * every);
+        }
+        sleep(i, every);
+        return true;
     }
 
     /** The rings of a noise spreading out, fading. */
@@ -2450,6 +2473,8 @@ final class World {
     static final class Lure {
         int x0, y0;
         float made;
+        /** ((33.0) The key it's kept under in lures (see ZombieAI.lureField). */
+        int key = Integer.MIN_VALUE;
         final int[] d = new int[LURE_S * LURE_S];
     }
 
@@ -2459,7 +2484,10 @@ final class World {
         protected boolean removeEldestEntry(java.util.Map.Entry<Integer, Lure> eldest) {
             // ((27.4) Kept to be used again for the next one (it's worked out afresh, every tile): each is 26 KB, and
             // a big horde roaming the streets made and dropped dozens a second.)
-            if (size() > 40) {
+            // ((33.0) More of them kept in a mass outbreak - one for each hundred of the dead, up to two hundred and forty
+            // (six megabytes): with fighting all over town, forty was too few for every spot the dead were heading for,
+            // and the same routes were worked out again and again, hundreds a second. Map version 61.)
+            if (size() > (city.cfg.civic >= 61 && zombies > 1500 ? Math.min(240, Math.max(40, zombies / 100)) : 40)) {
                 if (spareLures.size() < 8) spareLures.add(eldest.getValue());
                 return true;
             }

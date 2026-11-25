@@ -500,6 +500,12 @@ final class DailyLife {
                 }
                 float[] sp = e.spot;
                 float sx = sp[0] - e.x, sy = sp[1] - e.y, sd = (float) Math.sqrt(sx * sx + sy * sy) + 0.001f;
+                // ((33.0) Held up a few steps short - by a wall, a fence or someone else's spot: here will do, as on a
+                // beach. They used to stand pushing at it for the best part of six minutes. Map version 61.)
+                if (e.jobStep == 0 && sd > 6 && sd < 22 && (e.blocked || e.stuckTime > 0.5f) && w.city.cfg.civic >= 61) {
+                    e.spot = sp = new float[]{e.x, e.y, sp[2]};
+                    sd = 0.001f;
+                }
                 if (e.jobStep == 0 && sd > 6) {
                     w.wilds.walkToSpot(e, sp[0], sp[1], e.speed * 0.9f);
                     e.jobTimer += dt * 0.25f;

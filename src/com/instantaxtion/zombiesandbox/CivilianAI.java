@@ -19,12 +19,19 @@ final class CivilianAI {
      * ((22.0) Someone running from the dead with an armoured van parked as a shelter close by: for it, and in.
      * False if there's none with room.
      */
+    /** ((33.0) The step on which the shelter vans were last checked against the fleet (see shelterStep). */
+    private int sheltersAt = -1;
+
     boolean shelterStep(Entity e) {
         Fleet.Vehicle best = null;
         float bd = 150;
+        // ((33.0) Whether each van is still on the map looked up once a step, not by everyone running past, each going
+        // through all the city's vehicles for it: with a van parked up and a thousand people running, a step's worth.)
+        boolean checked = sheltersAt == w.lodFrame;
+        sheltersAt = w.lodFrame;
         for (int i = w.fleet.shelters.size() - 1; i >= 0; i--) {
             Fleet.Vehicle v = w.fleet.shelters.get(i);
-            if (v.broken || v.burnt || !w.fleet.vehicles.contains(v)) {
+            if (v.broken || v.burnt || (!checked && !w.fleet.vehicles.contains(v))) {
                 w.fleet.shelters.remove(i);
                 continue;
             }
@@ -76,7 +83,23 @@ final class CivilianAI {
         // ((10.31) Not even looking when the nearest of the dead is well out of reach: most of a big city, most
         // of the time.)
         boolean zNear = w.city.fieldAt(w.city.zombieDist, e.x, e.y) <= 100 / City.T + 6;
-        Entity threat = zNear ? w.spatial.nearest(e, 100, true, true) : null;
+        Entity threat;
+        // ((33.0) In a mass outbreak, the nearest of the dead in sight is looked for five times a second, not every step
+        // (the one last seen kept in between while it's still there and within reach): with thousands of people in
+        // among tens of thousands of the dead, the looking was a good part of each step. Map version 61.)
+        if (zNear && w.zombies > 1500 && w.city.cfg.civic >= 61) {
+            e.seekCd -= dt;
+            Entity was = e.seekT;
+            if (e.seekCd > 0 && (was == null || (!was.dead && !was.removed && (was.x - e.x) * (was.x - e.x) + (was.y - e.y) * (was.y - e.y) < 100 * 100))) threat = was;
+            else {
+                threat = w.spatial.nearest(e, 100, true, true);
+                e.seekT = threat;
+                e.seekCd = 0.2f + (e.nameSeed & 3) * 0.02f;
+            }
+        } else {
+            e.seekT = null;
+            threat = zNear ? w.spatial.nearest(e, 100, true, true) : null;
+        }
         if (threat == null && zNear) threat = w.spatial.nearest(e, 26, true, false);
         float threatDist = threat != null ? noticed(e, threat) : Float.MAX_VALUE;
 
@@ -121,14 +144,23 @@ final class CivilianAI {
 
     /** One of the dead seen: the scream, the alarm, the fright that stays with them, a call to 911. How far off it is. */
     private float noticed(final Entity e, final Entity threat) {
+        boolean horde = false;
         if (e.fleeTimer <= 0) {
-            if (w.rnd.nextFloat() < 0.3f) w.emit(Sfx.SCREAM, e.x, e.y);
+            // ((33.0) A crowd of the dead, not just the one: they run on twice as long. People who'd seen a horde of
+            // fifty coming stopped seven seconds later, a street away from it. Map version 61.)
+            horde = w.city.cfg.civic >= 61 && w.spatial.countZombiesNear(threat.x, threat.y, 70) >= 8;
+            if (w.rnd.nextFloat() < 0.3f) {
+                w.emit(Sfx.SCREAM, e.x, e.y);
+                // ((33.0) A scream carries: the dead idling within earshot turn towards it, a horde with them. Map
+                // version 61.)
+                if (w.city.cfg.civic >= 61) w.zombieAI.engineLure(e.x, e.y, 110);
+            }
             alarm(e, threat);
         }
         float ddx = threat.x - e.x, ddy = threat.y - e.y;
         float threatDist = (float) Math.sqrt(ddx * ddx + ddy * ddy);
         // A close call stays with you: the nearer it came, the longer they keep running.
-        e.fleeTimer = Math.max(e.fleeTimer, threatDist < 50 ? 10 : 7);
+        e.fleeTimer = Math.max(e.fleeTimer, horde ? 15 : threatDist < 50 ? 10 : 7);
         e.fear = 60;
         e.aware = true;
         e.threatX = threat.x;
@@ -605,7 +637,11 @@ final class CivilianAI {
             float od = (o.x - e.threatX) * (o.x - e.threatX) + (o.y - e.threatY) * (o.y - e.threatY);
             if (o.fleeTimer > 0 && o.fear >= 25) continue;
             o.aware = true;
-            o.fear = Math.max(o.fear, 30);
+            // ((33.0) Fear passed on by word of mouth is a little less each time it's passed on - ten less than the one
+            // shouting has - so a warning dies out a few people down the line. Two people warned of the same one of the
+            // dead kept shouting the warning at each other, each keeping the other frightened, and ran to and fro on the
+            // spot for minutes after it was gone. Map version 61.)
+            o.fear = Math.max(o.fear, w.city.cfg.civic >= 61 ? Math.min(30, e.fear - 10) : 30);
             o.threatX = e.threatX;
             o.threatY = e.threatY;
             // Heading that way, or close to it: turn round and go.
@@ -815,7 +851,13 @@ final class CivilianAI {
             float a = (e.nameSeed & 255) / 256f * World.TAU, rr = police.r * (1.3f + ((e.nameSeed >> 8) & 7) * 0.25f);
             float sx = police.x + (float) Math.cos(a) * rr, sy = police.y + (float) Math.sin(a) * rr;
             if (pd > rr + 60 && w.movement.followField(e, w.city.field(police), e.speed * 1.6f)) return true;
-            if (!w.city.solidAt(sx, sy) && World.hypot(sx - e.x, sy - e.y) > 6) {
+            // ((33.0) A spot they can't stand on - too close to a wall or a fence for them to fit - or one they've come
+            // within a few steps of and can get no nearer for the crowd: as good as there. They pushed at it, stepped
+            // aside, and came back to push again, running to and fro on the same few yards for minutes. Map version 61.)
+            boolean v61 = w.city.cfg.civic >= 61;
+            float sd = (float) World.hypot(sx - e.x, sy - e.y);
+            boolean there = sd <= 6 || (v61 && sd < 26 && (e.blocked || e.stuckTime > 0.3f || e.want < 1));
+            if (!w.city.solidAt(sx, sy) && !(v61 && w.city.circleBlocked(sx, sy, e.radius)) && !there) {
                 w.wilds.walkToSpot(e, sx, sy, e.speed * 1.2f);
                 return true;
             }

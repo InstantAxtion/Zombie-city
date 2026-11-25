@@ -49,6 +49,27 @@ final class ZombieAI {
     void surge(Entity lead) {
         float x = lead.noiseX, y = lead.noiseY;
         int n = 0;
+        // ((33.0) Only the dead within a horde's reach of its leader are looked at (by the grid), not everyone in the
+        // city: a follower further off than that has lost its leader already (see hordeFollow), and with tens of
+        // thousands of the dead each roar was a whole step's worth of looking. Map version 61.)
+        if (w.city.cfg.civic >= 61 && w.hashSize >= 0) {
+            float r = 440 + World.GRID_SLACK;
+            int cx0 = Math.max(0, (int) ((lead.x - r) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((lead.x + r) / World.CELL));
+            int cy0 = Math.max(0, (int) ((lead.y - r) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((lead.y + r) / World.CELL));
+            for (int cy = cy0; cy <= cy1; cy++)
+                for (int cx = cx0; cx <= cx1; cx++) {
+                    int c = cy * w.gw + cx;
+                    for (int k = w.cellStart[c], end = w.cellStart[c] + w.zCount[c]; k < end; k++) {
+                        Entity o = w.sorted[k];
+                        if (o.dead || (o != lead && o.hordeLeader != lead)) continue;
+                        o.noiseX = x + w.rnd.nextFloat() * 40 - 20;
+                        o.noiseY = y + w.rnd.nextFloat() * 40 - 20;
+                        o.noiseTimer = 16;
+                        o.surge = 12;
+                        n++;
+                    }
+                }
+        } else
         for (int i = 0, m = w.entities.size(); i < m; i++) {
             Entity o = w.entities.get(i);
             if (o.dead || (o != lead && o.hordeLeader != lead)) continue;
@@ -150,6 +171,8 @@ final class ZombieAI {
         // have spotted someone they keep track of them.
         // ((12.1) Balance: a little keener all round, 140 and 55 before.)
         float sight = w.trait[World.TR_KEEN] ? 210 : w.trait[World.TR_DULL] ? 120 : 165, near = w.trait[World.TR_KEEN] ? 85 : w.trait[World.TR_DULL] ? 45 : 65;
+        // ((33.0) Feeding, it only notices who comes right up to it (map version 61).)
+        if (z.feedTimer > 0 && w.city.cfg.civic >= 61) sight = near;
         // ((32.4) With tens of thousands of the dead, each keeps the one it's after for a quarter of a second (while that
         // one is still there and in reach), and one with nobody in sight looks again every half second, not every step:
         // the looking - everyone within reach, and a line of sight to each - was the biggest part of each step.)
@@ -162,6 +185,7 @@ final class ZombieAI {
                     && (was.x - z.x) * (was.x - z.x) + (was.y - z.y) * (was.y - z.y) < sight * sight))) t = was;
             else {
                 t = w.spatial.nearest(z, sight, false, true);
+                if (t != was) z.passCd = 0;
                 z.seekT = t;
                 z.seekCd = (t == null ? 0.5f : 0.25f) + (z.nameSeed & 7) * 0.02f;
             }
@@ -220,7 +244,33 @@ final class ZombieAI {
         z.searchTimer -= dt;
         z.moanCd -= dt;
         if (z.scatterT > 0) z.scatterT -= dt;
-        if (w.rnd.nextFloat() < dt * 0.03f) w.emit(z.big() ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
+        if (w.rnd.nextFloat() < dt * 0.03f) {
+            w.emit(z.big() ? Sfx.GROAN_DEEP : Sfx.GROAN, z.x, z.y);
+            // ((33.0) One of the dead wandering on its own groans, and the others wandering near turn and shuffle over to
+            // it: the dead drift together into packs instead of each roaming alone. Map version 61.)
+            if (w.city.cfg.civic >= 61 && z.memory <= 0 && z.noiseTimer <= 0 && z.feedTimer <= 0 && z.hordeLeader == null && !z.leadsHorde) groanDraw(z);
+        }
+    }
+
+    /** ((33.0) The dead idling near a groan (within sixty) drift over to where it came from. */
+    private void groanDraw(final Entity z) {
+        if (w.hashSize < 0) return;
+        final float r = 60;
+        int cx0 = Math.max(0, (int) ((z.x - r) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((z.x + r) / World.CELL));
+        int cy0 = Math.max(0, (int) ((z.y - r) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((z.y + r) / World.CELL));
+        for (int cy = cy0; cy <= cy1; cy++)
+            for (int cx = cx0; cx <= cx1; cx++) {
+                int c = cy * w.gw + cx;
+                for (int k = w.cellStart[c], end = w.cellStart[c] + w.zCount[c]; k < end; k++) {
+                    Entity o = w.sorted[k];
+                    if (o == z || o.dead || o.memory > 0 || o.noiseTimer > 0 || o.feedTimer > 0 || o.hordeLeader != null || o.leadsHorde || o.charge > 0) continue;
+                    float ddx = o.x - z.x, ddy = o.y - z.y, d2 = ddx * ddx + ddy * ddy;
+                    if (d2 > r * r || d2 < 12 * 12) continue;
+                    o.noiseX = z.x + w.rnd.nextFloat() * 16 - 8;
+                    o.noiseY = z.y + w.rnd.nextFloat() * 16 - 8;
+                    o.noiseTimer = 3;
+                }
+            }
     }
 
     /** Someone in sight: a charge or a lunge, the moan that brings the others, and after them - round by its own angle, over or through what's between - to bite. True when that was their step. */
@@ -290,7 +340,7 @@ final class ZombieAI {
                 }
             }
             // Seen through a fence or across the highway barrier: the way round (by smell), not into it.
-            if (d > 16 && !w.city.passLine(z.x, z.y, t.x, t.y)) {
+            if (d > 16 && !passTo(z, t, dt)) {
                 // Right up against a safe zone's wall with them on the other side: tear at it.
                 if (w.dispatch.wallOwner != null && clawWall(z, dt)) return true;
                 // ((13.4) Just the other side of a fence or a barricade: straight at it, to climb over (see
@@ -317,6 +367,21 @@ final class ZombieAI {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Whether one of the dead can walk straight at the one it's after (nothing but the odd tree between them).
+     * ((33.0) In a mass outbreak, looked at five times a second rather than every step, and afresh whenever it picks
+     * someone else: with thousands chasing at once it was a twentieth of each step. Map version 61.)
+     */
+    private boolean passTo(final Entity z, final Entity t, final float dt) {
+        if (w.zombies <= 1500 || w.city.cfg.civic < 61) return w.city.passLine(z.x, z.y, t.x, t.y);
+        z.passCd -= dt;
+        if (z.passCd <= 0) {
+            z.passOk = w.city.passLine(z.x, z.y, t.x, t.y);
+            z.passCd = 0.2f + (z.nameSeed & 3) * 0.02f;
+        }
+        return z.passOk;
     }
 
     /** Lost sight of them: to where they were last seen, into the car or the building they got into, on along their trail. True when that was their step. */
@@ -1148,6 +1213,18 @@ final class ZombieAI {
         w.history(t, t.infected && !was ? "bitten - infected" : t.hp < t.maxHp * 0.35f ? "badly bitten" : "bitten");
         if (z.type == Entity.BRUTE) w.movement.tryMove(t, nx * 4, ny * 4);
         else if (z.type == Entity.BRUISER) w.movement.tryMove(t, nx * 2, ny * 2);
+        // ((33.0) The bite that kills: it stops and feeds on them for a few seconds, blind to anyone not right by it -
+        // the moment the rest of the street gets to run. They used to turn from a kill straight on to the next one.
+        // Map version 61.)
+        if (t.hp <= 0 && w.city.cfg.civic >= 61) {
+            z.feedTimer = 3 + w.rnd.nextFloat() * 3;
+            z.threatX = t.x;
+            z.threatY = t.y;
+            z.memory = 0;
+            z.searchTimer = 0;
+            z.seekT = null;
+            z.seekCd = 0;
+        }
     }
 
     /** Shoves a zombie back and stuns it; armed units also hit it with their weapon. */
@@ -1269,6 +1346,9 @@ final class ZombieAI {
         }
     }
 
+    /** ((33.0) The routes last asked for, by their spot's key (see lureField). */
+    private final World.Lure[] lureHot = new World.Lure[256];
+
     /** The shared route patch to (x, y) (spots within a few steps of each other share one), or null. */
     World.Lure lureField(float x, float y) {
         int tx = Math.max(0, Math.min(w.city.w - 1, (int) (x / City.T))), ty = Math.max(0, Math.min(w.city.h - 1, (int) (y / City.T)));
@@ -1282,9 +1362,22 @@ final class ZombieAI {
             tx = Math.min(w.city.w - 1, (tx / cell) * cell + cell / 2);
             ty = Math.min(w.city.h - 1, (ty / cell) * cell + cell / 2);
         }
+        float keep = w.zombies > 1500 ? 60 : w.zombies > 300 ? 40 : 20;
+        // ((33.0) In a mass outbreak, the routes last asked for are kept to hand by their spot (a small table looked into
+        // directly), not looked up in the list of them every time - for each of thousands of the dead on a route, every
+        // step. Map version 61.)
+        boolean quick = mass && w.city.cfg.civic >= 61;
+        int slot = (key ^ (key >>> 7) ^ (key >>> 16)) & (lureHot.length - 1);
+        if (quick) {
+            World.Lure h = lureHot[slot];
+            if (h != null && h.key == key && w.time - h.made < keep && w.time >= h.made) return h;
+        }
         World.Lure f = w.lures.get(key);
         // ((32.0) Kept twice as long in a mass outbreak.)
-        if (f != null && w.time - f.made < (w.zombies > 1500 ? 60 : w.zombies > 300 ? 40 : 20)) return f;
+        if (f != null && w.time - f.made < keep) {
+            if (quick && f.key == key) lureHot[slot] = f;
+            return f;
+        }
         if (w.pathBudget < 0.1f) return f;
         w.pathBudget -= 0.1f;
         if (w.city.solid[ty * w.city.w + tx]) {
@@ -1295,6 +1388,7 @@ final class ZombieAI {
         }
         if (f == null) f = w.spareLures.isEmpty() ? new World.Lure() : w.spareLures.remove(w.spareLures.size() - 1);
         f.made = w.time;
+        f.key = key;
         f.x0 = tx - World.LURE_R;
         f.y0 = ty - World.LURE_R;
         java.util.Arrays.fill(f.d, City.FAR);
@@ -1306,35 +1400,58 @@ final class ZombieAI {
         sizes[0] = 1;
         w.lureBuckets[0][0] = start;
         int pending = 1;
+        // ((33.0) The same search, tile for tile and in the same order, with the arrays held here and each neighbour
+        // found by adding to the index rather than dividing it out again: a twentieth of each step in a mass outbreak
+        // went on these.)
+        final int S = World.LURE_S, cw = w.city.w, ch = w.city.h, x0 = f.x0, y0 = f.y0;
+        final int[] fd = f.d;
+        final boolean[] solid = w.city.solid;
+        final byte[] cost = w.city.walkCost;
+        final int[][] buckets = w.lureBuckets;
         for (int d = 0; pending > 0 && d < 900; d++) {
             int bi = d % 9;
-            int[] bk = w.lureBuckets[bi];
+            int[] bk = buckets[bi];
             int size = sizes[bi];
             sizes[bi] = 0;
             pending -= size;
             for (int k = 0; k < size; k++) {
                 int t = bk[k];
-                if (f.d[t] != d) continue;
-                int lx = t % World.LURE_S, ly = t / World.LURE_S;
+                if (fd[t] != d) continue;
+                int ly = t / S, lx = t - ly * S;
+                int wx = x0 + lx, wy = y0 + ly, wi = wy * cw + wx;
                 for (int q = 0; q < 4; q++) {
-                    int nx = lx + (q == 0 ? -1 : q == 1 ? 1 : 0), ny = ly + (q == 2 ? -1 : q == 3 ? 1 : 0);
-                    if (nx < 0 || ny < 0 || nx >= World.LURE_S || ny >= World.LURE_S) continue;
-                    int wx = f.x0 + nx, wy = f.y0 + ny;
-                    if (wx < 0 || wy < 0 || wx >= w.city.w || wy >= w.city.h) continue;
-                    int wi = wy * w.city.w + wx;
-                    if (w.city.solid[wi]) continue;
-                    int nl = ny * World.LURE_S + nx, nd = d + w.city.walkCost[wi];
-                    if (nd >= f.d[nl]) continue;
-                    f.d[nl] = nd;
+                    int nl, ni;
+                    if (q == 0) {
+                        if (lx == 0 || wx <= 0 || wy < 0 || wy >= ch) continue;
+                        nl = t - 1;
+                        ni = wi - 1;
+                    } else if (q == 1) {
+                        if (lx == S - 1 || wx + 1 >= cw || wx + 1 < 0 || wy < 0 || wy >= ch) continue;
+                        nl = t + 1;
+                        ni = wi + 1;
+                    } else if (q == 2) {
+                        if (ly == 0 || wy <= 0 || wx < 0 || wx >= cw) continue;
+                        nl = t - S;
+                        ni = wi - cw;
+                    } else {
+                        if (ly == S - 1 || wy + 1 >= ch || wy + 1 < 0 || wx < 0 || wx >= cw) continue;
+                        nl = t + S;
+                        ni = wi + cw;
+                    }
+                    if (solid[ni]) continue;
+                    int nd = d + cost[ni];
+                    if (nd >= fd[nl]) continue;
+                    fd[nl] = nd;
                     int b2 = nd % 9;
-                    if (sizes[b2] >= w.lureBuckets[b2].length) continue;
-                    w.lureBuckets[b2][sizes[b2]++] = nl;
+                    if (sizes[b2] >= buckets[b2].length) continue;
+                    buckets[b2][sizes[b2]++] = nl;
                     pending++;
                 }
             }
         }
         w.lures.put(key, f);
         w.luresMade++;
+        if (quick) lureHot[slot] = f;
         return f;
     }
 
@@ -1407,8 +1524,10 @@ final class ZombieAI {
      */
     void zombieWalkTo(Entity z, float x, float y, float speed) {
         float dx = x - z.x, dy = y - z.y, d = (float) Math.sqrt(dx * dx + dy * dy) + 0.001f;
-        boolean clear = !z.blocked && z.stuckTime < 0.5f && (d < 40 || w.city.los(z.x, z.y, x, y));
-        if (clear && z.path == null) {
+        // ((33.0) The line of sight only looked along when there's no route already being followed: it was looked along
+        // every step for each of the dead on a route, and the answer then never used.)
+        boolean clear = z.path == null && !z.blocked && z.stuckTime < 0.5f && (d < 40 || walkLos(z, x, y));
+        if (clear) {
             w.movement.steer(z, dx / d, dy / d, speed);
             return;
         }
@@ -1428,6 +1547,22 @@ final class ZombieAI {
         }
         z.blocked = false;
         if (!w.movement.followPath(z, speed)) w.movement.steer(z, dx / d, dy / d, speed);
+    }
+
+    /**
+     * ((33.0) A clear straight line from one of the dead to where it's going. In a mass outbreak, once found blocked it's
+     * taken as still blocked for the next third of a second while it's going to the same spot: with the route planner
+     * busy, those it had no time for looked along the same long line through the same buildings every step, a
+     * twentieth of each step with tens of thousands of the dead. Map version 61.)
+     */
+    private boolean walkLos(final Entity z, final float x, final float y) {
+        if (w.zombies <= 1500 || w.city.cfg.civic < 61) return w.city.los(z.x, z.y, x, y);
+        int to = w.city.tileIndex(x, y);
+        if (to == z.walkBlockedTo && w.lodFrame - z.walkBlockedAt < 10 && w.lodFrame >= z.walkBlockedAt) return false;
+        if (w.city.los(z.x, z.y, x, y)) return true;
+        z.walkBlockedTo = to;
+        z.walkBlockedAt = w.lodFrame;
+        return false;
     }
 
     /**

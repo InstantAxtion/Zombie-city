@@ -404,13 +404,24 @@ final class Indoors {
 
     /** Zombies shut inside a building smash their way out. */
     void burstOut(City.Building b) {
-        int n = b.lurkers;
+        int n = b.lurkers, out = 0;
         b.lurkers = 0;
         for (int k = 0; k < n; k++) {
             float[] p = w.city.findWalkable(b.doorX + w.rnd.nextFloat() * 12 - 6, b.doorY + w.rnd.nextFloat() * 12 - 6);
             if (p == null) break;
             Entity z = w.population.spawn(w.death.turnType(Entity.CIVILIAN), p[0], p[1]);
-            if (z != null) z.fresh = 0;
+            if (z != null) {
+                z.fresh = 0;
+                out++;
+            }
+        }
+        // ((33.0) With the city already holding all the people it can, those that couldn't come out stay shut in for
+        // later, and only those that did are announced: they used to vanish, and the radio counted them all the same.
+        // Map version 61.)
+        if (w.city.cfg.civic >= 61) {
+            b.lurkers = n - out;
+            if (out == 0) return;
+            n = out;
         }
         w.emit(Sfx.THUD, b.doorX, b.doorY);
         w.emit(Sfx.GROAN, b.doorX, b.doorY);

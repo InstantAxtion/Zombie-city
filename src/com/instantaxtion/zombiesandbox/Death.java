@@ -228,6 +228,12 @@ final class Death {
             if (c.rise > 0) {
                 c.rise -= dt;
                 if (c.rise <= 0) {
+                    // ((33.0) With the city full, one about to get up waits a moment and tries again (for up to a minute,
+                    // then it stays down where it lies): it used to vanish from the ground altogether. Map version 61.)
+                    if (w.entities.size() >= w.maxEntities && w.city.cfg.civic >= 61) {
+                        c.rise = c.age < 60 ? 1 : -1;
+                        continue;
+                    }
                     w.corpses.remove(i);
                     if (w.entities.size() >= w.maxEntities) continue;
                     if (c.zombie) {
