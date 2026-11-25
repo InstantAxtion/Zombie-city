@@ -176,6 +176,40 @@ final class FleetArmy {
         return v;
     }
 
+    /** ((33.0) Army trucks of each base wrecked and not yet replaced: {how many, when the next comes}. */
+    private final java.util.HashMap<City.Facility, float[]> lostTrucks = new java.util.HashMap<City.Facility, float[]>();
+    /** ((33.0) Trucks put back in bases' garages for ones wrecked (for the tests and probes). */
+    int trucksReplaced;
+
+    /** ((33.0) From Fleet.damage: one of a base's troop trucks (a truck, Humvee, APC, IFV, gun truck or MRAP) is wrecked. */
+    void truckLost(Vehicle v) {
+        if (!army(v) || v.type != TRUCK || v.player != null || v.reinforcement || v.restock || v.supply > 0 || v.ammoTruck
+                || v.kind == K_DOZER || v.kind == K_FIRE_SUPPORT || v.kind == K_RAPID_VAN || isPost(v) || v.recon) return;
+        City.Facility f = city.nearestFacility(City.FACILITY_BASE, v.homeX, v.homeY);
+        if (f == null || f.fallen || f.qrf || World.hypot(f.x - v.homeX, f.y - v.homeY) > Math.max(260, f.r * 2.5f)) return;
+        float[] n = lostTrucks.get(f);
+        if (n == null) lostTrucks.put(f, n = new float[]{0, 0});
+        if (n[0] <= 0) n[1] = w.time + 60;
+        n[0]++;
+    }
+
+    /**
+     * ((33.0) Every few seconds: a base that has lost trucks gets one back in its garages a minute after each, from the army
+     * outside. Those wrecked in an outbreak were never replaced, and in a long one its squads were soon left to walk.
+     */
+    void replaceTrucks() {
+        if (lostTrucks.isEmpty()) return;
+        for (int i = 0, m = city.facilities.size(); i < m; i++) {
+            City.Facility f = city.facilities.get(i);
+            float[] n = lostTrucks.get(f);
+            if (n == null || n[0] <= 0 || w.time < n[1] || f.fallen) continue;
+            f.spareTrucks++;
+            trucksReplaced++;
+            n[0]--;
+            n[1] = w.time + 60;
+        }
+    }
+
     /** Each army base still standing has its bulldozer, parked in the yard (made again after a game is loaded). */
     void ensureDozers() {
         ensureDozers0();
@@ -800,8 +834,19 @@ final class FleetArmy {
             v.timer -= dt;
             v.idleTimer = z == null ? v.idleTimer + dt : 0;
             if (v.timer <= 0 || v.idleTimer > 15) {
+                // ((33.0) No way back to base from here (the roads choked, or cut): it holds where it is and fights on, and
+                // tries for home again later. It was left parked in the road for good, its gun silent, the dead all round it.)
+                if (city.cfg.civic >= 61 && !fleet.routing.route(v, v.homeX, v.homeY)) {
+                    v.timer = 40;
+                    v.idleTimer = 0;
+                    return false;
+                }
                 v.state = RETURN;
                 w.dispatch.say(Dispatch.WHO_MILITARY, null, "Military: Armor pulling back to base.", v.x, v.y);
+                if (city.cfg.civic >= 61) {
+                    v.stuckTimer = 0;
+                    return false;
+                }
                 return fleet.service.routeHomeOrPark(v);
             }
             return false;

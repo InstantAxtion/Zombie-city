@@ -674,6 +674,8 @@ final class Fleet {
     final FleetPlayer playerDriving;
 
     void clear() {
+        // ((33.0) Each marked gone, as on every other way off the list: Rides asks the flag, not the list.)
+        for (int i = 0; i < vehicles.size(); i++) vehicles.get(i).removedFromFleet = true;
         vehicles.clear();
         shelters.clear();
     }
@@ -1040,6 +1042,8 @@ final class Fleet {
         if (trafficTimer <= 0) {
             trafficTimer = 6;
             armyUnits.dozers();
+            // ((33.0) A base's wrecked trucks replaced in its garages, a minute after each.)
+            if (city.cfg.civic >= 61) armyUnits.replaceTrucks();
             if (movingTraffic() < trafficTarget * trafficScale && w.zombieCount() < 10 && w.alert < 2) cars.spawnTraffic(1);
             towAway();
         }
@@ -1088,6 +1092,12 @@ final class Fleet {
                 if (v.driver != null && v.realDriver) crews.driverOut(v, false);
                 // (10.48) Whoever was still aboard a car fleeing the city went with it.
                 if (v.exodus && !v.riders.isEmpty()) w.droveOut(v.riders);
+                // ((33.0) Anyone else still aboard something taken off the map here (an ambulance home, a truck back in its
+                // bay) gets out where it stops: they went with it, off the map and on nobody's list.)
+                else if (!v.riders.isEmpty() && (v.type == AMBULANCE || v.type == TRUCK || v.type == CRUISER) && !v.leaving && city.cfg.civic >= 61) {
+                    for (int r = 0; r < v.riders.size(); r++) w.release(v.riders.get(r), v.x, v.y);
+                    v.riders.clear();
+                }
                 v.removedFromFleet = true;
                 vehicles.remove(i);
                 continue;
@@ -1312,6 +1322,11 @@ final class Fleet {
         v.broken = true;
         v.parked = true;
         w.carsWrecked++;
+        // ((33.0) A station's police car lost: its station gets another in time (FleetPatrols.deliverCar).)
+        if (city.cfg.civic >= 61) {
+            patrols.carLost(v);
+            armyUnits.truckLost(v);
+        }
         // The crew bails out (and the driver). ((17.6) Not from a helicopter in the air: they go down with it.)
         if (v.type != HELI && !v.crew.isEmpty()) crews.crewOut(v, true);
         if (v.type != HELI && v.driver != null) crews.driverOut(v, true);

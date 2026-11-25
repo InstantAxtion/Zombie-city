@@ -33,6 +33,8 @@ final class Convoys {
         float stateT, age, quietT, saidCd, progressT, bestD = Float.MAX_VALUE;
         String place, from;
         Dispatch.Convoy tracker;
+        /** ((33.0) Seconds left pushing through after a halt it couldn't hold: no halting again for the dead about meanwhile. */
+        transient float pushT;
     }
 
     private final World w;
@@ -246,7 +248,11 @@ final class Convoys {
                 Fleet.Vehicle v = c.vs.get(k);
                 if (alive(v)) threat += w.countZombiesNear(v.x, v.y, 55);
             }
-            if ((c.state == MOVING || c.state == LEAVING) && threat >= 2) {
+            // ((33.0) "Pushing through" is pushing through: for a quarter of a minute after a halt it couldn't hold, it drives
+            // on whatever's round it. It halted again the very next moment, the dead still in among it, and sat in the middle
+            // of them another forty seconds - over and over, never getting anywhere till it was torn apart.)
+            c.pushT -= dt;
+            if ((c.state == MOVING || c.state == LEAVING) && threat >= 2 && (c.pushT <= 0 || w.city.cfg.civic < 61)) {
                 c.resume = c.state;
                 c.state = HALTED;
                 c.stateT = 0;
@@ -263,6 +269,7 @@ final class Convoys {
                         c.saidCd = 25;
                         w.dispatch.say(Dispatch.WHO_MILITARY, null, "Convoy: We can't hold here. Pushing through!", head.x, head.y);
                     }
+                    if (c.stateT > 40) c.pushT = 15;
                     c.state = c.resume;
                     c.stateT = c.resume == MOVING ? 0 : c.stateT;
                 }

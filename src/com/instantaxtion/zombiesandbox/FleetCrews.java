@@ -57,6 +57,13 @@ final class FleetCrews {
             if (!w.release(e, x, y)) return null;
             v.crew.remove(v.crew.size() - 1);
             // (Still its crew, on foot.)
+            // ((33.0) Only if it's empty now (it waits for them: see FleetPatrols.patrolBeat). With others still aboard it
+            // drives on, and one dragged out was left tied to a car that had gone - no other car or call would have them.)
+            if (city.cfg.civic >= 61 && !v.crew.isEmpty()) {
+                e.rig = null;
+                e.taskTimer = 0;
+                return e;
+            }
             e.rig = v;
             note(e);
             e.taskTimer = 0;
@@ -240,6 +247,17 @@ final class FleetCrews {
         for (int i = 0, n = fleet.rigged.size(); i < n; i++) {
             Entity e = fleet.rigged.get(i);
             Vehicle r = e.rig;
+            // ((33.0) And anyone on the street still down as one of a police car's or army truck's people while it drives
+            // on without them - well out of reach, not coming back for them, not waiting for them - is let go. Left behind
+            // by a car that went on to its next call, or one whose lift went wrong, they were nobody's to send: no other
+            // car, patrol or call would have them while they were still "its" crew.)
+            if (r != null && !e.dead && !e.removed && e.listed && e.ride == null && e != w.controlled && city.cfg.civic >= 61 && leftBehind(e, r)) {
+                e.rig = null;
+                if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
+                if (e.owner != null && e.owner.rig == r) e.owner = null;
+                untied++;
+                continue;
+            }
             if (r == null || e.dead || e.removed || e.listed || e.ride != null || aboard.contains(e) || e == w.controlled) continue;
             if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
             if (!w.release(e, r.x, r.y)) {
@@ -250,6 +268,21 @@ final class FleetCrews {
             }
             e.rig = r;
         }
+    }
+
+    /** ((33.0) People let go by findStrays from a vehicle that had gone on without them (for the tests and probes). */
+    int untied;
+
+    /**
+     * ((33.0) Whether e, on the street, has been left behind by r: a police car or army truck driving on (to a call, its
+     * rounds, home) with somebody aboard, not out to pick its people up, and e a long way from it.
+     */
+    private boolean leftBehind(Entity e, Vehicle r) {
+        if (r.type != CRUISER && r.type != TRUCK) return false;
+        if (r.removedFromFleet || r.broken || r.parked || r.pickup || r.player != null || isPost(r) || r.convoy != null || r.kind == K_PICKUP) return false;
+        if (r.state != DRIVE && r.state != PATROL && r.state != RETURN) return false;
+        if (r.crew.isEmpty() && r.driver == null) return false;
+        return Math.abs(r.x - e.x) + Math.abs(r.y - e.y) > 900 && World.hypot(r.x - e.x, r.y - e.y) > 700;
     }
 
     /**
@@ -431,6 +464,9 @@ final class FleetCrews {
      * empty car or truck near them: one parked there drives out to fetch them.
      */
     void fetchStranded() {
+        // ((33.0) Up to three cars out each time on map version 61, not the one: with hundreds of officers and soldiers left
+        // standing about after an outbreak, one car every three seconds took most of the game to fetch them.)
+        int sent = 0, most = city.cfg.civic >= 61 ? 3 : 1;
         for (int t = 0; t < 2; t++) {
             int type = t == 0 ? Entity.COP : Entity.SOLDIER;
             for (int k = 0, n = w.entities.size(); k < n; k++) {
@@ -480,7 +516,7 @@ final class FleetCrews {
                     w.dispatch.say(type == Entity.COP ? Dispatch.WHO_POLICE : Dispatch.WHO_MILITARY, e,
                         (v.type == TRUCK ? "Truck" : "Car") + " coming out to " + v.place + " to pick up " + (type == Entity.COP ? World.count(group.size(), "officer", "officers") : World.count(group.size(), "soldier", "soldiers")) + ".", v.x, v.y);
                 }
-                return;
+                if (++sent >= most) return;
             }
         }
     }
