@@ -894,7 +894,8 @@ final class ArmedAI {
      * where the bombs came down, knocked flat with the dead all round. True when that was their step.
      */
     private boolean clearStrike(final Entity e, final float range, final float dt) {
-        if (w.firebombTime <= 0 || w.city.cfg.civic < 61 || e == w.controlled || e.ride != null || e.aloft || e.roof != null) return false;
+        if (w.city.cfg.civic < 61 || e == w.controlled || e.ride != null || e.aloft || e.roof != null) return false;
+        if (w.firebombTime <= 0 && !strikeFalling()) return false;
         float ax = e.x - w.firebombX, ay = e.y - w.firebombY, ad = (float) Math.sqrt(ax * ax + ay * ay) + 0.001f;
         if (ad > 330) return false;
         float mx = ax / ad, my = ay / ad;
@@ -917,6 +918,18 @@ final class ArmedAI {
             w.dispatch.chatter(e.type == Entity.SOLDIER ? Dispatch.WHO_MILITARY : Dispatch.WHO_POLICE, e, "Air strike inbound! Clear the area, move!", e.x, e.y);
         }
         return true;
+    }
+
+    /**
+     * ((33.0) The bombs of an air strike still coming down (they fall over three seconds and more after the count reaches
+     * nothing): those clearing the area turned round at zero and walked back under them.)
+     */
+    private boolean strikeFalling() {
+        for (int i = 0, n = w.pendingBlasts.size(); i < n; i++) {
+            float[] b = w.pendingBlasts.get(i);
+            if (b[3] >= 500 && World.hypot(b[0] - w.firebombX, b[1] - w.firebombY) < 260) return true;
+        }
+        return false;
     }
 
     /** ((33.0) When the last call to clear an air strike's area went out on the radio. */

@@ -22,7 +22,15 @@ final class Combat {
             b[4] -= dt;
             if (b[4] <= 0) {
                 w.pendingBlasts.remove(i);
-                explode(b[0], b[1], b[2], b[3]);
+                // ((33.0) Map version 61: the dead put down by an air strike (500) or a mortar barrage's shells (46, 210)
+                // are the army's kills too (see credit) - they were nobody's.)
+                boolean army = w.city.cfg.civic >= 61 && (b[3] >= 500 || (b[2] == 46 && b[3] == 210));
+                if (army) blastSide = Entity.SOLDIER;
+                try {
+                    explode(b[0], b[1], b[2], b[3]);
+                } finally {
+                    if (army) blastSide = -1;
+                }
             }
         }
     }
