@@ -2,11 +2,15 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.5";
-    static final int VERSION_CODE = 325;
+    static final String VERSION = "32.6";
+    static final int VERSION_CODE = 326;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.6  -  Brush",
+                    "Brush sizes are now 10, 50 and 100 (the 1 is gone).",
+            },
             {
                     "32.5  -  Bigger brush",
                     "Brush sizes are now 1, 10, 50 and 100 (the 25 is gone).",
