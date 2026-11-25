@@ -2113,6 +2113,8 @@ final class Dispatch {
         }
         // ((10.62) All of it slower to come than before.)
         armyEta = Math.max(240, 420 - w.outbreakTime) + rnd.nextFloat() * 90;
+        // ((32.4) Map version 57: thousands of the dead - the convoy rolls in two to three minutes.)
+        if (massHelp()) armyEta = 120 + rnd.nextFloat() * 60;
         airCd = Math.max(airCd, 180);
         int mins = Math.max(2, Math.round(armyEta / 60f));
         say(WHO_MILITARY, null, "Military: Request approved. A quick reaction force of " + World.count(qrf, "soldier", "soldiers") + " in Humvees is about two minutes out. "
@@ -2289,8 +2291,35 @@ final class Dispatch {
         else squadReserve += count;
     }
 
+    /** ((32.4) Map version 57, with over 3000 of the dead: the help from outside comes as for a war. */
+    boolean massHelp() {
+        return city.cfg.civic >= 57 && w.zombies > 3000;
+    }
+
+    /** ((32.4) Whether the National Guard has been mobilised for this outbreak (once). */
+    boolean guardCalled;
+
     private void outsideFlow() {
         if (w.alert < 1) return;
+        // ((32.4) Map version 57: past five thousand of the dead, the state mobilises the National Guard - one soldier for
+        // every twenty of the dead and an officer for every forty (up to 1500 and 800) added to the help from outside,
+        // and the army called if it hasn't been. The reserves the city starts with were sized for an outbreak, not a
+        // war: against twenty thousand, the city fought on to its last few hundred with hundreds still waiting outside.)
+        if (city.cfg.civic >= 57 && !guardCalled && w.zombies > 5000) {
+            guardCalled = true;
+            int sold = Math.min(1500, w.zombies / 20), cops = Math.min(800, w.zombies / 40);
+            squadReserve += sold;
+            policeReserve += cops;
+            outsideStarted = true;
+            // (A convoy of its own, even if the army's first has been and gone.)
+            if (armyArrived) {
+                armyCalled = false;
+                armyArrived = false;
+                armySaid = false;
+            }
+            say(WHO_MILITARY, null, "Governor: The National Guard is mobilised - " + World.count(sold, "soldier", "soldiers") + " and "
+                    + World.count(cops, "officer", "officers") + " from across the state are on their way.", city.worldW() / 2, city.worldH() / 2, true);
+        }
         Incident worst = null;
         for (int i = 0; i < incidents.size(); i++) {
             Incident inc = incidents.get(i);
@@ -2434,6 +2463,11 @@ final class Dispatch {
                 break;
         }
         if (pressure >= 2 && !a.swat) a.count = a.count * (pressure >= 3 ? 2 : 3) / (pressure >= 3 ? 1 : 2);
+        // ((32.4) Map version 57: in a mass outbreak, bigger waves and sooner - up to four times the size, twice as often.)
+        if (massHelp()) {
+            a.count = Math.round(a.count * Math.min(4f, 1 + w.zombies / 5000f));
+            policeCd *= 0.5f;
+        }
         a.count = Math.min(a.count, policeReserve);
         policeReserve -= a.count;
         a.time = 25 + rnd.nextFloat() * 15;

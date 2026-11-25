@@ -296,7 +296,8 @@ final class CityConfig implements OptionSet {
     // ((32.1) 54: a quarter more police, soldiers and help from outside (forceCut).)
     // ((32.2) 55: slow zombies (World.slowDead).)
     // ((32.3) 56: the police hold the perimeter, the army does the killing.)
-    int civic = 56;
+    // ((32.4) 57: help from outside sized for tens of thousands of the dead (Dispatch.massHelp, the National Guard).)
+    int civic = 57;
 
     /** ((16.9) Fire stations: only in cities built before 16.9. There's been no fire service since 10.49. */
     boolean fireStations() { return civic < 31; }

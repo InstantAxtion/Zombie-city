@@ -1,4 +1,4 @@
-# tools/health.sh numbers, recorded 2026-11-25 on eedcce0
+# tools/health.sh numbers, recorded 2026-11-25 on f2d70f8
 metropolis.vehicles_stuck_30s 0
 metropolis.overlap_pair_seconds 0.3
 metropolis.spins 95
@@ -24,7 +24,7 @@ metropolis.civilian_seconds_running_at_dead 0
 metropolis.civilian_seconds_calm_near_dead 0
 metropolis.civilian_seconds_bunched_fleeing 0
 metropolis.civilians_lost 0
-metropolis.sim_ms_per_step 2.04
+metropolis.sim_ms_per_step 2.12
 archipelago.vehicles_stuck_30s 1
 archipelago.overlap_pair_seconds 0.6
 archipelago.spins 31
@@ -50,4 +50,4 @@ archipelago.civilian_seconds_running_at_dead 0
 archipelago.civilian_seconds_calm_near_dead 0
 archipelago.civilian_seconds_bunched_fleeing 0
 archipelago.civilians_lost 0
-archipelago.sim_ms_per_step 2.75
+archipelago.sim_ms_per_step 2.69

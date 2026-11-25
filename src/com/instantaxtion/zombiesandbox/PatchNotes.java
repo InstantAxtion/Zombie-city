@@ -2,11 +2,17 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.3";
-    static final int VERSION_CODE = 323;
+    static final String VERSION = "32.4";
+    static final int VERSION_CODE = 324;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.4  -  Tens of thousands",
+                    "Outside help is sized for huge outbreaks: past 5,000 zombies the National Guard mobilises, police waves come bigger and faster, and the army convoy arrives in 2-3 minutes.",
+                    "20,000 to 40,000 zombies is now a long fight the city slowly wins, with the army doing most of the killing.",
+                    "Huge hordes run faster: zombies keep their target instead of searching every frame, share routes to noises, and off-screen crowds are worked out less often.",
+            },
             {
                     "32.3  -  Police hold the line",
                     "In big outbreaks the army goes in and does the killing; police hold the perimeter and stay out of the worst of it.",

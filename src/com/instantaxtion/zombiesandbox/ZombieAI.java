@@ -150,7 +150,24 @@ final class ZombieAI {
         // have spotted someone they keep track of them.
         // ((12.1) Balance: a little keener all round, 140 and 55 before.)
         float sight = w.trait[World.TR_KEEN] ? 210 : w.trait[World.TR_DULL] ? 120 : 165, near = w.trait[World.TR_KEEN] ? 85 : w.trait[World.TR_DULL] ? 45 : 65;
-        Entity t = w.spatial.nearest(z, sight, false, true);
+        // ((32.4) With tens of thousands of the dead, each keeps the one it's after for a quarter of a second (while that
+        // one is still there and in reach), and one with nobody in sight looks again every half second, not every step:
+        // the looking - everyone within reach, and a line of sight to each - was the biggest part of each step.)
+        Entity t;
+        if (w.zombies > 3000) {
+            z.seekCd -= dt;
+            Entity was = z.seekT;
+            if (z.seekCd > 0 && (was == null || (!was.dead && !was.removed && was.ride == null
+                    && (was.x - z.x) * (was.x - z.x) + (was.y - z.y) * (was.y - z.y) < sight * sight))) t = was;
+            else {
+                t = w.spatial.nearest(z, sight, false, true);
+                z.seekT = t;
+                z.seekCd = (t == null ? 0.5f : 0.25f) + (z.nameSeed & 7) * 0.02f;
+            }
+        } else {
+            z.seekT = null;
+            t = w.spatial.nearest(z, sight, false, true);
+        }
         if (t != null && z.memory <= 0) {
             float ddx = t.x - z.x, ddy = t.y - z.y, d = (float) Math.sqrt(ddx * ddx + ddy * ddy) + 0.001f;
             float facing = ((float) Math.cos(z.angle) * ddx + (float) Math.sin(z.angle) * ddy) / d;
@@ -1256,15 +1273,17 @@ final class ZombieAI {
         int tx = Math.max(0, Math.min(w.city.w - 1, (int) (x / City.T))), ty = Math.max(0, Math.min(w.city.h - 1, (int) (y / City.T)));
         // ((32.0) In a mass outbreak, one shared route for every spot within six tiles of each other, not three: with
         // gunfire all over town, a route for each was a tenth of each step.)
+        // ((32.4) Ten tiles, kept a minute, with over 3000.)
         boolean mass = w.zombies > 300;
-        int key = mass ? (1 << 30) + (ty / 6) * 65536 + tx / 6 : (ty / 3) * 65536 + tx / 3;
+        int cell = w.zombies > 3000 ? 10 : 6;
+        int key = mass ? (cell << 26) + (ty / cell) * 65536 + tx / cell : (ty / 3) * 65536 + tx / 3;
         if (mass) {
-            tx = Math.min(w.city.w - 1, (tx / 6) * 6 + 3);
-            ty = Math.min(w.city.h - 1, (ty / 6) * 6 + 3);
+            tx = Math.min(w.city.w - 1, (tx / cell) * cell + cell / 2);
+            ty = Math.min(w.city.h - 1, (ty / cell) * cell + cell / 2);
         }
         World.Lure f = w.lures.get(key);
         // ((32.0) Kept twice as long in a mass outbreak.)
-        if (f != null && w.time - f.made < (w.zombies > 300 ? 40 : 20)) return f;
+        if (f != null && w.time - f.made < (w.zombies > 3000 ? 60 : w.zombies > 300 ? 40 : 20)) return f;
         if (w.pathBudget < 0.1f) return f;
         w.pathBudget -= 0.1f;
         if (w.city.solid[ty * w.city.w + tx]) {

@@ -855,6 +855,9 @@ final class Movement {
             Entity e = w.entities.get(i);
             if (e.dead || e.lodStep == 0) continue;
             if (big && (i + w.lodFrame) % sepEvery != 0 && !w.onScreen(e)) continue;
+            // ((32.4) With over twenty thousand of the dead, those of them off screen every eighth step: a sixth of each
+            // step went on keeping crowds nobody could see from overlapping.)
+            if (sepEvery == 4 && w.zombies > 20000 && e.isZombie() && (i + w.lodFrame) % 8 != 0 && !w.onScreen(e)) continue;
             // ((16.8) And in the biggest crowds, not at all for someone going calmly about their day off screen: nobody
             // sees two of them brush past each other, and they're kept apart again the moment they're looked at. Over
             // a tenth of each step on the biggest maps.)
@@ -868,6 +871,9 @@ final class Movement {
             int cx0 = Math.max(0, (int) ((e.x - reach) / World.CELL)), cx1 = Math.min(w.gw - 1, (int) ((e.x + reach) / World.CELL));
             int cy0 = Math.max(0, (int) ((e.y - reach) / World.CELL)), cy1 = Math.min(w.gh - 1, (int) ((e.y + reach) / World.CELL));
             float pushX = 0, pushY = 0, ex = e.x, ey = e.y, er = e.radius;
+            // ((32.4) Whether they're in a passage one tile wide: worked out once for them, not once for each of those
+            // touching them - in a safe zone packed with hundreds, it was a tenth of each step.)
+            int narrow = -1;
             // ((27.4) The grid's arrays held here, not looked up again for each of everyone near.)
             final Entity[] sorted = w.sorted;
             final float[] sX = w.sortedX, sY = w.sortedY, sR = w.sortedR;
@@ -893,7 +899,8 @@ final class Movement {
                         // at each other for good.)
                         // (Only for one already held up there for half a second: looking at the tiles round every pair of
                         // people who touch was a twentieth of a step on the Big map.)
-                        else if (e.stallT > 0.5f && e.type == Entity.CIVILIAN && o.type == Entity.CIVILIAN && e.fleeTimer <= 0 && o.fleeTimer <= 0 && narrowAt(e.x, e.y)) min *= 0.35f;
+                        else if (e.stallT > 0.5f && e.type == Entity.CIVILIAN && o.type == Entity.CIVILIAN && e.fleeTimer <= 0 && o.fleeTimer <= 0
+                                && (narrow >= 0 ? narrow : (narrow = narrowAt(e.x, e.y) ? 1 : 0)) == 1) min *= 0.35f;
                         // ((26.0) The dead pushing at a wall crush up together into a heap against it.)
                         else if (e.climbPress > 0 && o.climbPress > 0) min *= 0.6f;
                         float d2 = ddx * ddx + ddy * ddy;

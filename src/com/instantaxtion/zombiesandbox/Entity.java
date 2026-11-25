@@ -91,6 +91,9 @@ final class Entity {
     transient Entity aimPick;
     /** ((32.0) When aimPick was last chosen (Combat.pickTarget). */
     transient float pickT = -100;
+    /** ((32.4) The one it's after, and when to look again (ZombieAI.thinkZombie, with over 3000 of the dead). */
+    transient Entity seekT;
+    transient float seekCd;
     /** ((27.4) Falling back with the others: where they're all making for, and until when. */
     transient float rallyX, rallyY, rallyT;
     /** ((27.5) On a commander's line: the officer, their place on it, and until when (see Commanders). */
