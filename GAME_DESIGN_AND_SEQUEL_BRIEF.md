@@ -1,8 +1,8 @@
 # Zombie City Sandbox: complete design brief, for building a sequel from scratch
 
 This document describes the game as it stands at version 33.0: what it is, how every system works, how the code is laid
-out, what the numbers are, what players liked and disliked, what went wrong technically, and what a ground-up sequel
-should keep, improve, or do completely differently. It is written so that an AI (or a person) who has never seen the
+out, what the numbers are, what players liked and disliked, what went wrong technically, and a vision for a far bigger sequel built from the
+ground up. It is written so that an AI (or a person) who has never seen the
 code can understand the whole game and plan a better one.
 
 Plain text with Markdown headings. Sections can be read on their own.
@@ -362,64 +362,95 @@ Things that went wrong and had to be reversed:
 
 ---
 
-## 16. Recommendations for a sequel built from scratch
+## 16. The sequel: a vision far bigger than the original
 
-### Keep (the heart of it)
-- The fantasy: a living city, a huge outbreak, police and army responding believably, the player as a sandbox god who
-  can also step in.
-- Scale as the selling point: tens of thousands of zombies, thousands of responders, on a phone.
-- Readable story: radio chatter, named units, callouts, after-action report, a stats panel the player trusts.
-- Determinism (seeded replays, shareable city codes, reliable tests).
-- Procedural everything (tiny download), but with data-driven content.
+The original is one city, one outbreak, watched from above. It proved the core: people love watching a believable
+society and its emergency services fight a vast, spreading outbreak, and they want it bigger, smarter and more
+legible. The sequel should not be "the same game, cleaner". It should be the game the first one hinted at: an
+outbreak simulator on the scale of a whole country, where the city of the first game is a single district on the map.
 
-### Do differently: architecture
-- **Data-oriented simulation (ECS or struct-of-arrays).** Positions, velocities, states in flat arrays; systems iterate
-  them. Enables SIMD-friendly loops and multithreading.
-- **Multithreaded jobs** for perception, movement and pathing; deterministic by fixed partitioning and ordering.
-- **GPU rendering** (OpenGL ES / Vulkan via a thin engine, or an engine such as Godot/Unity/Bevy with instancing):
-  one draw call for all zombies, sprite atlases, LOD by zoom.
-- **Hierarchical simulation LOD:** full agents near the camera and fights; aggregated "horde blobs" (counts moving on a
-  coarse grid, fighting statistically) far away; promote/demote smoothly. This is how to reach 100,000+.
-- **Flow fields for hordes:** a few shared fields (towards noise, towards the living, away from danger) on a coarse grid;
-  zombies follow the field and only do local avoidance. No per-zombie A*.
-- **Explicit entity location states** (OnFoot, InVehicle(slot), InBuilding(id), Dead) owned by one system with
-  events; no boolean flags or lazy sweeps.
-- **Behaviour trees / utility AI with clear data** for police/army, with squads as first-class objects (a squad has a
-  vehicle, an objective, a formation), not each soldier deciding alone.
-- **Vehicles as a small set of states plus a planner** (Idle, Driving(route), Deploying, Waiting(for X, timeout),
-  Returning), every wait with a timeout. Traffic as lanes on a road graph, not tiles.
-- **Versioned save snapshots of the full state**, no behaviour gating; a balance change applies to everyone.
-- **Built-in instrumentation from day one:** event log, per-entity history ring, automated audits (stuck, lost,
-  duplicated), batch headless simulations across many seeds with dashboards. Balance by statistics, not single runs.
-- **Content as data:** buildings, landmarks, unit types, weapons, vehicles in data files; procedural generators read
-  them.
+### The scale of it
 
-### Do differently: design
-- **Lean into the mass battle.** The player's favourite activity is painting huge hordes and watching. Give it a mode:
-  "Outbreak sandbox" with presets (spread, single mass, waves), a timeline, slow motion, cinematic camera, heatmaps,
-  a kill/loss graph per side, replays.
-- **Command layer.** Let the player act as incident commander: draw cordon lines, set rally points, call air strikes,
-  assign the Guard, prioritise districts. The current game has orders but they are fiddly.
-- **Clear roles.** Police: contain and protect (perimeters, evacuation corridors, checkpoints). Army: assault and clear.
-  Make the roles visible on the map (zones, lines, fronts).
-- **Zombie ecology:** fewer special cases, more systemic behaviour (noise, scent, hunger, light, sound propagation
-  through streets), horde formation and splitting, migration across the map.
-- **Readable feedback at scale:** aggregated indicators (front lines, density heatmap, infection spread) instead of
-  thousands of individual labels.
-- **Performance settings that scale gracefully** (simulation LOD distance, max detailed agents) rather than a hard
-  population cap.
-- **Drop:** interiors, safe-zone walls, recruitment, medevac, micro daily-life detail that nobody sees at scale.
-  Consider bringing safe zones back only as a player-drawn tool.
-- **Keep it fair and legible:** a unit that dies should have a visible reason (overrun, out of ammo, cornered); show it
-  in the after-action report.
+- **From one city to a region, then a nation.** A procedurally generated country of many cities, towns, villages,
+  farmland, forests, mountains, coastlines and islands, joined by highways, railways, ports, airports and power lines.
+  The player can zoom from a single street corner (individual people, every bullet) out to the whole region (cities as
+  glowing clusters, the infection as a spreading stain, military fronts as lines) in one continuous camera.
+- **Millions of people.** Every resident exists, but most are simulated in aggregate (households, neighbourhoods,
+  commuter flows) and only come alive as individuals when something happens near them or the camera arrives. Zombie
+  hordes of hundreds of thousands roam the countryside as migrating masses and break into individual zombies on contact.
+- **Time that matters.** An outbreak plays out over days, weeks or months of game time, with day and night, weather,
+  seasons, and the slow collapse (or recovery) of the country. Fast-forward through quiet days; slow to real time for
+  the battle at the bridge.
 
-### Pitfalls to avoid (learned the hard way)
-- Never use wall-clock time in simulation decisions.
-- Never cap responders to hide a driving problem.
-- Measure balance over many seeds; a single run lies.
-- Instrument before fixing: log how and where units die before changing their behaviour.
-- Every "wait for X" needs a timeout and a fallback.
-- Any list of entities needs one owner; moving between lists must be atomic.
+### A whole society to simulate and to lose
+
+- **Infrastructure that fails.** Power stations, water, fuel depots, hospitals, phone networks, food supply. Lose a
+  power station and a city goes dark (zombies gather where the lights still are; people panic). Lose fuel and the
+  convoys stop.
+- **Government and command.** Mayors, police chiefs, the governor, the national government, the military command.
+  Each makes decisions with imperfect information: quarantines, evacuations, curfews, martial law, the decision to
+  bomb a bridge. Politics and public trust shift with the outcome.
+- **Media and information.** News reports, rumours, social media panic, misinformation; the public's behaviour follows
+  what they believe, not what is true.
+- **Logistics as gameplay.** Ammunition, fuel, food, medicine and vehicles move by road, rail, air and sea. Supply
+  lines can be cut by hordes; depots can be overrun; a besieged town lives or dies by its last convoy.
+- **Civilians with agency.** Families that try to reach each other, survivors who barricade neighbourhoods, militias,
+  looters, refugees on the highways, volunteers, people who hide the bitten. Settlements that form, trade, fight and
+  fall.
+
+### Every force, at every level
+
+- **Police** from patrol officers to SWAT, highway patrol, state police and federal agencies, each with real roles:
+  cordons, checkpoints, evacuation corridors, crowd control, rescues.
+- **Military** from the National Guard to regular army divisions, armour, artillery, engineers who blow bridges and
+  build walls, helicopters, fighter jets, transport aircraft, navy ships off the coast, field hospitals, forward
+  operating bases.
+- **Emergency services**: fire brigades fighting the fires that follow, paramedics, the coast guard, aid agencies.
+- **A chain of command that the player can join at any level**: a single officer on the street, a squad leader, a
+  precinct commander, a city's incident commander, the regional military commander, or the president. Or simply watch
+  as an all-seeing sandbox god.
+
+### The outbreak as a living system
+
+- **Zombie ecology**: hunger, noise, scent, light, weather and terrain drive where the dead go. Hordes form, merge,
+  split and migrate along valleys, rivers and highways. Cold slows them; heat rots them; cities become nests.
+- **Strains and mutations** that emerge over the course of an outbreak, each changing how people must fight.
+- **Infection that spreads through society**: travel, hospitals, refugee camps, a bitten soldier on a troop train.
+- **Origins and scenarios**: a lab leak, a crashed airliner, a prison riot, a festival, a port; or a fully random start.
+
+### Many ways to play
+
+- **Sandbox**: paint hordes of any size anywhere in the country, place forces, change the rules, watch.
+- **Command campaigns**: hold a city for thirty days; evacuate a coast; retake a region; protect the capital.
+- **Survival as one person**: live through the outbreak at street level in the same simulated world.
+- **Director mode**: script and record cinematic battles, replays, timelapses, heatmaps.
+- **Shared worlds**: replay and share whole outbreaks by seed; cooperative command (one player per city);
+  asynchronous challenges ("contain this outbreak with fewer losses than your friends").
+- **Modding**: unit types, weapons, vehicles, buildings, countries and rules in data files; a scenario editor.
+
+### Readable at any scale
+
+- At street level: the original's strengths, named people, radio chatter, callouts, every shot.
+- At city level: front lines, cordons, infection density, unit icons by role, supply routes.
+- At national level: a strategic map of cities, infection spread, power, supplies, public trust and military fronts.
+- An after-action story for every outbreak: what happened, where it turned, who held, who fell and why.
+
+### What makes it possible (brief)
+
+- A data-oriented, multithreaded simulation with level-of-detail at every layer (aggregated people, horde masses,
+  strategic forces) that promotes to full individual simulation where it matters.
+- GPU rendering with instancing and zoom-based level of detail; one continuous camera from street to nation.
+- Flow fields and graph-based movement for crowds and traffic; explicit, single-owner state for every entity.
+- Deterministic simulation from seeds, built-in instrumentation and large-scale automated balancing over many runs.
+- Content and rules as data, not code.
+
+### Lessons from the first game to carry forward
+
+- The fight must be legible: players should always understand why a unit died or a district fell.
+- Players want better behaviour, not artificial limits (no capping responders to hide bad driving).
+- Systems that add clutter without adding to the core fantasy get cut (the first game removed safe zones, interiors,
+  recruitment and medevac); build the sequel's systems so each one changes the outbreak in a way the player can see.
+- Measure before tuning; a chaotic simulation lies in single runs.
 
 ---
 
