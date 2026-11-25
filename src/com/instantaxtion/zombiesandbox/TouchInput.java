@@ -684,7 +684,7 @@ final class TouchInput {
         for (int i = 0; i < n; i++) {
             float ox = 0, oy = 0;
             if (n > 1) {
-                double a = gv.rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(gv.rnd.nextDouble()) * (n >= 50 ? 54 : n > 10 ? 36 : 20);
+                double a = gv.rnd.nextDouble() * Math.PI * 2, r = Math.sqrt(gv.rnd.nextDouble()) * (n >= 100 ? 76 : n >= 50 ? 54 : n > 10 ? 36 : 20);
                 ox = (float) (Math.cos(a) * r);
                 oy = (float) (Math.sin(a) * r);
             }

@@ -172,7 +172,8 @@ final class GameView extends View implements Menu.Host {
     /** ((21.4) The 3D / bird's-eye button went to Settings, View.) */
     static final int TOP_BUTTONS = 6;
     static final int[] SPEEDS = {1, 2, 4, 8};
-    static final int[] BRUSHES = {1, 10, 25, 50};
+    // ((32.5) 1, 10, 50 and 100: the 25 gone, a 100 for the big hordes.)
+    static final int[] BRUSHES = {1, 10, 50, 100};
     static final int[] SHOP_AWNINGS = {0xFFD83A3A, 0xFF2E7D4F, 0xFF2E5FB0, 0xFFE8A21C, 0xFF8A2E6B};
     static final int[] ROW_COLORS = {0xFFF0AD4E, 0xFF4F7BE0, 0xFF8FA05A, 0xFF7CC24E};
     static final String[] ROW_LABELS = {"Civilians", "Cops", "Military", "Zombies"};
