@@ -1223,6 +1223,12 @@ final class Fleet {
             driverTimer = 0.5f;
             crews.drivers();
         }
+        // ((32.8) Anyone let out of a vehicle without being put down anywhere: back on the street.)
+        strayTimer -= dt;
+        if (strayTimer <= 0) {
+            strayTimer = 2;
+            crews.findStrays();
+        }
         // Keep the streets busy while the city is still calm; clear old wrecks.
         reclaimTimer -= dt;
         if (reclaimTimer <= 0) {
@@ -1412,6 +1418,8 @@ final class Fleet {
 
     /** ((22.3) Everyone given a vehicle to belong to, for onFoot. */
     final ArrayList<Entity> rigged = new ArrayList<Entity>();
+    /** ((32.8) Seconds to the next look for strays (FleetCrews.findStrays). */
+    private float strayTimer = 2;
 
     /**
      * A squad from the base mounts up: a truck pulls up at the gate, the soldiers climb aboard, and it drives

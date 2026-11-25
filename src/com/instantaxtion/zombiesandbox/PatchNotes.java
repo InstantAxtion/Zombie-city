@@ -2,11 +2,19 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.7";
-    static final int VERSION_CODE = 327;
+    static final String VERSION = "32.8";
+    static final int VERSION_CODE = 328;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "32.8  -  Bug fixes",
+                    "The New Game screen's police and army numbers now match the game (they were about 100 police short).",
+                    "Officers and soldiers driving vehicles are counted again (the army count ran about 20 short).",
+                    "Fixed police and soldiers vanishing after getting out of vehicles (around 100 in a few minutes of an outbreak), and cars waiting for them for good.",
+                    "Fixed people being added to the world twice, so they moved and thought at double speed.",
+                    "Officers waiting at their station no longer pace in circles trying to reach a spot inside the building.",
+            },
             {
                     "32.7  -  No safe zones",
                     "Safe zones are gone: no walled zones go up, and police and soldiers aren't tied down guarding them.",

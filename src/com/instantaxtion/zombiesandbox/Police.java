@@ -137,10 +137,21 @@ final class Police {
             if (noBeat && bx * bx + by * by < (st.r + 200) * (st.r + 200)) {
                 float a = (e.callsign * 2.39996f) % World.TAU, r = st.r * 0.55f + (e.callsign % 4) * 9;
                 float px = st.x + (float) Math.cos(a) * r, py = st.y + (float) Math.sin(a) * r;
-                if (!w.city.solidAt(px, py)) {
+                // ((32.8) A spot they can stand on: not in a wall, and not inside the station or any building - officers
+                // walked round and round outside the station for minutes trying to reach one that was.)
+                if (w.city.cfg.civic >= 59 && (w.city.solidAt(px, py) || w.city.insideOf(px, py) != null)) {
+                    float[] q = w.city.findWalkable(px, py);
+                    if (q != null && w.city.insideOf(q[0], q[1]) == null && World.hypot(q[0] - px, q[1] - py) < 60) {
+                        px = q[0];
+                        py = q[1];
+                    }
+                }
+                if (!w.city.solidAt(px, py) && (w.city.cfg.civic < 59 || w.city.insideOf(px, py) == null)) {
                     e.dutyFor = 0;
                     e.dutyHx = e.dutyHy = 0;
-                    w.holdoutLife.standAt(e, px, py, 0.6f);
+                    // (Near enough is there.)
+                    if (w.city.cfg.civic >= 59 && World.hypot(px - e.x, py - e.y) < 14) w.movement.steer(e, 0, 0, 0);
+                    else w.holdoutLife.standAt(e, px, py, 0.6f);
                     return true;
                 }
             }

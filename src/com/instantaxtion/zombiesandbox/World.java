@@ -565,7 +565,44 @@ final class World {
             else soldiers++;
         }
         if (city.armory != null && city.armoryGate != null) soldiers += 4;
+        // ((32.8) And the officers the game puts down on top of the force (Population): the FBI's agents, the mounted
+        // police, the traffic officers at the lights, the SWAT teams and riot squads standing by, and the prison guards.
+        // Left out, the New Game screen showed a hundred or so fewer police than the game then had.)
+        if (cfg.civic >= 59) {
+            int nonSat = 0;
+            boolean anyPolice = false;
+            for (City.Facility x : city.facilities) {
+                if (x.kind != City.FACILITY_POLICE) continue;
+                anyPolice = true;
+                if (x.fed) cops += cfg.v[CityConfig.OPT_SIZE] >= CityConfig.VAST ? 14 : cfg.v[CityConfig.OPT_SIZE] >= CityConfig.COLOSSAL ? 12 : 10;
+                if (!x.satellite) nonSat++;
+            }
+            if (cfg.nature() && stations > 0) {
+                cops += Math.max(2, Math.min(4, stations + 1));
+                if (nonSat > 0) cops += 3 + 2 * (nonSat - 1);
+            }
+            int swat = anyPolice ? (city.w >= 300 ? 2 : 1) : 0, bearcats = cfg.nature() ? Math.min(3, stations) : 0, riot = cfg.nature() ? Math.min(3, stations) : 0;
+            if (stations > 0) cops += (swat + bearcats) * 6 + riot * 6;
+            // (Two pairs of scouts at each army base but the quick reaction force's.)
+            if (cfg.nature() && f[1] > 0) for (City.Facility x : city.facilities) if (x.kind == City.FACILITY_BASE && !x.qrf) soldiers += 4;
+            if (city.prison != null) {
+                int[] p = city.prison;
+                int inmates = Math.max(30, Math.min(350, (p[2] - p[0]) * (p[3] - p[1]) / 9));
+                cops += Math.max(3, Math.min(10, inmates / 35)) + city.prisonPosts.size();
+            }
+        }
         return new int[]{people, cops, soldiers};
+    }
+
+    /**
+     * ((32.8) Into the list of everyone on the map - once. Someone climbing into a car is only marked removed, and taken
+     * off the list at the next sweep (up to eight steps later); out again before that, they were added a second time, and
+     * thought, moved and were counted twice from then on.
+     */
+    void addEntity(Entity e) {
+        if (e.listed) return;
+        e.listed = true;
+        entities.add(e);
     }
 
     void populate(CityConfig cfg) {
@@ -1098,7 +1135,7 @@ final class World {
             recruiting.recruitment();
         }
         if (!newRecruits.isEmpty()) {
-            for (int i = 0; i < newRecruits.size(); i++) entities.add(newRecruits.get(i));
+            for (int i = 0; i < newRecruits.size(); i++) addEntity(newRecruits.get(i));
             newRecruits.clear();
         }
     }

@@ -630,7 +630,7 @@ final class Exodus {
             e.fleeTimer = 0;
             e.task = e.leader == null ? Dispatch.T_HOMECOMING : Dispatch.T_NONE;
             e.goalCd = 0;
-            w.entities.add(e);
+            w.addEntity(e);
             w.cameHome++;
         }
         if (w.away.isEmpty() && (w.exodusSaid & 2) == 0) {

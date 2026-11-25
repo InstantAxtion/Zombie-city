@@ -97,6 +97,7 @@ final class Death {
             int last = w.entities.size() - 1;
             w.entities.set(i, w.entities.get(last));
             w.entities.remove(last);
+            e.listed = false;
             if (last < w.lodWake.length) {
                 w.lodWake[i] = 0;
                 w.lodWake[last] = 0;
@@ -241,7 +242,7 @@ final class Death {
                         z.angle = c.angle;
                         z.nameSeed = c.nameSeed;
                         z.hp = z.maxHp * 0.6f;
-                        w.entities.add(z);
+                        w.addEntity(z);
                         w.zombiesKilled = Math.max(0, w.zombiesKilled - 1);
                         w.emit(Sfx.GROAN, c.x, c.y);
                         continue;
@@ -258,7 +259,7 @@ final class Death {
                     z.fresh = 45;
                     z.speed *= World.freshWalk(z);
                     z.runSpeed *= World.freshRun(z);
-                    w.entities.add(z);
+                    w.addEntity(z);
                     w.turned++;
                     w.stats.noteTurn(c.x, c.y);
                     w.effects.bloodBurst(c.x, c.y, 5, 0, 0);

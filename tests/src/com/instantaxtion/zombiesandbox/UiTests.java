@@ -488,6 +488,7 @@ final class UiTests extends TestKit {
         rider.removed = true;
         bus.riders.add(rider);
         w.entities.remove(rider);
+        rider.listed = false;
         col.purpose = Convoys.EVAC;
         col.aboard = 1;
         w.convoys.dropEvacuations();

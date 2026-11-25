@@ -201,10 +201,18 @@ final class FleetCrews {
     }
 
     void crewOut(Vehicle v, boolean offDuty) {
+        ArrayList<Entity> stay = null;
         for (int i = 0; i < v.crew.size(); i++) {
             Entity e = v.crew.get(i);
             float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
-            if (!w.release(e, v.x + (float) Math.cos(a) * (10 + i * 3), v.y + (float) Math.sin(a) * (10 + i * 3))) continue;
+            // ((32.8) Nowhere to put them down: they stay aboard. They used to be taken off the crew all the same - on
+            // nobody's list, not on the map, and their car waiting for them for good.)
+            if (!w.release(e, v.x + (float) Math.cos(a) * (10 + i * 3), v.y + (float) Math.sin(a) * (10 + i * 3))
+                    && !w.release(e, v.x, v.y)) {
+                if (stay == null) stay = new ArrayList<Entity>();
+                stay.add(e);
+                continue;
+            }
             // ((27.4) A job that was getting into this vehicle is over once they're out of it.)
             if (e.owner != null && e.owner.rig == v) e.owner = null;
             e.rig = offDuty ? null : v;
@@ -213,6 +221,35 @@ final class FleetCrews {
             e.taskTimer = 0;
         }
         v.crew.clear();
+        if (stay != null) v.crew.addAll(stay);
+    }
+
+    /**
+     * ((32.8) Once every two seconds: anyone tied to a vehicle who is on no vehicle, not on the map and not dead - let out
+     * of one without being put down anywhere - is put back on the street beside it. A hundred police and soldiers went
+     * missing like that in a few minutes of an outbreak: never seen again, still counted, and their cars waiting for them.
+     */
+    void findStrays() {
+        java.util.Set<Entity> aboard = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Entity, Boolean>());
+        for (int i = 0, n = fleet.vehicles.size(); i < n; i++) {
+            Vehicle v = fleet.vehicles.get(i);
+            aboard.addAll(v.crew);
+            aboard.addAll(v.riders);
+            if (v.driver != null) aboard.add(v.driver);
+        }
+        for (int i = 0, n = fleet.rigged.size(); i < n; i++) {
+            Entity e = fleet.rigged.get(i);
+            Vehicle r = e.rig;
+            if (r == null || e.dead || e.removed || e.listed || e.ride != null || aboard.contains(e) || e == w.controlled) continue;
+            if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
+            if (!w.release(e, r.x, r.y)) {
+                e.dead = true;
+                e.removed = true;
+                e.rig = null;
+                continue;
+            }
+            e.rig = r;
+        }
     }
 
     /**
@@ -543,6 +580,10 @@ final class FleetCrews {
             }
             if (v.passengers > 0 && (v.passengerType == Entity.COP || v.passengerType == Entity.SOLDIER) && !v.removedFromFleet)
                 counts[v.passengerType] += v.passengers;
+            // ((32.8) And whoever of the city's own is at the wheel: off the street while they drive, they weren't counted
+            // at all - a score of soldiers and a dozen officers short in the middle of an outbreak.)
+            Entity d = v.driver;
+            if (d != null && v.realDriver && (d.removed || !d.listed) && !c.contains(d) && (d.type == Entity.COP || d.type == Entity.SOLDIER)) counts[d.type]++;
         }
     }
 }

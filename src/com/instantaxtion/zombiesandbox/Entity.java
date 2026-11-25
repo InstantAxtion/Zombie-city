@@ -93,6 +93,8 @@ final class Entity {
     transient float pickT = -100;
     /** ((32.4) The one it's after, and when to look again (ZombieAI.thinkZombie, with over 3000 of the dead). */
     transient Entity seekT;
+    /** ((32.8) In World.entities now (see World.addEntity, Death.cleanup). */
+    transient boolean listed;
     transient float seekCd;
     /** ((27.4) Falling back with the others: where they're all making for, and until when. */
     transient float rallyX, rallyY, rallyT;

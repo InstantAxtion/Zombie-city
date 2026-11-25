@@ -64,7 +64,7 @@ final class FleetPlayer {
             e.removed = false;
             e.ride = null;
             e.rig = null;
-            w.entities.add(e);
+            w.addEntity(e);
             for (int i = 0; i < v.riders.size(); i++) w.release(v.riders.get(i), sx0, sy0);
             v.riders.clear();
             v.parked = false;
@@ -100,7 +100,7 @@ final class FleetPlayer {
         e.dead = false;
         e.removed = false;
         e.ride = null;
-        w.entities.add(e);
+        w.addEntity(e);
         for (int i = 0; i < v.riders.size(); i++) w.release(v.riders.get(i), sx, sy);
         v.riders.clear();
     }

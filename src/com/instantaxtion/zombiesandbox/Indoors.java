@@ -457,6 +457,6 @@ final class Indoors {
             o.threatX = b.doorX + (b.doorX - (b.x0 + b.x1) / 2);
             o.threatY = b.doorY + (b.doorY - (b.y0 + b.y1) / 2);
         }
-        w.entities.add(o);
+        w.addEntity(o);
     }
 }

@@ -566,7 +566,7 @@ final class Population {
         float[] p = w.city.findWalkable(x, y);
         if (p == null) return null;
         Entity e = make(type, p[0], p[1], -1, 0);
-        w.entities.add(e);
+        w.addEntity(e);
         // Counted straight away, so the numbers go up even while the game is paused.
         w.counts[type]++;
         if (e.isUndead() && w.patientZero == null) w.death.markPatientZero(e);
@@ -1175,6 +1175,7 @@ final class Population {
     void clearAll() {
         w.sandbox.clearBarricades();
         w.medkits.clear();
+        for (int i = 0, n = w.entities.size(); i < n; i++) w.entities.get(i).listed = false;
         w.entities.clear();
         Arrays.fill(w.lodWake, 0);
         w.corpses.clear();

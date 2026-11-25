@@ -234,7 +234,7 @@ final class VehicleSave {
             for (Entity e : v.riders) seat(e, v, false);
             if (v.driver != null) seat(v.driver, v, true);
         }
-        for (int i = w.entities.size() - 1; i >= 0; i--) if (aboard.containsKey(w.entities.get(i))) w.entities.remove(i);
+        for (int i = w.entities.size() - 1; i >= 0; i--) if (aboard.containsKey(w.entities.get(i))) w.entities.remove(i).listed = false;
         int top = fleet.unitCount;
         for (int i = 0; i < n; i++) {
             Fleet.Vehicle v = vs.get(i);

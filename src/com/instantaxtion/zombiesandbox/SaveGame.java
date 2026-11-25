@@ -724,7 +724,7 @@ final class SaveGame {
                         in.readInt(), in.readInt());
 
             int count = in.readInt();
-            for (int i = 0; i < count; i++) w.entities.add(readEntity(in, w, d, version));
+            for (int i = 0; i < count; i++) w.addEntity(readEntity(in, w, d, version));
             // ((27.4) Everyone as written, in order: the vehicles (at the end) say who of them is aboard.)
             ArrayList<Entity> written = new ArrayList<Entity>(w.entities);
             if (version >= 2)

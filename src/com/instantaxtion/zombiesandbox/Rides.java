@@ -391,7 +391,7 @@ final class Rides {
         // ((14.7) Your squad, out with you, carries on following you.)
         o.task = o.commandedBy != null && o.commandedBy == w.controlled ? Dispatch.T_SQUAD : Dispatch.T_NONE;
         o.taskTimer = 3;
-        w.entities.add(o);
+        w.addEntity(o);
         return true;
     }
 
