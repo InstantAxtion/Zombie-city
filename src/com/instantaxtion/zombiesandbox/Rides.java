@@ -21,7 +21,10 @@ final class Rides {
      */
     boolean boardStep(Entity e) {
         Fleet.Vehicle v = e.rig;
-        if (v == null || v.broken || v.parked || !w.fleet.vehicles.contains(v)) {
+        // ((33.0) Gone from the fleet by its flag, not by looking for it in the list of five or six hundred vehicles for
+        // everyone walking to one, every step: two thirds of the time spent on those walking to a vehicle in a mass
+        // outbreak. Every way off the list sets the flag (Fleet.clear too, now).)
+        if (v == null || v.broken || v.parked || v.removedFromFleet) {
             e.rig = null;
             e.task = Dispatch.T_NONE;
             return false;
@@ -66,7 +69,7 @@ final class Rides {
     boolean boardRide(Entity e) {
         Fleet.Vehicle v = e.ride;
         if (v == null) return false;
-        if (v.broken || v.parked || !w.fleet.vehicles.contains(v) || v.riders.size() >= Fleet.SEATS) {
+        if (v.broken || v.parked || v.removedFromFleet || v.riders.size() >= Fleet.SEATS) {
             e.ride = null;
             if (e.task == Dispatch.T_RIDE) e.task = Dispatch.T_NONE;
             return false;

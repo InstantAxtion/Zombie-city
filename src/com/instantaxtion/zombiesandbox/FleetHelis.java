@@ -25,6 +25,23 @@ final class FleetHelis {
         v.y += (float) Math.sin(v.angle) * 20 * dt;
         v.alt = Math.max(0, v.alt - dt * 0.5f);
         if (v.alt > 0) return false;
+        // ((33.0) Everyone aboard is lost with it, and counted lost: they were wiped off the crew and the count went down by
+        // them with nobody down as killed - police and soldiers who were simply gone.)
+        if (city.cfg.civic >= 61) {
+            for (int pass = 0; pass < 2; pass++) {
+                ArrayList<Entity> aboard = pass == 0 ? v.crew : v.riders;
+                for (int i = 0; i < aboard.size(); i++) {
+                    Entity e = aboard.get(i);
+                    if (e.listed) continue;
+                    e.hp = 0;
+                    e.x = v.x;
+                    e.y = v.y;
+                    e.rig = null;
+                    e.ride = null;
+                    w.death.onDeath(e);
+                }
+            }
+        }
         v.crew.clear();
         v.riders.clear();
         v.driver = null;
@@ -535,6 +552,7 @@ final class FleetHelis {
             v.hold = 0;
             if (v.kind == K_GUNSHIP) {
                 v.timer = 120;
+                v.idleTimer = 0;
                 w.dispatch.say(Dispatch.WHO_MILITARY, null, "Gunship " + v.number + ": Over " + (v.place != null ? v.place : "the target")
                         + ". Cannon hot, engaging the pack.", v.x, v.y);
             } else if (v.kind == K_POLICE_HELI) {
@@ -717,6 +735,11 @@ final class FleetHelis {
                 v.gunCd = 0.5f;
             }
         }
+        // ((33.0) A gunship with a pack still under it stays on: half a minute more at a time, four minutes over the fight at
+        // most, before it goes back to refuel. In a city-wide outbreak it flew home after two, with the dead it was shelling
+        // still thick below, and was a minute on the pad before it could go up again.)
+        if (v.kind == K_GUNSHIP) v.idleTimer += dt;
+        if (v.timer <= 0 && v.kind == K_GUNSHIP && v.escort == null && city.cfg.civic >= 61 && v.idleTimer < 240 && w.countZombiesNear(v.tx, v.ty, 220) >= 6) v.timer = 30;
         if (v.timer <= 0) {
             v.state = FLY_OUT;
             v.escort = null;
@@ -868,9 +891,16 @@ final class FleetHelis {
                 keep--;
                 continue;
             }
-            v.crew.remove(i);
             float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
-            if (!w.release(e, v.x + (float) Math.cos(a) * 12, v.y + (float) Math.sin(a) * 12)) continue;
+            // ((33.0) Nowhere to put them down (the city full to the brim): they stay aboard, and come home with it. They
+            // were taken off the crew first all the same, and were on nobody's list and not on the map.)
+            if (city.cfg.civic >= 61) {
+                if (!w.release(e, v.x + (float) Math.cos(a) * 12, v.y + (float) Math.sin(a) * 12)) continue;
+                v.crew.remove(i);
+            } else {
+                v.crew.remove(i);
+                if (!w.release(e, v.x + (float) Math.cos(a) * 12, v.y + (float) Math.sin(a) * 12)) continue;
+            }
             e.rig = null;
             if (v.incident != null && !v.incident.resolved) {
                 e.task = Dispatch.T_RESPOND;

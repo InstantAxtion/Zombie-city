@@ -181,6 +181,18 @@ final class FleetService {
         }
         // ((14.8) Its crowd barriers holding the dead back.)
         if (v.block != null && v.barHp > 0) w.barrierHold(v, dt);
+        // ((33.0) Anyone still in a wreck - kept in it when there was nowhere to put them down (see dropRiders) - tries again
+        // every couple of seconds.)
+        if (v.broken && !v.riders.isEmpty() && v.player == null && city.cfg.civic >= 61 && (int) (v.anim * 0.5f) != (int) ((v.anim + dt) * 0.5f)) dropRiders(v, true);
+        // ((33.0) And a police car or army truck left where it stopped, nobody in it: rolled off the lanes too - to the kerb, a
+        // car park, the verge - the way one stopped at a scene is. Left in the lane it held up everything behind it, often for
+        // the rest of the game.)
+        if ((v.type == CRUISER || v.type == TRUCK) && v.state == ABANDONED && !v.broken && !v.pulling && !v.pullTried && v.player == null
+                && v.crew.isEmpty() && city.cfg.civic >= 61) {
+            v.pullTried = true;
+            int t = city.tileIndex(v.x, v.y);
+            if (t >= 0 && city.tiles[t] == City.ROAD && !fleet.driving.inSpace(v)) fleet.driving.offLane(v, 5);
+        }
         // ((11.3) A car left parked out in the road - stopped where it was, its driver gone - is put by the kerb
         // first, out of the lanes.)
         if (v.type == CAR && !v.broken && !v.pulling && !v.pullTried && v.player == null) {
@@ -242,7 +254,11 @@ final class FleetService {
                     fleet.routing.route(v, spot[0], spot[1]);
             }
         }
-        if (v.state == DRIVE && v.pickup && v.stuckTimer > 12) {
+        // ((33.0) Nearly there to pick its people up and the dead thick on the road ahead (they're in the middle of a fight):
+        // it pulls up short and they come to it, rather than its driver driving on in among them on their own to be mobbed.)
+        boolean shortOf = city.cfg.civic >= 61 && v.state == DRIVE && v.pickup && v.crew.isEmpty() && !armoured(v)
+                && Math.abs(v.tx - v.x) + Math.abs(v.ty - v.y) < 500 && (v.checkCd -= dt) <= 0 && (v.checkCd = 0.5f) > 0 && hordeAhead(v);
+        if (v.state == DRIVE && v.pickup && (v.stuckTimer > 12 || shortOf)) {
             v.state = PICKUP;
             v.timer = 0;
             v.speed = 0;
@@ -278,6 +294,24 @@ final class FleetService {
                     v.incident = n;
                     v.place = n.place;
                     v.state = DRIVE;
+                }
+            }
+        }
+        // ((33.0) Help from outside on its way to a call that has all the cars or trucks it can take already, nearer it than
+        // this one: on to the call that needs help most instead, every five seconds a look. A dozen Humvees and half a dozen
+        // police cars from outside all drove to the one call, down the one street, and jammed solid a long way short of it.)
+        if (city.cfg.civic >= 61 && v.reinforcement && v.state == DRIVE && v.zone == null && v.incident != null && !v.incident.resolved
+                && v.passengers > 0 && (v.type == CRUISER || v.type == TRUCK) && !nearItsCall(v) && (int) (v.anim * 0.2f) != (int) ((v.anim - dt) * 0.2f)
+                && !fleet.routing.busy() && crowdedAhead(v, v.incident)) {
+            Dispatch.Incident n = w.dispatch.neediest(v.x, v.y, v.incident);
+            if (n != null && World.hypot(n.x - v.incident.x, n.y - v.incident.y) > 400 && !crowdedAhead(v, n)) {
+                float[] road = city.nearestDrivable(n.x, n.y);
+                if (road != null && fleet.routing.route(v, road[0], road[1])) {
+                    v.incident = n;
+                    v.place = n.place;
+                    v.stuckTimer = 0;
+                    v.detours = 0;
+                    diverted++;
                 }
             }
         }
@@ -354,6 +388,27 @@ final class FleetService {
             w.emit(Sfx.SIREN, v.x, v.y);
         }
         return false;
+    }
+
+    /** ((33.0) Help from outside sent on to another call, the one it was going to having all it could take (for the tests and probes). */
+    int diverted;
+
+    /**
+     * ((33.0) Whether call inc (and those close round it) already has as many police cars - or army trucks - as it can take
+     * (FleetPatrols.carsFull's and trucksFull's numbers) at it, or on their way and nearer it than v.
+     */
+    boolean crowdedAhead(Vehicle v, Dispatch.Incident inc) {
+        int cap = v.type == CRUISER ? Math.min(6, 2 + inc.zombiesNear / 8) : Math.min(5, 3 + inc.zombiesNear / 10), n = 0;
+        float mine = (float) World.hypot(v.x - inc.x, v.y - inc.y);
+        for (int i = 0, m = fleet.vehicles.size(); i < m && n < cap; i++) {
+            Vehicle o = fleet.vehicles.get(i);
+            if (o == v || o.removedFromFleet || o.type != v.type || o.broken || o.ammoTruck || o.kind == K_FIRE_SUPPORT) continue;
+            if (o.state != DRIVE && o.state != SCENE) continue;
+            Dispatch.Incident oi = o.incident;
+            if (oi == null || (oi != inc && (Math.abs(oi.x - inc.x) >= 250 || Math.abs(oi.y - inc.y) >= 250))) continue;
+            if (o.state == SCENE || World.hypot(o.x - inc.x, o.y - inc.y) < mine) n++;
+        }
+        return n >= cap;
     }
 
     /**
@@ -554,6 +609,25 @@ final class FleetService {
         v.speed = Math.max(0, v.speed - dt * 220);
         v.hold += dt;
         v.stuckTimer = 0;
+        // ((33.0) Held a while and they're still there: it turns round for another way home (twice at most), rather than
+        // waiting them out and then being left in the road with nobody in it.)
+        if (city.cfg.civic >= 61 && v.hold > 6 && v.rerouteCd <= 0 && v.detours < 2 && v.player == null) {
+            v.detours++;
+            v.rerouteCd = 6;
+            fleet.routing.mayTurnBack = true;
+            boolean way;
+            try {
+                way = fleet.routing.route(v, v.parkHome && v.depot != null ? v.depot.gateX : v.homeX, v.parkHome && v.depot != null ? v.depot.gateY : v.homeY);
+            } finally {
+                fleet.routing.mayTurnBack = false;
+            }
+            if (way) {
+                v.hold = 0;
+                v.pathField = null;
+                fleet.driving.backOutIfBehind(v);
+                return false;
+            }
+        }
         if (v.hold > 25) {
             v.speed = 0;
             v.parked = true;
@@ -1032,9 +1106,12 @@ final class FleetService {
         // ((13.3) A minute and a half for them to get there, not 45 seconds.)
         if ((walking > 0 && v.timer < 90) || v.timer < 2) return false;
         v.pickup = false;
+        // ((33.0) Every one of them it's leaving behind is let go, not only those walking over: one sent off on a call of
+        // their own meanwhile stayed down as its people, and no other car, patrol or call would have them.)
+        boolean all = city.cfg.civic >= 61;
         for (Entity e : v.squad)
-            if (!e.dead && e.task == Dispatch.T_BOARD && e.rig == v) {
-                e.task = Dispatch.T_NONE;
+            if (!e.dead && (e.task == Dispatch.T_BOARD || all) && e.rig == v) {
+                if (e.task == Dispatch.T_BOARD) e.task = Dispatch.T_NONE;
                 e.rig = null;
             }
         // ((11.0) Picked up for a call: off to it.)
@@ -1206,6 +1283,11 @@ final class FleetService {
         if (z == null || !city.los(v.x, v.y, z.x, z.y)) return null;
         Dispatch.Incident inc = v.incident;
         if (inc != null && World.hypot(z.x - inc.x, z.y - inc.y) < 240) return null;
+        // ((33.0) In a big outbreak (two hundred of the dead or more) a straggler on its own by the road, with nobody near it to
+        // save, isn't worth the stop: they drive on to the call they were sent to (and run it down if it steps out). With the
+        // dead everywhere they stopped for the first one they passed, every time, and never got to the fight they were sent to.)
+        if (city.cfg.civic >= 61 && inc != null && !inc.resolved && w.zombies >= 200 && w.countZombiesNear(z.x, z.y, 60) < 3
+                && !w.spatial.peopleNear(z.x, z.y, 70)) return null;
         Entity who = lone ? v.driver : v.crew.get(0);
         // (Out of rounds: nothing to fight with, so they drive on.)
         boolean armed = false;
@@ -1241,13 +1323,20 @@ final class FleetService {
         if (zone)
             w.dispatch.say(Dispatch.WHO_INFO, null, "A driver dropped " + v.riders.size()
                     + (v.riders.size() == 1 ? " person" : " people") + " at the " + v.zone.place + " safe zone.", v.x, v.y);
+        ArrayList<Entity> stay = null;
         for (int i = 0; i < v.riders.size(); i++) {
             Entity e = v.riders.get(i);
-            if (!w.release(e, v.x + (float) Math.cos(v.angle + 1.57f) * 9, v.y + (float) Math.sin(v.angle + 1.57f) * 9))
+            if (!w.release(e, v.x + (float) Math.cos(v.angle + 1.57f) * 9, v.y + (float) Math.sin(v.angle + 1.57f) * 9)) {
+                if (stay == null) stay = new ArrayList<Entity>();
+                stay.add(e);
                 continue;
+            }
             if (zone) e.task = Dispatch.T_SEEK;
         }
         v.riders.clear();
+        // ((33.0) Nobody let out with nowhere to be put down (the city full to the brim): they stay aboard. They were taken
+        // off the riders all the same, and were gone - off the map, in no vehicle, still counted.)
+        if (stay != null && city.cfg.civic >= 61) v.riders.addAll(stay);
         v.rescue = false;
         v.zone = null;
     }
@@ -1259,10 +1348,15 @@ final class FleetService {
             w.droveOut(v.riders);
             return;
         }
+        ArrayList<Entity> stay = null;
         for (int i = 0; i < v.riders.size(); i++) {
             Entity e = v.riders.get(i);
             float a = v.angle + (i % 2 == 0 ? 1.57f : -1.57f);
-            if (!w.release(e, v.x + (float) Math.cos(a) * 9, v.y + (float) Math.sin(a) * 9)) continue;
+            if (!w.release(e, v.x + (float) Math.cos(a) * 9, v.y + (float) Math.sin(a) * 9)) {
+                if (stay == null) stay = new ArrayList<Entity>();
+                stay.add(e);
+                continue;
+            }
             if (panic) {
                 e.fleeTimer = 3;
                 e.threatX = v.x;
@@ -1270,6 +1364,8 @@ final class FleetService {
             }
         }
         v.riders.clear();
+        // ((33.0) As in arrive: those with nowhere to be put down stay aboard rather than vanish.)
+        if (stay != null && city.cfg.civic >= 61) v.riders.addAll(stay);
         v.rescue = false;
     }
 

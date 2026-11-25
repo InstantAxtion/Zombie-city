@@ -328,8 +328,13 @@ final class FleetMedevac {
 
     /** The wounded out at the care they were brought to, to be patched up there. */
     private void unload(Vehicle v) {
+        ArrayList<Entity> stay = null;
         for (Entity e : new ArrayList<Entity>(v.riders)) {
-            if (!w.release(e, v.x, v.y)) continue;
+            if (!w.release(e, v.x, v.y)) {
+                if (stay == null) stay = new ArrayList<Entity>();
+                stay.add(e);
+                continue;
+            }
             e.casevac = null;
             e.waitPickup = false;
             e.inCare = true;
@@ -337,6 +342,8 @@ final class FleetMedevac {
             e.hospitalT = 0;
         }
         v.riders.clear();
+        // ((33.0) The wounded with nowhere to be put down (the city full to the brim) stay aboard: they were gone for good.)
+        if (stay != null && city.cfg.civic >= 61) v.riders.addAll(stay);
         v.squad.clear();
     }
 
