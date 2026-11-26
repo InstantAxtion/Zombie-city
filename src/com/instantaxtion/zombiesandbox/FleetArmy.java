@@ -105,7 +105,7 @@ final class FleetArmy {
                     if (z != null) w.dispatch.sighting(z.x, z.y, null);
                     if (w.time - v.reconSaid > 20) {
                         v.reconSaid = w.time;
-                        w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Recon " + v.number + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "hostile", "hostiles"))
+                        w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.isEmpty() ? null : v.crew.get(0), "Recon " + v.number + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "hostile", "hostiles"))
                                 + " on " + city.placeName(v.x, v.y) + ". Marked. Moving on.", v.x, v.y);
                     }
                 }

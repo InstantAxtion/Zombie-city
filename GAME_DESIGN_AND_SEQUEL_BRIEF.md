@@ -468,6 +468,53 @@ outbreak simulator on the scale of a whole country, where the city of the first 
 
 ---
 
-## 18. 33.0 additions
+## 18. 33.0 additions (the largest update: 123 changes)
 
-(Filled in when 33.0 is released: the full list of fixes and features in the largest update.)
+Built by one lead and four parallel helpers (interface, police and army, vehicles, zombies/civilians/speed), merged
+and tested together. Measured on the default map:
+- 10,000 zombies: police killed 287 -> 200 and 486 -> 274 on two seeds; soldiers killed 75 -> 69 and 123 -> 95; army
+  kills roughly doubled (the army now out-kills the police in big outbreaks).
+- 20,000 zombies: 21-25 -> 15-19 ms per simulation step. 40,000: 34-38 -> 30-33 ms.
+- 2,000 zombies on screen: about 30,900 -> 4,900 draw calls a frame (desktop harness).
+
+**Police and army (26):** police no longer hunt hordes on foot in mass outbreaks; ammo shared along the cordon; officers
+keep moving to their cordon place while shooting; firing lines spread out; grenades aimed at the middle of a pack;
+idle officers not drawn off after distant sightings; fall-backs away from the infected zone and out by the open side;
+up to 8 cordoned zones; nearest officers fill posts; posts kept out of hordes; three officers per post spread along the
+line; guard reinforcements to the fight most short of soldiers; up to 3 tanks; riot vans, station officers and other
+calls' officers not sent into army fights; outside army in up to 4 columns to separate fights; outside police dropped
+at the perimeter; correct status for officers heading to their station; units clear air strikes until the last bomb;
+kills by tanks, gunships, turrets, air strikes and mortars credited to the right side.
+
+**Vehicles (24):** faster boarding lookups; people a helicopter or car can't put down stay aboard; stuck restock runs
+freed; empty patrol cars recall their officers; dragged-out officers untied from the car; people left behind freed;
+pickups release everyone left; single-officer cars return to standby; convoys actually push through; downed helicopter
+crews counted; tanks with no way home keep fighting; up to three fetch cars at once; empty seats filled with nearby
+officers; cars stop short of hordes when collecting people; empty cars try another way home; outside help redirected
+from calls with enough vehicles; replacement police cars and army trucks; no stopping for lone stragglers in big
+outbreaks; abandoned vehicles rolled out of lanes; gunships linger over big packs; 10 s straggler waits; cars crawling
+in a knot turn round.
+
+**Zombies, civilians, speed (24):** distant zombies think less often; unseeing zombies near the living thinner; a bigger
+shared-route cache; faster route building; a quick route table; fewer line-of-sight and straight-path checks; reused
+aim points; alpha surges look only near the leader; off-screen separation every 16th step over 20,000; frenzy on a
+timer; civilians check threats 5x a second; one shelter-van check per step; fear chains fade; crowds at stations and
+fishermen/campers stop pushing at unreachable spots; zombies that can't leave a building stay inside; bodies rising in
+a full city retry; zombies feed on kills; screams and groans gather the dead; crowds keep civilians running longer;
+alpha roars send people running.
+
+**Interface (27):** simplified drawing of big crowds; zombie health bars hidden in crowds; units drawn over hordes and
+over zombie dots, on the minimap too; FPS counter with on-screen count; remembered brush and tool choices; brush ring;
+"only N placed" message; live graph fix; banners fit; tactical map and minimap density shading; timeline keeps the
+newest events; stale safe-zone text gone; cards fit short screens; kills by side and losses on Stats and the report;
+square-root chart; cheaper best-fighter lists; "Most zombies at once" record; separators everywhere; vehicle cards
+show kills and wounded.
+
+**Lead (22):** soldiers no longer stuck reaching base duty, fence and parade spots; officers no longer circle stations;
+max population up to 100,000; HUD separators, police and army in the collapsed line, kills per minute, peak zombies,
+no safe-zone line where there are none, National Guard note and banner, milestone radio calls; Mixed zombie brush;
+Big (150) and Mega (500) hordes; mass-outbreak speed savings start earlier; plus a recon Humvee crash fix found in
+final testing.
+
+**Known after 33.0:** police cars can still jam at a few busy Archipelago junctions; soldiers on bases sometimes shuffle
+for parade places; police still make a large share of kills when zombies are spread everywhere.

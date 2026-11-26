@@ -617,7 +617,7 @@ final class FleetPatrols {
             v.incident = inc;
             if (respond(v, inc)) {
                 v.place = inc.place;
-                w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", shots fired at " + inc.place + ". Responding.", tx, ty);
+                w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.isEmpty() ? null : v.crew.get(0), callsign(v) + ", shots fired at " + inc.place + ". Responding.", tx, ty);
             } else v.incident = null;
         }
     }
@@ -771,7 +771,7 @@ final class FleetPatrols {
         v.stuckTimer = 0;
         w.emit(Sfx.SIREN, v.x, v.y);
         w.dispatch.chatter(Dispatch.WHO_POLICE, null, "Dispatch: " + callsign(v) + ", respond to " + inc.place + ".", inc.x, inc.y);
-        if (!v.crew.isEmpty()) w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
+        if (!v.crew.isEmpty()) w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.isEmpty() ? null : v.crew.get(0), callsign(v) + ", en route.", v.x, v.y);
         return true;
     }
 
@@ -845,7 +845,7 @@ final class FleetPatrols {
         fleet.bikeSightings++;
         if (w.time - v.reconSaid > 25) {
             v.reconSaid = w.time;
-            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "of the dead", "of the dead"))
+            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.isEmpty() ? null : v.crew.get(0), callsign(v) + ": " + (n >= 10 ? "Horde of about " + n / 5 * 5 : World.count(n, "of the dead", "of the dead"))
                     + " on " + city.placeName(v.x, v.y) + ". Calling it in.", v.x, v.y);
         }
     }
@@ -1220,7 +1220,7 @@ return false;
         v.onward = null;
         v.ammoRun = f;
         v.stuckTimer = 0;
-        w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", we're nearly out of rounds. Heading to " + f.name + " to restock.", v.x, v.y);
+        w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.isEmpty() ? null : v.crew.get(0), callsign(v) + ", we're nearly out of rounds. Heading to " + f.name + " to restock.", v.x, v.y);
         return true;
     }
 
@@ -1235,7 +1235,7 @@ return false;
         v.speed = 0;
         v.ammoRun = null;
         if (d < f.r + 160 && w.restockCrew(v.crew, f) > 0 && !v.crew.isEmpty())
-            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.get(0), callsign(v) + ", restocked at " + f.name + ". Available.", v.x, v.y);
+            w.dispatch.say(Dispatch.WHO_POLICE, v.crew.isEmpty() ? null : v.crew.get(0), callsign(v) + ", restocked at " + f.name + ". Available.", v.x, v.y);
         else if (crewNeedsAmmo(v)) {
             // (Couldn't get through: out, and the rest of the way on foot.)
             // ((33.0) Free to go: the car is left where it stopped for anyone to take. Still its crew, they were tied to a

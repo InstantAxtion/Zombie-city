@@ -2,11 +2,21 @@ package com.instantaxtion.zombiesandbox;
 
 /** The in-game patch notes log, newest version first. */
 final class PatchNotes {
-    static final String VERSION = "32.9";
-    static final int VERSION_CODE = 329;
+    static final String VERSION = "33.0";
+    static final int VERSION_CODE = 330;
 
     /** Each entry: a heading, then one line per change. */
     static final String[][] NOTES = {
+            {
+                    "33.0  -  The largest update yet (123 changes)",
+                    "Police hold the perimeter and the army does the killing: at 10,000 zombies, 30-44% fewer police killed and the army's kills doubled.",
+                    "Army convoys split up to the worst fights, up to 3 tanks out, smarter grenades; police share ammo on the line and break out cleanly.",
+                    "Huge hordes run up to 25% faster, and draw 6x faster on screen; police and army are drawn on top of the horde.",
+                    "New: Mixed zombie brush, Big (150) and Mega (500) hordes, max population up to 100,000, kills per minute and peak on the HUD.",
+                    "Vehicles: replacement cars and trucks, seats filled, less waiting on stragglers, convoys that push through, gunships that stay on target.",
+                    "Zombies feed on kills, gather at groans and screams; alphas' roars send people running.",
+                    "Many fixes: lost and stuck units, people vanishing from vehicles, stuck soldiers on bases, officers circling stations, stats and counts.",
+            },
             {
                     "32.9  -  No interiors",
                     "All building interiors are gone: roofs stay on when zoomed in, and no rooms or furniture are drawn - less to draw close up.",

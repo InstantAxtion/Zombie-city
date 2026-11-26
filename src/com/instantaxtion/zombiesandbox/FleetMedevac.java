@@ -425,7 +425,7 @@ final class FleetMedevac {
                 v.pickup = true;
                 if (fleet.service.headHome(v)) {
                     v.patrol = false;
-                    w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.get(0), fleet.patrols.callsign(v) + ", the car's in a bad way. Bringing it in for repairs.", v.x, v.y);
+                    w.dispatch.chatter(Dispatch.WHO_POLICE, v.crew.isEmpty() ? null : v.crew.get(0), fleet.patrols.callsign(v) + ", the car's in a bad way. Bringing it in for repairs.", v.x, v.y);
                 } else v.pickup = false;
                 continue;
             }

@@ -587,7 +587,7 @@ final class FleetService {
             }
             v.state = DRIVE;
             v.stuckTimer = 0;
-            w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.get(0), "Patrol mounted up. Sweeping " + v.place + ".", v.x, v.y);
+            w.dispatch.say(Dispatch.WHO_MILITARY, v.crew.isEmpty() ? null : v.crew.get(0), "Patrol mounted up. Sweeping " + v.place + ".", v.x, v.y);
             return false;
         }
         if (inc == null || inc.resolved || !fleet.routing.route(v, inc.x, inc.y)) {
@@ -599,7 +599,7 @@ final class FleetService {
         }
         v.state = DRIVE;
         v.stuckTimer = 0;
-        w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. Rolling out to "
+        w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.isEmpty() ? null : v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. Rolling out to "
                 + inc.place + ".", v.x, v.y);
         return false;
     }
@@ -1132,7 +1132,7 @@ final class FleetService {
                 v.place = to.place;
                 v.state = DRIVE;
                 v.stuckTimer = 0;
-                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. On our way to " + to.place + ".", v.x, v.y);
+                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.isEmpty() ? null : v.crew.get(0), "Mounted up, " + v.crew.size() + " aboard. On our way to " + to.place + ".", v.x, v.y);
                 return false;
             }
         }
@@ -1165,7 +1165,7 @@ final class FleetService {
                 v.place = next.place;
                 v.state = DRIVE;
                 v.stuckTimer = 0;
-                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.get(0), "Mounted up. Moving on to " + next.place + ".", v.x, v.y);
+                w.dispatch.chatter(Dispatch.WHO_MILITARY, v.crew.isEmpty() ? null : v.crew.get(0), "Mounted up. Moving on to " + next.place + ".", v.x, v.y);
                 return false;
             }
         }
